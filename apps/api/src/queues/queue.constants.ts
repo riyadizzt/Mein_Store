@@ -20,6 +20,8 @@ export const JOB_NAMES = {
   // Inventory
   SYNC_TO_ALL_CHANNELS: 'sync-to-all-channels',
   CHECK_LOW_STOCK: 'check-low-stock',
+  LOW_STOCK_ALERT: 'low-stock-alert',
+  RELEASE_EXPIRED_RESERVATIONS: 'release-expired-reservations',
 
   // Orders
   PROCESS_NEW_ORDER: 'process-new-order',

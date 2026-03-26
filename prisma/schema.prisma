@@ -173,6 +173,21 @@ enum InventoryMovementType {
   transfer
   damaged
   expired
+  reserved
+  released
+  cancelled
+}
+
+enum WarehouseType {
+  WAREHOUSE
+  STORE
+}
+
+enum ReservationStatus {
+  RESERVED
+  CONFIRMED
+  RELEASED
+  EXPIRED
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -374,10 +389,11 @@ model ProductVariant {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
-  inventory       Inventory[]
-  orderItems      OrderItem[]
-  channelListings ChannelProductListing[]
+  product           Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory         Inventory[]
+  orderItems        OrderItem[]
+  channelListings   ChannelProductListing[]
+  stockReservations StockReservation[]
 
   @@map("product_variants")
 }
@@ -401,15 +417,17 @@ model ProductImage {
 // ─────────────────────────────────────────────────────────────
 
 model Warehouse {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   name      String
   address   String?
-  isActive  Boolean  @default(true) @map("is_active")
-  isDefault Boolean  @default(false) @map("is_default")
-  createdAt DateTime @default(now()) @map("created_at")
+  type      WarehouseType @default(WAREHOUSE)
+  isActive  Boolean       @default(true) @map("is_active")
+  isDefault Boolean       @default(false) @map("is_default")
+  createdAt DateTime      @default(now()) @map("created_at")
 
-  inventory         Inventory[]
+  inventory          Inventory[]
   inventoryMovements InventoryMovement[]
+  stockReservations  StockReservation[]
 
   @@map("warehouses")
 }
@@ -434,19 +452,56 @@ model Inventory {
 }
 
 model InventoryMovement {
-  id          String               @id @default(uuid())
-  variantId   String               @map("variant_id")
-  warehouseId String               @map("warehouse_id")
-  type        InventoryMovementType
-  quantity    Int                  // positiv = eingang, negativ = ausgang
-  referenceId String?              @map("reference_id") // orderId, returnId, etc.
-  notes       String?
-  createdBy   String?              @map("created_by")
-  createdAt   DateTime             @default(now()) @map("created_at")
+  id             String                @id @default(uuid())
+  variantId      String                @map("variant_id")
+  warehouseId    String                @map("warehouse_id")
+  type           InventoryMovementType
+  quantity       Int                   // positiv = eingang, negativ = ausgang
+  quantityBefore Int?                  @map("quantity_before")
+  quantityAfter  Int?                  @map("quantity_after")
+  referenceId    String?               @map("reference_id") // orderId, reservationId, transferId etc.
+  notes          String?
+  createdBy      String?               @map("created_by")
+  createdAt      DateTime              @default(now()) @map("created_at")
 
   warehouse Warehouse @relation(fields: [warehouseId], references: [id])
 
+  @@index([variantId, warehouseId])
+  @@index([createdAt])
   @@map("inventory_movements")
+}
+
+model StockReservation {
+  id          String            @id @default(uuid())
+  variantId   String            @map("variant_id")
+  warehouseId String            @map("warehouse_id")
+  orderId     String?           @map("order_id")
+  sessionId   String?           @map("session_id")
+  quantity    Int
+  status      ReservationStatus @default(RESERVED)
+  expiresAt   DateTime          @map("expires_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
+
+  @@index([variantId, warehouseId, status])
+  @@index([expiresAt, status])
+  @@map("stock_reservations")
+}
+
+model LowStockAlert {
+  id           String    @id @default(uuid())
+  variantId    String    @map("variant_id")
+  warehouseId  String    @map("warehouse_id")
+  currentQty   Int       @map("current_qty")
+  reorderPoint Int       @map("reorder_point")
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([variantId, resolvedAt])
+  @@map("low_stock_alerts")
 }
 
 // ─────────────────────────────────────────────────────────────
