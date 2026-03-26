@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { ScheduleModule } from '@nestjs/schedule'
 import { PrismaModule } from './prisma/prisma.module'
+import { QueueModule } from './queues/queue.module'
+import { HealthModule } from './modules/health/health.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { UsersModule } from './modules/users/users.module'
 import { ProductsModule } from './modules/products/products.module'
@@ -41,6 +43,12 @@ import { AdminModule } from './modules/admin/admin.module'
 
     // Database
     PrismaModule,
+
+    // Queue (BullMQ + Redis)
+    QueueModule,
+
+    // Health Check
+    HealthModule,
 
     // Feature Modules
     AuthModule,
