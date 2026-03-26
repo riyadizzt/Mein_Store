@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "siteName": "Malak Store",
+    "description": "Fashion & Shoes — Your Omnichannel Fashion Store"
+  },
+  "home": {
+    "welcome": "Welcome to Malak Store",
+    "subtitle": "Discover our latest collection for women, men and kids."
+  },
+  "nav": {
+    "home": "Home",
+    "products": "Products",
+    "cart": "Cart",
+    "account": "Account",
+    "login": "Login",
+    "logout": "Logout",
+    "register": "Register",
+    "search": "Search..."
+  },
+  "auth": {
+    "loginTitle": "Sign In",
+    "registerTitle": "Create Account",
+    "email": "Email Address",
+    "password": "Password",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "phone": "Phone (optional)",
+    "forgotPassword": "Forgot password?",
+    "alreadyHaveAccount": "Already have an account?",
+    "noAccount": "Don't have an account?",
+    "gdprConsent": "I agree to the processing of my data in accordance with the Privacy Policy.",
+    "loginButton": "Sign In",
+    "registerButton": "Create Account",
+    "errors": {
+      "invalidEmail": "Invalid email address",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "passwordWeak": "Password must contain a number and a special character",
+      "gdprRequired": "GDPR consent is required",
+      "invalidCredentials": "Invalid email or password",
+      "accountLocked": "Account locked. Please wait a few minutes."
+    }
+  },
+  "product": {
+    "addToCart": "Add to Cart",
+    "outOfStock": "Out of Stock",
+    "size": "Size",
+    "color": "Color",
+    "sizeGuide": "Size Guide",
+    "reviews": "Reviews",
+    "noReviews": "No reviews yet",
+    "inStock": "In Stock",
+    "lowStock": "Only {count} left in stock",
+    "priceIncludesVat": "Price incl. {rate}% VAT",
+    "freeShipping": "Free shipping from €{amount}"
+  },
+  "cart": {
+    "title": "Shopping Cart",
+    "empty": "Your cart is empty",
+    "continueShopping": "Continue Shopping",
+    "checkout": "Checkout",
+    "total": "Total",
+    "subtotal": "Subtotal",
+    "shipping": "Shipping",
+    "tax": "VAT (19%)",
+    "remove": "Remove",
+    "quantity": "Quantity"
+  },
+  "checkout": {
+    "step1": "Delivery Address",
+    "step2": "Payment",
+    "step3": "Confirmation",
+    "orderSummary": "Order Summary",
+    "placeOrder": "Place Order",
+    "paymentMethods": {
+      "card": "Credit Card",
+      "paypal": "PayPal",
+      "klarna": "Klarna",
+      "sepa": "SEPA Direct Debit",
+      "cod": "Cash on Delivery"
+    }
+  },
+  "errors": {
+    "generic": "An error occurred. Please try again.",
+    "notFound": "Page not found",
+    "serverError": "Server error. Please try again later."
+  },
+  "footer": {
+    "imprint": "Imprint",
+    "privacy": "Privacy Policy",
+    "terms": "Terms & Conditions",
+    "contact": "Contact"
+  }
+}

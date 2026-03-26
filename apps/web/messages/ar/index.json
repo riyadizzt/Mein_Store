@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "siteName": "متجر ملاك",
+    "description": "أزياء وأحذية — متجرك الشامل للأزياء"
+  },
+  "home": {
+    "welcome": "مرحباً بكم في متجر ملاك",
+    "subtitle": "اكتشف أحدث مجموعاتنا للسيدات والرجال والأطفال."
+  },
+  "nav": {
+    "home": "الرئيسية",
+    "products": "المنتجات",
+    "cart": "سلة التسوق",
+    "account": "حسابي",
+    "login": "تسجيل الدخول",
+    "logout": "تسجيل الخروج",
+    "register": "إنشاء حساب",
+    "search": "ابحث..."
+  },
+  "auth": {
+    "loginTitle": "تسجيل الدخول",
+    "registerTitle": "إنشاء حساب جديد",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "firstName": "الاسم الأول",
+    "lastName": "اسم العائلة",
+    "phone": "رقم الهاتف (اختياري)",
+    "forgotPassword": "نسيت كلمة المرور؟",
+    "alreadyHaveAccount": "هل لديك حساب بالفعل؟",
+    "noAccount": "ليس لديك حساب؟",
+    "gdprConsent": "أوافق على معالجة بياناتي وفقاً لسياسة الخصوصية.",
+    "loginButton": "تسجيل الدخول",
+    "registerButton": "إنشاء الحساب",
+    "errors": {
+      "invalidEmail": "عنوان البريد الإلكتروني غير صالح",
+      "passwordTooShort": "يجب أن تحتوي كلمة المرور على 8 أحرف على الأقل",
+      "passwordWeak": "يجب أن تحتوي كلمة المرور على رقم وحرف خاص",
+      "gdprRequired": "موافقة GDPR مطلوبة",
+      "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+      "accountLocked": "تم تأمين الحساب. يرجى الانتظار بضع دقائق."
+    }
+  },
+  "product": {
+    "addToCart": "أضف إلى السلة",
+    "outOfStock": "غير متوفر",
+    "size": "المقاس",
+    "color": "اللون",
+    "sizeGuide": "دليل المقاسات",
+    "reviews": "التقييمات",
+    "noReviews": "لا توجد تقييمات بعد",
+    "inStock": "متوفر في المخزون",
+    "lowStock": "باقي {count} فقط",
+    "priceIncludesVat": "السعر شامل {rate}% ضريبة",
+    "freeShipping": "شحن مجاني من €{amount}"
+  },
+  "cart": {
+    "title": "سلة التسوق",
+    "empty": "سلة التسوق فارغة",
+    "continueShopping": "مواصلة التسوق",
+    "checkout": "إتمام الشراء",
+    "total": "الإجمالي",
+    "subtotal": "المجموع الفرعي",
+    "shipping": "الشحن",
+    "tax": "ضريبة القيمة المضافة (19%)",
+    "remove": "إزالة",
+    "quantity": "الكمية"
+  },
+  "checkout": {
+    "step1": "عنوان التوصيل",
+    "step2": "الدفع",
+    "step3": "التأكيد",
+    "orderSummary": "ملخص الطلب",
+    "placeOrder": "تأكيد الطلب",
+    "paymentMethods": {
+      "card": "بطاقة ائتمان",
+      "paypal": "PayPal",
+      "klarna": "Klarna",
+      "sepa": "خصم SEPA المباشر",
+      "cod": "الدفع عند الاستلام"
+    }
+  },
+  "errors": {
+    "generic": "حدث خطأ. يرجى المحاولة مرة أخرى.",
+    "notFound": "الصفحة غير موجودة",
+    "serverError": "خطأ في الخادم. يرجى المحاولة لاحقاً."
+  },
+  "footer": {
+    "imprint": "بيانات النشر",
+    "privacy": "سياسة الخصوصية",
+    "terms": "الشروط والأحكام",
+    "contact": "اتصل بنا"
+  }
+}

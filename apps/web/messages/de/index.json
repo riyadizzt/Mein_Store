@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "siteName": "Malak Store",
+    "description": "Mode & Schuhe — Dein Omnichannel Fashion Store"
+  },
+  "home": {
+    "welcome": "Willkommen bei Malak Store",
+    "subtitle": "Entdecke unsere neueste Kollektion für Damen, Herren und Kinder."
+  },
+  "nav": {
+    "home": "Startseite",
+    "products": "Produkte",
+    "cart": "Warenkorb",
+    "account": "Konto",
+    "login": "Anmelden",
+    "logout": "Abmelden",
+    "register": "Registrieren",
+    "search": "Suchen..."
+  },
+  "auth": {
+    "loginTitle": "Anmelden",
+    "registerTitle": "Konto erstellen",
+    "email": "E-Mail-Adresse",
+    "password": "Passwort",
+    "firstName": "Vorname",
+    "lastName": "Nachname",
+    "phone": "Telefonnummer (optional)",
+    "forgotPassword": "Passwort vergessen?",
+    "alreadyHaveAccount": "Haben Sie bereits ein Konto?",
+    "noAccount": "Noch kein Konto?",
+    "gdprConsent": "Ich stimme der Verarbeitung meiner Daten gemäß Datenschutzerklärung zu.",
+    "loginButton": "Anmelden",
+    "registerButton": "Konto erstellen",
+    "errors": {
+      "invalidEmail": "Ungültige E-Mail-Adresse",
+      "passwordTooShort": "Passwort muss mindestens 8 Zeichen haben",
+      "passwordWeak": "Passwort muss eine Zahl und ein Sonderzeichen enthalten",
+      "gdprRequired": "GDPR-Einwilligung ist erforderlich",
+      "invalidCredentials": "E-Mail oder Passwort falsch",
+      "accountLocked": "Konto gesperrt. Bitte warten Sie einige Minuten."
+    }
+  },
+  "product": {
+    "addToCart": "In den Warenkorb",
+    "outOfStock": "Nicht vorrätig",
+    "size": "Größe",
+    "color": "Farbe",
+    "sizeGuide": "Größentabelle",
+    "reviews": "Bewertungen",
+    "noReviews": "Noch keine Bewertungen",
+    "inStock": "Auf Lager",
+    "lowStock": "Nur noch {count} auf Lager",
+    "priceIncludesVat": "Preis inkl. {rate}% MwSt.",
+    "freeShipping": "Kostenloser Versand ab €{amount}"
+  },
+  "cart": {
+    "title": "Warenkorb",
+    "empty": "Ihr Warenkorb ist leer",
+    "continueShopping": "Weiter einkaufen",
+    "checkout": "Zur Kasse",
+    "total": "Gesamt",
+    "subtotal": "Zwischensumme",
+    "shipping": "Versand",
+    "tax": "MwSt. (19%)",
+    "remove": "Entfernen",
+    "quantity": "Menge"
+  },
+  "checkout": {
+    "step1": "Lieferadresse",
+    "step2": "Zahlung",
+    "step3": "Bestätigung",
+    "orderSummary": "Bestellübersicht",
+    "placeOrder": "Jetzt bestahlen",
+    "paymentMethods": {
+      "card": "Kreditkarte",
+      "paypal": "PayPal",
+      "klarna": "Klarna",
+      "sepa": "SEPA-Lastschrift",
+      "cod": "Nachnahme"
+    }
+  },
+  "errors": {
+    "generic": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+    "notFound": "Seite nicht gefunden",
+    "serverError": "Serverfehler. Bitte später versuchen."
+  },
+  "footer": {
+    "imprint": "Impressum",
+    "privacy": "Datenschutz",
+    "terms": "AGB",
+    "contact": "Kontakt"
+  }
+}

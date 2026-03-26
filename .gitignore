@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+.expo/
+out/
+
+# Environment files — NIEMALS committen!
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Turbo
+.turbo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Prisma
+prisma/migrations/
+
+# Testing
+coverage/
+.nyc_output
+
+# Vercel
+.vercel
+
+# Sentry
+.sentryclirc
