@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common'
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { ScheduleModule } from '@nestjs/schedule'
+import { EventEmitterModule } from '@nestjs/event-emitter'
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware'
 import { PrismaModule } from './prisma/prisma.module'
 import { QueueModule } from './queues/queue.module'
 import { HealthModule } from './modules/health/health.module'
@@ -42,6 +44,9 @@ import { AdminModule } from './modules/admin/admin.module'
     // Cron Jobs
     ScheduleModule.forRoot(),
 
+    // Event-basierte Modul-Kommunikation (synchron + async)
+    EventEmitterModule.forRoot({ wildcard: false, delimiter: '.', maxListeners: 20 }),
+
     // Database
     PrismaModule,
 
@@ -65,4 +70,8 @@ import { AdminModule } from './modules/admin/admin.module'
     AdminModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*')
+  }
+}

@@ -509,37 +509,97 @@ model LowStockAlert {
 // ─────────────────────────────────────────────────────────────
 
 model Order {
-  id              String      @id @default(uuid())
-  orderNumber     String      @unique @map("order_number")
-  shopifyOrderId  String?     @map("shopify_order_id")
-  userId          String?     @map("user_id")
-  guestEmail      String?     @map("guest_email")
-  shippingAddressId String?   @map("shipping_address_id")
-  status          OrderStatus @default(pending)
-  channel         SalesChannel @default(website)
-  channelOrderId  String?     @map("channel_order_id")
-  channelFee      Decimal     @default(0) @map("channel_fee") @db.Decimal(10, 2)
-  subtotal        Decimal     @map("subtotal") @db.Decimal(10, 2)
-  shippingCost    Decimal     @default(0) @map("shipping_cost") @db.Decimal(10, 2)
-  taxAmount       Decimal     @map("tax_amount") @db.Decimal(10, 2)
-  discountAmount  Decimal     @default(0) @map("discount_amount") @db.Decimal(10, 2)
-  totalAmount     Decimal     @map("total_amount") @db.Decimal(10, 2)
-  currency        String      @default("EUR")
-  notes           String?
-  cancelledAt     DateTime?   @map("cancelled_at")
-  cancelReason    String?     @map("cancel_reason")
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  id                String       @id @default(uuid())
+  orderNumber       String       @unique @map("order_number")
+  shopifyOrderId    String?      @map("shopify_order_id")
+  userId            String?      @map("user_id")
+  guestEmail        String?      @map("guest_email")
+  shippingAddressId String?      @map("shipping_address_id")
+  status            OrderStatus  @default(pending)
+  channel           SalesChannel @default(website)
+  channelOrderId    String?      @map("channel_order_id")
+  channelFee        Decimal      @default(0) @map("channel_fee") @db.Decimal(10, 2)
+  subtotal          Decimal      @map("subtotal") @db.Decimal(10, 2)
+  shippingCost      Decimal      @default(0) @map("shipping_cost") @db.Decimal(10, 2)
+  taxAmount         Decimal      @map("tax_amount") @db.Decimal(10, 2)
+  discountAmount    Decimal      @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  totalAmount       Decimal      @map("total_amount") @db.Decimal(10, 2)
+  currency          String       @default("EUR")
+  shippingZone      String?      @map("shipping_zone")
+  couponCode        String?      @map("coupon_code")
+  notes             String?
+  cancelledAt       DateTime?    @map("cancelled_at")
+  cancelReason      String?      @map("cancel_reason")
+  deletedAt         DateTime?    @map("deleted_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
 
-  user            User?       @relation(fields: [userId], references: [id])
-  shippingAddress Address?    @relation(fields: [shippingAddressId], references: [id])
+  user            User?                @relation(fields: [userId], references: [id])
+  shippingAddress Address?             @relation(fields: [shippingAddressId], references: [id])
   items           OrderItem[]
   payment         Payment?
   shipment        Shipment?
   returns         Return[]
   couponUsages    CouponUsage[]
+  statusHistory   OrderStatusHistory[]
 
+  @@index([userId, status])
+  @@index([createdAt, id])
   @@map("orders")
+}
+
+model OrderStatusHistory {
+  id          String       @id @default(uuid())
+  orderId     String       @map("order_id")
+  fromStatus  OrderStatus? @map("from_status")
+  toStatus    OrderStatus  @map("to_status")
+  source      String       // 'customer' | 'admin' | 'system' | 'payment_webhook'
+  referenceId String?      @map("reference_id")
+  notes       String?
+  createdBy   String?      @map("created_by")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+model IdempotencyKey {
+  id           String   @id @default(uuid())
+  key          String   @unique
+  userId       String?  @map("user_id")
+  endpoint     String
+  requestHash  String   @map("request_hash")
+  responseBody Json?    @map("response_body")
+  statusCode   Int?     @map("status_code")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OrderSequence {
+  dateKey String @id @map("date_key")
+  seq     Int    @default(1)
+
+  @@map("order_sequences")
+}
+
+model ShippingZone {
+  id                    String    @id @default(uuid())
+  zoneName              String    @map("zone_name")
+  countryCodes          String[]  @map("country_codes")
+  basePrice             Decimal   @map("base_price") @db.Decimal(10, 2)
+  freeShippingThreshold Decimal?  @map("free_shipping_threshold") @db.Decimal(10, 2)
+  weightSurchargePerKg  Decimal?  @map("weight_surcharge_per_kg") @db.Decimal(10, 2)
+  isActive              Boolean   @default(true) @map("is_active")
+  deletedAt             DateTime? @map("deleted_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@map("shipping_zones")
 }
 
 model OrderItem {

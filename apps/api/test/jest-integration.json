@@ -1,0 +1,16 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "../src",
+  "testRegex": ".*\\.integration\\.spec\\.ts$",
+  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+  "collectCoverageFrom": ["**/*.(t|j)s"],
+  "coverageDirectory": "../coverage-integration",
+  "testEnvironment": "node",
+  "moduleNameMapper": {
+    "^@omnichannel/types(.*)$": "<rootDir>/../../../packages/types/src$1",
+    "^@omnichannel/utils(.*)$": "<rootDir>/../../../packages/utils/src$1"
+  },
+  "globalSetup": "<rootDir>/../test/setup/global-setup.ts",
+  "globalTeardown": "<rootDir>/../test/setup/global-teardown.ts",
+  "setupFilesAfterFramework": ["<rootDir>/../test/setup/test-setup.ts"]
+}
