@@ -73,6 +73,7 @@
   "product": {
     "addToCart": "In den Warenkorb",
     "added": "Hinzugefügt",
+    "addToWishlist": "Zur Wunschliste hinzufügen",
     "outOfStock": "Nicht vorrätig",
     "notifyAvailable": "Benachrichtigen wenn verfügbar",
     "size": "Größe",

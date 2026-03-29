@@ -1,12 +1,15 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { Header } from './header'
-import { Footer } from './footer'
-import { MobileNav } from './mobile-nav'
-import { CartDrawer } from './cart-drawer'
-import { CookieBanner } from './cookie-banner'
-import { OfflineToast } from './offline-toast'
+
+// Lazy load below-fold / non-critical shell components
+const Footer = dynamic(() => import('./footer').then((m) => ({ default: m.Footer })))
+const MobileNav = dynamic(() => import('./mobile-nav').then((m) => ({ default: m.MobileNav })), { ssr: false })
+const CartDrawer = dynamic(() => import('./cart-drawer').then((m) => ({ default: m.CartDrawer })), { ssr: false })
+const CookieBanner = dynamic(() => import('./cookie-banner').then((m) => ({ default: m.CookieBanner })), { ssr: false })
+const OfflineToast = dynamic(() => import('./offline-toast').then((m) => ({ default: m.OfflineToast })), { ssr: false })
 
 /**
  * StoreShell — renders store chrome (header, footer, mobile nav, cart, cookies)

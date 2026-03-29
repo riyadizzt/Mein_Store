@@ -1,6 +1,7 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
+import { translateColor } from '@/lib/locale-utils'
 
 interface Variant {
   id: string
@@ -10,6 +11,8 @@ interface Variant {
   size?: string
   isActive: boolean
   priceModifier: number
+  stock?: number
+  isInStock?: boolean
   _stock?: { available: number }
 }
 
@@ -19,8 +22,13 @@ interface VariantSelectorProps {
   onSelect: (variantId: string) => void
 }
 
+function getStock(v: Variant): number {
+  return (v as any).stock ?? v._stock?.available ?? 0
+}
+
 export function VariantSelector({ variants, selectedVariantId, onSelect }: VariantSelectorProps) {
   const t = useTranslations('product')
+  const locale = useLocale()
 
   // Extract unique colors and sizes
   const colors = [...new Map(
@@ -44,9 +52,16 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
     )
   }
 
-  const isAvailable = (color?: string, size?: string) => {
-    const v = findVariant(color, size)
-    return v && v.isActive && (v._stock?.available ?? 1) > 0
+  // For COLOR circles: check if ANY size of this color has stock
+  const isColorAvailable = (color: string) => {
+    return variants.some((v) => v.color === color && v.isActive && getStock(v) > 0)
+  }
+
+  // For SIZE buttons: check if this specific color+size combo has stock
+  const isSizeAvailable = (size: string) => {
+    if (!selectedColor) return variants.some((v) => v.size === size && v.isActive && getStock(v) > 0)
+    const v = findVariant(selectedColor, size)
+    return v ? getStock(v) > 0 : false
   }
 
   return (
@@ -55,11 +70,11 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
       {colors.length > 0 && (
         <div>
           <label className="text-sm font-medium mb-2 block">
-            {t('color')}: <span className="text-muted-foreground font-normal">{selectedColor}</span>
+            {t('color')}: <span className="text-muted-foreground font-normal">{selectedColor ? translateColor(selectedColor, locale) : ''}</span>
           </label>
           <div className="flex flex-wrap gap-2">
             {colors.map(({ color, hex }) => {
-              const available = isAvailable(color, selectedSize)
+              const available = isColorAvailable(color)
               const isSelected = selectedColor === color
 
               return (
@@ -70,13 +85,13 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
                     if (v) onSelect(v.id)
                   }}
                   disabled={!available}
-                  title={color}
+                  title={`${translateColor(color, locale)}${!available ? ` (${t('outOfStock')})` : ''}`}
                   className={`relative h-9 w-9 rounded-full border-2 transition-all ${
                     isSelected
                       ? 'border-primary ring-2 ring-primary/20'
                       : 'border-border hover:border-foreground/50'
                   } ${!available ? 'opacity-40 cursor-not-allowed' : ''}`}
-                  aria-label={color}
+                  aria-label={translateColor(color, locale)}
                 >
                   <span
                     className="absolute inset-1 rounded-full"
@@ -102,7 +117,7 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
           </label>
           <div className="flex flex-wrap gap-2">
             {sizes.map((size) => {
-              const available = isAvailable(selectedColor, size)
+              const available = isSizeAvailable(size)
               const isSelected = selectedSize === size
 
               return (

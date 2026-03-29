@@ -73,6 +73,7 @@
   "product": {
     "addToCart": "أضف إلى السلة",
     "added": "تمت الإضافة",
+    "addToWishlist": "إضافة للمفضلة",
     "outOfStock": "غير متوفر",
     "notifyAvailable": "أبلغني عند التوفر",
     "size": "المقاس",

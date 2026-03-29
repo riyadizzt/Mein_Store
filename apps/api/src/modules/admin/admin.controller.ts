@@ -19,7 +19,6 @@ import {
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { memoryStorage } from 'multer'
-import { v2 as cloudinary } from 'cloudinary'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'
 import { Roles } from '../../common/decorators/roles.decorator'
@@ -32,6 +31,7 @@ import { AdminReturnsService } from './services/admin-returns.service'
 import { AdminStaffService } from './services/admin-staff.service'
 import { AuditService } from './services/audit.service'
 import { EmailService } from '../email/email.service'
+import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
 
 @Controller('admin')
@@ -49,6 +49,7 @@ export class AdminController {
     private readonly audit: AuditService,
     private readonly emailService: EmailService,
     private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
   ) {}
 
   // ── Dashboard ─────────────────────────────────────────────
@@ -507,16 +508,13 @@ export class AdminController {
     @UploadedFile() file: Express.Multer.File,
     @Body('colorName') colorName?: string,
   ) {
-    // Upload to Cloudinary
-    const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { folder: `malak/products/${productId}`, transformation: [{ width: 1200, height: 1200, crop: 'limit', quality: 'auto' }] },
-        (error, result) => { if (error || !result) return reject(error ?? new Error('Upload failed')); resolve(result) },
-      ).end(file.buffer)
-    })
+    // Upload to Supabase Storage (optimized WebP + thumbnail)
+    const { url } = await this.storage.uploadProductImage(
+      productId, file.buffer, file.originalname, colorName || undefined,
+    )
 
     // Save to DB
-    return this.products.addImageUrl(productId, result.secure_url, colorName || undefined)
+    return this.products.addImageUrl(productId, url, colorName || undefined)
   }
 
   @Patch('products/images/:imageId/color')

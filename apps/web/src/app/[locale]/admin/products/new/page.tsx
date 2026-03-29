@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Save, Eye, Globe, ChevronDown, X, Plus, Upload, Star,
+  Save, Eye, Globe, ChevronDown, X, Plus, Upload, Star, Image as ImageIcon,
   AlertTriangle, ExternalLink, Shirt, Footprints, Baby,
   Package, Loader2,
 } from 'lucide-react'
@@ -61,16 +61,17 @@ export default function NewProductPage() {
   const [salePrice, setSalePrice] = useState<number | null>(null)
   const [showSeo, setShowSeo] = useState(false)
 
+  // Images — ONE unified gallery, colorName nullable
+  const [images, setImages] = useState<ImageEntry[]>([])
+  const [assigningImageId, setAssigningImageId] = useState<string | null>(null)
+
   // Colors
   const [colors, setColors] = useState<ColorEntry[]>([])
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [customColorName, setCustomColorName] = useState('')
   const [customColorHex, setCustomColorHex] = useState('#000000')
 
-  // UNIFIED images — one array, colorName nullable
-  const [images, setImages] = useState<ImageEntry[]>([])
-
-  // Sizes — flexible
+  // Sizes
   const [sizePreset, setSizePreset] = useState<string>('clothing')
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set())
   const [customSizeInput, setCustomSizeInput] = useState('')
@@ -100,8 +101,34 @@ export default function NewProductPage() {
     enabled: dupQuery.length >= 3 && !dupDismissed,
   })
 
-  // ── Handlers ──
+  // ── Image Handlers ──
+  const addImages = (files: FileList | File[]) => {
+    const newImages: ImageEntry[] = Array.from(files).map((file, i) => ({
+      id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      url: URL.createObjectURL(file),
+      file,
+      colorName: null,
+      isPrimary: images.length === 0 && i === 0,
+    }))
+    setImages((prev) => [...prev, ...newImages])
+  }
 
+  const removeImage = (id: string) => {
+    setImages((prev) => {
+      const filtered = prev.filter((img) => img.id !== id)
+      if (filtered.length > 0 && !filtered.some((i) => i.isPrimary)) filtered[0].isPrimary = true
+      return filtered
+    })
+  }
+
+  const setPrimaryImage = (id: string) => setImages((prev) => prev.map((i) => ({ ...i, isPrimary: i.id === id })))
+
+  const assignImageToColor = (imageId: string, colorName: string | null) => {
+    setImages((prev) => prev.map((img) => img.id === imageId ? { ...img, colorName } : img))
+    setAssigningImageId(null)
+  }
+
+  // ── Other Handlers ──
   const handleNameChange = (lang: string, value: string) => {
     setTranslations((prev) => ({ ...prev, [lang]: { ...prev[lang], name: value } }))
     if (lang === 'de') {
@@ -120,67 +147,21 @@ export default function NewProductPage() {
   const removeColor = (id: string) => {
     const color = colors.find((c) => c.id === id)
     setColors(colors.filter((c) => c.id !== id))
-    // Remove images assigned to this color
-    if (color) setImages(images.filter((img) => img.colorName !== color.name))
+    if (color) setImages((prev) => prev.map((img) => img.colorName === color.name ? { ...img, colorName: null } : img))
   }
 
-  // Add image for a specific color
-  const addColorImage = (colorName: string, file: File) => {
-    const url = URL.createObjectURL(file)
-    // Remove existing image for this color, add new one
-    setImages((prev) => {
-      const filtered = prev.filter((img) => img.colorName !== colorName)
-      return [...filtered, { id: `img-${Date.now()}`, url, file, colorName, isPrimary: filtered.length === 0 }]
-    })
-  }
+  const toggleSize = (size: string) => { const n = new Set(selectedSizes); n.has(size) ? n.delete(size) : n.add(size); setSelectedSizes(n) }
+  const addCustomSize = () => { const s = customSizeInput.trim(); if (!s || selectedSizes.has(s)) return; setSelectedSizes(new Set([...selectedSizes, s])); setCustomSizeInput('') }
 
-  // Add general image (no color)
-  const addGeneralImage = (file: File) => {
-    const url = URL.createObjectURL(file)
-    setImages((prev) => [...prev, { id: `img-${Date.now()}-${Math.random()}`, url, file, colorName: null, isPrimary: prev.length === 0 }])
-  }
-
-  const removeImage = (id: string) => {
-    setImages((prev) => {
-      const filtered = prev.filter((img) => img.id !== id)
-      if (filtered.length > 0 && !filtered.some((i) => i.isPrimary)) filtered[0].isPrimary = true
-      return filtered
-    })
-  }
-
-  const setPrimaryImage = (id: string) => setImages((prev) => prev.map((i) => ({ ...i, isPrimary: i.id === id })))
-
-  // Sizes
-  const toggleSize = (size: string) => {
-    const next = new Set(selectedSizes)
-    next.has(size) ? next.delete(size) : next.add(size)
-    setSelectedSizes(next)
-  }
-
-  const addCustomSize = () => {
-    const s = customSizeInput.trim()
-    if (!s || selectedSizes.has(s)) return
-    setSelectedSizes(new Set([...selectedSizes, s]))
-    setCustomSizeInput('')
-  }
-
-  // Variants
   const variants = colors.flatMap((color) =>
     [...selectedSizes].map((size) => ({
-      key: `${color.name}-${size}`,
-      color: color.name, colorHex: color.hex, size,
+      key: `${color.name}-${size}`, color: color.name, colorHex: color.hex, size,
       sku: `MAL-${slug ? slug.slice(0, 6).toUpperCase().replace(/[^A-Z0-9]/g, '') : 'NEW'}-${color.name.slice(0, 3).toUpperCase()}-${size}`,
     }))
   )
 
-  const applyBulkStock = () => {
-    if (bulkStock === '') return
-    const next: Record<string, number> = {}
-    for (const v of variants) next[v.key] = Number(bulkStock)
-    setVariantStocks(next)
-  }
+  const applyBulkStock = () => { if (bulkStock === '') return; const n: Record<string, number> = {}; for (const v of variants) n[v.key] = Number(bulkStock); setVariantStocks(n) }
 
-  // Validate + Save
   const validate = () => {
     const e: Record<string, string> = {}
     if (!translations.de.name.trim()) e.name = t('wizard.nameRequired')
@@ -206,24 +187,114 @@ export default function NewProductPage() {
           weightGrams: 500, initialStock: variantStocks[v.key] ?? 0,
         })),
       })
+      // TODO: Upload images to Supabase after product creation
       router.push(`/${locale}/admin/products`)
-    } catch (err: any) {
-      setErrors({ save: err?.message ?? 'Error' })
-    } finally { setSaving(false) }
+    } catch (err: any) { setErrors({ save: err?.message ?? 'Error' }) }
+    finally { setSaving(false) }
   }
 
   const duplicates = dupResult?.duplicates ?? []
   const hasDup = duplicates.length > 0 && !dupDismissed
-  const generalImages = images.filter((img) => !img.colorName)
-  const getColorImage = (colorName: string) => images.find((img) => img.colorName === colorName)
+
+  // Image counts per color
+  const getColorImages = (colorName: string) => images.filter((img) => img.colorName === colorName)
 
   return (
     <div className="max-w-4xl mx-auto pb-32">
       <AdminBreadcrumb items={[{ label: t('products.title'), href: `/${locale}/admin/products` }, { label: t('wizard.newProduct') }]} />
       <h1 className="text-2xl font-bold mb-8">{t('wizard.newProduct')}</h1>
 
-      {/* ── Section 1: Basics ── */}
-      <section id="section-name" className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out' }}>
+      {/* ══════════ Section 1: BILDER-GALERIE ══════════ */}
+      <section className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out' }}>
+        <div className="px-6 py-4 border-b bg-muted/20 flex items-center justify-between">
+          <span className="font-semibold text-sm flex items-center gap-2"><ImageIcon className="h-4 w-4" />{t('wizard.images')}</span>
+          <span className="text-xs text-muted-foreground">{images.length} {locale === 'ar' ? 'صورة' : 'Bilder'}</span>
+        </div>
+        <div className="p-6">
+          {/* Upload Zone */}
+          <label className="block border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-[#d4a853]/50 hover:bg-[#d4a853]/5 transition-all mb-4">
+            <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">{t('wizard.uploadZone')}</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">{t('wizard.uploadHint')}</p>
+            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) addImages(e.target.files) }} />
+          </label>
+
+          {/* Image Grid */}
+          {images.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+              {images.map((img) => {
+                const assignedColor = img.colorName ? colors.find((c) => c.name === img.colorName) : null
+                return (
+                  <div key={img.id} className="relative aspect-square rounded-xl overflow-hidden border-2 group hover:shadow-lg transition-all cursor-pointer"
+                    style={{ borderColor: assignedColor ? assignedColor.hex : 'transparent' }}>
+                    <img src={img.url} alt="" className="w-full h-full object-cover" />
+
+                    {/* Primary badge */}
+                    {img.isPrimary && (
+                      <div className="absolute top-1.5 left-1.5 rtl:left-auto rtl:right-1.5">
+                        <Star className="h-4 w-4 text-[#d4a853] fill-[#d4a853] drop-shadow" />
+                      </div>
+                    )}
+
+                    {/* Color assignment badge */}
+                    {assignedColor && (
+                      <div className="absolute bottom-1.5 left-1.5 rtl:left-auto rtl:right-1.5 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/60 backdrop-blur-sm">
+                        <div className="h-3 w-3 rounded-full border border-white/50" style={{ backgroundColor: assignedColor.hex }} />
+                        <span className="text-[9px] text-white font-medium">{translateColor(assignedColor.name, locale)}</span>
+                      </div>
+                    )}
+
+                    {/* Hover overlay with actions */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
+                      {/* Set as primary */}
+                      {!img.isPrimary && (
+                        <button onClick={(e) => { e.stopPropagation(); setPrimaryImage(img.id) }}
+                          className="w-full py-1 rounded-lg bg-white/90 text-[10px] font-medium text-gray-800 hover:bg-white transition-colors flex items-center justify-center gap-1">
+                          <Star className="h-3 w-3" />{locale === 'ar' ? 'رئيسي' : 'Hauptbild'}
+                        </button>
+                      )}
+
+                      {/* Assign to color */}
+                      {colors.length > 0 && (
+                        <button onClick={(e) => { e.stopPropagation(); setAssigningImageId(assigningImageId === img.id ? null : img.id) }}
+                          className="w-full py-1 rounded-lg bg-white/90 text-[10px] font-medium text-gray-800 hover:bg-white transition-colors">
+                          {img.colorName ? (locale === 'ar' ? 'تغيير اللون' : 'Farbe ändern') : (locale === 'ar' ? 'تعيين لون' : 'Farbe zuweisen')}
+                        </button>
+                      )}
+
+                      {/* Remove */}
+                      <button onClick={(e) => { e.stopPropagation(); removeImage(img.id) }}
+                        className="w-full py-1 rounded-lg bg-red-500/90 text-[10px] font-medium text-white hover:bg-red-600 transition-colors flex items-center justify-center gap-1">
+                        <X className="h-3 w-3" />{locale === 'ar' ? 'حذف' : 'Entfernen'}
+                      </button>
+                    </div>
+
+                    {/* Color assignment dropdown */}
+                    {assigningImageId === img.id && (
+                      <div className="absolute inset-x-0 bottom-0 bg-white rounded-b-xl shadow-lg border-t z-10 p-2" onClick={(e) => e.stopPropagation()} style={{ animation: 'fadeSlideUp 150ms ease-out' }}>
+                        <button onClick={() => assignImageToColor(img.id, null)}
+                          className={`w-full text-left rtl:text-right px-2 py-1.5 rounded-lg text-xs hover:bg-muted transition-colors ${!img.colorName ? 'bg-muted font-semibold' : ''}`}>
+                          {locale === 'ar' ? 'بدون لون (عام)' : 'Kein Farbe (Allgemein)'}
+                        </button>
+                        {colors.map((c) => (
+                          <button key={c.id} onClick={() => assignImageToColor(img.id, c.name)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-muted transition-colors ${img.colorName === c.name ? 'bg-muted font-semibold' : ''}`}>
+                            <div className="h-3 w-3 rounded-full border" style={{ backgroundColor: c.hex }} />
+                            {translateColor(c.name, locale)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ══════════ Section 2: GRUNDDATEN ══════════ */}
+      <section id="section-name" className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out 50ms both' }}>
         <div className="px-6 py-4 border-b bg-muted/20 font-semibold text-sm">{t('wizard.basics')}</div>
         <div className="flex border-b">
           {LANGS.map((lang) => (
@@ -238,16 +309,15 @@ export default function NewProductPage() {
             <label className="text-sm font-medium mb-1.5 block">{t('wizard.productName')} ({activeLang.toUpperCase()}) {activeLang === 'de' && <span className="text-destructive">*</span>}</label>
             <Input value={translations[activeLang]?.name ?? ''} onChange={(e) => handleNameChange(activeLang, e.target.value)}
               className={`text-lg h-12 rounded-xl ${errors.name && activeLang === 'de' ? 'border-destructive ring-2 ring-destructive/20' : ''}`}
-              dir={activeLang === 'ar' ? 'rtl' : 'ltr'} placeholder={activeLang === 'de' ? 'z.B. Winterjacke Classic' : activeLang === 'en' ? 'e.g. Classic Winter Jacket' : 'جاكيت شتوي كلاسيكي'} />
+              dir={activeLang === 'ar' ? 'rtl' : 'ltr'} />
             {errors.name && activeLang === 'de' && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
             {hasDup && (
-              <div className="mt-3 rounded-xl border p-4 bg-amber-50 border-amber-200" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+              <div className="mt-3 rounded-xl border p-3 bg-amber-50 border-amber-200" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
                 <div className="flex items-center gap-2 mb-2"><AlertTriangle className="h-4 w-4 text-amber-600" /><span className="text-sm font-semibold text-amber-800">{locale === 'ar' ? 'منتجات مشابهة:' : 'Ähnliche Produkte:'}</span></div>
                 {duplicates.slice(0, 3).map((d: any) => (
-                  <div key={d.product.id} className="flex items-center gap-3 bg-white/80 rounded-lg p-2 mt-1">
-                    {d.product.image && <img src={d.product.image} alt="" className="h-8 w-8 rounded object-cover" />}
+                  <div key={d.product.id} className="flex items-center gap-2 bg-white/80 rounded-lg p-2 mt-1">
                     <span className="text-sm flex-1 truncate">{getProductName(d.product.translations, locale)}</span>
-                    <a href={`/${locale}/admin/products/${d.product.id}`} className="text-xs text-primary flex items-center gap-1"><ExternalLink className="h-3 w-3" /></a>
+                    <a href={`/${locale}/admin/products/${d.product.id}`} className="text-xs text-primary"><ExternalLink className="h-3 w-3" /></a>
                   </div>
                 ))}
                 <button onClick={() => setDupDismissed(true)} className="text-xs text-muted-foreground mt-2">{locale === 'ar' ? 'إنشاء على أي حال' : 'Trotzdem erstellen'}</button>
@@ -263,11 +333,9 @@ export default function NewProductPage() {
             <div>
               <label className="text-sm font-medium mb-1.5 block">{t('wizard.category')} <span className="text-destructive">*</span></label>
               <div className="flex gap-2">
-                <select value={selectedDept} onChange={(e) => { setSelectedDept(e.target.value); setCategoryId('') }} className="w-1/2 h-10 px-3 rounded-xl border bg-background text-sm"><option value="">—</option>
-                  {(categories ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.name ?? d.translations?.[0]?.name ?? d.slug}</option>)}</select>
+                <select value={selectedDept} onChange={(e) => { setSelectedDept(e.target.value); setCategoryId('') }} className="w-1/2 h-10 px-3 rounded-xl border bg-background text-sm"><option value="">—</option>{(categories ?? []).map((d: any) => <option key={d.id} value={d.id}>{d.name ?? d.translations?.[0]?.name ?? d.slug}</option>)}</select>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`w-1/2 h-10 px-3 rounded-xl border bg-background text-sm ${errors.category ? 'border-destructive' : ''}`} disabled={!selectedDept}>
-                  <option value="">{t('wizard.selectCategory')}</option>
-                  {(categories ?? []).find((d: any) => d.id === selectedDept)?.children?.map((s: any) => <option key={s.id} value={s.id}>{s.name ?? s.translations?.[0]?.name}</option>)}</select>
+                  <option value="">{t('wizard.selectCategory')}</option>{(categories ?? []).find((d: any) => d.id === selectedDept)?.children?.map((s: any) => <option key={s.id} value={s.id}>{s.name ?? s.translations?.[0]?.name}</option>)}</select>
               </div>
               {errors.category && <p className="text-xs text-destructive mt-1">{errors.category}</p>}
             </div>
@@ -275,10 +343,9 @@ export default function NewProductPage() {
           </div>
           <div id="section-price" className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.basePrice')} <span className="text-destructive">*</span></label>
-              <Input type="number" min={0} step={0.01} value={basePrice || ''} onChange={(e) => setBasePrice(+e.target.value)} className={`rounded-xl ${errors.price ? 'border-destructive' : ''}`} placeholder="29.99" />
-              {errors.price && <p className="text-xs text-destructive mt-1">{errors.price}</p>}</div>
+              <Input type="number" min={0} step={0.01} value={basePrice || ''} onChange={(e) => setBasePrice(+e.target.value)} className={`rounded-xl ${errors.price ? 'border-destructive' : ''}`} placeholder="29.99" />{errors.price && <p className="text-xs text-destructive mt-1">{errors.price}</p>}</div>
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.salePrice')}</label><Input type="number" min={0} step={0.01} value={salePrice ?? ''} onChange={(e) => setSalePrice(e.target.value ? +e.target.value : null)} className="rounded-xl" placeholder="Optional" /></div>
-            <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.taxRate')}</label><Input type="number" value={19} readOnly className="rounded-xl bg-muted" /></div>
+            <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.taxRate')}</label><Input value={19} readOnly className="rounded-xl bg-muted" /></div>
           </div>
           <button onClick={() => setShowSeo(!showSeo)} className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"><Globe className="h-4 w-4" />{t('wizard.seoFields')} <ChevronDown className={`h-3 w-3 transition-transform ${showSeo ? 'rotate-180' : ''}`} /></button>
           {showSeo && (
@@ -290,15 +357,15 @@ export default function NewProductPage() {
         </div>
       </section>
 
-      {/* ── Section 2: Colors + Images (UNIFIED) ── */}
+      {/* ══════════ Section 3: FARBEN ══════════ */}
       <section className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out 100ms both' }}>
         <div className="px-6 py-4 border-b bg-muted/20 flex items-center justify-between">
-          <span className="font-semibold text-sm">{t('wizard.colors')} + {t('wizard.images')}</span>
+          <span className="font-semibold text-sm">{t('wizard.colors')}</span>
           <button onClick={() => setShowColorPicker(!showColorPicker)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#d4a853]/10 text-[#d4a853] hover:bg-[#d4a853]/20 border border-[#d4a853]/20"><Plus className="h-3 w-3" />{t('inventory.addNewColor')}</button>
         </div>
         <div className="p-6">
           {showColorPicker && (
-            <div className="mb-6 p-4 rounded-xl border bg-muted/10" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+            <div className="mb-4 p-4 rounded-xl border bg-muted/10" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {PRESET_COLORS.filter((c) => !colors.some((cc) => cc.name === c.name)).map((c) => (
                   <button key={c.name} onClick={() => { addColor(c.name, c.hex); setShowColorPicker(false) }}
@@ -315,106 +382,69 @@ export default function NewProductPage() {
             </div>
           )}
 
-          {colors.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground text-sm"><Package className="h-8 w-8 mx-auto mb-2 opacity-20" />{locale === 'ar' ? 'أضف لوناً للبدء' : 'Farbe hinzufügen um zu starten'}</div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {/* Selected colors with image count */}
+          {colors.length > 0 ? (
+            <div className="space-y-2">
               {colors.map((color) => {
-                const colorImg = getColorImage(color.name)
+                const colorImgs = getColorImages(color.name)
                 return (
-                  <div key={color.id} className="relative border rounded-xl overflow-hidden group hover:border-primary/30 hover:shadow-md transition-all" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
-                    <label className="block aspect-square bg-muted/30 cursor-pointer relative overflow-hidden">
-                      {colorImg ? <img src={colorImg.url} alt="" className="w-full h-full object-cover" /> : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/40"><Upload className="h-8 w-8 mb-1" /><span className="text-[10px]">{locale === 'ar' ? 'رفع صورة' : 'Bild hochladen'}</span></div>
-                      )}
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) addColorImage(color.name, f) }} />
-                    </label>
-                    <div className="p-3 flex items-center gap-2">
-                      <div className="h-5 w-5 rounded-full border-2 border-white shadow" style={{ backgroundColor: color.hex }} />
-                      <span className="text-xs font-semibold flex-1">{translateColor(color.name, locale)}</span>
+                  <div key={color.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border hover:border-primary/20 transition-all group" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                    <div className="h-8 w-8 rounded-full border-2 border-white shadow" style={{ backgroundColor: color.hex }} />
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold">{translateColor(color.name, locale)}</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        {colorImgs.length > 0 ? `${colorImgs.length} ${locale === 'ar' ? 'صور' : 'Bilder'}` : (locale === 'ar' ? 'بدون صور — عيّن صوراً من المعرض' : 'Keine Bilder — weise Bilder aus der Galerie zu')}
+                      </span>
                     </div>
-                    <button onClick={() => removeColor(color.id)} className="absolute top-2 right-2 rtl:right-auto rtl:left-2 h-6 w-6 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"><X className="h-3 w-3" /></button>
+                    {/* Mini thumbnails of assigned images */}
+                    {colorImgs.length > 0 && (
+                      <div className="flex -space-x-2">{colorImgs.slice(0, 3).map((img) => (
+                        <img key={img.id} src={img.url} alt="" className="h-8 w-8 rounded-lg object-cover border-2 border-white" />
+                      ))}</div>
+                    )}
+                    <button onClick={() => removeColor(color.id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"><X className="h-3.5 w-3.5" /></button>
                   </div>
                 )
               })}
             </div>
+          ) : (
+            <div className="py-6 text-center text-muted-foreground text-sm"><Package className="h-6 w-6 mx-auto mb-2 opacity-20" />{locale === 'ar' ? 'أضف لوناً للبدء' : 'Farbe hinzufügen'}</div>
           )}
-
-          {/* General Images (no color assigned) */}
-          <div className="mt-6 pt-6 border-t">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 block">{t('wizard.images')} ({locale === 'ar' ? 'عامة' : 'Allgemein'})</label>
-            <div className="flex gap-3 flex-wrap">
-              {generalImages.map((img) => (
-                <div key={img.id} className="relative h-20 w-20 rounded-xl overflow-hidden border group">
-                  <img src={img.url} alt="" className="w-full h-full object-cover" />
-                  {img.isPrimary && <Star className="absolute top-1 left-1 h-3 w-3 text-[#d4a853] fill-[#d4a853]" />}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                    {!img.isPrimary && <button onClick={() => setPrimaryImage(img.id)} className="h-5 w-5 rounded-full bg-white flex items-center justify-center"><Star className="h-2.5 w-2.5" /></button>}
-                    <button onClick={() => removeImage(img.id)} className="h-5 w-5 rounded-full bg-white flex items-center justify-center"><X className="h-2.5 w-2.5" /></button>
-                  </div>
-                </div>
-              ))}
-              <label className="h-20 w-20 rounded-xl border-2 border-dashed flex items-center justify-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors">
-                <Plus className="h-5 w-5 text-muted-foreground/40" />
-                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { for (const f of Array.from(e.target.files ?? [])) addGeneralImage(f) }} />
-              </label>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* ── Section 3: Sizes (FLEXIBLE) ── */}
-      <section className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out 200ms both' }}>
+      {/* ══════════ Section 4: GRÖßEN ══════════ */}
+      <section className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out 150ms both' }}>
         <div className="px-6 py-4 border-b bg-muted/20 font-semibold text-sm">{locale === 'ar' ? 'المقاسات' : 'Größen'}</div>
         <div className="p-6">
-          {/* Preset buttons (SUGGESTIONS, not forced) */}
           <div className="flex gap-2 mb-4">
-            {Object.entries(SIZE_PRESETS).map(([key, sys]) => {
-              const Icon = sys.icon
-              return (
-                <button key={key} onClick={() => setSizePreset(key)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${sizePreset === key ? 'bg-[#1a1a2e] text-white shadow-md' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
-                  <Icon className="h-4 w-4" />{sys.label}
-                </button>
-              )
-            })}
+            {Object.entries(SIZE_PRESETS).map(([key, sys]) => { const Icon = sys.icon; return (
+              <button key={key} onClick={() => setSizePreset(key)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${sizePreset === key ? 'bg-[#1a1a2e] text-white shadow-md' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}><Icon className="h-4 w-4" />{sys.label}</button>
+            )})}
           </div>
-
-          {/* Preset chips */}
           <div className="flex flex-wrap gap-2 mb-4">
             {SIZE_PRESETS[sizePreset].sizes.map((size) => (
-              <button key={size} onClick={() => toggleSize(size)}
-                className={`h-10 min-w-[44px] px-3 rounded-xl text-sm font-bold transition-all ${selectedSizes.has(size) ? 'bg-[#1a1a2e] text-white shadow-md' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>{size}</button>
+              <button key={size} onClick={() => toggleSize(size)} className={`h-10 min-w-[44px] px-3 rounded-xl text-sm font-bold transition-all ${selectedSizes.has(size) ? 'bg-[#1a1a2e] text-white shadow-md' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>{size}</button>
             ))}
           </div>
-
-          {/* Custom size input */}
           <div className="flex gap-2 items-center">
-            <Input value={customSizeInput} onChange={(e) => setCustomSizeInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
-              placeholder={locale === 'ar' ? 'مقاس مخصص: One Size, 7XL, 50/52...' : 'Eigene Größe: One Size, 7XL, 50/52...'}
-              className="rounded-xl text-sm max-w-xs" />
+            <Input value={customSizeInput} onChange={(e) => setCustomSizeInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
+              placeholder={locale === 'ar' ? 'مقاس مخصص...' : 'Eigene Größe...'} className="rounded-xl text-sm max-w-xs" />
             <Button size="sm" variant="outline" className="rounded-xl" onClick={addCustomSize} disabled={!customSizeInput.trim()}><Plus className="h-3 w-3" /></Button>
           </div>
-
-          {/* Show custom sizes that aren't in preset */}
           {[...selectedSizes].filter((s) => !SIZE_PRESETS[sizePreset].sizes.includes(s)).length > 0 && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
-              <span className="text-xs text-muted-foreground self-center">{locale === 'ar' ? 'مخصص:' : 'Eigene:'}</span>
               {[...selectedSizes].filter((s) => !SIZE_PRESETS[sizePreset].sizes.includes(s)).map((size) => (
-                <button key={size} onClick={() => toggleSize(size)}
-                  className="h-10 px-3 rounded-xl text-sm font-bold bg-[#1a1a2e] text-white shadow-md flex items-center gap-1.5">
-                  {size} <X className="h-3 w-3 opacity-60" />
-                </button>
+                <button key={size} onClick={() => toggleSize(size)} className="h-10 px-3 rounded-xl text-sm font-bold bg-[#1a1a2e] text-white shadow-md flex items-center gap-1.5">{size} <X className="h-3 w-3 opacity-60" /></button>
               ))}
             </div>
           )}
         </div>
       </section>
 
-      {/* ── Section 4: Variants ── */}
+      {/* ══════════ Section 5: VARIANTEN ══════════ */}
       {variants.length > 0 && (
-        <section className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out 300ms both' }}>
+        <section className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out 200ms both' }}>
           <div className="px-6 py-4 border-b bg-muted/20 flex items-center justify-between">
             <span className="font-semibold text-sm">{variants.length} {t('products.variants')}</span>
             <div className="flex items-center gap-2">
@@ -443,7 +473,7 @@ export default function NewProductPage() {
         </section>
       )}
 
-      {/* ── Sticky Save Bar ── */}
+      {/* ══════════ Sticky Save Bar ══════════ */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t shadow-lg">
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">

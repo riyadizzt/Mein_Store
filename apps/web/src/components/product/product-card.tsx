@@ -11,9 +11,10 @@ import type { Product } from '@/hooks/use-products'
 
 interface ProductCardProps {
   product: Product
+  priority?: boolean
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, priority = false }: ProductCardProps) {
   const t = useTranslations('product')
   const locale = useLocale()
   const [isHovered, setIsHovered] = useState(false)
@@ -70,6 +71,7 @@ export function ProductCard({ product }: ProductCardProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       prefetch={false}
+      aria-label={name}
     >
       {/* Image Container — Premium hover effects */}
       <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-muted shadow-card transition-all duration-300 group-hover:shadow-card-hover">
@@ -79,6 +81,8 @@ export function ProductCard({ product }: ProductCardProps) {
               src={imageUrl}
               alt={primaryImage?.altText ?? name}
               fill
+              priority={priority}
+              loading={priority ? 'eager' : 'lazy'}
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className={`object-cover transition-all duration-500 group-hover:scale-105 ${
                 isHovered && secondImage ? 'opacity-0' : 'opacity-100'
@@ -127,6 +131,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {available > 0 && (
           <button
             onClick={handleAddToCart}
+            aria-label={`${name} ${t('addToCart')}`}
             className="absolute bottom-0 left-0 right-0 h-11 bg-foreground/95 backdrop-blur-sm text-background text-sm font-medium flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-full group-hover:translate-y-0"
           >
             <ShoppingBag className="h-4 w-4" />

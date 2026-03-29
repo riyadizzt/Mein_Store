@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import * as bcrypt from 'bcrypt'
 import * as crypto from 'crypto'
-import { v2 as cloudinary } from 'cloudinary'
 import { PrismaService } from '../../prisma/prisma.service'
+import { StorageService } from '../../common/services/storage.service'
 import { UpdateProfileDto } from './dto/update-profile.dto'
 import { ChangePasswordDto } from './dto/change-password.dto'
 import { ChangeEmailDto } from './dto/change-email.dto'
@@ -14,7 +14,10 @@ import { ConflictException } from '@nestjs/common'
 export class ProfileService {
   private readonly logger = new Logger(ProfileService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   async findMe(userId: string) {
     const user = await this.prisma.user.findFirst({
@@ -66,31 +69,16 @@ export class ProfileService {
   async uploadProfileImage(userId: string, file: Express.Multer.File): Promise<string> {
     await this.findMe(userId)
 
-    // Upload to Cloudinary EU (configured in app bootstrap)
-    const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
-      cloudinary.uploader
-        .upload_stream(
-          {
-            folder: `malak/users/${userId}/avatar`,
-            public_id: 'profile',
-            overwrite: true,
-            transformation: [{ width: 400, height: 400, crop: 'fill', gravity: 'face' }],
-          },
-          (error, result) => {
-            if (error || !result) return reject(error ?? new Error('Cloudinary upload failed'))
-            resolve(result)
-          },
-        )
-        .end(file.buffer)
-    })
+    // Upload to Supabase Storage (optimized WebP 400x400)
+    const url = await this.storage.uploadAvatar(userId, file.buffer)
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { profileImageUrl: result.secure_url },
+      data: { profileImageUrl: url },
     })
 
     this.logger.log(`Profile image updated for user ${userId}`)
-    return result.secure_url
+    return url
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {

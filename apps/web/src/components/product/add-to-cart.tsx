@@ -101,7 +101,7 @@ export function AddToCart({
           {added ? (
             <>
               <Check className="h-5 w-5" />
-              Hinzugefügt
+              {t('added')}
             </>
           ) : isOutOfStock ? (
             t('outOfStock')
@@ -152,6 +152,7 @@ export function StickyAddToCart({
 // ── Wishlist Button (used on PDP) ───────────────────────
 
 function WishlistButton({ productId }: { productId: string }) {
+  const t = useTranslations('product')
   const { isInWishlist, toggle, isPending, isAuthenticated } = useWishlist()
   const wishlisted = isInWishlist(productId)
 
@@ -164,7 +165,7 @@ function WishlistButton({ productId }: { productId: string }) {
       className={`h-11 w-11 flex items-center justify-center border rounded-xl transition-all duration-200 flex-shrink-0 ${
         wishlisted ? 'bg-red-50 border-red-200' : 'hover:bg-muted'
       }`}
-      aria-label="Zur Wunschliste"
+      aria-label={t('addToWishlist')}
     >
       <Heart className={`h-5 w-5 transition-colors ${wishlisted ? 'fill-red-500 text-red-500' : ''}`} />
     </button>

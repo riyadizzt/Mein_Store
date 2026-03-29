@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, Trash2, Package, Save, Upload, Star, X } from 'lucide-react'
+import {
+  Loader2, Plus, Trash2, Package, Save, Upload, Star, X,
+  Image as ImageIcon,
+} from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { translateColor, getProductName, formatCurrency } from '@/lib/locale-utils'
@@ -34,14 +37,15 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   const [showAddColor, setShowAddColor] = useState(false)
   const [showAddSize, setShowAddSize] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState<string | null>(null) // colorName being uploaded
+  const [uploading, setUploading] = useState(false)
+  const [assigningImageId, setAssigningImageId] = useState<string | null>(null)
 
   const { data: product, isLoading } = useQuery({
     queryKey: ['admin-product', id],
     queryFn: async () => { const { data } = await api.get(`/admin/products/${id}`); return data },
   })
 
-  // Pre-fill from product data
+  // Pre-fill
   useEffect(() => {
     if (!product) return
     const t: Record<string, any> = { de: { name: '', description: '', metaTitle: '', metaDesc: '' }, en: { name: '', description: '', metaTitle: '', metaDesc: '' }, ar: { name: '', description: '', metaTitle: '', metaDesc: '' } }
@@ -58,53 +62,47 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', id] }),
   })
 
-  // Image upload to Cloudinary via API
-  const handleImageUpload = async (file: File, colorName?: string) => {
-    setUploading(colorName ?? '__general__')
-    try {
+  const saveMut = useMutation({
+    mutationFn: async () => { await api.patch(`/admin/products/${id}/price`, { basePrice, salePrice }) },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', id] }),
+  })
+
+  // Image upload to Supabase
+  const handleImageUpload = async (files: FileList | File[], colorName?: string) => {
+    setUploading(true)
+    const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
+    for (const file of Array.from(files)) {
       const formData = new FormData()
       formData.append('file', file)
       if (colorName) formData.append('colorName', colorName)
-
-      const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/${id}/images/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/${id}/images/upload`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
       })
-      if (!res.ok) throw new Error('Upload failed')
-      qc.invalidateQueries({ queryKey: ['admin-product', id] })
-    } finally {
-      setUploading(null)
     }
+    qc.invalidateQueries({ queryKey: ['admin-product', id] })
+    setUploading(false)
   }
 
   const handleDeleteImage = async (imageId: string) => {
     const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/images/${imageId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
     })
     qc.invalidateQueries({ queryKey: ['admin-product', id] })
   }
 
-  const saveMut = useMutation({
-    mutationFn: async () => {
-      await api.patch(`/admin/products/${id}/price`, { basePrice, salePrice })
-      // Note: full product update (translations, category) would need a PUT /products/:id endpoint
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', id] }),
-  })
-
-  const handleSave = async () => {
-    setSaving(true)
-    try { await saveMut.mutateAsync() } finally { setSaving(false) }
+  const handleAssignColor = async (imageId: string, colorName: string | null) => {
+    await api.patch(`/admin/products/images/${imageId}/color`, { colorName })
+    qc.invalidateQueries({ queryKey: ['admin-product', id] })
+    setAssigningImageId(null)
   }
 
   if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
   if (!product) return <p className="text-muted-foreground">{locale === 'ar' ? 'المنتج غير موجود' : 'Produkt nicht gefunden.'}</p>
 
   const productName = getProductName(product.translations, locale)
+  const productImages = product.images ?? []
+  const productColors = [...new Map((product.variants ?? []).map((v: any) => [v.color, v.colorHex])).entries()].map(([name, hex]) => ({ name: name as string, hex: hex as string }))
 
   // Group variants by color
   const colorGroups = new Map<string, any[]>()
@@ -119,7 +117,75 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
       <AdminBreadcrumb items={[{ label: t('products.title'), href: `/${locale}/admin/products` }, { label: productName }]} />
       <h1 className="text-2xl font-bold mb-8">{productName}</h1>
 
-      {/* ── Section 1: Basics ── */}
+      {/* ══════════ BILDER-GALERIE ══════════ */}
+      <section className="bg-background border rounded-2xl overflow-hidden mb-6">
+        <div className="px-6 py-4 border-b bg-muted/20 flex items-center justify-between">
+          <span className="font-semibold text-sm flex items-center gap-2"><ImageIcon className="h-4 w-4" />{t('wizard.images')}</span>
+          <span className="text-xs text-muted-foreground">{productImages.length} {locale === 'ar' ? 'صورة' : 'Bilder'}</span>
+        </div>
+        <div className="p-6">
+          {/* Upload zone */}
+          <label className="block border-2 border-dashed rounded-xl p-5 text-center cursor-pointer hover:border-[#d4a853]/50 hover:bg-[#d4a853]/5 transition-all mb-4">
+            {uploading ? <Loader2 className="h-6 w-6 mx-auto mb-1 animate-spin text-[#d4a853]" /> : <Upload className="h-6 w-6 mx-auto mb-1 text-muted-foreground/40" />}
+            <p className="text-sm text-muted-foreground">{t('wizard.uploadZone')}</p>
+            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) handleImageUpload(e.target.files) }} />
+          </label>
+
+          {/* Image grid */}
+          {productImages.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+              {productImages.map((img: any) => {
+                const assignedColor = img.colorName ? productColors.find((c) => c.name === img.colorName) : null
+                return (
+                  <div key={img.id} className="relative aspect-square rounded-xl overflow-hidden border-2 group hover:shadow-lg transition-all"
+                    style={{ borderColor: assignedColor ? assignedColor.hex : 'transparent' }}>
+                    <img src={img.url} alt="" className="w-full h-full object-cover" />
+
+                    {img.isPrimary && <Star className="absolute top-1.5 left-1.5 rtl:left-auto rtl:right-1.5 h-4 w-4 text-[#d4a853] fill-[#d4a853] drop-shadow" />}
+
+                    {assignedColor && (
+                      <div className="absolute bottom-1.5 left-1.5 rtl:left-auto rtl:right-1.5 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/60 backdrop-blur-sm">
+                        <div className="h-3 w-3 rounded-full border border-white/50" style={{ backgroundColor: assignedColor.hex }} />
+                        <span className="text-[9px] text-white font-medium">{translateColor(assignedColor.name, locale)}</span>
+                      </div>
+                    )}
+
+                    {/* Hover actions */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
+                      {productColors.length > 0 && (
+                        <button onClick={() => setAssigningImageId(assigningImageId === img.id ? null : img.id)}
+                          className="w-full py-1 rounded-lg bg-white/90 text-[10px] font-medium text-gray-800 hover:bg-white">
+                          {img.colorName ? (locale === 'ar' ? 'تغيير اللون' : 'Farbe ändern') : (locale === 'ar' ? 'تعيين لون' : 'Farbe zuweisen')}
+                        </button>
+                      )}
+                      <button onClick={() => handleDeleteImage(img.id)}
+                        className="w-full py-1 rounded-lg bg-red-500/90 text-[10px] font-medium text-white hover:bg-red-600 flex items-center justify-center gap-1">
+                        <X className="h-3 w-3" />{locale === 'ar' ? 'حذف' : 'Entfernen'}
+                      </button>
+                    </div>
+
+                    {/* Color assignment dropdown */}
+                    {assigningImageId === img.id && (
+                      <div className="absolute inset-x-0 bottom-0 bg-white rounded-b-xl shadow-lg border-t z-10 p-2" onClick={(e) => e.stopPropagation()} style={{ animation: 'fadeSlideUp 150ms ease-out' }}>
+                        <button onClick={() => handleAssignColor(img.id, null)} className={`w-full text-left rtl:text-right px-2 py-1.5 rounded-lg text-xs hover:bg-muted ${!img.colorName ? 'bg-muted font-semibold' : ''}`}>
+                          {locale === 'ar' ? 'بدون لون (عام)' : 'Allgemein (kein Farbe)'}
+                        </button>
+                        {productColors.map((c) => (
+                          <button key={c.name} onClick={() => handleAssignColor(img.id, c.name)} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-muted ${img.colorName === c.name ? 'bg-muted font-semibold' : ''}`}>
+                            <div className="h-3 w-3 rounded-full border" style={{ backgroundColor: c.hex }} />{translateColor(c.name, locale)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ══════════ GRUNDDATEN ══════════ */}
       <section className="bg-background border rounded-2xl overflow-hidden mb-6">
         <div className="px-6 py-4 border-b bg-muted/20 font-semibold text-sm">{t('wizard.basics')}</div>
         <div className="flex border-b">
@@ -142,96 +208,54 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
               className="w-full h-28 px-4 py-3 rounded-xl border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20" dir={activeLang === 'ar' ? 'rtl' : 'ltr'} />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.basePrice')}</label>
-              <Input type="number" min={0} step={0.01} value={basePrice || ''} onChange={(e) => setBasePrice(+e.target.value)} className="rounded-xl" /></div>
-            <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.salePrice')}</label>
-              <Input type="number" min={0} step={0.01} value={salePrice ?? ''} onChange={(e) => setSalePrice(e.target.value ? +e.target.value : null)} className="rounded-xl" /></div>
+            <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.basePrice')}</label><Input type="number" min={0} step={0.01} value={basePrice || ''} onChange={(e) => setBasePrice(+e.target.value)} className="rounded-xl" /></div>
+            <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.salePrice')}</label><Input type="number" min={0} step={0.01} value={salePrice ?? ''} onChange={(e) => setSalePrice(e.target.value ? +e.target.value : null)} className="rounded-xl" /></div>
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.taxRate')}</label><Input value={19} readOnly className="rounded-xl bg-muted" /></div>
           </div>
         </div>
       </section>
 
-      {/* ── Section 2: Colors + Images ── */}
+      {/* ══════════ FARBEN + GRÖßEN ══════════ */}
       <section className="bg-background border rounded-2xl overflow-hidden mb-6">
         <div className="px-6 py-4 border-b bg-muted/20 flex items-center justify-between">
-          <span className="font-semibold text-sm">{t('wizard.colors')} + {t('wizard.images')}</span>
+          <span className="font-semibold text-sm">{t('wizard.colors')} + {locale === 'ar' ? 'المقاسات' : 'Größen'}</span>
           <div className="flex gap-2">
             <button onClick={() => setShowAddColor(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#d4a853]/10 text-[#d4a853] hover:bg-[#d4a853]/20 border border-[#d4a853]/20"><Plus className="h-3 w-3" />{t('inventory.addNewColor')}</button>
             <button onClick={() => setShowAddSize(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200"><Plus className="h-3 w-3" />{t('inventory.addNewSize')}</button>
           </div>
         </div>
         <div className="p-6">
-          {/* Color cards with images */}
-          {colorGroups.size > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
-              {[...colorGroups.entries()].map(([color, variants]) => {
-                const hex = variants[0]?.colorHex ?? '#999'
-                const colorImg = (product.images ?? []).find((img: any) => img.colorName === color)
-                const totalStock = variants.reduce((s: number, v: any) => s + (v.inventory ?? []).reduce((ss: number, inv: any) => ss + inv.quantityOnHand - inv.quantityReserved, 0), 0)
-                const isUploadingThis = uploading === color
+          {/* Colors with image counts */}
+          {productColors.length > 0 ? (
+            <div className="space-y-2 mb-6">
+              {productColors.map((color) => {
+                const colorImgs = productImages.filter((img: any) => img.colorName === color.name)
                 return (
-                  <div key={color} className="border rounded-xl overflow-hidden hover:border-primary/20 hover:shadow-md transition-all group">
-                    {/* Clickable image area — uploads to Cloudinary */}
-                    <label className="block aspect-square bg-muted/30 relative cursor-pointer overflow-hidden">
-                      {isUploadingThis ? (
-                        <div className="w-full h-full flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#d4a853]" /></div>
-                      ) : colorImg ? (
-                        <img src={colorImg.url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/40 group-hover:text-[#d4a853] transition-colors">
-                          <Upload className="h-8 w-8 mb-1" />
-                          <span className="text-[10px] font-medium">{locale === 'ar' ? 'رفع صورة' : 'Bild hochladen'}</span>
-                        </div>
-                      )}
-                      <input type="file" accept="image/*" className="hidden"
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f, color) }} />
-                      {/* Delete existing image */}
-                      {colorImg && (
-                        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteImage(colorImg.id) }}
-                          className="absolute top-2 right-2 rtl:right-auto rtl:left-2 h-6 w-6 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600">
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                      <div className={`absolute bottom-2 right-2 rtl:right-auto rtl:left-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${totalStock <= 0 ? 'bg-red-100 text-red-700' : totalStock <= 5 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>{totalStock}</div>
-                    </label>
-                    <div className="p-3">
-                      <div className="flex items-center gap-2"><div className="h-4 w-4 rounded-full border" style={{ backgroundColor: hex }} /><span className="text-xs font-semibold">{translateColor(color, locale)}</span></div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">{variants.length} {t('products.variants')}</div>
+                  <div key={color.name} className="flex items-center gap-3 px-4 py-3 rounded-xl border hover:border-primary/20 transition-all">
+                    <div className="h-8 w-8 rounded-full border-2 border-white shadow" style={{ backgroundColor: color.hex }} />
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold">{translateColor(color.name, locale)}</span>
+                      <span className="text-xs text-muted-foreground ml-2">{colorImgs.length} {locale === 'ar' ? 'صور' : 'Bilder'}</span>
                     </div>
+                    {colorImgs.length > 0 && (
+                      <div className="flex -space-x-2">{colorImgs.slice(0, 3).map((img: any) => (
+                        <img key={img.id} src={img.url} alt="" className="h-8 w-8 rounded-lg object-cover border-2 border-white" />
+                      ))}</div>
+                    )}
                   </div>
                 )
               })}
             </div>
           ) : (
-            <div className="py-8 text-center text-muted-foreground text-sm"><Package className="h-8 w-8 mx-auto mb-2 opacity-20" /></div>
+            <div className="py-6 text-center text-muted-foreground text-sm"><Package className="h-6 w-6 mx-auto mb-2 opacity-20" /></div>
           )}
 
-          {/* General images (no color) */}
-          <div className="mt-6 pt-6 border-t">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 block">{t('wizard.images')} ({locale === 'ar' ? 'عامة' : 'Allgemein'})</label>
-            <div className="flex gap-3 flex-wrap">
-              {(product.images ?? []).filter((img: any) => !img.colorName).map((img: any) => (
-                <div key={img.id} className="relative h-20 w-20 rounded-xl overflow-hidden border group">
-                  <img src={img.url} alt="" className="w-full h-full object-cover" />
-                  {img.isPrimary && <Star className="absolute top-1 left-1 h-3 w-3 text-[#d4a853] fill-[#d4a853]" />}
-                  <button onClick={() => handleDeleteImage(img.id)} className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <X className="h-4 w-4 text-white" />
-                  </button>
-                </div>
-              ))}
-              <label className="h-20 w-20 rounded-xl border-2 border-dashed flex items-center justify-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors">
-                {uploading === '__general__' ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : <Plus className="h-5 w-5 text-muted-foreground/40" />}
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f) }} />
-              </label>
-            </div>
-          </div>
-
           {/* Variant Matrix */}
-          {colorGroups.size > 1 && <div className="mt-6"><VariantMatrix variants={product.variants ?? []} locale={locale} /></div>}
+          {colorGroups.size > 1 && <VariantMatrix variants={product.variants ?? []} locale={locale} />}
         </div>
       </section>
 
-      {/* ── Section 3: Variants List ── */}
+      {/* ══════════ VARIANTEN ══════════ */}
       <section className="bg-background border rounded-2xl overflow-hidden mb-6">
         <div className="px-6 py-4 border-b bg-muted/20 font-semibold text-sm">{t('products.variants')} ({product.variants?.length ?? 0})</div>
         <div className="divide-y">
@@ -267,7 +291,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
       {/* Sticky Save */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t shadow-lg">
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-end gap-3">
-          <Button className="rounded-xl gap-2" onClick={handleSave} disabled={saving}>
+          <Button className="rounded-xl gap-2" onClick={async () => { setSaving(true); await saveMut.mutateAsync(); setSaving(false) }} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{t('inventory.save')}
           </Button>
         </div>

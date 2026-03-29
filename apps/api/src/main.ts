@@ -3,11 +3,7 @@ import { ValidationPipe } from '@nestjs/common'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
-import { v2 as cloudinary } from 'cloudinary'
 import { AppModule } from './app.module'
-
-// Configure Cloudinary once at startup (EU region via CLOUDINARY_URL env)
-cloudinary.config({ secure: true })
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {

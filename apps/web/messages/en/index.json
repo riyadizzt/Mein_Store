@@ -73,6 +73,7 @@
   "product": {
     "addToCart": "Add to Cart",
     "added": "Added",
+    "addToWishlist": "Add to Wishlist",
     "outOfStock": "Out of Stock",
     "notifyAvailable": "Notify when available",
     "size": "Size",

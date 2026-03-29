@@ -19,6 +19,7 @@ import { ChannelsModule } from './modules/channels/channels.module'
 import { WmsModule } from './modules/wms/wms.module'
 import { AdminModule } from './modules/admin/admin.module'
 import { EmailModule } from './modules/email/email.module'
+import { StorageModule } from './common/services/storage.module'
 
 @Module({
   imports: [
@@ -50,6 +51,9 @@ import { EmailModule } from './modules/email/email.module'
 
     // Database
     PrismaModule,
+
+    // Supabase Storage (Bilder)
+    StorageModule,
 
     // Queue (BullMQ + Redis)
     QueueModule,

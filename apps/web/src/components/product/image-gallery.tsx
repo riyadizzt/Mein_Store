@@ -31,9 +31,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
 
   // Mobile swipe
   const touchStartX = useRef(0)
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX
-  }
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX }
   const handleTouchEnd = (e: React.TouchEvent) => {
     const diff = touchStartX.current - e.changedTouches[0].clientX
     if (Math.abs(diff) > 50) {
@@ -45,16 +43,14 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
   if (images.length === 0) {
     return (
       <div className="aspect-square rounded-2xl bg-muted flex items-center justify-center">
-        <span className="text-4xl font-bold text-muted-foreground/20">
-          {productName.charAt(0).toUpperCase()}
-        </span>
+        <span className="text-4xl font-bold text-muted-foreground/20">{productName.charAt(0).toUpperCase()}</span>
       </div>
     )
   }
 
   return (
     <div className="space-y-3">
-      {/* Main Image */}
+      {/* Main Image — priority for LCP */}
       <div
         ref={mainRef}
         className="relative aspect-square rounded-2xl overflow-hidden bg-muted cursor-crosshair"
@@ -69,16 +65,12 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
             src={activeImage.url}
             alt={activeImage.altText ?? `${productName} — Bild ${activeIndex + 1}`}
             fill
-            priority={activeIndex === 0}
-            sizes="(max-width: 768px) 100vw, 50vw"
+            priority
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 600px"
             className="object-cover"
             style={
               isZooming
-                ? {
-                    transform: 'scale(2)',
-                    transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`,
-                    transition: 'transform-origin 0.1s',
-                  }
+                ? { transform: 'scale(2)', transformOrigin: `${zoomPosition.x}% ${zoomPosition.y}%`, transition: 'transform-origin 0.1s' }
                 : undefined
             }
           />
@@ -92,6 +84,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
             <button
               key={i}
               onClick={() => setActiveIndex(i)}
+              aria-label={`${productName} Bild ${i + 1}`}
               className={`relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 ${
                 i === activeIndex ? 'ring-2 ring-accent ring-offset-2' : 'opacity-70 hover:opacity-100'
               }`}
@@ -102,6 +95,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
                 fill
                 sizes="64px"
                 className="object-cover"
+                loading="lazy"
               />
             </button>
           ))}
@@ -116,9 +110,9 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
               key={i}
               onClick={() => setActiveIndex(i)}
               className={`h-2.5 rounded-full transition-all duration-200 ${
-                i === activeIndex ? 'w-7 bg-accent' : 'w-2.5 bg-muted-foreground/30'
+                i === activeIndex ? 'w-7 bg-accent' : 'w-2.5 bg-muted-foreground/50'
               }`}
-              aria-label={`Bild ${i + 1}`}
+              aria-label={`Bild ${i + 1} von ${images.length}`}
             />
           ))}
         </div>

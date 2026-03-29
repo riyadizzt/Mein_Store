@@ -23,9 +23,9 @@ export function ProductScroll({ title, sort }: ProductScrollProps) {
                 <ProductCardSkeleton />
               </div>
             ))
-          : products?.map((product) => (
+          : products?.map((product, i) => (
               <div key={product.id} className="flex-shrink-0 w-[200px] sm:w-[240px] snap-start">
-                <ProductCard product={product} />
+                <ProductCard product={product} priority={i < 4} />
               </div>
             ))}
       </div>
