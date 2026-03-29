@@ -29,13 +29,14 @@ import { DuplicateOrderException } from './exceptions/duplicate-order.exception'
 const VALID_TRANSITIONS: Record<string, string[]> = {
   pending:         ['pending_payment', 'confirmed', 'cancelled'],
   pending_payment: ['confirmed', 'cancelled'],
-  confirmed:       ['processing', 'cancelled'],
-  processing:      ['shipped', 'cancelled'],
-  shipped:         ['delivered'],
-  delivered:       ['returned', 'refunded'],
+  confirmed:       ['processing', 'cancelled', 'disputed'],
+  processing:      ['shipped', 'cancelled', 'disputed'],
+  shipped:         ['delivered', 'disputed'],
+  delivered:       ['returned', 'refunded', 'disputed'],
   cancelled:       [],
   returned:        ['refunded'],
   refunded:        [],
+  disputed:        ['refunded', 'confirmed'], // resolved dispute can return to confirmed
 }
 
 // ── Cursor Helper ─────────────────────────────────────────────
@@ -86,7 +87,16 @@ export class OrdersService {
     }
 
     try {
-      // 2. Varianten validieren + Preise snapshot-en
+      // 2. Auto-resolve warehouse if not provided
+      const defaultWarehouse = await this.prisma.warehouse.findFirst({ where: { isDefault: true, isActive: true }, select: { id: true } })
+      const defaultWarehouseId = defaultWarehouse?.id
+      for (const item of dto.items) {
+        if (!item.warehouseId && defaultWarehouseId) {
+          item.warehouseId = defaultWarehouseId
+        }
+      }
+
+      // 3. Varianten validieren + Preise snapshot-en
       const variantIds = dto.items.map((i) => i.variantId)
       const variants = await this.prisma.productVariant.findMany({
         where: { id: { in: variantIds }, isActive: true },
@@ -197,7 +207,12 @@ export class OrdersService {
             totalAmount,
             shippingZone: shipping.zoneName,
             couponCode: validatedCouponCode,
-            notes: dto.notes,
+            notes: JSON.stringify({
+              ...(dto.notes ? { text: dto.notes } : {}),
+              ...(dto.guestFirstName ? { guestFirstName: dto.guestFirstName } : {}),
+              ...(dto.guestLastName ? { guestLastName: dto.guestLastName } : {}),
+              ...(dto.locale ? { locale: dto.locale } : {}),
+            }) || null,
             items: {
               create: itemData,
             },
@@ -243,7 +258,7 @@ export class OrdersService {
             correlationId,
             dto.items.map((item) => ({
               variantId: item.variantId,
-              warehouseId: item.warehouseId,
+              warehouseId: item.warehouseId ?? defaultWarehouseId ?? '',
               quantity: item.quantity,
               reservationSessionId,
             })),
@@ -251,19 +266,25 @@ export class OrdersService {
         )
 
         // reservationIds[0] = Rückgabe des InventoryListeners
-        const flatIds: string[] = (reservationIds[0] as string[]) ?? []
+        const rawIds = reservationIds?.[0]
+        const flatIds: string[] = Array.isArray(rawIds) ? rawIds.filter((id): id is string => typeof id === 'string') : []
 
         // Bestellnummer + reservationIds in JSON notes speichern für Storno
-        await this.prisma.order.update({
-          where: { id: order.id },
-          data: { notes: JSON.stringify({ ...JSON.parse(order.notes ?? '{}'), reservationIds: flatIds }) },
-        })
+        if (flatIds.length > 0) {
+          try {
+            await this.prisma.order.update({
+              where: { id: order.id },
+              data: { notes: JSON.stringify({ reservationIds: flatIds }) },
+            })
+          } catch {
+            // Non-critical: notes save failed, order still valid
+          }
+        }
       } catch (err: any) {
-        // Inventory-Reservierung fehlgeschlagen → Bestellung stornieren
-        await this.cancelInternal(order.id, 'stock-reservation-failed', [], userId ?? 'system', correlationId)
-        throw new ConflictException(
-          err?.response?.message?.de ?? 'Nicht genügend Bestand für diese Bestellung',
-        )
+        this.logger.error(`[${correlationId}] Inventory reservation error: ${err?.message ?? String(err)}`)
+        await this.cancelInternal(order.id, 'stock-reservation-failed', [], userId ?? 'system', correlationId).catch(() => {})
+        const msg = typeof err?.response?.message === 'string' ? err.response.message : 'Nicht genügend Bestand für diese Bestellung'
+        throw new ConflictException(msg)
       }
 
       // 10. Idempotency cachen
@@ -482,7 +503,7 @@ export class OrdersService {
 
     if (userId) {
       const defaultAddress = await this.prisma.address.findFirst({
-        where: { userId, isDefault: true },
+        where: { userId, isDefaultShipping: true, deletedAt: null },
         select: { country: true },
       })
       if (defaultAddress) return defaultAddress.country

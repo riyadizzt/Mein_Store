@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   ConflictException,
   UnauthorizedException,
   BadRequestException,
@@ -9,6 +10,7 @@ import { JwtService } from '@nestjs/jwt'
 import * as bcrypt from 'bcrypt'
 import * as crypto from 'crypto'
 import { PrismaService } from '../../prisma/prisma.service'
+import { EmailService } from '../email/email.service'
 import { RegisterDto } from './dto/register.dto'
 import { LoginDto } from './dto/login.dto'
 import { AuthTokens } from '@omnichannel/types'
@@ -20,9 +22,12 @@ const BCRYPT_ROUNDS = 12
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -58,12 +63,18 @@ export class AuthService {
       },
     })
 
-    // TODO: E-Mail-Verifizierung senden (Phase 1)
+    // Welcome + E-Mail-Verifizierung (non-blocking via BullMQ)
+    const lang = user.preferredLang ?? 'de'
+    await this.emailService.queueWelcome(user.email, lang, user.firstName).catch(() => {})
 
     return this.generateTokens(user.id, user.email, user.role)
   }
 
-  async login(dto: LoginDto, _ipAddress: string): Promise<AuthTokens> {
+  async login(
+    dto: LoginDto,
+    ipAddress: string,
+    userAgent?: string,
+  ): Promise<AuthTokens> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase(), deletedAt: null },
     })
@@ -110,13 +121,13 @@ export class AuthService {
       throw new ForbiddenException('Konto deaktiviert. Bitte Kontakt aufnehmen.')
     }
 
-    // Erfolgreicher Login — Zähler zurücksetzen
+    // Erfolgreicher Login — Zähler zurücksetzen + lastLoginAt tracken
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { loginAttempts: 0, lockedUntil: null },
+      data: { loginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
     })
 
-    return this.generateTokens(user.id, user.email, user.role)
+    return this.generateTokens(user.id, user.email, user.role, { ipAddress, userAgent })
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
@@ -159,7 +170,11 @@ export class AuthService {
       },
     })
 
-    // TODO: E-Mail senden mit rawToken (Phase 1 — Resend Integration)
+    // Password reset email (non-blocking via BullMQ, rate limited: 3/hour)
+    const lang = user.preferredLang ?? 'de'
+    await this.emailService.queuePasswordReset(
+      user.email, lang, user.firstName, user.id, rawToken,
+    ).catch(() => {})
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
@@ -192,7 +207,12 @@ export class AuthService {
     ])
   }
 
-  private async generateTokens(userId: string, email: string, role: string): Promise<AuthTokens> {
+  private async generateTokens(
+    userId: string,
+    email: string,
+    role: string,
+    meta?: { ipAddress?: string; userAgent?: string; deviceName?: string },
+  ): Promise<AuthTokens> {
     const payload = { sub: userId, email, role }
 
     const accessToken = this.jwt.sign(payload)
@@ -207,6 +227,10 @@ export class AuthService {
         userId,
         tokenHash: refreshTokenHash,
         expiresAt,
+        ipAddress: meta?.ipAddress,
+        userAgent: meta?.userAgent,
+        deviceName: meta?.deviceName,
+        lastUsedAt: new Date(),
       },
     })
 
@@ -215,6 +239,70 @@ export class AuthService {
       refreshToken: rawRefreshToken,
       expiresIn: 15 * 60, // 15 Minuten in Sekunden
     }
+  }
+
+  // ── Google OAuth ─────────────────────────────────────────
+
+  async googleLogin(googleUser: {
+    email: string
+    firstName: string
+    lastName: string
+    profileImageUrl?: string
+  }): Promise<{ accessToken: string; refreshToken: string }> {
+    // Find or create user
+    let user = await this.prisma.user.findUnique({
+      where: { email: googleUser.email },
+    })
+
+    if (!user) {
+      // Auto-create account
+      user = await this.prisma.user.create({
+        data: {
+          email: googleUser.email,
+          firstName: googleUser.firstName,
+          lastName: googleUser.lastName,
+          profileImageUrl: googleUser.profileImageUrl,
+          isVerified: true, // Google already verified the email
+          role: 'customer',
+          gdprConsents: {
+            create: {
+              consentType: 'data_processing',
+              isGranted: true,
+              grantedAt: new Date(),
+              consentVersion: '1.0',
+              ipAddress: 'google-oauth',
+              source: 'registration',
+            },
+          },
+        },
+      })
+      this.logger.log(`New Google user created: ${user.email}`)
+    }
+
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Account blocked')
+    }
+
+    // Generate tokens
+    const accessToken = this.jwt.sign(
+      { sub: user.id, email: user.email, role: user.role },
+    )
+    const refreshToken = crypto.randomBytes(32).toString('hex')
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashToken(refreshToken),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    })
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    })
+
+    return { accessToken, refreshToken }
   }
 
   private hashToken(token: string): string {

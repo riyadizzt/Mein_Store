@@ -6,14 +6,39 @@
     "moduleResolution": "bundler",
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@omnichannel/types": ["../../packages/types/src/index.ts"],
-      "@omnichannel/utils": ["../../packages/utils/src/index.ts"]
-    }
+      "@/*": [
+        "./src/*"
+      ],
+      "@omnichannel/types": [
+        "../../packages/types/src/index.ts"
+      ],
+      "@omnichannel/utils": [
+        "../../packages/utils/src/index.ts"
+      ]
+    },
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "noEmit": true,
+    "isolatedModules": true
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

@@ -1,0 +1,16 @@
+<h1 style="margin:0 0 16px;font-size:22px;color:#1a1a2e;">Bestellung storniert</h1>
+<p>Hallo {{firstName}},</p>
+<p>Ihre Bestellung <strong>{{orderNumber}}</strong> wurde storniert.</p>
+
+{{#if reason}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;background-color:#fff3cd;border-radius:6px;">
+  <tr>
+    <td style="padding:16px;">
+      <p style="margin:0;font-size:13px;color:#856404;"><strong>Grund:</strong> {{reason}}</p>
+    </td>
+  </tr>
+</table>
+{{/if}}
+
+<p>Falls eine Zahlung getätigt wurde, wird der Betrag innerhalb von 5–10 Werktagen auf Ihr Zahlungsmittel zurückerstattet.</p>
+<p style="color:#868e96;font-size:13px;">Wenn Sie diese Stornierung nicht veranlasst haben, kontaktieren Sie bitte umgehend unseren Kundenservice.</p>

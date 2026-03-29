@@ -3,6 +3,7 @@ export const QUEUE_NAMES = {
   EMAIL: 'email',
   INVENTORY_SYNC: 'inventory-sync',
   ORDER_PROCESSING: 'order-processing',
+  GDPR: 'gdpr',
 } as const
 
 export const JOB_NAMES = {
@@ -26,4 +27,8 @@ export const JOB_NAMES = {
   // Orders
   PROCESS_NEW_ORDER: 'process-new-order',
   GENERATE_INVOICE: 'generate-invoice',
+
+  // GDPR
+  ANONYMIZE_USER: 'anonymize-user',
+  DATA_EXPORT: 'data-export',
 } as const

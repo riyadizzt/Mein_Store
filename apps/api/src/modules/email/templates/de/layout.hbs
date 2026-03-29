@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de" dir="ltr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{{subject}}</title></head>
+<body style="margin:0;padding:0;background-color:#faf8f5;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf8f5;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+<tr><td style="background-color:#1a1a2e;padding:28px 40px;text-align:center;">
+  {{#if logoUrl}}<img src="{{logoUrl}}" alt="Malak Bekleidung" width="120" style="max-width:120px;height:auto;display:block;margin:0 auto;">
+  {{else}}<div style="width:56px;height:56px;border-radius:50%;border:2px solid #d4a853;display:inline-block;text-align:center;line-height:56px;margin-bottom:6px;"><span style="color:#d4a853;font-size:24px;font-weight:700;font-family:Georgia,serif;">M</span></div>
+  <div style="font-size:14px;font-weight:700;color:#ffffff;letter-spacing:5px;text-transform:uppercase;">MALAK BEKLEIDUNG</div>{{/if}}
+  <div style="height:1px;background:linear-gradient(to right,transparent,#d4a853,transparent);margin-top:16px;"></div>
+</td></tr>
+
+<tr><td style="padding:36px 32px;color:#2d2d2d;font-size:15px;line-height:1.7;">{{{content}}}</td></tr>
+
+<tr><td style="background-color:#1a1a2e;padding:28px 32px;text-align:center;">
+  <div style="margin-bottom:16px;">
+    <a href="https://instagram.com/malak.bekleidung" style="display:inline-block;width:38px;height:38px;border-radius:50%;border:1px solid #d4a853;text-align:center;line-height:38px;margin:0 5px;text-decoration:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d4a853" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="m16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+    <a href="https://facebook.com/malak.bekleidung" style="display:inline-block;width:38px;height:38px;border-radius:50%;border:1px solid #d4a853;text-align:center;line-height:38px;margin:0 5px;text-decoration:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#d4a853" style="vertical-align:middle;"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+    <a href="https://tiktok.com/@malak.bekleidung" style="display:inline-block;width:38px;height:38px;border-radius:50%;border:1px solid #d4a853;text-align:center;line-height:38px;margin:0 5px;text-decoration:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#d4a853" style="vertical-align:middle;"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg></a>
+  </div>
+  <div style="margin-bottom:16px;">
+    <svg width="40" height="14" viewBox="0 0 40 14" style="margin:0 4px;vertical-align:middle;"><text x="0" y="11" fill="#d4a853" font-size="10" font-weight="600" font-family="Arial">VISA</text></svg>
+    <svg width="80" height="14" viewBox="0 0 80 14" style="margin:0 4px;vertical-align:middle;"><text x="0" y="11" fill="#d4a853" font-size="10" font-weight="600" font-family="Arial">MASTERCARD</text></svg>
+    <svg width="55" height="14" viewBox="0 0 55 14" style="margin:0 4px;vertical-align:middle;"><text x="0" y="11" fill="#d4a853" font-size="10" font-weight="600" font-family="Arial">KLARNA</text></svg>
+    <svg width="50" height="14" viewBox="0 0 50 14" style="margin:0 4px;vertical-align:middle;"><text x="0" y="11" fill="#d4a853" font-size="10" font-weight="600" font-family="Arial">PAYPAL</text></svg>
+  </div>
+  <div style="color:#ffffff70;font-size:11px;line-height:1.5;">
+    <div style="font-weight:600;color:#ffffffcc;margin-bottom:4px;">{{companyName}}</div>
+    {{#if companyAddress}}<div>{{companyAddress}}</div>{{/if}}
+    {{#if companyCeo}}<div>Geschäftsführer: {{companyCeo}}</div>{{/if}}
+    {{#if companyVatId}}<div>USt-IdNr.: {{companyVatId}}</div>{{/if}}
+    <div>{{companyEmail}}</div>
+    <div style="height:1px;background:#ffffff15;margin:12px 0;"></div>
+    <div style="color:#ffffff40;font-size:10px;">&copy; {{currentYear}} {{companyName}} · <a href="{{shopUrl}}/de/legal/impressum" style="color:#ffffff50;">Impressum</a> · <a href="{{shopUrl}}/de/legal/datenschutz" style="color:#ffffff50;">Datenschutz</a> · <a href="{{shopUrl}}/de/legal/agb" style="color:#ffffff50;">AGB</a></div>
+  </div>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

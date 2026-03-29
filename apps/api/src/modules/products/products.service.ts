@@ -15,6 +15,7 @@ export interface ProductFilters {
   minPrice?: number
   maxPrice?: number
   isFeatured?: boolean
+  sort?: string
   page?: number
   limit?: number
 }
@@ -43,6 +44,7 @@ export class ProductsService {
         basePrice: dto.basePrice,
         salePrice: dto.salePrice,
         taxRate: dto.taxRate ?? 19,
+        isActive: dto.isActive ?? true,
         isFeatured: dto.isFeatured ?? false,
         publishedAt: new Date(),
         translations: {
@@ -99,6 +101,7 @@ export class ProductsService {
       minPrice,
       maxPrice,
       isFeatured,
+      sort,
       page = 1,
       limit = 20,
     } = filters
@@ -110,7 +113,18 @@ export class ProductsService {
       deletedAt: null,
     }
 
-    if (categoryId) where.categoryId = categoryId
+    if (categoryId) {
+      // Check if this is a parent category — if so, include all children
+      const childCats = await this.prisma.category.findMany({
+        where: { parentId: categoryId, isActive: true },
+        select: { id: true },
+      })
+      if (childCats.length > 0) {
+        where.categoryId = { in: [categoryId, ...childCats.map((c) => c.id)] }
+      } else {
+        where.categoryId = categoryId
+      }
+    }
     if (gender) where.gender = gender
     if (brand) where.brand = { contains: brand, mode: 'insensitive' }
     if (isFeatured !== undefined) where.isFeatured = isFeatured
@@ -125,7 +139,10 @@ export class ProductsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: sort === 'price_asc' ? { basePrice: 'asc' }
+          : sort === 'price_desc' ? { basePrice: 'desc' }
+          : sort === 'bestseller' ? { isFeatured: 'desc' }
+          : { createdAt: 'desc' },
         include: {
           translations: { where: { language: lang as any } },
           images: {

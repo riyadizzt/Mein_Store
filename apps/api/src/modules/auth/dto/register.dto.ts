@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, Matches, IsOptional, IsIn } from 'class-validator'
+import { IsEmail, IsString, IsBoolean, MinLength, Matches, IsOptional, IsIn } from 'class-validator'
 import { ApiProperty } from '@nestjs/swagger'
 import { Language } from '@omnichannel/types'
 
@@ -36,5 +36,6 @@ export class RegisterDto {
   preferredLang?: Language
 
   @ApiProperty({ description: 'GDPR Einwilligung — Pflichtfeld' })
+  @IsBoolean()
   gdprConsent!: boolean
 }

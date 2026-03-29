@@ -1,0 +1,668 @@
+import { Injectable, NotFoundException } from '@nestjs/common'
+import { PrismaService } from '../../../prisma/prisma.service'
+import { AuditService } from './audit.service'
+
+@Injectable()
+export class AdminProductsService {
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
+
+  async findOne(id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        translations: true,
+        variants: {
+          where: { isActive: true },
+          include: {
+            inventory: { select: { id: true, quantityOnHand: true, quantityReserved: true, reorderPoint: true, warehouse: { select: { id: true, name: true } } } },
+          },
+        },
+        images: { orderBy: { sortOrder: 'asc' } },
+        category: { include: { translations: true, parent: { include: { translations: true } } } },
+        _count: { select: { reviews: true } },
+      },
+    })
+    if (!product) throw new NotFoundException('Product not found')
+    return product
+  }
+
+  async findAll(query: {
+    search?: string
+    isActive?: boolean
+    categoryId?: string
+    parentCategoryId?: string
+    stockStatus?: string  // in_stock | low | out_of_stock
+    priceMin?: number
+    priceMax?: number
+    sortBy?: string       // name | price | stock | date
+    sortDir?: string
+    limit?: number
+    offset?: number
+  }) {
+    const limit = Math.min(query.limit ?? 25, 200)
+    const offset = query.offset ?? 0
+    const where: any = { deletedAt: null }
+
+    if (query.isActive !== undefined) where.isActive = query.isActive
+    if (query.search) {
+      where.OR = [
+        { slug: { contains: query.search, mode: 'insensitive' } },
+        { translations: { some: { name: { contains: query.search, mode: 'insensitive' } } } },
+        { variants: { some: { OR: [{ sku: { contains: query.search, mode: 'insensitive' } }, { barcode: { contains: query.search, mode: 'insensitive' } }] } } },
+      ]
+    }
+
+    if (query.categoryId) {
+      where.categoryId = query.categoryId
+    } else if (query.parentCategoryId) {
+      const subcats = await this.prisma.category.findMany({
+        where: { parentId: query.parentCategoryId, isActive: true },
+        select: { id: true },
+      })
+      where.categoryId = { in: [query.parentCategoryId, ...subcats.map((c) => c.id)] }
+    }
+
+    if (query.priceMin != null || query.priceMax != null) {
+      where.basePrice = {}
+      if (query.priceMin != null) where.basePrice.gte = query.priceMin
+      if (query.priceMax != null) where.basePrice.lte = query.priceMax
+    }
+
+    // Sorting
+    const dir = query.sortDir === 'asc' ? 'asc' : 'desc'
+    let orderBy: any = { createdAt: 'desc' }
+    if (query.sortBy === 'price') orderBy = { basePrice: dir }
+    else if (query.sortBy === 'name') orderBy = { translations: { _count: dir } } // fallback
+    else if (query.sortBy === 'date') orderBy = { createdAt: dir }
+
+    const [products, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: {
+          translations: { select: { language: true, name: true } },
+          variants: {
+            where: { isActive: true },
+            select: {
+              id: true, sku: true, barcode: true, color: true, colorHex: true, size: true,
+              priceModifier: true, purchasePrice: true,
+              inventory: { select: { quantityOnHand: true, quantityReserved: true, reorderPoint: true } },
+            },
+          },
+          images: { select: { url: true, isPrimary: true }, orderBy: { sortOrder: 'asc' }, take: 3 },
+          category: {
+            select: {
+              id: true, parentId: true,
+              translations: { select: { name: true, language: true } },
+              parent: { select: { translations: { select: { name: true, language: true } } } },
+            },
+          },
+          _count: { select: { reviews: true } },
+        },
+        orderBy,
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.product.count({ where }),
+    ])
+
+    // Enrich with computed fields
+    let enriched = products.map((p) => {
+      // Calculate total stock across all variants and warehouses
+      let totalStock = 0
+      let totalReserved = 0
+      let lowStockVariants = 0
+      let outOfStockVariants = 0
+      const uniqueColors = new Set<string>()
+      const uniqueSizes = new Set<string>()
+      let minPrice = Number(p.basePrice)
+      let maxPrice = Number(p.basePrice)
+
+      for (const v of p.variants) {
+        if (v.color) uniqueColors.add(v.color)
+        if (v.size) uniqueSizes.add(v.size)
+        const variantPrice = Number(p.basePrice) + Number(v.priceModifier)
+        if (variantPrice < minPrice) minPrice = variantPrice
+        if (variantPrice > maxPrice) maxPrice = variantPrice
+
+        let variantStock = 0
+        let variantReserved = 0
+        for (const inv of v.inventory) {
+          variantStock += inv.quantityOnHand
+          variantReserved += inv.quantityReserved
+          totalStock += inv.quantityOnHand
+          totalReserved += inv.quantityReserved
+        }
+        const avail = variantStock - variantReserved
+        if (avail <= 0) outOfStockVariants++
+        else if (v.inventory.some((inv) => (inv.quantityOnHand - inv.quantityReserved) <= inv.reorderPoint)) lowStockVariants++
+      }
+
+      const availableStock = totalStock - totalReserved
+      const stockStatus = availableStock <= 0 ? 'out_of_stock'
+        : outOfStockVariants > 0 || lowStockVariants > 0 ? 'low' : 'in_stock'
+
+      // Check which translations exist
+      const hasDE = p.translations.some((t) => t.language === 'de' && t.name)
+      const hasEN = p.translations.some((t) => t.language === 'en' && t.name)
+      const hasAR = p.translations.some((t) => t.language === 'ar' && t.name)
+
+      return {
+        id: p.id,
+        slug: p.slug,
+        basePrice: Number(p.basePrice),
+        salePrice: (p as any).salePrice ? Number((p as any).salePrice) : null,
+        isActive: p.isActive,
+        isFeatured: p.isFeatured,
+        createdAt: p.createdAt,
+        translations: p.translations,
+        missingLangs: [!hasDE && 'de', !hasEN && 'en', !hasAR && 'ar'].filter(Boolean),
+        image: p.images.find((i) => i.isPrimary)?.url ?? p.images[0]?.url ?? null,
+        imageCount: p.images.length,
+        category: p.category,
+        variantsCount: p.variants.length,
+        colors: [...uniqueColors],
+        colorHexes: [...new Set(p.variants.filter((v) => v.colorHex).map((v) => v.colorHex!))],
+        sizes: [...uniqueSizes],
+        priceRange: { min: minPrice, max: maxPrice },
+        totalStock: availableStock,
+        totalStockRaw: totalStock,
+        lowStockVariants,
+        outOfStockVariants,
+        stockStatus,
+        reviewsCount: p._count.reviews,
+        variants: p.variants.map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          barcode: v.barcode,
+          color: v.color,
+          colorHex: v.colorHex,
+          size: v.size,
+          price: Number(p.basePrice) + Number(v.priceModifier),
+          stock: v.inventory.reduce((sum, inv) => sum + (inv.quantityOnHand - inv.quantityReserved), 0),
+        })),
+      }
+    })
+
+    // Post-filter by stock status
+    if (query.stockStatus === 'out_of_stock') enriched = enriched.filter((p) => p.stockStatus === 'out_of_stock')
+    else if (query.stockStatus === 'low') enriched = enriched.filter((p) => p.stockStatus === 'low' || p.stockStatus === 'out_of_stock')
+    else if (query.stockStatus === 'in_stock') enriched = enriched.filter((p) => p.stockStatus === 'in_stock')
+
+    // Sort by stock (post-query)
+    if (query.sortBy === 'stock') {
+      enriched.sort((a, b) => dir === 'asc' ? a.totalStock - b.totalStock : b.totalStock - a.totalStock)
+    }
+
+    return {
+      data: enriched,
+      meta: { total: query.stockStatus ? enriched.length : total, limit, offset },
+    }
+  }
+
+  // ── DUPLICATE DETECTION ─────────────────────────────────────
+
+  async checkDuplicate(query: { name?: string; sku?: string; barcode?: string; excludeId?: string }) {
+    const results: { type: 'exact_name' | 'similar_name' | 'sku' | 'barcode'; product: any }[] = []
+
+    if (query.name && query.name.trim().length >= 3) {
+      const searchName = query.name.trim().toLowerCase()
+
+      // Find all products with translations
+      const candidates = await this.prisma.product.findMany({
+        where: {
+          deletedAt: null,
+          ...(query.excludeId ? { id: { not: query.excludeId } } : {}),
+          translations: { some: { name: { not: '' } } },
+        },
+        select: {
+          id: true, slug: true, basePrice: true, isActive: true,
+          translations: { select: { language: true, name: true } },
+          variants: { select: { sku: true }, take: 1 },
+          images: { select: { url: true, isPrimary: true }, take: 1, orderBy: { sortOrder: 'asc' } },
+          category: { select: { translations: { select: { name: true, language: true } } } },
+        },
+        take: 200,
+      })
+
+      for (const product of candidates) {
+        for (const t of product.translations) {
+          if (!t.name) continue
+          const prodName = t.name.toLowerCase()
+
+          // Exact match
+          if (prodName === searchName) {
+            results.push({ type: 'exact_name', product: this.formatDuplicateResult(product) })
+            break
+          }
+
+          // Similar match (Levenshtein)
+          const dist = this.levenshtein(searchName, prodName)
+          if (dist <= 3 && dist > 0) {
+            results.push({ type: 'similar_name', product: this.formatDuplicateResult(product) })
+            break
+          }
+
+          // Contains match
+          if (prodName.includes(searchName) || searchName.includes(prodName)) {
+            if (Math.abs(prodName.length - searchName.length) <= 5) {
+              results.push({ type: 'similar_name', product: this.formatDuplicateResult(product) })
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // SKU check
+    if (query.sku && query.sku.trim()) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: {
+          sku: query.sku.trim(),
+          ...(query.excludeId ? { product: { id: { not: query.excludeId } } } : {}),
+        },
+        select: {
+          product: {
+            select: {
+              id: true, slug: true, basePrice: true, isActive: true,
+              translations: { select: { language: true, name: true } },
+              variants: { select: { sku: true }, take: 1 },
+              images: { select: { url: true, isPrimary: true }, take: 1 },
+              category: { select: { translations: { select: { name: true, language: true } } } },
+            },
+          },
+        },
+      })
+      if (variant) {
+        results.push({ type: 'sku', product: this.formatDuplicateResult(variant.product) })
+      }
+    }
+
+    // Barcode check
+    if (query.barcode && query.barcode.trim()) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: {
+          barcode: query.barcode.trim(),
+          ...(query.excludeId ? { product: { id: { not: query.excludeId } } } : {}),
+        },
+        select: {
+          product: {
+            select: {
+              id: true, slug: true, basePrice: true, isActive: true,
+              translations: { select: { language: true, name: true } },
+              variants: { select: { sku: true }, take: 1 },
+              images: { select: { url: true, isPrimary: true }, take: 1 },
+              category: { select: { translations: { select: { name: true, language: true } } } },
+            },
+          },
+        },
+      })
+      if (variant) {
+        results.push({ type: 'barcode', product: this.formatDuplicateResult(variant.product) })
+      }
+    }
+
+    // Deduplicate by product ID
+    const seen = new Set<string>()
+    const unique = results.filter((r) => {
+      if (seen.has(r.product.id)) return false
+      seen.add(r.product.id)
+      return true
+    })
+
+    return { duplicates: unique }
+  }
+
+  async getNextSku(prefix: string): Promise<string> {
+    // Find highest SKU number with this prefix
+    const existing = await this.prisma.productVariant.findMany({
+      where: { sku: { startsWith: prefix } },
+      select: { sku: true },
+      orderBy: { sku: 'desc' },
+      take: 1,
+    })
+    if (existing.length === 0) return `${prefix}-001`
+
+    const lastSku = existing[0].sku
+    const parts = lastSku.split('-')
+    const num = parseInt(parts[parts.length - 1]) || 0
+    const next = String(num + 1).padStart(3, '0')
+    parts[parts.length - 1] = next
+    return parts.join('-')
+  }
+
+  private formatDuplicateResult(product: any) {
+    return {
+      id: product.id,
+      slug: product.slug,
+      translations: product.translations,
+      sku: product.variants?.[0]?.sku ?? null,
+      image: product.images?.find((i: any) => i.isPrimary)?.url ?? product.images?.[0]?.url ?? null,
+      price: Number(product.basePrice),
+      isActive: product.isActive,
+      category: product.category,
+    }
+  }
+
+  private levenshtein(a: string, b: string): number {
+    if (a.length === 0) return b.length
+    if (b.length === 0) return a.length
+    const matrix: number[][] = []
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i]
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b[i - 1] === a[j - 1]) matrix[i][j] = matrix[i - 1][j - 1]
+        else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
+      }
+    }
+    return matrix[b.length][a.length]
+  }
+
+  // ── VARIANT MANAGEMENT ──────────────────────────────────────
+
+  async addColor(productId: string, data: {
+    color: string; colorHex: string; sizes: string[];
+    priceModifier?: number; stock?: Record<string, number>; barcode?: string;
+  }, adminId: string, ipAddress: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: null },
+      select: { id: true, slug: true, variants: { select: { sku: true } } },
+    })
+    if (!product) throw new NotFoundException('Product not found')
+
+    // Find the product's SKU prefix (e.g. MAL-050)
+    const existingSku = product.variants[0]?.sku ?? ''
+    const skuParts = existingSku.split('-')
+    const skuPrefix = skuParts.length >= 2 ? `${skuParts[0]}-${skuParts[1]}` : `MAL-${Date.now().toString().slice(-3)}`
+
+    // Color code for SKU (first 3 chars uppercase)
+    const colorCode = data.color.slice(0, 3).toUpperCase().replace(/[^A-ZÄÖÜẞ]/g, '')
+
+    const defaultWh = await this.prisma.warehouse.findFirst({ where: { isDefault: true } })
+    const whId = defaultWh?.id
+
+    const created: any[] = []
+    for (const size of data.sizes) {
+      // Generate unique SKU
+      let sku = `${skuPrefix}-${colorCode}-${size}`
+      const existing = await this.prisma.productVariant.findUnique({ where: { sku } })
+      if (existing) sku = `${skuPrefix}-${colorCode}-${size}-${Date.now().toString().slice(-4)}`
+
+      const variant = await this.prisma.productVariant.create({
+        data: {
+          productId,
+          sku,
+          barcode: data.barcode || null,
+          color: data.color,
+          colorHex: data.colorHex,
+          size,
+          priceModifier: data.priceModifier ?? 0,
+        },
+      })
+
+      // Create inventory record
+      if (whId) {
+        const stockQty = data.stock?.[size] ?? 0
+        await this.prisma.inventory.create({
+          data: { variantId: variant.id, warehouseId: whId, quantityOnHand: stockQty },
+        })
+        if (stockQty > 0) {
+          await this.prisma.inventoryMovement.create({
+            data: {
+              variantId: variant.id, warehouseId: whId,
+              type: 'purchase_received', quantity: stockQty,
+              quantityBefore: 0, quantityAfter: stockQty,
+              notes: `New color added: ${data.color}`, createdBy: adminId,
+            },
+          })
+        }
+      }
+
+      created.push({ id: variant.id, sku, color: data.color, size, stock: data.stock?.[size] ?? 0 })
+    }
+
+    await this.audit.log({
+      adminId, action: 'VARIANT_COLOR_ADDED', entityType: 'product', entityId: productId,
+      changes: { after: { color: data.color, sizes: data.sizes, variants: created.length } }, ipAddress,
+    })
+
+    return { created: created.length, variants: created }
+  }
+
+  async addSize(productId: string, data: {
+    size: string; colors: string[];
+    priceModifier?: number; stock?: Record<string, number>;
+  }, adminId: string, ipAddress: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: null },
+      select: {
+        id: true,
+        variants: { select: { sku: true, color: true, colorHex: true }, where: { isActive: true } },
+      },
+    })
+    if (!product) throw new NotFoundException('Product not found')
+
+    const skuParts = (product.variants[0]?.sku ?? '').split('-')
+    const skuPrefix = skuParts.length >= 2 ? `${skuParts[0]}-${skuParts[1]}` : `MAL-${Date.now().toString().slice(-3)}`
+
+    // Get colorHex map from existing variants
+    const colorHexMap = new Map<string, string>()
+    for (const v of product.variants) {
+      if (v.color && v.colorHex) colorHexMap.set(v.color, v.colorHex)
+    }
+
+    const defaultWh = await this.prisma.warehouse.findFirst({ where: { isDefault: true } })
+    const whId = defaultWh?.id
+
+    const created: any[] = []
+    for (const color of data.colors) {
+      const colorCode = color.slice(0, 3).toUpperCase().replace(/[^A-ZÄÖÜẞ]/g, '')
+      let sku = `${skuPrefix}-${colorCode}-${data.size}`
+      const existing = await this.prisma.productVariant.findUnique({ where: { sku } })
+      if (existing) sku = `${skuPrefix}-${colorCode}-${data.size}-${Date.now().toString().slice(-4)}`
+
+      const variant = await this.prisma.productVariant.create({
+        data: {
+          productId, sku,
+          color, colorHex: colorHexMap.get(color) ?? '#999999',
+          size: data.size, priceModifier: data.priceModifier ?? 0,
+        },
+      })
+
+      if (whId) {
+        const stockQty = data.stock?.[color] ?? 0
+        await this.prisma.inventory.create({
+          data: { variantId: variant.id, warehouseId: whId, quantityOnHand: stockQty },
+        })
+        if (stockQty > 0) {
+          await this.prisma.inventoryMovement.create({
+            data: {
+              variantId: variant.id, warehouseId: whId,
+              type: 'purchase_received', quantity: stockQty,
+              quantityBefore: 0, quantityAfter: stockQty,
+              notes: `New size added: ${data.size}`, createdBy: adminId,
+            },
+          })
+        }
+      }
+
+      created.push({ id: variant.id, sku, color, size: data.size, stock: data.stock?.[color] ?? 0 })
+    }
+
+    await this.audit.log({
+      adminId, action: 'VARIANT_SIZE_ADDED', entityType: 'product', entityId: productId,
+      changes: { after: { size: data.size, colors: data.colors, variants: created.length } }, ipAddress,
+    })
+
+    return { created: created.length, variants: created }
+  }
+
+  async deleteVariant(productId: string, variantId: string, adminId: string, ipAddress: string) {
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { id: variantId, productId },
+      select: { id: true, sku: true, color: true, size: true },
+    })
+    if (!variant) throw new NotFoundException('Variant not found')
+
+    // Soft-delete by deactivating
+    await this.prisma.productVariant.update({ where: { id: variantId }, data: { isActive: false } })
+
+    await this.audit.log({
+      adminId, action: 'VARIANT_DELETED', entityType: 'product', entityId: productId,
+      changes: { before: { variantId, sku: variant.sku, color: variant.color, size: variant.size } }, ipAddress,
+    })
+
+    return { deleted: true, sku: variant.sku }
+  }
+
+  async updateVariant(variantId: string, data: {
+    priceModifier?: number; barcode?: string; purchasePrice?: number;
+  }, adminId: string, ipAddress: string) {
+    const variant = await this.prisma.productVariant.findUnique({ where: { id: variantId } })
+    if (!variant) throw new NotFoundException('Variant not found')
+
+    const updateData: any = {}
+    if (data.priceModifier !== undefined) updateData.priceModifier = data.priceModifier
+    if (data.barcode !== undefined) updateData.barcode = data.barcode || null
+    if (data.purchasePrice !== undefined) updateData.purchasePrice = data.purchasePrice
+
+    const updated = await this.prisma.productVariant.update({ where: { id: variantId }, data: updateData })
+
+    await this.audit.log({
+      adminId, action: 'VARIANT_UPDATED', entityType: 'product', entityId: variant.productId,
+      changes: { after: updateData }, ipAddress,
+    })
+
+    return updated
+  }
+
+  // Get existing colors and sizes for a product (for the modals)
+  async getProductVariantOptions(productId: string) {
+    const variants = await this.prisma.productVariant.findMany({
+      where: { productId, isActive: true },
+      select: { color: true, colorHex: true, size: true },
+    })
+
+    const colors = new Map<string, string>()
+    const sizes = new Set<string>()
+    for (const v of variants) {
+      if (v.color && v.colorHex) colors.set(v.color, v.colorHex)
+      if (v.size) sizes.add(v.size)
+    }
+
+    return {
+      colors: [...colors.entries()].map(([name, hex]) => ({ name, hex })),
+      sizes: [...sizes],
+    }
+  }
+
+  async updatePrice(productId: string, basePrice: number, salePrice: number | null, adminId: string, ipAddress: string) {
+    const product = await this.prisma.product.findFirst({ where: { id: productId, deletedAt: null } })
+    if (!product) throw new NotFoundException('Product not found')
+
+    const updated = await this.prisma.product.update({
+      where: { id: productId },
+      data: { basePrice, salePrice },
+    })
+
+    await this.audit.log({
+      adminId, action: 'PRODUCT_PRICE_CHANGED', entityType: 'product', entityId: productId,
+      changes: { before: { basePrice: Number(product.basePrice), salePrice: product.salePrice ? Number(product.salePrice) : null }, after: { basePrice, salePrice } },
+      ipAddress,
+    })
+    return updated
+  }
+
+  async bulkUpdateStatus(productIds: string[], isActive: boolean, adminId: string, ipAddress: string) {
+    const result = await this.prisma.product.updateMany({
+      where: { id: { in: productIds }, deletedAt: null },
+      data: { isActive },
+    })
+    await this.audit.log({
+      adminId, action: isActive ? 'PRODUCTS_ACTIVATED' : 'PRODUCTS_DEACTIVATED',
+      entityType: 'product', entityId: productIds.join(','),
+      changes: { after: { isActive, count: result.count } }, ipAddress,
+    })
+    return { updated: result.count }
+  }
+
+  async bulkDelete(productIds: string[], adminId: string, ipAddress: string) {
+    const result = await this.prisma.product.updateMany({
+      where: { id: { in: productIds }, deletedAt: null },
+      data: { deletedAt: new Date() },
+    })
+    await this.audit.log({
+      adminId, action: 'PRODUCTS_DELETED', entityType: 'product', entityId: productIds.join(','),
+      changes: { after: { deletedCount: result.count } }, ipAddress,
+    })
+    return { deleted: result.count }
+  }
+
+  async duplicate(productId: string, adminId: string, ipAddress: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: null },
+      include: { translations: true, variants: true, images: true },
+    })
+    if (!product) throw new NotFoundException('Product not found')
+
+    const slug = `${product.slug}-copy-${Date.now()}`
+    const newProduct = await this.prisma.product.create({
+      data: {
+        slug, categoryId: product.categoryId, brand: product.brand,
+        gender: product.gender, basePrice: product.basePrice,
+        salePrice: product.salePrice, taxRate: product.taxRate, isActive: false,
+        translations: {
+          create: product.translations.map((t) => ({
+            language: t.language, name: `${t.name} (Kopie)`,
+            description: t.description, sizeGuide: t.sizeGuide,
+            metaTitle: t.metaTitle, metaDesc: t.metaDesc,
+          })),
+        },
+      },
+      include: { translations: true },
+    })
+
+    await this.audit.log({
+      adminId, action: 'PRODUCT_DUPLICATED', entityType: 'product', entityId: newProduct.id,
+      changes: { before: { sourceId: productId }, after: { newId: newProduct.id, slug } }, ipAddress,
+    })
+    return newProduct
+  }
+
+  // ── IMAGE-COLOR ASSIGNMENT ──────────────────────────────────
+
+  async assignImageToColor(imageId: string, colorName: string | null) {
+    return this.prisma.productImage.update({ where: { id: imageId }, data: { colorName } })
+  }
+
+  async addImageUrl(productId: string, url: string, colorName?: string) {
+    const count = await this.prisma.productImage.count({ where: { productId } })
+    return this.prisma.productImage.create({
+      data: { productId, url, colorName: colorName || null, sortOrder: count, isPrimary: count === 0 },
+    })
+  }
+
+  async getProductImages(productId: string) {
+    return this.prisma.productImage.findMany({
+      where: { productId },
+      orderBy: { sortOrder: 'asc' },
+    })
+  }
+
+  async exportCsv() {
+    const result = await this.findAll({ limit: 2000, offset: 0 })
+    const header = 'Name (DE);Name (EN);Name (AR);SKU;Kategorie;Preis;Sale-Preis;Varianten;Bestand;Status\n'
+    const rows = result.data.map((p: any) => {
+      const nameDE = p.translations.find((t: any) => t.language === 'de')?.name ?? ''
+      const nameEN = p.translations.find((t: any) => t.language === 'en')?.name ?? ''
+      const nameAR = p.translations.find((t: any) => t.language === 'ar')?.name ?? ''
+      const cat = (p.category?.translations ?? []).find((t: any) => t.language === 'de')?.name ?? ''
+      return `${nameDE};${nameEN};${nameAR};${p.variants[0]?.sku ?? ''};${cat};${p.basePrice};${p.salePrice ?? ''};${p.variantsCount};${p.totalStock};${p.isActive ? 'Aktiv' : 'Inaktiv'}`
+    }).join('\n')
+    return header + rows
+  }
+}

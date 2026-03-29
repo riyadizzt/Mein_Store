@@ -45,12 +45,19 @@ const getRedisConnection = (config: ConfigService) => {
       useFactory: (config: ConfigService) =>
         new Queue(QUEUE_NAMES.ORDER_PROCESSING, { connection: getRedisConnection(config) }),
     },
+    {
+      provide: 'GDPR_QUEUE',
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new Queue(QUEUE_NAMES.GDPR, { connection: getRedisConnection(config) }),
+    },
   ],
   exports: [
     'SHOPIFY_SYNC_QUEUE',
     'EMAIL_QUEUE',
     'INVENTORY_SYNC_QUEUE',
     'ORDER_PROCESSING_QUEUE',
+    'GDPR_QUEUE',
   ],
 })
 export class QueueModule {}

@@ -125,6 +125,11 @@ export class CreateProductDto {
   @IsBoolean()
   isFeatured?: boolean
 
+  @ApiProperty({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean
+
   @ApiProperty({ type: [ProductTranslationDto] })
   @ValidateNested({ each: true })
   @ArrayMinSize(1)

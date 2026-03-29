@@ -1,0 +1,303 @@
+'use client'
+
+import { useState, useCallback, useEffect } from 'react'
+import { useTranslations, useLocale } from 'next-intl'
+import Image from 'next/image'
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import { ArrowLeft, Loader2, CreditCard, Lock, Shield } from 'lucide-react'
+import { useCheckoutStore } from '@/store/checkout-store'
+import { useCartStore } from '@/store/cart-store'
+import { useShopSettings } from '@/hooks/use-shop-settings'
+import { getStripe } from '@/lib/stripe'
+import { api } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+
+export function StepPayment() {
+  const locale = useLocale()
+  const stripeLocale = locale === 'ar' ? 'ar' : locale === 'en' ? 'en' : 'de'
+  const [stripeReady, setStripeReady] = useState(false)
+  const [stripeInstance, setStripeInstance] = useState<any>(null)
+
+  useEffect(() => {
+    getStripe().then((s) => { setStripeInstance(s); setStripeReady(true) })
+  }, [])
+
+  if (!stripeReady || !stripeInstance) {
+    return <div className="max-w-2xl mx-auto py-6"><div className="h-40 animate-shimmer rounded-xl" /></div>
+  }
+
+  return (
+    <Elements
+      stripe={stripeInstance}
+      options={{
+        locale: stripeLocale as any,
+        appearance: {
+          theme: 'stripe',
+          variables: { colorPrimary: '#1a1a2e', borderRadius: '10px', fontFamily: locale === 'ar' ? 'Cairo, system-ui, sans-serif' : 'Inter, system-ui, sans-serif' },
+        },
+      }}
+    >
+      <StepPaymentInner />
+    </Elements>
+  )
+}
+
+function StepPaymentInner() {
+  const stripe = useStripe()
+  const elements = useElements()
+  const t = useTranslations('checkout')
+  const tCart = useTranslations('cart')
+  const locale = useLocale()
+  const { data: shopSettings } = useShopSettings()
+  const {
+    shippingAddress, shippingOption, termsAccepted, guestEmail,
+    isProcessing, error,
+    setTermsAccepted, setStep, setProcessing, setError,
+    setOrder, generateIdempotencyKey, setPaymentMethod,
+  } = useCheckoutStore()
+  const { items, subtotal } = useCartStore()
+  const cartSubtotal = subtotal()
+
+  const shippingCost = Number(shippingOption?.price ?? 0)
+  const totalAmount = cartSubtotal + shippingCost
+
+  // Only show card (Klarna/PayPal hidden until they have real integrations)
+  const klarnaEnabled = !!shopSettings?.klarnaEnabled
+  const [activeTab, setActiveTab] = useState<'card' | 'klarna'>('card')
+
+  const handlePlaceOrder = useCallback(async () => {
+    if (!termsAccepted || isProcessing || !stripe || !elements) return
+
+    const cardElement = elements.getElement(CardElement)
+    if (activeTab === 'card' && !cardElement) return
+
+    setProcessing(true)
+    setError(null)
+
+    try {
+      const idempotencyKey = generateIdempotencyKey()
+      const method = activeTab === 'card' ? 'stripe_card' : 'klarna_pay_now'
+      setPaymentMethod(method as any)
+
+      // 1. Create order
+      const { data: order } = await api.post('/orders', {
+        items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
+        countryCode: shippingAddress?.country ?? 'DE',
+        ...(guestEmail ? { guestEmail } : {}),
+        ...(shippingAddress ? { guestFirstName: shippingAddress.firstName, guestLastName: shippingAddress.lastName } : {}),
+        locale,
+      }, {
+        headers: { 'X-Idempotency-Key': idempotencyKey },
+      })
+
+      setOrder(order.id, order.orderNumber)
+
+      // 2. Create payment intent
+      const { data: payment } = await api.post('/payments', {
+        orderId: order.id,
+        method,
+        idempotencyKey,
+      })
+
+      if (activeTab === 'klarna' && payment.redirectUrl) {
+        window.location.href = payment.redirectUrl
+        return
+      }
+
+      // Confirm payment on backend (fire-and-forget) + navigate
+      const goToConfirmation = () => {
+        // 1. Confirm payment (don't await — we don't need the response)
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/confirm`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        }).catch(() => {})
+
+        // 2. Save order data in sessionStorage so confirmation page can read it instantly
+        try {
+          sessionStorage.setItem('malak-last-order', JSON.stringify({
+            orderNumber: order.orderNumber, orderId: order.id,
+            totalAmount: order.totalAmount, subtotal: order.subtotal,
+            shippingCost: order.shippingCost, taxAmount: order.taxAmount,
+            guestEmail: guestEmail || '',
+            guestFirstName: shippingAddress?.firstName || '',
+            guestLastName: shippingAddress?.lastName || '',
+          }))
+        } catch {}
+
+        // 3. Navigate — this ALWAYS works, no async, no race
+        window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
+      }
+
+      // 3. Confirm card payment with Stripe
+      if (activeTab === 'card' && payment.clientSecret) {
+        const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(payment.clientSecret, {
+          payment_method: { card: cardElement! },
+        })
+
+        if (stripeError) {
+          setError(stripeError.message ?? t('errors.cardNotCharged'))
+          setProcessing(false)
+          return
+        }
+
+        if (paymentIntent?.status === 'succeeded') {
+          await goToConfirmation()
+          return
+        }
+
+        if (paymentIntent?.status === 'requires_action') {
+          const { error: confirmError } = await stripe.confirmCardPayment(payment.clientSecret)
+          if (confirmError) {
+            setError(confirmError.message ?? t('errors.cardNotCharged'))
+            setProcessing(false)
+            return
+          }
+          await goToConfirmation()
+          return
+        }
+      }
+
+      // Fallback success
+      await goToConfirmation()
+    } catch (err: any) {
+      console.error('Checkout error:', err?.response?.data ?? err?.message)
+      const msg = err?.response?.data?.message
+      let errorMsg: string
+      if (Array.isArray(msg)) errorMsg = msg.join(', ')
+      else if (typeof msg === 'object' && msg !== null) errorMsg = msg[locale] ?? msg.de ?? msg.en ?? JSON.stringify(msg)
+      else errorMsg = msg ?? t('errors.cardNotCharged')
+      setError(errorMsg)
+      setProcessing(false)
+    }
+  }, [termsAccepted, isProcessing, stripe, elements, activeTab, items, shippingAddress, guestEmail, locale]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="max-w-2xl mx-auto py-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        {/* Left: Payment */}
+        <div className="lg:col-span-3 space-y-6">
+          <h2 className="text-xl font-bold">{t('payment.title')}</h2>
+
+          {error && (
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive animate-fade-up" role="alert">
+              {error}
+            </div>
+          )}
+
+          {/* Payment method tabs */}
+          {klarnaEnabled && (
+            <div className="flex border rounded-xl overflow-hidden">
+              <button
+                onClick={() => setActiveTab('card')}
+                className={`flex-1 py-3.5 px-4 text-sm font-medium border-r transition-all duration-200 ${
+                  activeTab === 'card' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
+                }`}
+              >
+                <CreditCard className="h-4 w-4 mx-auto mb-1" />
+                {t('paymentMethods.card')}
+              </button>
+              <button
+                onClick={() => setActiveTab('klarna')}
+                className={`flex-1 py-3.5 px-4 text-sm font-medium transition-all duration-200 ${
+                  activeTab === 'klarna' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
+                }`}
+              >
+                Klarna
+              </button>
+            </div>
+          )}
+
+          {/* Card Form — ALWAYS visible when card tab active */}
+          {activeTab === 'card' && (
+            <div className="p-5 border rounded-xl bg-background transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/20">
+              <CardElement
+                options={{
+                  style: {
+                    base: {
+                      fontSize: '16px',
+                      color: '#1a1a2e',
+                      fontFamily: 'Inter, system-ui, sans-serif',
+                      '::placeholder': { color: '#9ca3af' },
+                    },
+                  },
+                  hidePostalCode: true,
+                }}
+              />
+            </div>
+          )}
+
+          {/* Klarna info */}
+          {activeTab === 'klarna' && (
+            <div className="p-5 rounded-xl bg-[#FFB3C7]/10 border border-[#FFB3C7]/30">
+              <p className="text-sm font-medium mb-2">{t('paymentMethods.klarna')}</p>
+              <p className="text-sm text-muted-foreground">{t('payment.klarnaInfo')}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t('payment.klarnaRedirect')}</p>
+            </div>
+          )}
+
+          {/* Legal */}
+          <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              className="rounded mt-0.5"
+            />
+            <span>{t('payment.termsRequired')}</span>
+          </label>
+
+          {/* Place Order */}
+          <Button
+            onClick={handlePlaceOrder}
+            disabled={!termsAccepted || isProcessing || !stripe}
+            className="w-full h-14 text-base gap-2 bg-accent text-accent-foreground rounded-xl font-semibold hover:bg-accent/90 btn-press"
+            size="lg"
+          >
+            {isProcessing ? (
+              <><Loader2 className="h-5 w-5 animate-spin" />{t('processing')}</>
+            ) : (
+              <><Lock className="h-4 w-4" />{t('placeOrderAmount', { amount: totalAmount.toFixed(2) })}</>
+            )}
+          </Button>
+
+          {/* Security */}
+          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Lock className="h-3 w-3" /> SSL</span>
+            <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> {t('payment.securePayment')}</span>
+            <span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> PCI DSS</span>
+          </div>
+
+          <Button variant="ghost" onClick={() => setStep('shipping')} className="w-full gap-2">
+            <ArrowLeft className="h-4 w-4" />{t('payment.backToShipping')}
+          </Button>
+        </div>
+
+        {/* Right: Order Summary */}
+        <div className="lg:col-span-2">
+          <div className="sticky top-20 border rounded-2xl shadow-card p-5 space-y-4">
+            <h3 className="font-semibold">{t('orderSummary')}</h3>
+            <div className="space-y-3 max-h-60 overflow-y-auto">
+              {items.map((item) => (
+                <div key={item.variantId} className="flex gap-3">
+                  <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
+                    {item.imageUrl && <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="w-full h-full object-cover" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{item.names?.[locale] ?? item.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{item.color}{item.color && item.size ? ' / ' : ''}{item.size} x {item.quantity}</p>
+                  </div>
+                  <span className="text-xs font-medium">&euro;{(item.unitPrice * item.quantity).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t pt-3 space-y-1.5 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{cartSubtotal.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>{shippingCost === 0 ? t('shippingStep.free') : `€${shippingCost.toFixed(2)}`}</span></div>
+              <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{totalAmount.toFixed(2)}</span></div>
+              <p className="text-[11px] text-muted-foreground text-right">{t('inclVat')}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

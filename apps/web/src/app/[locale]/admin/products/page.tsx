@@ -1,0 +1,382 @@
+'use client'
+
+import { useState, Fragment } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import Link from 'next/link'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Search, Plus, Copy, Trash2, LayoutList, LayoutGrid,
+  ChevronDown, ChevronRight, ChevronLeft, Check, Download,
+  Package, Edit3, ArrowUpDown, RotateCcw, AlertTriangle,
+} from 'lucide-react'
+import { api } from '@/lib/api'
+import { translateColor, getProductName, getCategoryName, formatCurrency } from '@/lib/locale-utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+
+const STOCK_BADGE: Record<string, string> = {
+  in_stock: 'bg-green-100 text-green-800',
+  low: 'bg-orange-100 text-orange-800',
+  out_of_stock: 'bg-red-100 text-red-800',
+}
+
+export default function AdminProductsPage() {
+  const locale = useLocale()
+  const t = useTranslations('admin')
+  const qc = useQueryClient()
+
+  const [search, setSearch] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [stockFilter, setStockFilter] = useState('')
+  const [sortBy, setSortBy] = useState('date')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
+  const [pageSize, setPageSize] = useState(25)
+  const [page, setPage] = useState(0)
+  const [view, setView] = useState<'list' | 'grid'>('list')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Data
+  const { data: departments } = useQuery({
+    queryKey: ['inventory-departments'],
+    queryFn: async () => { const { data } = await api.get('/admin/inventory/summary'); return data },
+  })
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['admin-products', search, categoryId, statusFilter, stockFilter, sortBy, sortDir, pageSize, page],
+    queryFn: async () => {
+      const { data } = await api.get('/admin/products', {
+        params: {
+          search: search || undefined,
+          parentCategoryId: categoryId || undefined,
+          isActive: statusFilter === 'active' ? 'true' : statusFilter === 'inactive' ? 'false' : undefined,
+          stockStatus: stockFilter || undefined,
+          sortBy, sortDir, limit: pageSize, offset: page * pageSize,
+        },
+      })
+      return data
+    },
+  })
+
+  const products = result?.data ?? []
+  const totalCount = result?.meta?.total ?? 0
+  const totalPages = Math.ceil(totalCount / pageSize)
+
+  // Mutations
+  const bulkMut = useMutation({
+    mutationFn: ({ action, ids }: { action: string; ids: string[] }) => {
+      if (action === 'activate') return api.post('/admin/products/bulk/status', { productIds: ids, isActive: true })
+      if (action === 'deactivate') return api.post('/admin/products/bulk/status', { productIds: ids, isActive: false })
+      return api.delete('/admin/products/bulk', { data: { productIds: ids } })
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-products'] }); setSelected(new Set()) },
+  })
+
+  const dupMut = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/products/${id}/duplicate`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-products'] }),
+  })
+
+  // Helpers
+  const getName = (ts: any[]) => getProductName(ts, locale)
+  const catName = (cat: any) => { if (!cat?.parent) return getCategoryName(cat, locale); return getCategoryName(cat.parent, locale) }
+  const fmtCur = (n: number) => formatCurrency(n, locale)
+
+
+  const toggleSelect = (id: string) => { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n) }
+  const toggleSelectAll = () => { if (selected.size === products.length) setSelected(new Set()); else setSelected(new Set(products.map((p: any) => p.id))) }
+  const toggleSort = (key: string) => { if (sortBy === key) setSortDir(sortDir === 'desc' ? 'asc' : 'desc'); else { setSortBy(key); setSortDir('desc') } }
+  const hasFilters = categoryId || statusFilter || stockFilter
+  const resetFilters = () => { setCategoryId(''); setStatusFilter(''); setStockFilter(''); setPage(0) }
+
+  const handleExport = async () => {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/export`, {
+      headers: { Authorization: `Bearer ${(await import('@/store/auth-store')).useAuthStore.getState().accessToken}` },
+    })
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'produkte.csv'; a.click(); URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div>
+      <AdminBreadcrumb items={[{ label: t('products.title') }]} />
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold tracking-tight">{t('products.title')}</h1>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="rounded-xl gap-2" onClick={handleExport}><Download className="h-4 w-4" />{t('products.export')}</Button>
+          <Link href={`/${locale}/admin/products/new`}><Button size="sm" className="rounded-xl gap-2"><Plus className="h-4 w-4" />{t('products.newProduct')}</Button></Link>
+        </div>
+      </div>
+
+      {/* Category Chips */}
+      {departments && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button onClick={() => { setCategoryId(''); setPage(0) }} className={`px-4 py-2 rounded-xl text-xs font-medium transition-all ${!categoryId ? 'bg-[#1a1a2e] text-white shadow-md' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>{t('products.allCategories')}</button>
+          {(departments as any[]).map((d: any) => (
+            <button key={d.id} onClick={() => { setCategoryId(categoryId === d.id ? '' : d.id); setPage(0) }}
+              className={`px-4 py-2 rounded-xl text-xs font-medium transition-all ${categoryId === d.id ? 'bg-[#1a1a2e] text-white shadow-md' : 'bg-muted/50 text-muted-foreground hover:bg-muted'}`}>
+              {getName(d.translations)} <span className="opacity-60 ml-1">{d.total}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Search + Filters + View Toggle */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 rtl:left-auto rtl:right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder={t('products.searchPlaceholder')} value={search} onChange={(e) => { setSearch(e.target.value); setPage(0) }} className="pl-10 rtl:pl-3 rtl:pr-10 h-10 rounded-xl" />
+        </div>
+        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(0) }} className={`px-3 py-2 rounded-xl text-xs font-medium border bg-background cursor-pointer ${statusFilter ? 'border-primary/50 text-primary bg-primary/5' : ''}`}>
+          <option value="">{t('products.allStatus')}</option>
+          <option value="active">{t('products.active')}</option>
+          <option value="inactive">{t('products.inactive')}</option>
+        </select>
+        <select value={stockFilter} onChange={(e) => { setStockFilter(e.target.value); setPage(0) }} className={`px-3 py-2 rounded-xl text-xs font-medium border bg-background cursor-pointer ${stockFilter ? 'border-primary/50 text-primary bg-primary/5' : ''}`}>
+          <option value="">{t('products.stockAll')}</option>
+          <option value="in_stock">{t('products.stockInStock')}</option>
+          <option value="low">{t('products.stockLow')}</option>
+          <option value="out_of_stock">{t('products.stockOut')}</option>
+        </select>
+        {hasFilters && <button onClick={resetFilters} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50"><RotateCcw className="h-3 w-3" />{t('products.filterReset')}</button>}
+
+        {/* View Toggle */}
+        <div className="flex items-center gap-0.5 bg-muted/50 rounded-xl p-0.5 ml-auto">
+          <button onClick={() => setView('list')} className={`p-2 rounded-lg transition-all ${view === 'list' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}><LayoutList className="h-4 w-4" /></button>
+          <button onClick={() => setView('grid')} className={`p-2 rounded-lg transition-all ${view === 'grid' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}><LayoutGrid className="h-4 w-4" /></button>
+        </div>
+      </div>
+
+      {/* Sort + Bulk */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground"><ArrowUpDown className="h-3.5 w-3.5 inline" /></span>
+          {['date', 'price', 'stock', 'name'].map((s) => (
+            <button key={s} onClick={() => toggleSort(s)} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${sortBy === s ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+              {t(`products.sort${s.charAt(0).toUpperCase() + s.slice(1)}`)}
+              {sortBy === s && <ChevronDown className={`h-3 w-3 transition-transform ${sortDir === 'asc' ? 'rotate-180' : ''}`} />}
+            </button>
+          ))}
+        </div>
+        {selected.size > 0 && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-medium text-primary">{selected.size} {t('products.selected')}</span>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => bulkMut.mutate({ action: 'activate', ids: [...selected] })}>{t('products.bulkActivate')}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => bulkMut.mutate({ action: 'deactivate', ids: [...selected] })}>{t('products.bulkDeactivate')}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg text-red-600 border-red-200" onClick={() => bulkMut.mutate({ action: 'delete', ids: [...selected] })}><Trash2 className="h-3 w-3 mr-1" />{t('products.bulkDelete')}</Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── GRID VIEW ── */}
+      {view === 'grid' ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {isLoading ? Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="bg-background border rounded-2xl overflow-hidden"><div className="aspect-square bg-muted animate-pulse" /><div className="p-4 space-y-2"><div className="h-4 bg-muted rounded animate-pulse" /><div className="h-3 bg-muted rounded animate-pulse w-2/3" /></div></div>
+          )) : products.length === 0 ? (
+            <div className="col-span-full py-16 text-center"><Package className="h-12 w-12 mx-auto mb-3 text-muted-foreground/20" /><p className="text-muted-foreground">{t('products.noProducts')}</p></div>
+          ) : products.map((p: any, i: number) => (
+            <div key={p.id} className="group bg-background border rounded-2xl overflow-hidden hover:shadow-lg hover:border-primary/20 transition-all duration-300"
+              style={{ animationDelay: `${i * 30}ms`, animation: 'fadeSlideUp 300ms ease-out both' }}>
+              {/* Image */}
+              <Link href={`/${locale}/admin/products/${p.id}`}>
+                <div className="aspect-square bg-muted/30 relative overflow-hidden">
+                  {p.image ? <img src={p.image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    : <div className="w-full h-full flex items-center justify-center"><Package className="h-12 w-12 text-muted-foreground/15" /></div>}
+                  {/* Status badge */}
+                  <div className="absolute top-2 right-2 rtl:right-auto rtl:left-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`} title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}>{p.isActive ? t('products.active') : t('products.inactive')}</span>
+                  </div>
+                  {/* Stock badge */}
+                  <div className="absolute bottom-2 right-2 rtl:right-auto rtl:left-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STOCK_BADGE[p.stockStatus]}`}>{p.totalStock}</span>
+                  </div>
+                  {/* Hover actions */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <Link href={`/${locale}/admin/products/${p.id}`} className="h-9 w-9 rounded-full bg-white flex items-center justify-center hover:scale-110 transition-transform"><Edit3 className="h-4 w-4" /></Link>
+                    <button onClick={(e) => { e.preventDefault(); dupMut.mutate(p.id) }} className="h-9 w-9 rounded-full bg-white flex items-center justify-center hover:scale-110 transition-transform"><Copy className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              </Link>
+              {/* Info */}
+              <div className="p-3">
+                <div className="text-sm font-semibold line-clamp-1 mb-1">{getName(p.translations)}</div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    {p.salePrice ? <><span className="text-sm font-bold text-red-600">{fmtCur(p.salePrice)}</span><span className="text-xs text-muted-foreground line-through ml-1">{fmtCur(p.basePrice)}</span></>
+                      : <span className="text-sm font-bold">{fmtCur(p.basePrice)}</span>}
+                  </div>
+                  {/* Color dots */}
+                  {p.colorHexes?.length > 0 && (
+                    <div className="flex -space-x-1">{p.colorHexes.slice(0, 4).map((hex: string, j: number) => (
+                      <div key={j} className="h-4 w-4 rounded-full border border-white shadow-sm" style={{ backgroundColor: hex }} />
+                    ))}{p.colorHexes.length > 4 && <span className="text-[10px] text-muted-foreground ml-1">+{p.colorHexes.length - 4}</span>}</div>
+                  )}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1">{p.variantsCount} {t('products.variants')} | {catName(p.category)}</div>
+                {/* Missing translations warning */}
+                {p.missingLangs?.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1.5 text-[10px] text-orange-600">
+                    <AlertTriangle className="h-3 w-3" />
+                    {p.missingLangs.map((l: string) => l.toUpperCase()).join(', ')} {t('products.missingTranslation')}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* ── LIST VIEW ── */
+        <div className="bg-background border rounded-2xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="px-3 py-3 w-8"><button onClick={toggleSelectAll} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selected.size === products.length && products.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selected.size === products.length && products.length > 0 && <Check className="h-3 w-3 text-white" />}</button></th>
+                  <th className="px-3 py-3 w-16"></th>
+                  <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.product')}</th>
+                  <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.category')}</th>
+                  <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.variants')}</th>
+                  <th className="text-end px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.price')}</th>
+                  <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.stock')}</th>
+                  <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.status')}</th>
+                  <th className="px-3 py-3 w-20"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="border-b"><td colSpan={9} className="px-3 py-4"><div className="h-4 bg-muted rounded-lg animate-pulse" style={{ width: `${50 + Math.random() * 40}%` }} /></td></tr>
+                )) : products.length === 0 ? (
+                  <tr><td colSpan={9} className="px-3 py-16 text-center"><Package className="h-12 w-12 mx-auto mb-3 text-muted-foreground/20" /><p className="text-muted-foreground">{t('products.noProducts')}</p></td></tr>
+                ) : products.map((p: any, i: number) => {
+                  const isExpanded = expandedId === p.id
+                  return (
+                    <Fragment key={p.id}><tr className="border-b hover:bg-muted/20 transition-colors group" style={{ animationDelay: `${i * 15}ms`, animation: 'fadeIn 200ms ease-out both' }}>
+                      <td className="px-3 py-3"><button onClick={() => toggleSelect(p.id)} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selected.has(p.id) ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selected.has(p.id) && <Check className="h-3 w-3 text-white" />}</button></td>
+                      {/* Thumbnail */}
+                      <td className="px-3 py-3">
+                        <Link href={`/${locale}/admin/products/${p.id}`}>
+                          {p.image ? <img src={p.image} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                            : <div className="h-14 w-14 rounded-xl bg-muted flex items-center justify-center"><Package className="h-5 w-5 text-muted-foreground/30" /></div>}
+                        </Link>
+                      </td>
+                      {/* Name + SKU + Missing langs */}
+                      <td className="px-3 py-3">
+                        <Link href={`/${locale}/admin/products/${p.id}`} className="group/link">
+                          <div className="font-semibold text-[13px] group-hover/link:text-primary transition-colors line-clamp-1">{getName(p.translations)}</div>
+                          {p.variants[0]?.sku && <div className="text-[11px] text-muted-foreground font-mono mt-0.5">{p.variants[0].sku}</div>}
+                          {p.missingLangs?.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1 text-[10px] text-orange-600"><AlertTriangle className="h-3 w-3" />{p.missingLangs.map((l: string) => l.toUpperCase()).join(', ')} {t('products.missingTranslation')}</div>
+                          )}
+                        </Link>
+                      </td>
+                      {/* Category */}
+                      <td className="px-3 py-3">
+                        <span className="inline-flex px-2.5 py-1 rounded-lg text-[11px] font-medium bg-muted/60">{catName(p.category)}</span>
+                      </td>
+                      {/* Variants (expandable) */}
+                      <td className="px-3 py-3 text-center">
+                        <button onClick={() => setExpandedId(isExpanded ? null : p.id)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium hover:bg-muted transition-colors">
+                          {/* Color dots */}
+                          {p.colorHexes?.length > 0 && (
+                            <div className="flex -space-x-0.5 mr-1">{p.colorHexes.slice(0, 3).map((hex: string, j: number) => (
+                              <div key={j} className="h-3 w-3 rounded-full border border-white" style={{ backgroundColor: hex }} />
+                            ))}</div>
+                          )}
+                          {p.variantsCount}
+                          <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                      </td>
+                      {/* Price */}
+                      <td className="px-3 py-3 text-end">
+                        {p.salePrice ? <><div className="font-bold text-[13px] text-red-600">{fmtCur(p.salePrice)}</div><div className="text-[10px] text-muted-foreground line-through">{fmtCur(p.basePrice)}</div></>
+                          : p.priceRange?.min !== p.priceRange?.max ? <div className="text-[13px] font-medium">{fmtCur(p.priceRange.min)} – {fmtCur(p.priceRange.max)}</div>
+                          : <div className="text-[13px] font-bold">{fmtCur(p.basePrice)}</div>}
+                      </td>
+                      {/* Stock */}
+                      <td className="px-3 py-3 text-center">
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${STOCK_BADGE[p.stockStatus]}`}>{p.totalStock}</span>
+                      </td>
+                      {/* Status */}
+                      <td className="px-3 py-3 text-center">
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`} title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}>{p.isActive ? t('products.active') : t('products.inactive')}</span>
+                      </td>
+                      {/* Actions */}
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <Link href={`/${locale}/admin/products/${p.id}`} className="p-1.5 rounded-lg hover:bg-muted"><Edit3 className="h-3.5 w-3.5 text-muted-foreground" /></Link>
+                          <button onClick={() => dupMut.mutate(p.id)} className="p-1.5 rounded-lg hover:bg-muted"><Copy className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Expanded variants row */}
+                    {isExpanded && (
+                      <tr key={`${p.id}-variants`} className="border-b bg-muted/10">
+                        <td colSpan={9} className="px-6 py-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                            {p.variants.map((v: any) => (
+                              <div key={v.id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-background border hover:border-primary/20 transition-colors">
+                                {v.colorHex && <div className="h-6 w-6 rounded-full border flex-shrink-0" style={{ backgroundColor: v.colorHex }} />}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-medium">{translateColor(v.color, locale)} / {v.size}</div>
+                                  <div className="text-[10px] text-muted-foreground font-mono">{v.sku}</div>
+                                </div>
+                                <div className="text-end">
+                                  <div className="text-xs font-bold">{fmtCur(v.price)}</div>
+                                  <div className={`text-[10px] font-semibold ${v.stock <= 0 ? 'text-red-600' : v.stock <= 5 ? 'text-orange-600' : 'text-green-600'}`}>{v.stock}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}</Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalCount > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/10">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {totalCount} {t('products.product')}
+                <select value={pageSize} onChange={(e) => { setPageSize(+e.target.value); setPage(0) }} className="ml-2 px-2 py-1 rounded-lg border bg-background text-xs">
+                  {[25, 50, 100].map((n) => <option key={n} value={n}>{n} {t('products.perPage')}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronLeft className="h-4 w-4 rtl:rotate-180" /></button>
+                <span className="text-xs font-medium px-3">{page + 1} / {totalPages || 1}</span>
+                <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronRight className="h-4 w-4 rtl:rotate-180" /></button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Grid pagination */}
+      {view === 'grid' && totalCount > 0 && (
+        <div className="flex items-center justify-between mt-4">
+          <div className="text-xs text-muted-foreground">{totalCount} {t('products.product')}</div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronLeft className="h-4 w-4 rtl:rotate-180" /></button>
+            <span className="text-xs font-medium px-3">{page + 1} / {totalPages || 1}</span>
+            <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronRight className="h-4 w-4 rtl:rotate-180" /></button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      `}</style>
+    </div>
+  )
+}

@@ -1,0 +1,62 @@
+<!-- Status Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr><td align="center" style="padding:0 0 16px;"><div style="width:60px;height:60px;border-radius:50%;background-color:#d4a85315;display:inline-block;text-align:center;line-height:60px;"><span style="font-size:26px;color:#d4a853;">{{#if isShipped}}&#9992;{{else if isDelivered}}&#10003;{{else}}&#9998;{{/if}}</span></div></td></tr>
+</table>
+
+<h1 style="margin:0 0 6px;font-size:22px;color:#1a1a2e;text-align:center;font-weight:700;">Status-Update</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 24px;font-size:14px;">Hallo {{firstName}}, deine Bestellung <strong style="color:#1a1a2e;">{{orderNumber}}</strong> wurde aktualisiert.</p>
+
+<!-- Status Badge -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td align="center">
+<span style="display:inline-block;padding:10px 28px;background-color:#d4a85315;border:2px solid #d4a853;border-radius:50px;font-size:16px;font-weight:700;color:#1a1a2e;">{{statusLabel}}</span>
+</td></tr></table>
+
+<!-- Progress Bar -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;"><tr><td align="center">
+<table role="presentation" cellpadding="0" cellspacing="0" style="width:80%;">
+<tr>
+<td style="text-align:center;width:33%;"><div style="width:26px;height:26px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;line-height:26px;display:inline-block;">&#10003;</div><br><span style="font-size:9px;color:#16a34a;font-weight:600;">Bestellt</span></td>
+<td style="width:17%;"><div style="height:3px;background:{{#if isShipped}}#16a34a{{else if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};border-radius:2px;"></div></td>
+<td style="text-align:center;width:33%;"><div style="width:26px;height:26px;border-radius:50%;background:{{#if isShipped}}#d4a853{{else if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};color:{{#if isShipped}}#fff{{else if isDelivered}}#fff{{else}}#999{{/if}};font-size:11px;line-height:26px;display:inline-block;">{{#if isShipped}}&#9992;{{else if isDelivered}}&#10003;{{else}}2{{/if}}</div><br><span style="font-size:9px;color:{{#if isShipped}}#d4a853{{else if isDelivered}}#16a34a{{else}}#999{{/if}};font-weight:600;">Versendet</span></td>
+<td style="width:17%;"><div style="height:3px;background:{{#if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};border-radius:2px;"></div></td>
+<td style="text-align:center;width:33%;"><div style="width:26px;height:26px;border-radius:50%;background:{{#if isDelivered}}#d4a853{{else}}#e5e7eb{{/if}};color:{{#if isDelivered}}#fff{{else}}#999{{/if}};font-size:11px;line-height:26px;display:inline-block;">{{#if isDelivered}}&#10003;{{else}}3{{/if}}</div><br><span style="font-size:9px;color:{{#if isDelivered}}#d4a853{{else}}#999{{/if}};font-weight:600;">Zugestellt</span></td>
+</tr>
+</table>
+</td></tr></table>
+
+{{#if trackingNumber}}
+<!-- Tracking -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf8f5;border-radius:12px;border:1px solid #f0ede8;"><tr><td style="padding:18px;text-align:center;">
+<div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Sendungsnummer</div>
+<div style="font-size:18px;font-weight:700;font-family:monospace;color:#1a1a2e;letter-spacing:1px;margin-bottom:12px;">{{trackingNumber}}</div>
+{{#if trackingUrl}}<a href="{{trackingUrl}}" style="display:inline-block;background-color:#d4a853;color:#ffffff;font-weight:600;font-size:12px;padding:10px 28px;border-radius:50px;text-decoration:none;text-transform:uppercase;letter-spacing:1px;">Sendung Verfolgen</a>{{/if}}
+</td></tr></table>
+{{/if}}
+
+{{#if items}}
+<!-- Items -->
+<div style="font-weight:600;font-size:13px;margin:0 0 10px;color:#1a1a2e;">Deine Artikel:</div>
+{{#each items}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 6px;background:#faf8f5;border-radius:10px;"><tr><td style="padding:10px 14px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+<td style="vertical-align:middle;"><div style="font-weight:600;font-size:13px;color:#1a1a2e;">{{name}}</div><div style="font-size:11px;color:#6b7280;">{{#if color}}{{color}}{{/if}}{{#if size}} · {{size}}{{/if}} · {{quantity}}x</div></td>
+<td style="text-align:right;vertical-align:middle;white-space:nowrap;"><span style="font-weight:700;font-size:14px;color:#1a1a2e;">&euro;{{totalPrice}}</span></td>
+</tr></table>
+</td></tr></table>
+{{/each}}
+{{/if}}
+
+{{#if shippingAddress}}
+<!-- Address -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;background:#faf8f5;border-radius:10px;"><tr><td style="padding:12px 14px;">
+<div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Lieferadresse</div>
+<div style="font-size:13px;color:#1a1a2e;">{{shippingAddress.firstName}} {{shippingAddress.lastName}}, {{shippingAddress.street}} {{shippingAddress.houseNumber}}, {{shippingAddress.postalCode}} {{shippingAddress.city}}</div>
+</td></tr></table>
+{{/if}}
+
+<!-- CTA -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;"><tr><td align="center">
+<a href="{{appUrl}}/de/tracking?mode=order&orderNumber={{orderNumber}}" style="display:inline-block;background-color:#1a1a2e;color:#ffffff;font-weight:600;font-size:12px;padding:12px 36px;border-radius:50px;text-decoration:none;text-transform:uppercase;letter-spacing:1px;">Bestellung Verfolgen</a>
+</td></tr></table>
+
+<p style="color:#9ca3af;font-size:11px;text-align:center;">Fragen? <a href="{{appUrl}}/de/contact" style="color:#d4a853;">Kundenservice kontaktieren</a></p>

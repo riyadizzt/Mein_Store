@@ -11,6 +11,7 @@ import { CreateOrderDto } from './dto/create-order.dto'
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto'
 import { QueryOrdersDto } from './dto/query-orders.dto'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
+import { JwtOptionalGuard } from '../../common/guards/jwt-optional.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'
 import { Roles } from '../../common/decorators/roles.decorator'
 import { CorrelationId } from '../../common/decorators/correlation-id.decorator'
@@ -23,7 +24,7 @@ export class OrdersController {
   // ── Bestellung erstellen (Customer oder Gast) ─────────────────
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtOptionalGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bestellung aufgeben' })

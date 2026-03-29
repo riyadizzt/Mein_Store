@@ -1,0 +1,32 @@
+## Malak Store — Local Staging Environment
+## Spiegelt Production 1:1 (Postgres + Redis + API + Web)
+##
+## Starten: docker compose -f docker-compose.staging.yml up -d
+## Seed:    pnpm --filter api seed:staging
+## Stoppen: docker compose -f docker-compose.staging.yml down
+
+services:
+  postgres-staging:
+    image: postgres:16-alpine
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: malak_staging
+      POSTGRES_PASSWORD: malak_staging_pw
+      POSTGRES_DB: malak_staging
+    volumes:
+      - staging_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malak_staging"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-staging:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+
+volumes:
+  staging_pgdata:

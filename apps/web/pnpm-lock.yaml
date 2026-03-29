@@ -1,0 +1,28 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@omnichannel/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@omnichannel/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+
+  ../..: {}
+
+  ../../Mein_Store: {}
+
+  ../../packages/config: {}
+
+  ../../packages/types: {}
+
+  ../../packages/utils: {}
+
+  ../api: {}

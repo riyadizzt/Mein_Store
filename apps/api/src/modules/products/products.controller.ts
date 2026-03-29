@@ -39,6 +39,7 @@ export class ProductsController {
     @Query('minPrice') minPrice?: string,
     @Query('maxPrice') maxPrice?: string,
     @Query('isFeatured') isFeatured?: string,
+    @Query('sort') sort?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -50,6 +51,7 @@ export class ProductsController {
       minPrice: minPrice ? Number(minPrice) : undefined,
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
       isFeatured: isFeatured !== undefined ? isFeatured === 'true' : undefined,
+      sort,
       page: page ? Number(page) : 1,
       limit: limit ? Math.min(Number(limit), 100) : 20,
     })

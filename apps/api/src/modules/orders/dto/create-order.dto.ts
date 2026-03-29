@@ -10,9 +10,10 @@ export class OrderItemInputDto {
   @IsUUID()
   variantId!: string
 
-  @ApiProperty({ example: 'uuid-of-warehouse' })
+  @ApiProperty({ example: 'uuid-of-warehouse', required: false })
+  @IsOptional()
   @IsUUID()
-  warehouseId!: string
+  warehouseId?: string
 
   @ApiProperty({ example: 2, minimum: 1 })
   @IsInt()
@@ -60,5 +61,20 @@ export class CreateOrderDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  guestFirstName?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  guestLastName?: string
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
   notes?: string
+
+  @ApiProperty({ required: false, description: 'Locale for email language (de/en/ar)' })
+  @IsOptional()
+  @IsString()
+  locale?: string
 }
