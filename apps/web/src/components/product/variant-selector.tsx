@@ -52,16 +52,22 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
     )
   }
 
-  // For COLOR circles: check if ANY size of this color has stock
+  // For COLOR circles: if a size is selected, check this color+size combo; otherwise check any size
   const isColorAvailable = (color: string) => {
+    if (selectedSize) {
+      const v = findVariant(color, selectedSize)
+      return v ? getStock(v) > 0 : false
+    }
     return variants.some((v) => v.color === color && v.isActive && getStock(v) > 0)
   }
 
-  // For SIZE buttons: check if this specific color+size combo has stock
+  // For SIZE buttons: if a color is selected, check this color+size combo; otherwise check any color
   const isSizeAvailable = (size: string) => {
-    if (!selectedColor) return variants.some((v) => v.size === size && v.isActive && getStock(v) > 0)
-    const v = findVariant(selectedColor, size)
-    return v ? getStock(v) > 0 : false
+    if (selectedColor) {
+      const v = findVariant(selectedColor, size)
+      return v ? getStock(v) > 0 : false
+    }
+    return variants.some((v) => v.size === size && v.isActive && getStock(v) > 0)
   }
 
   return (

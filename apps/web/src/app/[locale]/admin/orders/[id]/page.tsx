@@ -19,10 +19,21 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
   const [statusChange, setStatusChange] = useState('')
   const [statusNotes, setStatusNotes] = useState('')
   const [cancelReason, setCancelReason] = useState('')
+  const [changingFulfillment, setChangingFulfillment] = useState(false)
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['admin-order', id],
     queryFn: async () => { const { data } = await api.get(`/admin/orders/${id}`); return data },
+  })
+
+  const { data: warehouses } = useQuery({
+    queryKey: ['admin-warehouses'],
+    queryFn: async () => { const { data } = await api.get('/admin/warehouses'); return data },
+  })
+
+  const fulfillmentMutation = useMutation({
+    mutationFn: (warehouseId: string) => api.patch(`/admin/orders/${id}/fulfillment`, { warehouseId }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setChangingFulfillment(false) },
   })
 
   const statusMutation = useMutation({
@@ -55,6 +66,43 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
             {(() => { try { const loc = JSON.parse(order.notes ?? '{}').locale ?? order.user?.preferredLang; return loc ? <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded ${loc === 'ar' ? 'bg-green-100 text-green-800' : loc === 'en' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>{loc.toUpperCase()}</span> : null } catch { return null } })()}
           </p>
         </div>
+      </div>
+
+      {/* Fulfillment-Standort */}
+      <div className="bg-background border rounded-xl p-4 mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center"><Truck className="h-4 w-4 text-blue-600" /></div>
+          <div>
+            <div className="text-xs text-muted-foreground">{locale === 'ar' ? 'موقع التنفيذ' : 'Fulfillment-Standort'}</div>
+            <div className="text-sm font-semibold">
+              {order.fulfillmentWarehouse?.name ?? (locale === 'ar' ? 'غير محدد' : 'Nicht zugewiesen')}
+              {order.fulfillmentWarehouse?.type && (
+                <span className="text-[10px] text-muted-foreground font-normal ml-1.5">
+                  ({order.fulfillmentWarehouse.type === 'STORE' ? (locale === 'ar' ? 'متجر' : 'Geschäft') : (locale === 'ar' ? 'مستودع' : 'Lager')})
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        {!changingFulfillment ? (
+          <button onClick={() => setChangingFulfillment(true)} className="text-xs text-primary hover:underline font-medium">
+            {locale === 'ar' ? 'تغيير' : 'Ändern'}
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <select
+              defaultValue={order.fulfillmentWarehouseId ?? ''}
+              onChange={(e) => { if (e.target.value) fulfillmentMutation.mutate(e.target.value) }}
+              className="px-3 py-1.5 rounded-lg border text-xs bg-background"
+            >
+              <option value="" disabled>{locale === 'ar' ? 'اختر الموقع' : 'Standort wählen'}</option>
+              {(warehouses as any[])?.map((w: any) => (
+                <option key={w.id} value={w.id}>{w.name} ({w.type === 'STORE' ? (locale === 'ar' ? 'متجر' : 'Geschäft') : (locale === 'ar' ? 'مستودع' : 'Lager')})</option>
+              ))}
+            </select>
+            <button onClick={() => setChangingFulfillment(false)} className="text-xs text-muted-foreground hover:text-foreground">{locale === 'ar' ? 'إلغاء' : 'Abbrechen'}</button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

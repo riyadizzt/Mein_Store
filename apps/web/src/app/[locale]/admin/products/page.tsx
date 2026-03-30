@@ -74,6 +74,12 @@ export default function AdminProductsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-products'] }); setSelected(new Set()) },
   })
 
+  const toggleStatusMut = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      api.post('/admin/products/bulk/status', { productIds: [id], isActive }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-products'] }),
+  })
+
   const dupMut = useMutation({
     mutationFn: (id: string) => api.post(`/admin/products/${id}/duplicate`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-products'] }),
@@ -190,7 +196,7 @@ export default function AdminProductsPage() {
                     : <div className="w-full h-full flex items-center justify-center"><Package className="h-12 w-12 text-muted-foreground/15" /></div>}
                   {/* Status badge */}
                   <div className="absolute top-2 right-2 rtl:right-auto rtl:left-2">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`} title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}>{p.isActive ? t('products.active') : t('products.inactive')}</span>
+                    <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleStatusMut.mutate({ id: p.id, isActive: !p.isActive }) }} className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-all hover:ring-2 hover:ring-offset-1 ${p.isActive ? 'bg-green-100 text-green-800 hover:ring-green-300' : 'bg-gray-100 text-gray-600 hover:ring-gray-300'}`} title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}>{p.isActive ? t('products.active') : t('products.inactive')}</button>
                   </div>
                   {/* Stock badge */}
                   <div className="absolute bottom-2 right-2 rtl:right-auto rtl:left-2">
@@ -304,7 +310,7 @@ export default function AdminProductsPage() {
                       </td>
                       {/* Status */}
                       <td className="px-3 py-3 text-center">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`} title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}>{p.isActive ? t('products.active') : t('products.inactive')}</span>
+                        <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleStatusMut.mutate({ id: p.id, isActive: !p.isActive }) }} className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-all hover:ring-2 hover:ring-offset-1 ${p.isActive ? 'bg-green-100 text-green-800 hover:ring-green-300' : 'bg-gray-100 text-gray-600 hover:ring-gray-300'}`} title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}>{p.isActive ? t('products.active') : t('products.inactive')}</button>
                       </td>
                       {/* Actions */}
                       <td className="px-3 py-3">

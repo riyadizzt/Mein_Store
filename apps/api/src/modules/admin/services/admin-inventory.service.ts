@@ -12,9 +12,8 @@ export class AdminInventoryService {
 
   // ── STATS ──────────────────────────────────────────────────
 
-  async getStats() {
-    const defaultWh = await this.prisma.warehouse.findFirst({ where: { isDefault: true } })
-    const whId = defaultWh?.id
+  async getStats(warehouseId?: string) {
+    const whId = warehouseId || (await this.prisma.warehouse.findFirst({ where: { isDefault: true } }))?.id
 
     const allInv = await this.prisma.inventory.findMany({
       where: whId ? { warehouseId: whId } : {},
@@ -222,6 +221,11 @@ export class AdminInventoryService {
 
     const whFilter = query.warehouseId ? { warehouseId: query.warehouseId } : {}
 
+    // If warehouse filter, only load products that HAVE inventory in this warehouse
+    if (query.warehouseId) {
+      where.variants = { some: { inventory: { some: { warehouseId: query.warehouseId } } } }
+    }
+
     const [products, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
@@ -261,8 +265,11 @@ export class AdminInventoryService {
           return inv
         })
         const avail = vStock - vReserved
-        if (avail <= 0) outCount++
-        else if (avail <= vReorder) lowCount++
+        // Only count variants that actually have inventory records
+        if (v.inventory.length > 0) {
+          if (avail <= 0) outCount++
+          else if (avail <= vReorder) lowCount++
+        }
         return { id: v.id, sku: v.sku, barcode: v.barcode, color: v.color, colorHex: v.colorHex, size: v.size, stock: avail, inventory: invs }
       })
 
@@ -283,17 +290,23 @@ export class AdminInventoryService {
       }
     })
 
+    // If warehouse filter active, hide products with no inventory in that warehouse
+    if (query.warehouseId) {
+      result = result.filter((p) => p.variants.some((v: any) => v.inventory.length > 0))
+    }
+
     // Post-filter by stock status
     if (query.status === 'out_of_stock') result = result.filter((p) => p.status === 'out_of_stock')
     else if (query.status === 'low') result = result.filter((p) => p.status === 'low' || p.status === 'out_of_stock')
     else if (query.status === 'in_stock') result = result.filter((p) => p.status === 'in_stock')
 
-    return { data: result, meta: { total: query.status ? result.length : total, limit, offset } }
+    const filteredTotal = (query.warehouseId || query.status) ? result.length : total
+    return { data: result, meta: { total: filteredTotal, limit, offset } }
   }
 
   // ── DEPARTMENT SUMMARY ─────────────────────────────────────
 
-  async getDepartmentSummary() {
+  async getDepartmentSummary(warehouseId?: string) {
     const departments = await this.prisma.category.findMany({
       where: { parentId: null, isActive: true },
       include: {
@@ -306,8 +319,10 @@ export class AdminInventoryService {
     const result = []
     for (const dept of departments) {
       const allCatIds = [dept.id, ...dept.children.map((c) => c.id)]
+      const invWhere: any = { variant: { product: { categoryId: { in: allCatIds }, deletedAt: null } } }
+      if (warehouseId) invWhere.warehouseId = warehouseId
       const inventory = await this.prisma.inventory.findMany({
-        where: { variant: { product: { categoryId: { in: allCatIds }, deletedAt: null } } },
+        where: invWhere,
         select: { quantityOnHand: true, quantityReserved: true, reorderPoint: true },
       })
       let total = 0, low = 0, critical = 0
@@ -413,20 +428,33 @@ export class AdminInventoryService {
 
   // ── INTAKE BY SKU (CSV Import) ──────────────────────────────
 
-  async intakeBySku(items: { sku: string; quantity: number }[], reason: string, adminId: string, ipAddress: string) {
+  async intakeBySku(items: { sku: string; quantity: number }[], reason: string, adminId: string, ipAddress: string, warehouseId?: string) {
     const results: any[] = []
     const errors: any[] = []
+
+    // Resolve warehouse — use provided or default
+    let whId = warehouseId
+    if (!whId) {
+      const defaultWh = await this.prisma.warehouse.findFirst({ where: { isDefault: true } })
+      whId = defaultWh?.id
+    }
 
     for (const item of items) {
       const variant = await this.prisma.productVariant.findFirst({
         where: { OR: [{ sku: item.sku }, { barcode: item.sku }] },
-        select: { id: true, sku: true, inventory: { select: { id: true }, take: 1 } },
+        select: { id: true, sku: true, inventory: { where: whId ? { warehouseId: whId } : {}, select: { id: true }, take: 1 } },
       })
-      if (!variant || !variant.inventory[0]) {
-        errors.push({ sku: item.sku, error: 'not_found' })
-        continue
+      if (!variant) { errors.push({ sku: item.sku, error: 'not_found' }); continue }
+
+      // If no inventory record exists for this warehouse, create one
+      let invId = variant.inventory[0]?.id
+      if (!invId && whId) {
+        const newInv = await this.prisma.inventory.create({ data: { variantId: variant.id, warehouseId: whId, quantityOnHand: 0 } })
+        invId = newInv.id
       }
-      const inv = await this.prisma.inventory.findUnique({ where: { id: variant.inventory[0].id } })
+      if (!invId) { errors.push({ sku: item.sku, error: 'no_inventory' }); continue }
+
+      const inv = await this.prisma.inventory.findUnique({ where: { id: invId } })
       if (!inv) { errors.push({ sku: item.sku, error: 'no_inventory' }); continue }
 
       const newQty = inv.quantityOnHand + item.quantity
@@ -542,6 +570,73 @@ export class AdminInventoryService {
       orderBy: { createdAt: 'desc' },
       take: limit,
     })
+  }
+
+  async getMovementLog(query: { warehouseId?: string; type?: string; search?: string; limit?: number; offset?: number }) {
+    const limit = Math.min(query.limit ?? 50, 200)
+    const offset = query.offset ?? 0
+    const where: any = {}
+
+    if (query.warehouseId) where.warehouseId = query.warehouseId
+    if (query.type) where.type = query.type
+    if (query.search) {
+      where.OR = [
+        { notes: { contains: query.search, mode: 'insensitive' } },
+        { referenceId: { contains: query.search, mode: 'insensitive' } },
+      ]
+    }
+
+    const [movements, total] = await Promise.all([
+      this.prisma.inventoryMovement.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.inventoryMovement.count({ where }),
+    ])
+
+    // Enrich with variant + warehouse info
+    const variantIds = [...new Set(movements.map((m) => m.variantId))]
+    const warehouseIds = [...new Set(movements.map((m) => m.warehouseId))]
+
+    const [variants, warehouses] = await Promise.all([
+      variantIds.length > 0 ? this.prisma.productVariant.findMany({
+        where: { id: { in: variantIds } },
+        select: { id: true, sku: true, color: true, size: true, product: { select: { translations: { select: { name: true, language: true } } } } },
+      }) : [],
+      warehouseIds.length > 0 ? this.prisma.warehouse.findMany({
+        where: { id: { in: warehouseIds } },
+        select: { id: true, name: true, type: true },
+      }) : [],
+    ])
+
+    const variantMap = new Map(variants.map((v) => [v.id, v]))
+    const warehouseMap = new Map(warehouses.map((w) => [w.id, w]))
+
+    return {
+      data: movements.map((m) => {
+        const v = variantMap.get(m.variantId)
+        const w = warehouseMap.get(m.warehouseId)
+        return {
+          id: m.id,
+          type: m.type,
+          quantity: m.quantity,
+          quantityBefore: m.quantityBefore,
+          quantityAfter: m.quantityAfter,
+          notes: m.notes,
+          createdBy: m.createdBy,
+          createdAt: m.createdAt,
+          sku: v?.sku,
+          color: v?.color,
+          size: v?.size,
+          productName: v?.product?.translations,
+          warehouseName: w?.name,
+          warehouseType: w?.type,
+        }
+      }),
+      meta: { total, limit, offset },
+    }
   }
 
   // ── CSV EXPORT ─────────────────────────────────────────────

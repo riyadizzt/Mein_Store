@@ -29,7 +29,7 @@ export class ReservationService {
     private readonly inventoryService: InventoryService,
     config: ConfigService,
   ) {
-    this.timeoutMinutes = config.get<number>('RESERVATION_TIMEOUT_MINUTES') ?? 15
+    this.timeoutMinutes = config.get<number>('RESERVATION_TIMEOUT_MINUTES') ?? 7
   }
 
   // ── Reserve: SELECT FOR UPDATE ───────────────────────────────

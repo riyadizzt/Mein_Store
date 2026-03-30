@@ -8,7 +8,7 @@ import {
   Search, Package, AlertTriangle, XCircle, TrendingUp,
   ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Check,
   Download, Upload, ScanBarcode, ClipboardList, PackagePlus, PackageMinus,
-  Minus, Plus, RotateCcw, Eye, X, LayoutList, Layers,
+  Minus, Plus, RotateCcw, Eye, X, LayoutList, Layers, ArrowRightLeft,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { translateColor, translateMovement, getProductName, formatCurrency, formatShortDate } from '@/lib/locale-utils'
@@ -55,6 +55,12 @@ export default function InventoryPage() {
   const [csvResult, setCsvResult] = useState<any>(null)
   const [addColorProduct, setAddColorProduct] = useState<string | null>(null)
   const [addSizeProduct, setAddSizeProduct] = useState<string | null>(null)
+  const [showAddWarehouse, setShowAddWarehouse] = useState(false)
+  const [newWhName, setNewWhName] = useState('')
+  const [newWhType, setNewWhType] = useState<'WAREHOUSE' | 'STORE'>('WAREHOUSE')
+  const [transferItem, setTransferItem] = useState<{ inventoryId: string; sku: string; color: string; size: string; stock: number } | null>(null)
+  const [transferTarget, setTransferTarget] = useState('')
+  const [transferQty, setTransferQty] = useState(1)
   const [scanInput, setScanInput] = useState('')
   const [scannedProduct, setScannedProduct] = useState<any>(null)
   const [scanQty, setScanQty] = useState(1)
@@ -62,13 +68,13 @@ export default function InventoryPage() {
   const scanRef = useRef<HTMLInputElement>(null)
 
   const { data: stats } = useQuery({
-    queryKey: ['inventory-stats'],
-    queryFn: async () => { const { data } = await api.get('/admin/inventory/stats'); return data },
+    queryKey: ['inventory-stats', warehouseId],
+    queryFn: async () => { const { data } = await api.get('/admin/inventory/stats', { params: { warehouseId: warehouseId || undefined } }); return data },
   })
 
   const { data: departments } = useQuery({
-    queryKey: ['inventory-departments'],
-    queryFn: async () => { const { data } = await api.get('/admin/inventory/summary'); return data },
+    queryKey: ['inventory-departments', warehouseId],
+    queryFn: async () => { const { data } = await api.get('/admin/inventory/summary', { params: { warehouseId: warehouseId || undefined } }); return data },
   })
 
   const { data: warehouses } = useQuery({
@@ -129,6 +135,18 @@ export default function InventoryPage() {
       await api.post(`/admin/inventory/${p.id}/output`, { quantity: p.quantity, reason: p.reason })
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-inventory'] }); qc.invalidateQueries({ queryKey: ['inventory-stats'] }) },
+  })
+
+  const transferMut = useMutation({
+    mutationFn: async (p: { inventoryId: string; toWarehouseId: string; quantity: number }) => {
+      await api.post(`/admin/inventory/${p.inventoryId}/transfer`, { toWarehouseId: p.toWarehouseId, quantity: p.quantity })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-inventory'] })
+      qc.invalidateQueries({ queryKey: ['inventory-stats'] })
+      qc.invalidateQueries({ queryKey: ['inventory-departments'] })
+      setTransferItem(null)
+    },
   })
 
   const handleBarcodeScan = useCallback(async (code: string) => {
@@ -230,6 +248,7 @@ export default function InventoryPage() {
           <PackageMinus className="h-4 w-4" />{t('inventory.output')}
         </Button>
         <Link href={`/${locale}/admin/inventory/stocktake`}><Button size="sm" variant="outline" className="rounded-xl gap-2"><ClipboardList className="h-4 w-4" />{t('inventory.stocktake')}</Button></Link>
+        <Link href={`/${locale}/admin/inventory/movements`}><Button size="sm" variant="outline" className="rounded-xl gap-2"><ArrowRightLeft className="h-4 w-4" />{locale === 'ar' ? 'سجل الحركات' : 'Bewegungslog'}</Button></Link>
         <Button size="sm" variant="outline" className="rounded-xl gap-2" onClick={() => { setShowScannerOverlay(true); setScannerMode('intake'); setScanLog([]); setScannedProduct(null); setScanInput('') }}>
           <ScanBarcode className="h-4 w-4" />{t('inventory.scanner')}
         </Button>
@@ -269,12 +288,15 @@ export default function InventoryPage() {
           <option value="low">{t('inventory.statusLow')}</option>
           <option value="out_of_stock">{t('inventory.statusOutOfStock')}</option>
         </select>
-        {(warehouses as any[])?.length > 1 && (
-          <select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setPage(0) }} className={`px-3 py-2 rounded-xl text-xs font-medium border bg-background cursor-pointer ${warehouseId ? 'border-primary/50 text-primary' : ''}`}>
+        <div className="flex items-center gap-1">
+          <select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setPage(0) }} className={`px-3 py-2 rounded-xl text-xs font-medium border bg-background cursor-pointer ${warehouseId ? 'border-primary/50 text-primary bg-primary/5' : ''}`}>
             <option value="">{t('inventory.allWarehouses')}</option>
-            {(warehouses as any[]).map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            {(warehouses as any[])?.map((w: any) => <option key={w.id} value={w.id}>{w.name} ({w.type === 'STORE' ? (locale === 'ar' ? 'متجر' : 'Geschäft') : (locale === 'ar' ? 'مستودع' : 'Lager')})</option>)}
           </select>
-        )}
+          <button onClick={() => setShowAddWarehouse(true)} className="h-9 w-9 rounded-xl border flex items-center justify-center hover:bg-muted transition-colors" title={locale === 'ar' ? 'إضافة موقع جديد' : 'Neuen Standort hinzufügen'}>
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
         {(locations as any[])?.length > 0 && (
           <select value={locationId} onChange={(e) => { setLocationId(e.target.value); setPage(0) }} className={`px-3 py-2 rounded-xl text-xs font-medium border bg-background cursor-pointer ${locationId ? 'border-primary/50 text-primary' : ''}`}>
             <option value="">{t('inventory.allLocations')}</option>
@@ -313,17 +335,14 @@ export default function InventoryPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30">
-                <th className="px-3 py-3 w-8"><button onClick={toggleSelectAll} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selectedIds.size === items.length && items.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selectedIds.size === items.length && items.length > 0 && <Check className="h-3 w-3 text-white" />}</button></th>
-                <th className="px-3 py-3 w-12"></th>
+                {viewMode === 'flat' && <th className="px-3 py-3 w-8"><button onClick={toggleSelectAll} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selectedIds.size === items.length && items.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selectedIds.size === items.length && items.length > 0 && <Check className="h-3 w-3 text-white" />}</button></th>}
+                {viewMode === 'grouped' && <th className="px-2 py-3 w-8"></th>}
                 <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.product')}</th>
                 <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">SKU</th>
-                <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.variant')}</th>
                 <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.stock')}</th>
                 <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.minimum')}</th>
-                <th className="text-end px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.salePrice')}</th>
-                <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.location')}</th>
-                <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.lastMovement')}</th>
-                <th className="px-3 py-3 w-16"></th>
+                <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.warehouse')}</th>
+                <th className="px-3 py-3 w-20 text-center">{viewMode === 'grouped' ? '' : ''}</th>
               </tr>
             </thead>
             <tbody>
@@ -337,53 +356,91 @@ export default function InventoryPage() {
                   const isOut = product.status === 'out_of_stock'
                   const isLow = product.status === 'low'
                   const isExpanded = expandedProductId === product.productId
+                  // Sort variants by color then size
+                  const sortedVariants = [...(product.variants ?? [])].sort((a: any, b: any) => {
+                    if (a.color !== b.color) return (a.color ?? '').localeCompare(b.color ?? '')
+                    return (a.size ?? '').localeCompare(b.size ?? '', undefined, { numeric: true })
+                  })
                   return (<Fragment key={product.productId}>
                     <tr className={`border-b transition-colors group cursor-pointer ${isOut ? 'bg-red-50/50' : isLow ? 'bg-orange-50/30' : 'hover:bg-muted/20'}`}
                       onClick={() => setExpandedProductId(isExpanded ? null : product.productId)}
                       style={{ animationDelay: `${i * 12}ms`, animation: 'fadeIn 200ms ease-out both' }}>
                       <td className="px-3 py-3"><ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></td>
-                      <td className="px-3 py-3">{product.image ? <img src={product.image} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground/30" /></div>}</td>
-                      <td className="px-3 py-3"><div className="font-semibold text-[13px] line-clamp-1">{getName(product.translations)}</div><span className={`inline-flex mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase ${STATUS_BADGE[product.status]}`}>{t(`inventory.status${product.status === 'in_stock' ? 'InStock' : product.status === 'low' ? 'Low' : 'OutOfStock'}`)}</span></td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{product.variantsCount} {t('inventory.variant')}</td>
-                      <td className="px-3 py-3"><div className="flex -space-x-0.5">{product.variants.slice(0, 4).map((v: any, j: number) => v.colorHex ? <div key={j} className="h-4 w-4 rounded-full border border-white" style={{ backgroundColor: v.colorHex }} /> : null)}</div></td>
-                      <td className="px-3 py-3 text-center"><span className={`font-bold text-sm ${isOut ? 'text-red-600' : isLow ? 'text-orange-600' : ''}`}>{product.totalStock}</span></td>
-                      <td className="px-3 py-3 text-center text-xs text-muted-foreground">{product.lowCount > 0 && <span className="text-orange-600">{product.lowCount}</span>}{product.outCount > 0 && <span className="text-red-600 ml-1">{product.outCount}</span>}</td>
-                      <td colSpan={4}></td>
-                    </tr>
-                    {/* Expanded variants */}
-                    {isExpanded && product.variants.map((v: any) => (
-                      <tr key={v.id} className="border-b bg-muted/10 hover:bg-muted/20 transition-colors group" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
-                        <td className="px-3 py-2"></td>
-                        <td className="px-3 py-2"></td>
-                        <td className="px-3 py-2 ps-8"><div className="flex items-center gap-2">{v.colorHex && <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: v.colorHex }} />}<span className="text-xs font-medium">{translateColor(v.color, locale)} / {v.size}</span></div></td>
-                        <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{v.sku}</td>
-                        <td className="px-3 py-2 text-[11px] text-muted-foreground">{v.barcode ?? '—'}</td>
-                        <td className="px-3 py-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {v.inventory[0] && <><button onClick={(e) => { e.stopPropagation(); quickAdjustMut.mutate({ id: v.inventory[0].id, delta: -1 }) }} className="h-5 w-5 rounded bg-muted hover:bg-red-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"><Minus className="h-2.5 w-2.5" /></button>
-                            <span className={`font-bold text-xs min-w-[24px] ${v.stock <= 0 ? 'text-red-600' : v.stock <= (v.inventory[0]?.reorderPoint ?? 5) ? 'text-orange-600' : ''}`}>{v.stock}</span>
-                            <button onClick={(e) => { e.stopPropagation(); quickAdjustMut.mutate({ id: v.inventory[0].id, delta: 1 }) }} className="h-5 w-5 rounded bg-muted hover:bg-green-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"><Plus className="h-2.5 w-2.5" /></button></>}
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-3">
+                          {product.image ? <img src={product.image} alt="" className="h-20 w-20 rounded-xl object-cover flex-shrink-0" /> : <div className="h-20 w-20 rounded-xl bg-muted flex items-center justify-center flex-shrink-0"><Package className="h-6 w-6 text-muted-foreground/30" /></div>}
+                          <div>
+                            <div className="font-semibold text-[13px] line-clamp-1">{getName(product.translations)}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase ${STATUS_BADGE[product.status]}`}>{t(`inventory.status${product.status === 'in_stock' ? 'InStock' : product.status === 'low' ? 'Low' : 'OutOfStock'}`)}</span>
+                              <div className="flex -space-x-0.5">{product.variants.slice(0, 5).map((v: any, j: number) => v.colorHex ? <div key={j} className="h-3 w-3 rounded-full border border-white" style={{ backgroundColor: v.colorHex }} /> : null)}</div>
+                            </div>
                           </div>
-                        </td>
-                        <td className="px-3 py-2 text-center text-[11px] text-muted-foreground">{v.inventory[0]?.reorderPoint ?? '—'}</td>
-                        <td colSpan={2} className="px-3 py-2 text-[11px] text-muted-foreground">{v.inventory[0]?.location?.name ?? '—'}</td>
-                        <td className="px-3 py-2 text-[11px] text-muted-foreground">{v.inventory[0]?.warehouse?.name ?? '—'}</td>
-                        <td className="px-3 py-2">
-                          <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: 0, stock: v.stock, location: v.inventory[0]?.location?.name }} productName={getName(product.translations)} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
-                        </td>
-                      </tr>
-                    ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">{product.variantsCount} {t('inventory.variant')}</td>
+                      <td className="px-3 py-3 text-center"><span className={`font-bold text-sm ${isOut ? 'text-red-600' : isLow ? 'text-orange-600' : ''}`}>{product.totalStock}</span></td>
+                      <td className="px-3 py-3 text-center text-xs">
+                        {product.lowCount > 0 && <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 text-[10px] font-medium">{product.lowCount} {locale === 'ar' ? 'منخفض' : 'niedrig'}</span>}
+                        {product.outCount > 0 && <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium ltr:ml-1 rtl:mr-1">{product.outCount} {locale === 'ar' ? 'نفد' : 'leer'}</span>}
+                      </td>
+                      <td className="px-3 py-3"></td>
+                      <td className="px-3 py-3"></td>
+                    </tr>
+                    {/* Expanded: one row per variant PER warehouse */}
+                    {isExpanded && sortedVariants
+                      .filter((v: any) => !warehouseId || v.inventory?.length > 0)
+                      .flatMap((v: any) => {
+                        const invList = v.inventory?.length > 0 ? v.inventory : [null]
+                        return invList.map((inv: any, invIdx: number) => {
+                          const stock = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : 0
+                          return (
+                            <tr key={`${v.id}-${inv?.id ?? invIdx}`} className={`border-b border-border/40 hover:bg-muted/30 transition-colors group ${stock <= 0 ? 'bg-red-50/20' : stock <= (inv?.reorderPoint ?? 5) ? 'bg-orange-50/10' : 'bg-muted/5'}`} style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                              <td className="py-2.5 ltr:border-l-2 rtl:border-r-2 border-primary/20"></td>
+                              <td className="px-3 py-2.5 ltr:pl-10 rtl:pr-10">
+                                <div className="flex items-center gap-2.5">
+                                  {v.colorHex && <div className="h-4 w-4 rounded-full border shadow-sm flex-shrink-0" style={{ backgroundColor: v.colorHex }} />}
+                                  <span className="text-[13px] font-medium">{translateColor(v.color, locale)} / {v.size}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{v.sku}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <div className="inline-flex items-center gap-1">
+                                  {inv && <button onClick={(e) => { e.stopPropagation(); quickAdjustMut.mutate({ id: inv.id, delta: -1 }) }} className="h-6 w-6 rounded bg-muted hover:bg-red-100 flex items-center justify-center transition-colors"><Minus className="h-3 w-3" /></button>}
+                                  <span className={`font-bold text-sm min-w-[28px] text-center ${stock <= 0 ? 'text-red-600' : stock <= (inv?.reorderPoint ?? 5) ? 'text-orange-600' : 'text-green-600'}`}>{stock}</span>
+                                  {inv && <button onClick={(e) => { e.stopPropagation(); quickAdjustMut.mutate({ id: inv.id, delta: 1 }) }} className="h-6 w-6 rounded bg-muted hover:bg-green-100 flex items-center justify-center transition-colors"><Plus className="h-3 w-3" /></button>}
+                                  {!inv && <span className="text-xs text-red-400">0</span>}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{inv?.reorderPoint ?? '—'}</td>
+                              <td className="px-3 py-2.5 text-xs text-muted-foreground">{inv?.warehouse?.name ?? '—'}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <div className="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {inv && stock > 0 && (
+                                    <button onClick={(e) => { e.stopPropagation(); setTransferItem({ inventoryId: inv.id, sku: v.sku, color: v.color, size: v.size, stock }); setTransferQty(1); setTransferTarget('') }}
+                                      className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors" title={locale === 'ar' ? 'نقل' : 'Transfer'}>
+                                      <ArrowRightLeft className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                  <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: 0, stock, location: inv?.location?.name }} productName={getName(product.translations)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground" />
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      })}
                     {/* Add color/size buttons */}
                     {isExpanded && (
-                      <tr key={`${product.productId}-actions`} className="border-b bg-muted/5">
-                        <td colSpan={11} className="px-6 py-3">
+                      <tr key={`${product.productId}-actions`} className="border-b border-border/40">
+                        <td className="ltr:border-l-2 rtl:border-r-2 border-primary/20"></td>
+                        <td colSpan={10} className="px-3 py-2.5 ltr:pl-10 rtl:pr-10">
                           <div className="flex items-center gap-2">
                             <button onClick={(e) => { e.stopPropagation(); setAddColorProduct(product.productId) }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-[#d4a853]/10 text-[#d4a853] hover:bg-[#d4a853]/20 transition-colors border border-[#d4a853]/20">
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium text-muted-foreground hover:text-[#d4a853] hover:bg-[#d4a853]/10 transition-colors">
                               <Plus className="h-3 w-3" />{t('inventory.addNewColor')}
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); setAddSizeProduct(product.productId) }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors border border-blue-200">
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors">
                               <Plus className="h-3 w-3" />{t('inventory.addNewSize')}
                             </button>
                           </div>
@@ -510,6 +567,14 @@ export default function InventoryPage() {
                 <button onClick={() => setScannerMode('intake')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'intake' ? 'bg-green-600 text-white' : 'bg-white/10 text-white/60'}`}>{t('inventory.scannerIntake')}</button>
                 <button onClick={() => setScannerMode('output')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'output' ? 'bg-red-600 text-white' : 'bg-white/10 text-white/60'}`}>{t('inventory.scannerOutput')}</button>
                 <button onClick={() => { setScannerMode('csv'); setCsvData([]); setCsvResult(null) }} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'csv' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60'}`}>{t('inventory.intakeCsv')}</button>
+              </div>
+              {/* Warehouse selection for intake */}
+              <div className="flex items-center gap-2 ml-4">
+                <span className="text-white/40 text-xs">{locale === 'ar' ? 'الموقع:' : 'Standort:'}</span>
+                <select value={warehouseId || ''} onChange={(e) => setWarehouseId(e.target.value)}
+                  className="px-2 py-1 rounded-lg bg-white/10 border border-white/20 text-white text-xs">
+                  {(warehouses as any[])?.map((w: any) => <option key={w.id} value={w.id} className="text-black">{w.name}</option>)}
+                </select>
               </div>
             </div>
             <Button variant="outline" size="sm" className="rounded-xl text-white border-white/20 hover:bg-white/10" onClick={() => setShowScannerOverlay(false)}>
@@ -665,11 +730,128 @@ export default function InventoryPage() {
       {addColorProduct && <AddColorModal productId={addColorProduct} onClose={() => setAddColorProduct(null)} />}
       {addSizeProduct && <AddSizeModal productId={addSizeProduct} onClose={() => setAddSizeProduct(null)} />}
 
+      {/* Transfer Modal */}
+      {transferItem && (
+        <Modal onClose={() => setTransferItem(null)}>
+          <div className="text-center mb-5">
+            <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-3"><ArrowRightLeft className="h-5 w-5 text-blue-600" /></div>
+            <h3 className="text-lg font-bold">{locale === 'ar' ? 'نقل بضاعة' : 'Transfer'}</h3>
+            <p className="text-xs text-muted-foreground mt-1">{transferItem.sku} — {translateColor(transferItem.color, locale)} / {transferItem.size}</p>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium mb-1 block">{locale === 'ar' ? 'إلى الموقع' : 'Ziel-Standort'}</label>
+              <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border bg-background text-sm">
+                <option value="">{locale === 'ar' ? 'اختر الموقع...' : 'Standort wählen...'}</option>
+                {(warehouses as any[])?.map((w: any) => (
+                  <option key={w.id} value={w.id}>{w.name} ({w.type === 'STORE' ? (locale === 'ar' ? 'متجر' : 'Geschäft') : (locale === 'ar' ? 'مستودع' : 'Lager')})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">{locale === 'ar' ? 'الكمية' : 'Menge'} ({locale === 'ar' ? 'متاح' : 'verfügbar'}: {transferItem.stock})</label>
+              <Input type="number" min={1} max={transferItem.stock} value={transferQty} onChange={(e) => setTransferQty(Math.min(+e.target.value, transferItem.stock))} className="rounded-xl" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setTransferItem(null)}>{t('inventory.cancel')}</Button>
+              <Button className="flex-1 rounded-xl gap-2" disabled={!transferTarget || transferQty <= 0 || transferMut.isPending}
+                onClick={() => transferMut.mutate({ inventoryId: transferItem.inventoryId, toWarehouseId: transferTarget, quantity: transferQty })}>
+                <ArrowRightLeft className="h-4 w-4" />{transferMut.isPending ? '...' : (locale === 'ar' ? 'نقل' : 'Transfer')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Warehouse Management Modal */}
+      {showAddWarehouse && (
+        <Modal onClose={() => setShowAddWarehouse(false)} wide>
+          <h3 className="text-lg font-bold mb-4">{locale === 'ar' ? 'إدارة المواقع' : 'Standorte verwalten'}</h3>
+
+          {/* Existing warehouses */}
+          <div className="space-y-2 mb-6">
+            {(warehouses as any[])?.map((w: any) => (
+              <WarehouseRow key={w.id} warehouse={w} locale={locale} onUpdate={async (data) => {
+                await api.patch(`/admin/warehouses/${w.id}`, data)
+                qc.invalidateQueries({ queryKey: ['admin-warehouses'] })
+              }} onDelete={async () => {
+                const res = await api.delete(`/admin/warehouses/${w.id}`)
+                if ((res.data as any)?.deleted) {
+                  qc.invalidateQueries({ queryKey: ['admin-warehouses'] })
+                } else {
+                  alert((res.data as any)?.message?.[locale] ?? (res.data as any)?.message?.de ?? 'Fehler')
+                }
+              }} />
+            ))}
+          </div>
+
+          {/* Add new */}
+          <div className="border-t pt-4">
+            <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase">{locale === 'ar' ? 'إضافة موقع جديد' : 'Neuen Standort hinzufügen'}</p>
+            <div className="flex gap-2">
+              <Input value={newWhName} onChange={(e) => setNewWhName(e.target.value)} placeholder={locale === 'ar' ? 'اسم الموقع...' : 'Standort-Name...'} className="rounded-xl text-sm flex-1" />
+              <select value={newWhType} onChange={(e) => setNewWhType(e.target.value as any)} className="px-3 py-2 rounded-xl border bg-background text-xs">
+                <option value="WAREHOUSE">{locale === 'ar' ? 'مستودع' : 'Lager'}</option>
+                <option value="STORE">{locale === 'ar' ? 'متجر' : 'Geschäft'}</option>
+              </select>
+              <Button size="sm" className="rounded-xl" disabled={!newWhName.trim()} onClick={async () => {
+                await api.post('/admin/warehouses', { name: newWhName.trim(), type: newWhType })
+                qc.invalidateQueries({ queryKey: ['admin-warehouses'] })
+                setNewWhName('')
+              }}><Plus className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <style>{`
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
       `}</style>
+    </div>
+  )
+}
+
+function WarehouseRow({ warehouse, locale, onUpdate, onDelete }: {
+  warehouse: any; locale: string
+  onUpdate: (data: any) => Promise<void>
+  onDelete: () => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(warehouse.name)
+  const [deleting, setDeleting] = useState(false)
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border hover:border-primary/20 transition-all group">
+      <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold ${warehouse.type === 'STORE' ? 'bg-blue-50 text-blue-600' : 'bg-muted text-muted-foreground'}`}>
+        {warehouse.type === 'STORE' ? (locale === 'ar' ? 'م' : 'G') : (locale === 'ar' ? 'خ' : 'L')}
+      </div>
+      <div className="flex-1 min-w-0">
+        {editing ? (
+          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus
+            className="w-full px-2 py-1 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+            onBlur={async () => { if (name.trim() && name !== warehouse.name) await onUpdate({ name: name.trim() }); setEditing(false) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setName(warehouse.name); setEditing(false) } }}
+          />
+        ) : (
+          <div className="text-sm font-semibold cursor-pointer" onClick={() => setEditing(true)}>{warehouse.name}</div>
+        )}
+        <div className="text-[10px] text-muted-foreground">
+          {warehouse.type === 'STORE' ? (locale === 'ar' ? 'متجر' : 'Geschäft') : (locale === 'ar' ? 'مستودع' : 'Lager')}
+          {warehouse.isDefault && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-[#d4a853]/10 text-[#d4a853] font-semibold">{locale === 'ar' ? 'افتراضي' : 'Standard'}</span>}
+        </div>
+      </div>
+      {!editing && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+          <button onClick={() => setEditing(true)} className="px-2 py-1 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted">{locale === 'ar' ? 'تعديل' : 'Bearbeiten'}</button>
+          {!warehouse.isDefault && (
+            <button onClick={async () => { setDeleting(true); await onDelete(); setDeleting(false) }} disabled={deleting}
+              className="px-2 py-1 rounded-lg text-xs text-red-500 hover:text-red-700 hover:bg-red-50">{locale === 'ar' ? 'حذف' : 'Löschen'}</button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

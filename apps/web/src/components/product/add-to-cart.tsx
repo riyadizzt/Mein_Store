@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Minus, Plus, Heart, Check, ShoppingBag } from 'lucide-react'
 import { useCartStore } from '@/store/cart-store'
 import { useWishlist } from '@/hooks/use-wishlist'
@@ -28,8 +28,22 @@ export function AddToCart({
   const [added, setAdded] = useState(false)
   const [disabled, setDisabled] = useState(false)
 
+  // Reset quantity to 1 when variant changes (different color/size selected)
+  useEffect(() => {
+    setQuantity(1)
+    setAdded(false)
+  }, [variantId])
+
+  const isOutOfStock = available <= 0
+  const maxQty = Math.max(1, Math.min(available, 10))
+
+  // Clamp quantity to available stock
+  useEffect(() => {
+    if (quantity > maxQty) setQuantity(maxQty)
+  }, [maxQty, quantity])
+
   const handleAdd = useCallback(() => {
-    if (disabled || available <= 0) return
+    if (disabled || available <= 0 || quantity > available) return
     setDisabled(true)
 
     addItem({
@@ -41,7 +55,7 @@ export function AddToCart({
       size,
       imageUrl,
       unitPrice: price,
-      quantity,
+      quantity: Math.min(quantity, available), // Never exceed stock
     })
 
     setAdded(true)
@@ -50,9 +64,6 @@ export function AddToCart({
       setDisabled(false)
     }, 2000)
   }, [disabled, available, addItem, variantId, productId, name, sku, color, size, imageUrl, price, quantity])
-
-  const isOutOfStock = available <= 0
-  const maxQty = Math.min(available, 10)
 
   return (
     <div className="space-y-4">

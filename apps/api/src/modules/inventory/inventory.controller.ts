@@ -98,7 +98,7 @@ export class InventoryController {
   @Post('reserve')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '[Checkout] Bestand reservieren (15 Min.)' })
+  @ApiOperation({ summary: '[Checkout] Bestand reservieren (7 Min.)' })
   reserve(@Body() dto: ReserveStockDto) {
     return this.reservationService.reserve(dto)
   }

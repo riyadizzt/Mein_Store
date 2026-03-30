@@ -44,6 +44,7 @@ export class AdminOrdersService {
         user: { select: { id: true, email: true, firstName: true, lastName: true } },
         payment: { select: { method: true, status: true, provider: true } },
         shipment: { select: { status: true, trackingNumber: true, carrier: true } },
+        fulfillmentWarehouse: { select: { id: true, name: true, type: true } },
         _count: { select: { items: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -70,6 +71,7 @@ export class AdminOrdersService {
         returns: true,
         statusHistory: { orderBy: { createdAt: 'asc' } },
         shippingAddress: true,
+        fulfillmentWarehouse: { select: { id: true, name: true, type: true } },
       },
     })
 
@@ -82,6 +84,52 @@ export class AdminOrdersService {
     })
 
     return { ...order, adminNotes: notes }
+  }
+
+  async changeFulfillmentWarehouse(orderId: string, newWarehouseId: string, adminId: string, ipAddress: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, deletedAt: null },
+      include: { items: true },
+    })
+    if (!order) throw new NotFoundException('Order not found')
+
+    const oldWarehouseId = order.fulfillmentWarehouseId
+
+    // If same warehouse, nothing to do
+    if (oldWarehouseId === newWarehouseId) return { changed: false }
+
+    // Move stock: reverse from old warehouse, deduct from new warehouse
+    if (oldWarehouseId) {
+      for (const item of order.items) {
+        // Add back to old warehouse
+        await this.prisma.inventory.updateMany({
+          where: { variantId: item.variantId, warehouseId: oldWarehouseId },
+          data: { quantityOnHand: { increment: item.quantity } },
+        })
+        // Deduct from new warehouse
+        await this.prisma.inventory.updateMany({
+          where: { variantId: item.variantId, warehouseId: newWarehouseId },
+          data: { quantityOnHand: { decrement: item.quantity } },
+        })
+      }
+    }
+
+    // Update order
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { fulfillmentWarehouseId: newWarehouseId },
+    })
+
+    // Get warehouse name for audit
+    const wh = await this.prisma.warehouse.findUnique({ where: { id: newWarehouseId }, select: { name: true } })
+
+    await this.audit.log({
+      adminId, action: 'ORDER_FULFILLMENT_CHANGED', entityType: 'order', entityId: orderId,
+      changes: { before: { warehouseId: oldWarehouseId }, after: { warehouseId: newWarehouseId, name: wh?.name } },
+      ipAddress,
+    })
+
+    return { changed: true, warehouseName: wh?.name }
   }
 
   async updateStatus(

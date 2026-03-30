@@ -23,6 +23,12 @@ export class GdprWorker implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    // Skip workers in development to avoid burning Upstash Redis requests
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log('GDPR worker SKIPPED (not production)')
+      return
+    }
+
     const url = this.config.getOrThrow<string>('UPSTASH_REDIS_REST_URL')
     const token = this.config.getOrThrow<string>('UPSTASH_REDIS_REST_TOKEN')
     const host = url.replace('https://', '')
@@ -44,6 +50,8 @@ export class GdprWorker implements OnModuleInit, OnModuleDestroy {
       {
         connection: { host, port: 6379, password: token, tls: {} },
         concurrency: 2,
+        drainDelay: 60000,
+        stalledInterval: 300000,
       },
     )
 
@@ -57,7 +65,7 @@ export class GdprWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await this.worker.close()
+    await this.worker?.close()
   }
 
   private async handleAnonymizeUser(payload: AnonymizeUserPayload) {

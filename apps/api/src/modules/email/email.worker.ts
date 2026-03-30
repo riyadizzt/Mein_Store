@@ -16,6 +16,12 @@ export class EmailWorker implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    // Skip workers in development to avoid burning Upstash Redis requests
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log('Email worker SKIPPED (not production)')
+      return
+    }
+
     const url = this.config.getOrThrow<string>('UPSTASH_REDIS_REST_URL')
     const token = this.config.getOrThrow<string>('UPSTASH_REDIS_REST_TOKEN')
     const host = url.replace('https://', '')
@@ -28,6 +34,8 @@ export class EmailWorker implements OnModuleInit, OnModuleDestroy {
       {
         connection: { host, port: 6379, password: token, tls: {} },
         concurrency: 5,
+        drainDelay: 30000,
+        stalledInterval: 300000,
       },
     )
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Share2 } from 'lucide-react'
+import { Share2, Truck } from 'lucide-react'
 import { useCartStore } from '@/store/cart-store'
 import { ImageGallery } from '@/components/product/image-gallery'
 import { VariantSelector } from '@/components/product/variant-selector'
@@ -12,19 +12,32 @@ interface ProductClientProps {
   product: any
   locale: string
   translations: Record<string, string>
+  computed: {
+    name: string
+    description: string
+    categoryName: string | undefined
+    price: number
+    hasDiscount: boolean
+    discountPercent: number
+    deliveryDate: string
+    basePrice: number
+  }
 }
 
-export function ProductClient({ product, translations: t }: ProductClientProps) {
+export function ProductClient({ product, translations: t, computed }: ProductClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const addCartItem = useCartStore((s) => s.addItem)
 
-  // Selected variant from URL
+  const { name, description, categoryName, price, hasDiscount, discountPercent, deliveryDate, basePrice } = computed
+
+  // Selected variant
   const selectedVariantId = searchParams.get('variant')
   const selectedVariant = useMemo(() => {
     if (!product?.variants) return null
     return (
       product.variants.find((v: any) => v.id === selectedVariantId) ??
+      product.variants.find((v: any) => v.isActive && v.stock > 0) ??
       product.variants.find((v: any) => v.isActive) ??
       product.variants[0]
     )
@@ -36,8 +49,6 @@ export function ProductClient({ product, translations: t }: ProductClientProps) 
     router.replace(`?${params.toString()}`, { scroll: false })
   }, [searchParams, router])
 
-  const name = product.name ?? product.translations?.[0]?.name ?? product.slug
-  const price = product.salePrice ?? product.basePrice
   const available = (selectedVariant as any)?.stock ?? 0
   const selectedColor = selectedVariant?.color
 
@@ -54,72 +65,98 @@ export function ProductClient({ product, translations: t }: ProductClientProps) 
       variantId: selectedVariant.id, productId: product.id, name,
       sku: selectedVariant.sku, color: selectedVariant.color,
       size: selectedVariant.size, imageUrl: images[0]?.url,
-      unitPrice: Number(price), quantity: 1,
+      unitPrice: price, quantity: 1,
     })
   }
 
   return (
     <>
-      {/* Image Gallery — replaces the server-rendered static image */}
-      {images.length > 1 && (
-        <div className="lg:hidden -mx-4 sm:mx-0 mb-6">
-          <ImageGallery images={images} productName={name} />
+      {/* Main Grid: Gallery left, Info right */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+        {/* Left: Image Gallery — ONE place, no duplicates */}
+        <ImageGallery images={images} productName={name} />
+
+        {/* Right: Product Info */}
+        <div className="space-y-6">
+          {categoryName && <p className="text-sm text-muted-foreground">{categoryName}</p>}
+          <h1 className="text-2xl sm:text-3xl font-bold">{name}</h1>
+
+          {/* Price */}
+          <div className="flex items-baseline gap-3">
+            <span className={`text-3xl font-bold ${hasDiscount ? 'text-accent' : ''}`}>
+              &euro;{price.toFixed(2)}
+            </span>
+            {hasDiscount && (
+              <>
+                <span className="text-lg text-muted-foreground line-through">&euro;{basePrice.toFixed(2)}</span>
+                <span className="px-2 py-0.5 rounded bg-destructive text-destructive-foreground text-xs font-semibold">-{discountPercent}%</span>
+              </>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground -mt-4">{t.priceIncludesVat}</p>
+
+          {/* Stock */}
+          <div className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${
+              available > 5 ? 'bg-green-500' : available > 0 ? 'bg-orange-500 animate-pulse' : 'bg-red-500'
+            }`} />
+            <span className="text-sm font-medium">
+              {available > 5 ? t.inStock : available > 0 ? `${t.inStock} (${available})` : t.outOfStock}
+            </span>
+          </div>
+
+          {/* Delivery */}
+          {available > 0 && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Truck className="h-4 w-4" />
+              <span>{t.deliveryEstimate} <strong className="text-foreground">{deliveryDate}</strong></span>
+            </div>
+          )}
+
+          {/* Variants */}
+          {product.variants && product.variants.length > 1 && (
+            <VariantSelector
+              variants={product.variants}
+              selectedVariantId={selectedVariant?.id ?? null}
+              onSelect={handleVariantSelect}
+            />
+          )}
+
+          {/* Add to Cart */}
+          <div className="border-t pt-6" />
+          {selectedVariant && (
+            <AddToCart
+              variantId={selectedVariant.id} productId={product.id} name={name}
+              sku={selectedVariant.sku} color={selectedVariant.color}
+              size={selectedVariant.size} imageUrl={images[0]?.url}
+              price={price} available={available}
+            />
+          )}
+
+          {/* Share */}
+          <div className="flex items-center gap-3 pt-2">
+            <span className="text-sm text-muted-foreground">{t.share}:</span>
+            <a href={`https://wa.me/?text=${encodeURIComponent(`${name} — €${price.toFixed(2)} ${typeof window !== 'undefined' ? window.location.href : ''}`)}`}
+              target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"
+              className="h-9 px-4 rounded-full border flex items-center justify-center hover:bg-muted transition-all text-sm font-bold text-green-600">W</a>
+            <button onClick={() => { if (typeof navigator !== 'undefined') navigator.clipboard.writeText(window.location.href) }}
+              className="h-9 px-4 rounded-full border flex items-center justify-center hover:bg-muted transition-all" aria-label={t.copyLink}>
+              <Share2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-      )}
-
-      {/* Desktop: Replace static image with interactive gallery */}
-      {images.length > 1 && (
-        <style>{`
-          @media (min-width: 1024px) {
-            #gallery-mount + div { display: none; }
-          }
-        `}</style>
-      )}
-
-      {/* Availability */}
-      <div className="flex items-center gap-2">
-        <span className={`h-2.5 w-2.5 rounded-full ${
-          available > 5 ? 'bg-green-500' : available > 0 ? 'bg-orange-500 animate-pulse' : 'bg-red-500'
-        }`} />
-        <span className="text-sm font-medium">
-          {available > 5 ? t.inStock : available > 0 ? `${t.lowStock.replace('{count}', String(available))}` : t.outOfStock}
-        </span>
       </div>
 
-      {/* Variant Selector */}
-      {product.variants && product.variants.length > 1 && (
-        <VariantSelector
-          variants={product.variants}
-          selectedVariantId={selectedVariant?.id ?? null}
-          onSelect={handleVariantSelect}
-        />
-      )}
-
-      {/* Add to Cart */}
-      <div className="border-t pt-6" />
-      {selectedVariant && (
-        <AddToCart
-          variantId={selectedVariant.id} productId={product.id} name={name}
-          sku={selectedVariant.sku} color={selectedVariant.color}
-          size={selectedVariant.size} imageUrl={images[0]?.url}
-          price={Number(price)} available={available}
-        />
-      )}
-
-      {/* Share */}
-      <div className="flex items-center gap-3 pt-2">
-        <span className="text-sm text-muted-foreground">{t.share}:</span>
-        <a href={`https://wa.me/?text=${encodeURIComponent(`${name} — €${Number(price).toFixed(2)} ${typeof window !== 'undefined' ? window.location.href : ''}`)}`}
-          target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"
-          className="h-9 px-4 rounded-full border flex items-center justify-center hover:bg-muted transition-all text-sm font-bold text-green-600">W</a>
-        <button onClick={() => { if (typeof navigator !== 'undefined') navigator.clipboard.writeText(window.location.href) }}
-          className="h-9 px-4 rounded-full border flex items-center justify-center hover:bg-muted transition-all" aria-label={t.copyLink}>
-          <Share2 className="h-4 w-4" />
-        </button>
+      {/* Description */}
+      <div className="mt-12 bg-muted/20 rounded-2xl p-6">
+        <h2 className="text-lg font-bold mb-4">{t.description}</h2>
+        <div className="prose prose-sm max-w-none text-muted-foreground">
+          {description ? <p>{description}</p> : <p className="italic">{t.noDescription}</p>}
+        </div>
       </div>
 
       {/* Mobile Sticky Bar */}
-      <StickyAddToCart name={name} price={Number(price)} onAdd={handleStickyAdd} isOutOfStock={available <= 0} />
+      <StickyAddToCart name={name} price={price} onAdd={handleStickyAdd} isOutOfStock={available <= 0} />
     </>
   )
 }

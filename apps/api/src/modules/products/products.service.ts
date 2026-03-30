@@ -44,9 +44,9 @@ export class ProductsService {
         basePrice: dto.basePrice,
         salePrice: dto.salePrice,
         taxRate: dto.taxRate ?? 19,
-        isActive: dto.isActive ?? true,
+        isActive: dto.isActive ?? false, // New products default INACTIVE — admin must review first
         isFeatured: dto.isFeatured ?? false,
-        publishedAt: new Date(),
+        publishedAt: dto.isActive ? new Date() : null,
         translations: {
           create: dto.translations.map((t) => ({
             language: t.language as any,

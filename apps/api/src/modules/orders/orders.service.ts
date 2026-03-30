@@ -207,6 +207,7 @@ export class OrdersService {
             totalAmount,
             shippingZone: shipping.zoneName,
             couponCode: validatedCouponCode,
+            fulfillmentWarehouseId: defaultWarehouse?.id ?? null,
             notes: JSON.stringify({
               ...(dto.notes ? { text: dto.notes } : {}),
               ...(dto.guestFirstName ? { guestFirstName: dto.guestFirstName } : {}),

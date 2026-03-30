@@ -2,6 +2,38 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
 
+// Map color names (DE/EN/AR) to SKU-safe 3-letter codes
+const COLOR_SKU_MAP: Record<string, string> = {
+  Schwarz: 'BLK', Weiß: 'WEI', Blau: 'BLU', Rot: 'ROT',
+  Grün: 'GRU', Grau: 'GRA', Beige: 'BEI', Navy: 'NAV',
+  Braun: 'BRN', Rosa: 'RSA', Gelb: 'GEL', Orange: 'ORA',
+  Lila: 'LIL', Türkis: 'TRK', Bordeaux: 'BDX', Khaki: 'KHK',
+  Silber: 'SLB', Gold: 'GLD',
+  // English
+  Black: 'BLK', White: 'WEI', Blue: 'BLU', Red: 'ROT',
+  Green: 'GRU', Gray: 'GRA', Brown: 'BRN', Pink: 'RSA',
+  Yellow: 'GEL', Purple: 'LIL',
+  // Arabic
+  'أسود': 'BLK', 'أبيض': 'WEI', 'أزرق': 'BLU', 'أحمر': 'ROT',
+  'أخضر': 'GRU', 'رمادي': 'GRA', 'بيج': 'BEI', 'كحلي': 'NAV',
+  'بني': 'BRN', 'وردي': 'RSA', 'أصفر': 'GEL', 'برتقالي': 'ORA',
+  'بنفسجي': 'LIL', 'فيروزي': 'TRK', 'خمري': 'BDX', 'كاكي': 'KHK',
+  'فضي': 'SLB', 'ذهبي': 'GLD',
+}
+
+function colorToSkuCode(name: string): string {
+  // Check known colors first
+  if (COLOR_SKU_MAP[name]) return COLOR_SKU_MAP[name]
+  // Fallback: take first 3 ASCII-safe uppercase chars
+  const ascii = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip diacritics
+  const letters = ascii.replace(/[^a-zA-Z]/g, '')
+  if (letters.length >= 2) return letters.slice(0, 3).toUpperCase()
+  // Last resort: hash-based 3-char code
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) >>> 0
+  return 'C' + (h % 900 + 100).toString()
+}
+
 @Injectable()
 export class AdminProductsService {
 
@@ -380,7 +412,7 @@ export class AdminProductsService {
     const skuPrefix = skuParts.length >= 2 ? `${skuParts[0]}-${skuParts[1]}` : `MAL-${Date.now().toString().slice(-3)}`
 
     // Color code for SKU (first 3 chars uppercase)
-    const colorCode = data.color.slice(0, 3).toUpperCase().replace(/[^A-ZÄÖÜẞ]/g, '')
+    const colorCode = colorToSkuCode(data.color)
 
     const defaultWh = await this.prisma.warehouse.findFirst({ where: { isDefault: true } })
     const whId = defaultWh?.id
@@ -460,7 +492,7 @@ export class AdminProductsService {
 
     const created: any[] = []
     for (const color of data.colors) {
-      const colorCode = color.slice(0, 3).toUpperCase().replace(/[^A-ZÄÖÜẞ]/g, '')
+      const colorCode = colorToSkuCode(color)
       let sku = `${skuPrefix}-${colorCode}-${data.size}`
       const existing = await this.prisma.productVariant.findUnique({ where: { sku } })
       if (existing) sku = `${skuPrefix}-${colorCode}-${data.size}-${Date.now().toString().slice(-4)}`

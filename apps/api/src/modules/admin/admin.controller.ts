@@ -197,6 +197,16 @@ export class AdminController {
     return this.orders.addNote(id, content, req.user.id)
   }
 
+  @Patch('orders/:id/fulfillment')
+  changeFulfillment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('warehouseId') warehouseId: string,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    return this.orders.changeFulfillmentWarehouse(id, warehouseId, req.user.id, ip)
+  }
+
   // ── Customers / Users ──────────────────────────────────────
 
   @Get('customers/stats')
@@ -566,7 +576,7 @@ export class AdminController {
   // ── Inventory ─────────────────────────────────────────────
 
   @Get('inventory/stats')
-  getInventoryStats() { return this.inventory.getStats() }
+  getInventoryStats(@Query('warehouseId') warehouseId?: string) { return this.inventory.getStats(warehouseId) }
 
   @Get('inventory/grouped')
   getInventoryGrouped(
@@ -581,7 +591,7 @@ export class AdminController {
   }
 
   @Get('inventory/summary')
-  getInventorySummary() { return this.inventory.getDepartmentSummary() }
+  getInventorySummary(@Query('warehouseId') warehouseId?: string) { return this.inventory.getDepartmentSummary(warehouseId) }
 
   @Get('inventory/export')
   async exportInventoryCsv(
@@ -617,9 +627,44 @@ export class AdminController {
   @Get('warehouses')
   getWarehouses() {
     return this.prisma.warehouse.findMany({
-      select: { id: true, name: true, type: true, isDefault: true },
+      select: { id: true, name: true, type: true, isDefault: true, address: true, isActive: true },
       orderBy: { isDefault: 'desc' },
     })
+  }
+
+  @Post('warehouses')
+  @HttpCode(HttpStatus.CREATED)
+  createWarehouse(@Body() body: { name: string; type?: string; address?: string }) {
+    return this.prisma.warehouse.create({
+      data: { name: body.name, type: (body.type as any) ?? 'WAREHOUSE', address: body.address },
+    })
+  }
+
+  @Patch('warehouses/:id')
+  updateWarehouse(@Param('id', ParseUUIDPipe) id: string, @Body() body: { name?: string; type?: string; address?: string; isActive?: boolean }) {
+    const data: any = {}
+    if (body.name !== undefined) data.name = body.name
+    if (body.type !== undefined) data.type = body.type
+    if (body.address !== undefined) data.address = body.address
+    if (body.isActive !== undefined) data.isActive = body.isActive
+    return this.prisma.warehouse.update({ where: { id }, data })
+  }
+
+  @Delete('warehouses/:id')
+  @HttpCode(HttpStatus.OK)
+  async deleteWarehouse(@Param('id', ParseUUIDPipe) id: string) {
+    // Check if warehouse has inventory
+    const count = await this.prisma.inventory.count({ where: { warehouseId: id, quantityOnHand: { gt: 0 } } })
+    if (count > 0) {
+      return { deleted: false, error: 'warehouse_has_stock', message: { de: `Dieses Lager hat noch ${count} Artikel mit Bestand. Bitte zuerst den Bestand transferieren.`, en: `This warehouse has ${count} items with stock. Please transfer stock first.`, ar: `هذا الموقع يحتوي على ${count} منتج في المخزون. يرجى نقل المخزون أولاً.` } }
+    }
+    // Don't delete default warehouse
+    const wh = await this.prisma.warehouse.findUnique({ where: { id } })
+    if (wh?.isDefault) {
+      return { deleted: false, error: 'is_default', message: { de: 'Standard-Lager kann nicht gelöscht werden.', en: 'Default warehouse cannot be deleted.', ar: 'لا يمكن حذف الموقع الافتراضي.' } }
+    }
+    await this.prisma.warehouse.delete({ where: { id } })
+    return { deleted: true }
   }
 
   @Patch('inventory/:id/adjust')
@@ -645,8 +690,8 @@ export class AdminController {
 
   @Post('inventory/intake-csv')
   @HttpCode(HttpStatus.OK)
-  stockIntakeBySku(@Body('items') items: { sku: string; quantity: number }[], @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
-    return this.inventory.intakeBySku(items, reason, req.user.id, ip)
+  stockIntakeBySku(@Body('items') items: { sku: string; quantity: number }[], @Body('reason') reason: string, @Body('warehouseId') warehouseId: string | undefined, @Req() req: any, @Ip() ip: string) {
+    return this.inventory.intakeBySku(items, reason, req.user.id, ip, warehouseId)
   }
 
   @Post('inventory/:id/output')
@@ -677,6 +722,14 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   bulkSetLocation(@Body('inventoryIds') ids: string[], @Body('locationId') locationId: string) {
     return this.inventory.bulkSetLocation(ids, locationId)
+  }
+
+  @Get('inventory/movements')
+  getMovementLog(
+    @Query('warehouseId') warehouseId?: string, @Query('type') type?: string,
+    @Query('search') search?: string, @Query('limit') limit?: string, @Query('offset') offset?: string,
+  ) {
+    return this.inventory.getMovementLog({ warehouseId, type, search, limit: limit ? +limit : 50, offset: offset ? +offset : 0 })
   }
 
   @Get('inventory/:variantId/:warehouseId/history')

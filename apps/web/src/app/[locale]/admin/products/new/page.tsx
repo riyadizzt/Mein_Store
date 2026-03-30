@@ -162,12 +162,15 @@ export default function NewProductPage() {
 
   const applyBulkStock = () => { if (bulkStock === '') return; const n: Record<string, number> = {}; for (const v of variants) n[v.key] = Number(bulkStock); setVariantStocks(n) }
 
+  const [imageWarning, setImageWarning] = useState(false)
+
   const validate = () => {
     const e: Record<string, string> = {}
     if (!translations.de.name.trim()) e.name = t('wizard.nameRequired')
     if (!categoryId) e.category = t('wizard.categoryRequired')
     if (!basePrice || basePrice <= 0) e.price = t('wizard.priceRequired')
     setErrors(e)
+    setImageWarning(images.length === 0)
     if (Object.keys(e).length > 0) document.getElementById(`section-${Object.keys(e)[0]}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     return Object.keys(e).length === 0
   }
@@ -176,7 +179,8 @@ export default function NewProductPage() {
     if (!validate()) return
     setSaving(true)
     try {
-      await api.post('/products', {
+      // 1. Create product + variants
+      const { data: created } = await api.post('/products', {
         slug, categoryId, basePrice, salePrice, taxRate: 19, isActive,
         translations: Object.entries(translations).filter(([, t]) => t.name).map(([lang, t]) => ({
           language: lang, name: t.name, description: t.description || undefined, metaTitle: t.metaTitle || undefined, metaDesc: t.metaDesc || undefined,
@@ -187,7 +191,38 @@ export default function NewProductPage() {
           weightGrams: 500, initialStock: variantStocks[v.key] ?? 0,
         })),
       })
-      // TODO: Upload images to Supabase after product creation
+
+      const productId = created?.id
+
+      // 2. Upload images to Supabase (if product was created and images exist)
+      if (productId && images.length > 0) {
+        const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
+        let uploadFailed = 0
+
+        for (const img of images) {
+          if (!img.file) continue
+          try {
+            const formData = new FormData()
+            formData.append('file', img.file)
+            if (img.colorName) formData.append('colorName', img.colorName)
+
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/${productId}/images/upload`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+              body: formData,
+            })
+            if (!res.ok) uploadFailed++
+          } catch {
+            uploadFailed++
+          }
+        }
+
+        if (uploadFailed > 0) {
+          setErrors({ save: `${locale === 'ar' ? 'تم إنشاء المنتج لكن فشل رفع' : 'Produkt erstellt, aber'} ${uploadFailed} ${locale === 'ar' ? 'صور' : 'Bilder fehlgeschlagen'}` })
+          // Still redirect — product was created, only some images failed
+        }
+      }
+
       router.push(`/${locale}/admin/products`)
     } catch (err: any) { setErrors({ save: err?.message ?? 'Error' }) }
     finally { setSaving(false) }
@@ -205,11 +240,17 @@ export default function NewProductPage() {
       <h1 className="text-2xl font-bold mb-8">{t('wizard.newProduct')}</h1>
 
       {/* ══════════ Section 1: BILDER-GALERIE ══════════ */}
-      <section className="bg-background border rounded-2xl overflow-hidden mb-6" style={{ animation: 'fadeSlideUp 400ms ease-out' }}>
+      <section className={`bg-background border rounded-2xl overflow-hidden mb-6 ${imageWarning ? 'border-orange-300' : ''}`} style={{ animation: 'fadeSlideUp 400ms ease-out' }}>
         <div className="px-6 py-4 border-b bg-muted/20 flex items-center justify-between">
           <span className="font-semibold text-sm flex items-center gap-2"><ImageIcon className="h-4 w-4" />{t('wizard.images')}</span>
           <span className="text-xs text-muted-foreground">{images.length} {locale === 'ar' ? 'صورة' : 'Bilder'}</span>
         </div>
+        {imageWarning && (
+          <div className="mx-6 mt-4 px-4 py-2 rounded-lg bg-orange-50 border border-orange-200 text-orange-700 text-xs flex items-center gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+            {locale === 'ar' ? 'لم يتم إضافة صور — المنتج سيظهر بدون صورة' : 'Keine Bilder hinzugefügt — Produkt wird ohne Bild angezeigt'}
+          </div>
+        )}
         <div className="p-6">
           {/* Upload Zone */}
           <label className="block border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-[#d4a853]/50 hover:bg-[#d4a853]/5 transition-all mb-4">
