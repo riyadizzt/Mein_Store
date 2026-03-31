@@ -37,7 +37,11 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
       .map((v) => [v.color, { color: v.color!, hex: v.colorHex }]),
   ).values()]
 
-  const sizes = [...new Set(variants.filter((v) => v.size).map((v) => v.size!))]
+  const sizes = [...new Set(variants.filter((v) => v.size).map((v) => v.size!))].sort((a, b) => {
+    const na = parseFloat(a) || 0
+    const nb = parseFloat(b) || 0
+    return na - nb || a.localeCompare(b)
+  })
 
   const selected = variants.find((v) => v.id === selectedVariantId)
   const selectedColor = selected?.color

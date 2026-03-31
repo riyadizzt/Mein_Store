@@ -6,6 +6,7 @@ import { routing } from '@/i18n/routing'
 import { Inter, Cairo } from 'next/font/google'
 import { QueryProvider } from '@/providers/query-provider'
 import { AuthProvider } from '@/providers/auth-provider'
+import { ConfirmProvider } from '@/components/ui/confirm-modal'
 import { StoreShell } from '@/components/layout/store-shell'
 import '../globals.css'
 
@@ -54,9 +55,11 @@ export default async function LocaleLayout({
         <NextIntlClientProvider messages={messages}>
           <QueryProvider>
             <AuthProvider>
-              <StoreShell locale={locale}>
-                {children}
-              </StoreShell>
+              <ConfirmProvider>
+                <StoreShell locale={locale}>
+                  {children}
+                </StoreShell>
+              </ConfirmProvider>
             </AuthProvider>
           </QueryProvider>
         </NextIntlClientProvider>

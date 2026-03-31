@@ -270,7 +270,7 @@ export class AdminInventoryService {
           if (avail <= 0) outCount++
           else if (avail <= vReorder) lowCount++
         }
-        return { id: v.id, sku: v.sku, barcode: v.barcode, color: v.color, colorHex: v.colorHex, size: v.size, stock: avail, inventory: invs }
+        return { id: v.id, sku: v.sku, barcode: v.barcode, color: v.color, colorHex: v.colorHex, size: v.size, stock: avail, price: Number(p.salePrice ?? p.basePrice ?? 0), inventory: invs }
       })
 
       const avail = totalStock - totalReserved
@@ -600,19 +600,26 @@ export class AdminInventoryService {
     const variantIds = [...new Set(movements.map((m) => m.variantId))]
     const warehouseIds = [...new Set(movements.map((m) => m.warehouseId))]
 
-    const [variants, warehouses] = await Promise.all([
+    const userIds = [...new Set(movements.map((m) => m.createdBy).filter(Boolean))] as string[]
+
+    const [variants, warehouses, users] = await Promise.all([
       variantIds.length > 0 ? this.prisma.productVariant.findMany({
         where: { id: { in: variantIds } },
-        select: { id: true, sku: true, color: true, size: true, product: { select: { translations: { select: { name: true, language: true } } } } },
+        select: { id: true, sku: true, color: true, size: true, product: { select: { translations: { select: { name: true, language: true } }, images: { select: { url: true }, orderBy: { sortOrder: 'asc' }, take: 1 } } } },
       }) : [],
       warehouseIds.length > 0 ? this.prisma.warehouse.findMany({
         where: { id: { in: warehouseIds } },
         select: { id: true, name: true, type: true },
       }) : [],
+      userIds.length > 0 ? this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, firstName: true, lastName: true },
+      }) : [],
     ])
 
     const variantMap = new Map(variants.map((v) => [v.id, v]))
     const warehouseMap = new Map(warehouses.map((w) => [w.id, w]))
+    const userMap = new Map(users.map((u) => [u.id, u]))
 
     return {
       data: movements.map((m) => {
@@ -626,11 +633,13 @@ export class AdminInventoryService {
           quantityAfter: m.quantityAfter,
           notes: m.notes,
           createdBy: m.createdBy,
+          createdByName: m.createdBy ? (() => { const u = userMap.get(m.createdBy); return u ? `${u.firstName} ${u.lastName}`.trim() : null })() : null,
           createdAt: m.createdAt,
           sku: v?.sku,
           color: v?.color,
           size: v?.size,
           productName: v?.product?.translations,
+          productImage: v?.product?.images?.[0]?.url ?? null,
           warehouseName: w?.name,
           warehouseType: w?.type,
         }

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { getProductName, formatCurrency, formatDate as fmtDateUtil, formatDateTime as fmtDtUtil } from '@/lib/locale-utils'
+import { useConfirm } from '@/components/ui/confirm-modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
@@ -51,6 +52,7 @@ export default function CustomerDetailPage() {
   const params = useParams()
   const cid = params.id as string
   const qc = useQueryClient()
+  const confirmDialog = useConfirm()
 
   const [activeTab, setActiveTab] = useState<TabKey>('orders')
   const [noteText, setNoteText] = useState('')
@@ -189,8 +191,11 @@ export default function CustomerDetailPage() {
                 <div className="flex items-center justify-center gap-2 mt-3">
                   {customer.isGuest ? <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300">{t('users.guest')}</span>
                     : <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-300">{t('users.filterRegistered')}</span>}
-                  {customer.isBlocked ? <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-300"><ShieldAlert className="h-3 w-3" />{t('users.blocked')}</span>
-                    : <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-300"><ShieldCheck className="h-3 w-3" />{t('users.activeStatus')}</span>}
+                  {customer.isBlocked
+                    ? <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/20 text-red-300"><ShieldAlert className="h-3 w-3" />{t('users.blocked')}</span>
+                    : customer.lockedUntil && new Date(customer.lockedUntil) > new Date()
+                      ? <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-500/20 text-orange-300"><ShieldAlert className="h-3 w-3" />{locale === 'ar' ? 'مقفل مؤقتاً' : 'Login gesperrt'}</span>
+                      : <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-300"><ShieldCheck className="h-3 w-3" />{t('users.activeStatus')}</span>}
                 </div>
               </div>
             </div>
@@ -210,9 +215,10 @@ export default function CustomerDetailPage() {
                   <Send className="h-3.5 w-3.5" />{t('users.sendEmail')}
                 </Button>
               </div>
-              {customer.isBlocked ? (
+              {customer.isBlocked || customer.lockedUntil ? (
                 <Button variant="outline" className="w-full justify-center gap-2 rounded-xl h-9 text-xs border-green-200 text-green-700 hover:bg-green-50" onClick={() => unblockMut.mutate()} disabled={unblockMut.isPending}>
-                  <Unlock className="h-3.5 w-3.5" />{t('users.unblockCustomer')}
+                  <Unlock className="h-3.5 w-3.5" />
+                  {customer.isBlocked ? t('users.unblockCustomer') : (locale === 'ar' ? 'إلغاء قفل تسجيل الدخول' : 'Login-Sperre aufheben')}
                 </Button>
               ) : (
                 <Button variant="outline" className="w-full justify-center gap-2 rounded-xl h-9 text-xs border-red-200 text-red-700 hover:bg-red-50" onClick={() => setShowBlockModal(true)}>
@@ -353,7 +359,7 @@ export default function CustomerDetailPage() {
                       <div className="flex-1"><p className="text-sm leading-relaxed whitespace-pre-wrap">{n.content}</p>
                         <div className="flex items-center gap-2 mt-3 text-[11px] text-muted-foreground"><span className="font-medium">{n.adminName}</span><span>&middot;</span><span>{fmtDt(n.createdAt)}</span></div>
                       </div>
-                      <button onClick={() => { if (confirm(t('users.deleteNoteConfirm'))) deleteNoteMut.mutate(n.id) }} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={async () => { const ok = await confirmDialog({ title: t('users.deleteNote'), description: t('users.deleteNoteConfirm'), variant: 'default', confirmLabel: t('categories.delete'), cancelLabel: t('categories.cancel') }); if (ok) deleteNoteMut.mutate(n.id) }} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>))}</div>}
             </div>)}

@@ -57,6 +57,7 @@ function StepPaymentInner() {
   } = useCheckoutStore()
   const { items, subtotal } = useCartStore()
   const cartSubtotal = subtotal()
+  const [stockError, setStockError] = useState(false)
 
   const shippingCost = Number(shippingOption?.price ?? 0)
   const totalAmount = cartSubtotal + shippingCost
@@ -160,11 +161,14 @@ function StepPaymentInner() {
       await goToConfirmation()
     } catch (err: any) {
       console.error('Checkout error:', err?.response?.data ?? err?.message)
+      const status = err?.response?.status
       const msg = err?.response?.data?.message
       let errorMsg: string
       if (Array.isArray(msg)) errorMsg = msg.join(', ')
       else if (typeof msg === 'object' && msg !== null) errorMsg = msg[locale] ?? msg.de ?? msg.en ?? JSON.stringify(msg)
       else errorMsg = msg ?? t('errors.cardNotCharged')
+      // Stock error (409) — mark as stock issue so button stays disabled
+      if (status === 409) setStockError(true)
       setError(errorMsg)
       setProcessing(false)
     }
@@ -248,7 +252,7 @@ function StepPaymentInner() {
           {/* Place Order */}
           <Button
             onClick={handlePlaceOrder}
-            disabled={!termsAccepted || isProcessing || !stripe}
+            disabled={!termsAccepted || isProcessing || !stripe || stockError}
             className="w-full h-14 text-base gap-2 bg-accent text-accent-foreground rounded-xl font-semibold hover:bg-accent/90 btn-press"
             size="lg"
           >

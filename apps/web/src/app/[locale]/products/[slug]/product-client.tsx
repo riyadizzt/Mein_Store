@@ -29,7 +29,7 @@ export function ProductClient({ product, translations: t, computed }: ProductCli
   const searchParams = useSearchParams()
   const addCartItem = useCartStore((s) => s.addItem)
 
-  const { name, description, categoryName, price, hasDiscount, discountPercent, deliveryDate, basePrice } = computed
+  const { name, description, categoryName, price: serverPrice, hasDiscount: serverHasDiscount, deliveryDate, basePrice: serverBasePrice } = computed
 
   // Selected variant
   const selectedVariantId = searchParams.get('variant')
@@ -42,6 +42,13 @@ export function ProductClient({ product, translations: t, computed }: ProductCli
       product.variants[0]
     )
   }, [product, selectedVariantId])
+
+  // Dynamic price: base + variant priceModifier
+  const modifier = Number(selectedVariant?.priceModifier ?? 0)
+  const basePrice = Math.max(0, serverBasePrice + modifier)
+  const price = serverHasDiscount ? Math.max(0, serverPrice + modifier) : basePrice
+  const hasDiscount = serverHasDiscount && price < basePrice
+  const discountPercent = hasDiscount && basePrice > 0 ? Math.round((1 - price / basePrice) * 100) : 0
 
   const handleVariantSelect = useCallback((variantId: string) => {
     const params = new URLSearchParams(searchParams.toString())

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -16,11 +17,15 @@ import {
   ParseUUIDPipe,
   Ip,
   Res,
+  NotFoundException,
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { memoryStorage } from 'multer'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'
+import { PermissionGuard } from '../../common/permissions/permission.guard'
+import { RequirePermission } from '../../common/permissions/require-permission.decorator'
+import { PERMISSIONS } from '../../common/permissions/permission.constants'
 import { Roles } from '../../common/decorators/roles.decorator'
 import { DashboardService } from './services/dashboard.service'
 import { AdminOrdersService } from './services/admin-orders.service'
@@ -35,8 +40,8 @@ import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
 
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'super_admin')
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
+@Roles('admin', 'super_admin', 'warehouse_staff')
 export class AdminController {
   constructor(
     private readonly dashboard: DashboardService,
@@ -55,12 +60,14 @@ export class AdminController {
   // ── Dashboard ─────────────────────────────────────────────
 
   @Get('dashboard')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
   getDashboard() {
     return this.dashboard.getOverview()
   }
 
   // ── Notifications ────────────────────────────────────────
   @Get('notifications')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
   async getNotifications() {
     const [newOrders, disputes, lowStock, pendingReturns, failedPayments] = await Promise.all([
       this.prisma.order.findMany({
@@ -139,6 +146,7 @@ export class AdminController {
   // ── Orders ────────────────────────────────────────────────
 
   @Get('orders')
+  @RequirePermission(PERMISSIONS.ORDERS_VIEW)
   getOrders(
     @Query('status') status?: string,
     @Query('dateFrom') dateFrom?: string,
@@ -150,6 +158,7 @@ export class AdminController {
   }
 
   @Get('orders/export/csv')
+  @RequirePermission(PERMISSIONS.ORDERS_VIEW)
   async exportOrdersCsv(@Res({ passthrough: true }) res: any) {
     const orders = await this.orders.findAll({ limit: 1000 })
     const header = 'Bestellnummer;Datum;Kunde;E-Mail;Status;Netto;MwSt;Brutto;Zahlungsart;Versand\n'
@@ -161,11 +170,13 @@ export class AdminController {
   }
 
   @Get('orders/:id')
+  @RequirePermission(PERMISSIONS.ORDERS_VIEW)
   getOrder(@Param('id', ParseUUIDPipe) id: string) {
     return this.orders.findOne(id)
   }
 
   @Patch('orders/:id/status')
+  @RequirePermission(PERMISSIONS.ORDERS_EDIT)
   updateOrderStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: string,
@@ -177,6 +188,7 @@ export class AdminController {
   }
 
   @Post('orders/:id/cancel')
+  @RequirePermission(PERMISSIONS.ORDERS_CANCEL)
   @HttpCode(HttpStatus.OK)
   cancelOrder(
     @Param('id', ParseUUIDPipe) id: string,
@@ -188,6 +200,7 @@ export class AdminController {
   }
 
   @Post('orders/:id/notes')
+  @RequirePermission(PERMISSIONS.ORDERS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   addOrderNote(
     @Param('id', ParseUUIDPipe) id: string,
@@ -198,6 +211,7 @@ export class AdminController {
   }
 
   @Patch('orders/:id/fulfillment')
+  @RequirePermission(PERMISSIONS.ORDERS_EDIT)
   changeFulfillment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('warehouseId') warehouseId: string,
@@ -210,11 +224,13 @@ export class AdminController {
   // ── Customers / Users ──────────────────────────────────────
 
   @Get('customers/stats')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   getCustomerStats() {
     return this.users.getCustomerStats()
   }
 
   @Get('customers/export')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   async exportCustomersCsv(
     @Query('filter') filter?: string,
     @Query('tag') tag?: string,
@@ -227,6 +243,7 @@ export class AdminController {
   }
 
   @Get('customers')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   getCustomers(
     @Query('search') search?: string,
     @Query('filter') filter?: string,
@@ -256,6 +273,7 @@ export class AdminController {
   }
 
   @Post('customers')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   createCustomer(
     @Body() body: { email: string; firstName: string; lastName: string; phone?: string; lang?: string; notes?: string; tags?: string[] },
@@ -266,11 +284,13 @@ export class AdminController {
   }
 
   @Get('customers/:id')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   getCustomer(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.findOne(id)
   }
 
   @Patch('customers/:id')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   updateCustomer(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { firstName?: string; lastName?: string; phone?: string; preferredLang?: string; tags?: string[] },
@@ -281,6 +301,7 @@ export class AdminController {
   }
 
   @Delete('customers/:id')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_DELETE)
   @Roles('super_admin')
   @HttpCode(HttpStatus.OK)
   deleteCustomer(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
@@ -288,32 +309,38 @@ export class AdminController {
   }
 
   @Get('customers/:id/activity')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   getCustomerActivity(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.getActivity(id)
   }
 
   @Get('customers/:id/emails')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   getCustomerEmails(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.getEmailHistory(id)
   }
 
   @Get('customers/:id/cart')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   getCustomerCart(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.getAbandonedCarts(id)
   }
 
   @Get('customers/:id/export')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_VIEW)
   exportCustomerData(@Param('id', ParseUUIDPipe) id: string) {
     return this.users.exportCustomerData(id)
   }
 
   @Post('customers/:id/notes')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   addCustomerNote(@Param('id', ParseUUIDPipe) id: string, @Body('content') content: string, @Req() req: any) {
     return this.users.addNote(id, content, req.user.id)
   }
 
   @Patch('customers/:id/notes/:noteId')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   updateCustomerNote(@Param('noteId', ParseUUIDPipe) noteId: string, @Body('content') content: string) {
     return this.users.updateNote(noteId, content)
   }
@@ -325,6 +352,7 @@ export class AdminController {
   }
 
   @Post('customers/:id/email')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   sendCustomerEmail(
     @Param('id', ParseUUIDPipe) id: string,
@@ -336,48 +364,56 @@ export class AdminController {
   }
 
   @Post('customers/:id/block')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   blockCustomer(@Param('id', ParseUUIDPipe) id: string, @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
     return this.users.blockUser(id, reason, req.user.id, ip)
   }
 
   @Post('customers/:id/unblock')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   unblockCustomer(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
     return this.users.unblockUser(id, req.user.id, ip)
   }
 
   @Post('customers/:id/tags')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   setCustomerTags(@Param('id', ParseUUIDPipe) id: string, @Body('tags') tags: string[], @Req() req: any, @Ip() ip: string) {
     return this.users.setTags(id, tags, req.user.id, ip)
   }
 
   @Post('customers/bulk-email')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   bulkEmail(@Body('userIds') userIds: string[], @Body('subject') subject: string, @Body('body') body: string, @Req() req: any, @Ip() ip: string) {
     return this.users.bulkEmail(userIds, subject, body, req.user.id, ip)
   }
 
   @Post('customers/bulk-tag')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   bulkTag(@Body('userIds') userIds: string[], @Body('tags') tags: string[], @Req() req: any, @Ip() ip: string) {
     return this.users.bulkTag(userIds, tags, req.user.id, ip)
   }
 
   @Post('customers/bulk-block')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   bulkBlock(@Body('userIds') userIds: string[], @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
     return this.users.bulkBlock(userIds, reason, req.user.id, ip)
   }
 
   @Post('customers/bulk-unblock')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   bulkUnblock(@Body('userIds') userIds: string[], @Req() req: any, @Ip() ip: string) {
     return this.users.bulkUnblock(userIds, req.user.id, ip)
   }
 
   @Post('customers/:id/cart/:cartId/reminder')
+  @RequirePermission(PERMISSIONS.CUSTOMERS_EDIT)
   @HttpCode(HttpStatus.OK)
   sendCartReminder(@Param('cartId', ParseUUIDPipe) cartId: string, @Req() req: any) {
     return this.users.sendCartReminder(cartId, req.user.id)
@@ -385,6 +421,7 @@ export class AdminController {
 
   // Keep legacy /admin/users endpoints for backward compat
   @Get('users')
+  @RequirePermission(PERMISSIONS.STAFF_VIEW)
   getUsers(
     @Query('search') search?: string, @Query('filter') filter?: string,
     @Query('sortBy') sortBy?: string, @Query('sortDir') sortDir?: string,
@@ -394,11 +431,13 @@ export class AdminController {
   }
 
   @Get('users/:id')
+  @RequirePermission(PERMISSIONS.STAFF_VIEW)
   getUser(@Param('id', ParseUUIDPipe) id: string) { return this.users.findOne(id) }
 
   // ── Products ──────────────────────────────────────────────
 
   @Get('products/export')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
   async exportProductsCsv(@Res({ passthrough: true }) res: any) {
     const csv = await this.products.exportCsv()
     res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename=produkte.csv' })
@@ -406,6 +445,7 @@ export class AdminController {
   }
 
   @Get('products/check-duplicate')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
   checkDuplicate(
     @Query('name') name?: string, @Query('sku') sku?: string,
     @Query('barcode') barcode?: string, @Query('excludeId') excludeId?: string,
@@ -414,11 +454,13 @@ export class AdminController {
   }
 
   @Get('products/next-sku')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
   getNextSku(@Query('prefix') prefix: string) {
     return this.products.getNextSku(prefix).then((sku) => ({ sku }))
   }
 
   @Get('products')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
   getProducts(
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
@@ -445,11 +487,41 @@ export class AdminController {
   }
 
   @Get('products/:id')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
   getProduct(@Param('id', ParseUUIDPipe) id: string) {
     return this.products.findOne(id)
   }
 
+  @Put('products/:id')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
+  async updateProduct(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { basePrice?: number; salePrice?: number | null; translations?: { language: string; name: string; description?: string; metaTitle?: string; metaDesc?: string }[] },
+  ) {
+    const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } })
+    if (!product) throw new NotFoundException('Product not found')
+
+    const data: any = {}
+    if (body.basePrice !== undefined) data.basePrice = body.basePrice
+    if (body.salePrice !== undefined) data.salePrice = body.salePrice
+
+    await this.prisma.product.update({ where: { id }, data })
+
+    if (body.translations?.length) {
+      for (const t of body.translations) {
+        await this.prisma.productTranslation.upsert({
+          where: { productId_language: { productId: id, language: t.language as any } },
+          create: { productId: id, language: t.language as any, name: t.name, description: t.description ?? '' },
+          update: { name: t.name, description: t.description ?? undefined, metaTitle: t.metaTitle ?? undefined, metaDesc: t.metaDesc ?? undefined },
+        })
+      }
+    }
+
+    return this.products.findOne(id)
+  }
+
   @Patch('products/:id/price')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   updateProductPrice(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('basePrice') basePrice: number,
@@ -461,6 +533,7 @@ export class AdminController {
   }
 
   @Post('products/bulk/status')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   @HttpCode(HttpStatus.OK)
   bulkUpdateProductStatus(
     @Body('productIds') productIds: string[],
@@ -472,6 +545,7 @@ export class AdminController {
   }
 
   @Delete('products/bulk')
+  @RequirePermission(PERMISSIONS.PRODUCTS_DELETE)
   @HttpCode(HttpStatus.OK)
   bulkDeleteProducts(
     @Body('productIds') productIds: string[],
@@ -482,28 +556,33 @@ export class AdminController {
   }
 
   @Post('products/:id/duplicate')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   duplicateProduct(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
     return this.products.duplicate(id, req.user.id, ip)
   }
 
   @Get('products/:id/variant-options')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
   getVariantOptions(@Param('id', ParseUUIDPipe) id: string) {
     return this.products.getProductVariantOptions(id)
   }
 
   @Get('products/:id/images')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
   getProductImages(@Param('id', ParseUUIDPipe) id: string) {
     return this.products.getProductImages(id)
   }
 
   @Post('products/:id/images')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   addProductImage(@Param('id', ParseUUIDPipe) id: string, @Body('url') url: string, @Body('colorName') colorName?: string) {
     return this.products.addImageUrl(id, url, colorName)
   }
 
   @Post('products/:id/images/upload')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(FileInterceptor('file', {
     storage: memoryStorage(),
@@ -528,17 +607,20 @@ export class AdminController {
   }
 
   @Patch('products/images/:imageId/color')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   assignImageColor(@Param('imageId', ParseUUIDPipe) imageId: string, @Body('colorName') colorName: string | null) {
     return this.products.assignImageToColor(imageId, colorName)
   }
 
   @Delete('products/images/:imageId')
+  @RequirePermission(PERMISSIONS.PRODUCTS_DELETE)
   @HttpCode(HttpStatus.OK)
   deleteProductImage(@Param('imageId', ParseUUIDPipe) imageId: string) {
     return this.prisma.productImage.delete({ where: { id: imageId } }).then(() => ({ deleted: true }))
   }
 
   @Post('products/:id/variants/add-color')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   addColor(
     @Param('id', ParseUUIDPipe) id: string,
@@ -549,6 +631,7 @@ export class AdminController {
   }
 
   @Post('products/:id/variants/add-size')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   addSize(
     @Param('id', ParseUUIDPipe) id: string,
@@ -559,6 +642,7 @@ export class AdminController {
   }
 
   @Patch('products/variants/:variantId')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   updateVariant(
     @Param('variantId', ParseUUIDPipe) variantId: string,
     @Body() body: { priceModifier?: number; barcode?: string; purchasePrice?: number },
@@ -568,6 +652,7 @@ export class AdminController {
   }
 
   @Delete('products/:id/variants/:variantId')
+  @RequirePermission(PERMISSIONS.PRODUCTS_DELETE)
   @HttpCode(HttpStatus.OK)
   deleteVariant(@Param('id', ParseUUIDPipe) id: string, @Param('variantId', ParseUUIDPipe) variantId: string, @Req() req: any, @Ip() ip: string) {
     return this.products.deleteVariant(id, variantId, req.user.id, ip)
@@ -576,9 +661,11 @@ export class AdminController {
   // ── Inventory ─────────────────────────────────────────────
 
   @Get('inventory/stats')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getInventoryStats(@Query('warehouseId') warehouseId?: string) { return this.inventory.getStats(warehouseId) }
 
   @Get('inventory/grouped')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getInventoryGrouped(
     @Query('warehouseId') warehouseId?: string, @Query('search') search?: string,
     @Query('parentCategoryId') parentCategoryId?: string, @Query('status') status?: string,
@@ -591,9 +678,11 @@ export class AdminController {
   }
 
   @Get('inventory/summary')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getInventorySummary(@Query('warehouseId') warehouseId?: string) { return this.inventory.getDepartmentSummary(warehouseId) }
 
   @Get('inventory/export')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   async exportInventoryCsv(
     @Query('warehouseId') warehouseId?: string, @Query('categoryId') categoryId?: string,
     @Query('status') status?: string, @Res({ passthrough: true }) res?: any,
@@ -604,9 +693,11 @@ export class AdminController {
   }
 
   @Get('inventory/barcode/:code')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   lookupBarcode(@Param('code') code: string) { return this.inventory.lookupBarcode(code) }
 
   @Get('inventory')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getInventory(
     @Query('warehouseId') warehouseId?: string, @Query('search') search?: string,
     @Query('categoryId') categoryId?: string, @Query('parentCategoryId') parentCategoryId?: string,
@@ -625,6 +716,7 @@ export class AdminController {
   }
 
   @Get('warehouses')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getWarehouses() {
     return this.prisma.warehouse.findMany({
       select: { id: true, name: true, type: true, isDefault: true, address: true, isActive: true },
@@ -633,6 +725,7 @@ export class AdminController {
   }
 
   @Post('warehouses')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.CREATED)
   createWarehouse(@Body() body: { name: string; type?: string; address?: string }) {
     return this.prisma.warehouse.create({
@@ -641,6 +734,7 @@ export class AdminController {
   }
 
   @Patch('warehouses/:id')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   updateWarehouse(@Param('id', ParseUUIDPipe) id: string, @Body() body: { name?: string; type?: string; address?: string; isActive?: boolean }) {
     const data: any = {}
     if (body.name !== undefined) data.name = body.name
@@ -651,6 +745,7 @@ export class AdminController {
   }
 
   @Delete('warehouses/:id')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   async deleteWarehouse(@Param('id', ParseUUIDPipe) id: string) {
     // Check if warehouse has inventory
@@ -668,63 +763,74 @@ export class AdminController {
   }
 
   @Patch('inventory/:id/adjust')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   adjustStock(@Param('id', ParseUUIDPipe) id: string, @Body('quantity') quantity: number, @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
     return this.inventory.adjustStock(id, quantity, reason, req.user.id, ip)
   }
 
   @Patch('inventory/:id/quick')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   quickAdjust(@Param('id', ParseUUIDPipe) id: string, @Body('delta') delta: number, @Req() req: any, @Ip() ip: string) {
     return this.inventory.quickAdjust(id, delta, req.user.id, ip)
   }
 
   @Patch('inventory/:id/min-max')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   updateMinMax(@Param('id', ParseUUIDPipe) id: string, @Body('reorderPoint') reorderPoint?: number, @Body('maxStock') maxStock?: number) {
     return this.inventory.updateMinMax(id, reorderPoint, maxStock)
   }
 
   @Post('inventory/intake')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   stockIntake(@Body('items') items: { inventoryId: string; quantity: number }[], @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
     return this.inventory.intake(items, reason, req.user.id, ip)
   }
 
   @Post('inventory/intake-csv')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   stockIntakeBySku(@Body('items') items: { sku: string; quantity: number }[], @Body('reason') reason: string, @Body('warehouseId') warehouseId: string | undefined, @Req() req: any, @Ip() ip: string) {
     return this.inventory.intakeBySku(items, reason, req.user.id, ip, warehouseId)
   }
 
   @Post('inventory/:id/output')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   stockOutput(@Param('id', ParseUUIDPipe) id: string, @Body('quantity') quantity: number, @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
     return this.inventory.output(id, quantity, reason, req.user.id, ip)
   }
 
   @Post('inventory/:id/transfer')
+  @RequirePermission(PERMISSIONS.INVENTORY_TRANSFER)
   @HttpCode(HttpStatus.OK)
   transferStock(@Param('id', ParseUUIDPipe) id: string, @Body('toWarehouseId') toWarehouseId: string, @Body('quantity') quantity: number, @Req() req: any, @Ip() ip: string) {
     return this.inventory.transfer(id, toWarehouseId, quantity, req.user.id, ip)
   }
 
   @Post('inventory/bulk-adjust')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   bulkAdjust(@Body('items') items: { inventoryId: string; quantity: number }[], @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
     return this.inventory.bulkAdjust(items, reason, req.user.id, ip)
   }
 
   @Post('inventory/bulk-min-stock')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   bulkSetMinStock(@Body('inventoryIds') ids: string[], @Body('reorderPoint') reorderPoint: number) {
     return this.inventory.bulkSetMinStock(ids, reorderPoint)
   }
 
   @Post('inventory/bulk-location')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   bulkSetLocation(@Body('inventoryIds') ids: string[], @Body('locationId') locationId: string) {
     return this.inventory.bulkSetLocation(ids, locationId)
   }
 
   @Get('inventory/movements')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getMovementLog(
     @Query('warehouseId') warehouseId?: string, @Query('type') type?: string,
     @Query('search') search?: string, @Query('limit') limit?: string, @Query('offset') offset?: string,
@@ -733,48 +839,58 @@ export class AdminController {
   }
 
   @Get('inventory/:variantId/:warehouseId/history')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getInventoryHistory(@Param('variantId', ParseUUIDPipe) variantId: string, @Param('warehouseId', ParseUUIDPipe) warehouseId: string) {
     return this.inventory.getHistory(variantId, warehouseId)
   }
 
   // Locations
   @Get('inventory/locations')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getLocations(@Query('warehouseId') warehouseId?: string) { return this.inventory.getLocations(warehouseId) }
 
   @Post('inventory/locations')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.CREATED)
   createLocation(@Body() body: { warehouseId: string; name: string; description?: string }, @Req() req: any) {
     return this.inventory.createLocation(body, req.user.id)
   }
 
   @Patch('inventory/locations/:id')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   updateLocation(@Param('id', ParseUUIDPipe) id: string, @Body() body: { name?: string; description?: string }) {
     return this.inventory.updateLocation(id, body)
   }
 
   @Delete('inventory/locations/:id')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   deleteLocation(@Param('id', ParseUUIDPipe) id: string) { return this.inventory.deleteLocation(id) }
 
   // Stocktake
   @Get('stocktakes')
+  @RequirePermission(PERMISSIONS.INVENTORY_STOCKTAKE)
   getStocktakes() { return this.inventory.getStocktakes() }
 
   @Post('stocktakes')
+  @RequirePermission(PERMISSIONS.INVENTORY_STOCKTAKE)
   @HttpCode(HttpStatus.CREATED)
   startStocktake(@Body('warehouseId') warehouseId: string, @Body('categoryId') categoryId: string | null, @Req() req: any) {
     return this.inventory.startStocktake(warehouseId, categoryId, req.user.id)
   }
 
   @Get('stocktakes/:id')
+  @RequirePermission(PERMISSIONS.INVENTORY_STOCKTAKE)
   getStocktake(@Param('id', ParseUUIDPipe) id: string) { return this.inventory.getStocktake(id) }
 
   @Patch('stocktakes/items/:itemId')
+  @RequirePermission(PERMISSIONS.INVENTORY_STOCKTAKE)
   updateStocktakeItem(@Param('itemId', ParseUUIDPipe) itemId: string, @Body('actualQty') actualQty: number) {
     return this.inventory.updateStocktakeItem(itemId, actualQty)
   }
 
   @Post('stocktakes/:id/complete')
+  @RequirePermission(PERMISSIONS.INVENTORY_STOCKTAKE)
   @HttpCode(HttpStatus.OK)
   completeStocktake(@Param('id', ParseUUIDPipe) id: string, @Body('applyChanges') applyChanges: boolean, @Req() req: any, @Ip() ip: string) {
     return this.inventory.completeStocktake(id, applyChanges, req.user.id, ip)
@@ -783,6 +899,7 @@ export class AdminController {
   // ── Audit Log ─────────────────────────────────────────────
 
   @Get('audit-log')
+  @RequirePermission(PERMISSIONS.AUDIT_VIEW)
   @Roles('super_admin')
   getAuditLog(
     @Query('adminId') adminId?: string,
@@ -799,12 +916,14 @@ export class AdminController {
   }
 
   @Get('audit-log/admins')
+  @RequirePermission(PERMISSIONS.AUDIT_VIEW)
   @Roles('super_admin')
   getAuditAdmins() {
     return this.audit.getAdmins()
   }
 
   @Get('audit-log/actions')
+  @RequirePermission(PERMISSIONS.AUDIT_VIEW)
   @Roles('super_admin')
   getAuditActions() {
     return this.audit.getActionTypes()
@@ -813,16 +932,19 @@ export class AdminController {
   // ── Returns ───────────────────────────────────────────
 
   @Get('returns')
+  @RequirePermission(PERMISSIONS.RETURNS_VIEW)
   getReturns(@Query('status') status?: string, @Query('search') search?: string, @Query('limit') limit?: string) {
     return this.returns.findAll({ status, search, limit: limit ? +limit : 50 })
   }
 
   @Get('returns/:id')
+  @RequirePermission(PERMISSIONS.RETURNS_VIEW)
   getReturn(@Param('id', ParseUUIDPipe) id: string) {
     return this.returns.findOne(id)
   }
 
   @Patch('returns/:id/status')
+  @RequirePermission(PERMISSIONS.RETURNS_EDIT)
   updateReturnStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: string,
@@ -834,6 +956,7 @@ export class AdminController {
   }
 
   @Patch('returns/:id/label')
+  @RequirePermission(PERMISSIONS.RETURNS_EDIT)
   updateReturnLabel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('returnTrackingNumber') trackingNumber: string,
@@ -847,6 +970,7 @@ export class AdminController {
   // ── Shipments ─────────────────────────────────────────
 
   @Get('shipments')
+  @RequirePermission(PERMISSIONS.SHIPPING_VIEW)
   async getShipments(
     @Query('status') status?: string,
     @Query('carrier') carrier?: string,
@@ -883,6 +1007,7 @@ export class AdminController {
   }
 
   @Get('shipments/:id')
+  @RequirePermission(PERMISSIONS.SHIPPING_VIEW)
   async getShipment(@Param('id', ParseUUIDPipe) id: string) {
     return this.prisma.shipment.findUniqueOrThrow({
       where: { id },
@@ -902,6 +1027,7 @@ export class AdminController {
   }
 
   @Patch('shipments/:id/status')
+  @RequirePermission(PERMISSIONS.SHIPPING_STATUS)
   async updateShipmentStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: string,
@@ -940,6 +1066,7 @@ export class AdminController {
   }
 
   @Patch('shipments/:id/tracking')
+  @RequirePermission(PERMISSIONS.SHIPPING_STATUS)
   async updateShipmentTracking(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('trackingNumber') trackingNumber: string,
@@ -966,6 +1093,7 @@ export class AdminController {
   }
 
   @Post('shipments/batch')
+  @RequirePermission(PERMISSIONS.SHIPPING_STATUS)
   @HttpCode(HttpStatus.OK)
   async batchCreateShipments(@Req() req: any, @Ip() ip: string) {
     // Find all orders ready to ship (confirmed or processing, no shipment yet)
@@ -1004,6 +1132,7 @@ export class AdminController {
   // ── Settings ──────────────────────────────────────────
 
   @Get('settings')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
   async getSettings() {
     const rows = await this.prisma.shopSetting.findMany()
     const db: Record<string, string> = {}
@@ -1027,6 +1156,7 @@ export class AdminController {
   }
 
   @Patch('settings')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
   @Roles('super_admin')
   async updateSettings(@Body() body: Record<string, string>, @Req() req: any, @Ip() ip: string) {
     const allowed = [
@@ -1080,12 +1210,33 @@ export class AdminController {
   // ── Staff (SUPER_ADMIN only) ──────────────────────────
 
   @Get('staff')
+  @RequirePermission(PERMISSIONS.STAFF_VIEW)
   @Roles('super_admin')
   getStaff(@Query('search') search?: string) {
     return this.staff.findAll({ search })
   }
 
+  @Get('staff/permissions')
+  @RequirePermission(PERMISSIONS.STAFF_VIEW)
+  @Roles('super_admin')
+  getPermissionDefinitions() {
+    return this.staff.getPermissionDefinitions()
+  }
+
+  @Post('staff/invite')
+  @RequirePermission(PERMISSIONS.STAFF_INVITE)
+  @Roles('super_admin')
+  @HttpCode(HttpStatus.CREATED)
+  inviteStaff(
+    @Body() body: { email: string; staffRole: string; customPermissions?: string[] },
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    return this.staff.invite(body, req.user.id, ip)
+  }
+
   @Post('staff')
+  @RequirePermission(PERMISSIONS.STAFF_INVITE)
   @Roles('super_admin')
   @HttpCode(HttpStatus.CREATED)
   createStaff(
@@ -1100,18 +1251,27 @@ export class AdminController {
     return this.staff.create({ email, firstName, lastName, role, password }, req.user.id, ip)
   }
 
+  @Get('staff/:id')
+  @RequirePermission(PERMISSIONS.STAFF_VIEW)
+  @Roles('super_admin')
+  getStaffMember(@Param('id', ParseUUIDPipe) id: string) {
+    return this.staff.findOne(id)
+  }
+
   @Patch('staff/:id/role')
+  @RequirePermission(PERMISSIONS.STAFF_ROLES)
   @Roles('super_admin')
   updateStaffRole(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('role') role: 'admin' | 'super_admin',
+    @Body() body: { staffRole?: string; customPermissions?: string[]; role?: string },
     @Req() req: any,
     @Ip() ip: string,
   ) {
-    return this.staff.updateRole(id, role, req.user.id, ip)
+    return this.staff.updateRole(id, body, req.user.id, ip)
   }
 
   @Post('staff/:id/activate')
+  @RequirePermission(PERMISSIONS.STAFF_DEACTIVATE)
   @Roles('super_admin')
   @HttpCode(HttpStatus.OK)
   activateStaff(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
@@ -1119,6 +1279,7 @@ export class AdminController {
   }
 
   @Post('staff/:id/deactivate')
+  @RequirePermission(PERMISSIONS.STAFF_DEACTIVATE)
   @Roles('super_admin')
   @HttpCode(HttpStatus.OK)
   deactivateStaff(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
@@ -1126,6 +1287,7 @@ export class AdminController {
   }
 
   @Post('staff/:id/reset-password')
+  @RequirePermission(PERMISSIONS.STAFF_DEACTIVATE)
   @Roles('super_admin')
   @HttpCode(HttpStatus.OK)
   resetStaffPassword(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
@@ -1133,14 +1295,41 @@ export class AdminController {
   }
 
   @Get('staff/:id/activity')
+  @RequirePermission(PERMISSIONS.STAFF_VIEW)
   @Roles('super_admin')
   getStaffActivity(@Param('id', ParseUUIDPipe) id: string) {
     return this.staff.getActivity(id)
   }
 
+  @Patch('staff/:id/profile')
+  @RequirePermission(PERMISSIONS.STAFF_ROLES)
+  @Roles('super_admin')
+  updateStaffProfile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { firstName?: string; lastName?: string },
+  ) {
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(body.firstName !== undefined ? { firstName: body.firstName.trim() } : {}),
+        ...(body.lastName !== undefined ? { lastName: body.lastName.trim() } : {}),
+      },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    })
+  }
+
+  @Delete('staff/:id')
+  @RequirePermission(PERMISSIONS.STAFF_DEACTIVATE)
+  @Roles('super_admin')
+  @HttpCode(HttpStatus.OK)
+  deleteStaff(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.staff.softDelete(id, req.user.id, ip)
+  }
+
   // ── Emails ────────────────────────────────────────────
 
   @Get('emails/templates')
+  @RequirePermission(PERMISSIONS.EMAILS_VIEW)
   getEmailTemplates() {
     const templates = [
       { key: 'welcome', name: { de: 'Willkommen', en: 'Welcome', ar: 'مرحباً' }, languages: ['de', 'en'] },
@@ -1164,6 +1353,7 @@ export class AdminController {
   }
 
   @Get('emails/preview/:key')
+  @RequirePermission(PERMISSIONS.EMAILS_VIEW)
   previewEmail(@Param('key') key: string, @Query('lang') lang: string = 'de') {
     const sampleData: Record<string, unknown> = {
       firstName: 'Max',
@@ -1200,6 +1390,7 @@ export class AdminController {
   }
 
   @Post('emails/test-send')
+  @RequirePermission(PERMISSIONS.EMAILS_TEST)
   @HttpCode(HttpStatus.OK)
   async testSendEmail(
     @Body('templateKey') templateKey: string,
@@ -1223,6 +1414,7 @@ export class AdminController {
   // ── Categories CRUD ───────────────────────────────────
 
   @Get('categories')
+  @RequirePermission(PERMISSIONS.CATEGORIES_VIEW)
   async getAdminCategories() {
     const all = await this.prisma.category.findMany({
       where: { isActive: true },

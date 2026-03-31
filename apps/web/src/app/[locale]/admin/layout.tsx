@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -9,42 +9,77 @@ import {
   LayoutDashboard, Package, ShoppingBag, Users, Warehouse, Tag,
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
+  ScanBarcode,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
+import { Camera } from 'lucide-react'
 
-const NAV = [
-  { key: 'dashboard', labelKey: 'dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-  { key: 'orders', labelKey: 'orders', href: '/admin/orders', icon: ShoppingBag, badgeKey: 'openOrders' },
-  { key: 'customers', labelKey: 'users', href: '/admin/customers', icon: Users },
-  { key: 'products', labelKey: 'products', href: '/admin/products', icon: Package },
-  { key: 'categories', labelKey: 'categories', href: '/admin/categories', icon: Tag },
-  { key: 'inventory', labelKey: 'inventory', href: '/admin/inventory', icon: Warehouse, badgeKey: 'lowStock' },
-  { key: 'shipping-zones', labelKey: 'shippingZones', href: '/admin/shipping-zones', icon: MapPin },
-  { key: 'returns', labelKey: 'returns', href: '/admin/returns', icon: RotateCcw },
-  { key: 'shipments', labelKey: 'shipments', href: '/admin/shipments', icon: Truck },
-  { key: 'settings', labelKey: 'settings', href: '/admin/settings', icon: Settings },
-  { key: 'appearance', labelKey: 'appearance', href: '/admin/settings/appearance', icon: Palette },
-  { key: 'pages', labelKey: 'pages', href: '/admin/pages', icon: FileText },
-  { key: 'staff', labelKey: 'staff', href: '/admin/staff', icon: Users2, superAdminOnly: true },
-  { key: 'emails', labelKey: 'emails', href: '/admin/emails', icon: Mail },
-  { key: 'audit-log', labelKey: 'auditLog', href: '/admin/audit-log', icon: ScrollText, superAdminOnly: true },
+const CameraBarcodeScannerOverlay = lazy(() => import('@/components/admin/camera-barcode-scanner').then((m) => ({ default: m.CameraBarcodeScannerOverlay })))
+
+const NAV_GROUPS = [
+  {
+    label: { de: 'Hauptmenü', en: 'Main', ar: 'الرئيسية' },
+    items: [
+      { key: 'dashboard', labelKey: 'dashboard', href: '/admin/dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+      { key: 'orders', labelKey: 'orders', href: '/admin/orders', icon: ShoppingBag, badgeKey: 'openOrders', permission: 'orders.view' },
+      { key: 'customers', labelKey: 'users', href: '/admin/customers', icon: Users, permission: 'customers.view' },
+    ],
+  },
+  {
+    label: { de: 'Katalog', en: 'Catalog', ar: 'الكتالوج' },
+    items: [
+      { key: 'products', labelKey: 'products', href: '/admin/products', icon: Package, permission: 'products.view' },
+      { key: 'categories', labelKey: 'categories', href: '/admin/categories', icon: Tag, permission: 'categories.view' },
+      { key: 'inventory', labelKey: 'inventory', href: '/admin/inventory', icon: Warehouse, badgeKey: 'lowStock', permission: 'inventory.view' },
+    ],
+  },
+  {
+    label: { de: 'Fulfillment', en: 'Fulfillment', ar: 'التنفيذ' },
+    items: [
+      { key: 'shipping-zones', labelKey: 'shippingZones', href: '/admin/shipping-zones', icon: MapPin, permission: 'settings.view' },
+      { key: 'returns', labelKey: 'returns', href: '/admin/returns', icon: RotateCcw, permission: 'returns.view' },
+      { key: 'shipments', labelKey: 'shipments', href: '/admin/shipments', icon: Truck, permission: 'shipping.view' },
+    ],
+  },
+  {
+    label: { de: 'Einstellungen', en: 'Settings', ar: 'الإعدادات' },
+    items: [
+      { key: 'settings', labelKey: 'settings', href: '/admin/settings', icon: Settings, permission: 'settings.view' },
+      { key: 'appearance', labelKey: 'appearance', href: '/admin/settings/appearance', icon: Palette, permission: 'settings.edit' },
+      { key: 'pages', labelKey: 'pages', href: '/admin/pages', icon: FileText, permission: 'settings.edit' },
+      { key: 'staff', labelKey: 'staff', href: '/admin/staff', icon: Users2, permission: 'staff.view' },
+      { key: 'emails', labelKey: 'emails', href: '/admin/emails', icon: Mail, permission: 'emails.view' },
+      { key: 'audit-log', labelKey: 'auditLog', href: '/admin/audit-log', icon: ScrollText, permission: 'audit.view' },
+    ],
+  },
 ]
+
+// hasPermission used inside render
+
+// Check if user has a specific permission
+function hasPermission(user: any, permission: string): boolean {
+  if (!user) return false
+  if (user.role === 'super_admin') return true
+  const perms: string[] = Array.isArray(user.permissions) ? user.permissions : []
+  return perms.includes(permission)
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const locale = useLocale()
   const t = useTranslations('admin')
   const router = useRouter()
   const pathname = usePathname()
-  const { user, isAuthenticated, logout } = useAuthStore()
+  const { adminUser: user, isAdminAuthenticated: isAuthenticated, adminLogout: logout } = useAuthStore()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [cameraScannerOpen, setCameraScannerOpen] = useState(false)
 
   // Skip auth guard on login page
   const isLoginPage = pathname.includes('/admin/login')
 
   // Auth guard (skip for login page)
   useEffect(() => {
-    if (!isLoginPage && (!isAuthenticated || !['admin', 'super_admin'].includes(user?.role ?? ''))) {
+    if (!isLoginPage && (!isAuthenticated || !['admin', 'super_admin', 'warehouse_staff'].includes(user?.role ?? ''))) {
       router.push(`/${locale}/admin/login`)
     }
   }, [isAuthenticated, user, router, locale, isLoginPage])
@@ -75,7 +110,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // Not authenticated: show nothing (redirect is happening via useEffect)
-  if (!isAuthenticated || !['admin', 'super_admin'].includes(user?.role ?? '')) return null
+  if (!isAuthenticated || !['admin', 'super_admin', 'warehouse_staff'].includes(user?.role ?? '')) return null
 
   const isActive = (href: string) => pathname.includes(href)
 
@@ -100,9 +135,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </button>
         <span className="font-bold">MALAK Admin</span>
         <div className="flex items-center gap-2">
+          <button onClick={() => setCameraScannerOpen(true)} className="p-2 rounded-lg hover:bg-muted active:scale-95 transition-all" aria-label="Camera Scanner">
+            <Camera className="h-5 w-5" />
+          </button>
           <NotificationBell count={totalNotifications} locale={locale} />
         </div>
       </div>
+
+      {/* Camera Scanner Overlay (mobile) */}
+      {cameraScannerOpen && (
+        <Suspense fallback={null}>
+          <CameraBarcodeScannerOverlay mode="single" locale={locale} onClose={() => setCameraScannerOpen(false)} />
+        </Suspense>
+      )}
 
       <div className="flex">
         {/* Sidebar */}
@@ -115,52 +160,85 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Sidebar uses flex-col so footer doesn't overlap */}
           <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="h-14 flex items-center justify-between px-5 border-b border-white/10 flex-shrink-0">
-            <span className="font-bold text-lg tracking-tight">MALAK</span>
-            <button className="lg:hidden" onClick={() => setSidebarOpen(false)}>
-              <X className="h-5 w-5" />
+          <div className="h-16 flex items-center justify-between px-5 flex-shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#d4a853] to-[#b8922e] flex items-center justify-center shadow-lg shadow-[#d4a853]/20">
+                <span className="text-white font-black text-sm">M</span>
+              </div>
+              <div>
+                <span className="font-bold text-sm tracking-tight text-white">MALAK</span>
+                <span className="block text-[9px] text-white/30 -mt-0.5 tracking-widest uppercase">Admin</span>
+              </div>
+            </div>
+            <button className="lg:hidden p-1 hover:bg-white/10 rounded-lg" onClick={() => setSidebarOpen(false)}>
+              <X className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Nav — scrollable */}
-          <nav className="flex-1 py-3 space-y-0.5 px-3 overflow-y-auto">
-            {NAV.filter((n) => !n.superAdminOnly || user?.role === 'super_admin').map((item) => {
-              const active = isActive(item.href)
-              const badge = item.badgeKey ? (notifications as any)?.[item.badgeKey] : 0
+          {/* Nav — scrollable with groups */}
+          <nav className="flex-1 px-3 pb-3 overflow-y-auto space-y-4">
+            {NAV_GROUPS.map((group) => {
+              const visibleItems = group.items.filter((item) => hasPermission(user, item.permission))
+              if (visibleItems.length === 0) return null
               return (
-                <Link
-                  key={item.key}
-                  href={`/${locale}${item.href}`}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors ${
-                    active ? 'bg-white/10 text-white font-medium' : 'text-white/60 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span className="flex-1">{t(`nav.${item.labelKey}`)}</span>
-                  {badge > 0 && (
-                    <span className="h-5 min-w-[20px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-1.5">
-                      {badge}
+                <div key={group.label.en}>
+                  <div className="px-3 mb-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/25">
+                      {(group.label as any)[locale] || group.label.de}
                     </span>
-                  )}
-                </Link>
+                  </div>
+                  <div className="space-y-0.5">
+                    {visibleItems.map((item) => {
+                      const active = isActive(item.href)
+                      const badge = item.badgeKey ? (notifications as any)?.[item.badgeKey] : 0
+                      return (
+                        <Link
+                          key={item.key}
+                          href={`/${locale}${item.href}`}
+                          onClick={() => setSidebarOpen(false)}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] transition-all group relative ${
+                            active
+                              ? 'bg-[#d4a853]/15 text-[#d4a853] font-semibold'
+                              : 'text-white/50 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          {active && <div className="absolute ltr:left-0 rtl:right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#d4a853]" />}
+                          <item.icon className={`h-[18px] w-[18px] transition-colors ${active ? 'text-[#d4a853]' : 'text-white/30 group-hover:text-white/60'}`} />
+                          <span className="flex-1">{t(`nav.${item.labelKey}`)}</span>
+                          {badge > 0 && (
+                            <span className={`h-5 min-w-[20px] rounded-full text-[10px] font-bold flex items-center justify-center px-1.5 ${
+                              active ? 'bg-[#d4a853] text-white' : 'bg-red-500 text-white'
+                            }`}>
+                              {badge}
+                            </span>
+                          )}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
               )
             })}
           </nav>
 
-          {/* Bottom — uses mt-auto to push to bottom without overlap */}
-          <div className="mt-auto p-4 border-t border-white/10 flex-shrink-0">
-            <div className="text-xs text-white/70 mb-2">
-              {user?.firstName} {user?.lastName}
-              <span className="ml-1 rtl:mr-1 rtl:ml-0 px-1.5 py-0.5 rounded bg-white/10 text-[10px] uppercase">{user?.role}</span>
+          {/* User section */}
+          <div className="p-3 border-t border-white/[0.06] flex-shrink-0">
+            <div className="flex items-center gap-2.5 px-2 py-2 mb-2">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-white/15 to-white/5 flex items-center justify-center text-xs font-bold text-white/70">
+                {user?.firstName?.[0]}{user?.lastName?.[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-white/80 truncate">{user?.firstName} {user?.lastName}</div>
+                <div className="text-[10px] text-white/30">{user?.role === 'super_admin' ? 'Super Admin' : user?.staffRole || user?.role}</div>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={switchLocale} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-white/60">
-                <Globe className="h-3.5 w-3.5" />
+            <div className="flex gap-1.5">
+              <button onClick={switchLocale} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[11px] text-white/40 hover:text-white/60 transition-colors">
+                <Globe className="h-3 w-3" />
                 {locale === 'de' ? 'العربية' : 'Deutsch'}
               </button>
-              <button onClick={handleLogout} className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-white/60">
-                <LogOut className="h-3.5 w-3.5" />
+              <button onClick={handleLogout} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-red-500/20 text-[11px] text-white/40 hover:text-red-400 transition-colors">
+                <LogOut className="h-3 w-3" />
                 {t('nav.logout')}
               </button>
             </div>
@@ -172,6 +250,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <main className="flex-1 min-h-screen">
           {/* Desktop Header */}
           <div className="hidden lg:flex h-14 bg-background border-b items-center justify-end px-6 gap-4">
+            {/* Scanner Field */}
+            <div className="relative flex-1 max-w-xs">
+              <ScanBarcode className="absolute left-3 rtl:left-auto rtl:right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                placeholder={locale === 'ar' ? 'مسح الباركود...' : 'Barcode scannen...'}
+                className="w-full h-9 pl-10 rtl:pl-3 rtl:pr-10 rounded-xl border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const code = (e.target as HTMLInputElement).value.trim()
+                    if (code) {
+                      router.push(`/${locale}/admin/inventory?search=${encodeURIComponent(code)}`)
+                      ;(e.target as HTMLInputElement).value = ''
+                    }
+                  }
+                }}
+              />
+            </div>
             <NotificationBell count={totalNotifications} locale={locale} />
             <span className="text-sm text-muted-foreground">
               {user?.firstName} <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted uppercase">{user?.role}</span>

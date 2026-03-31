@@ -7,8 +7,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
+import { ConfigService } from '@nestjs/config'
 import * as bcrypt from 'bcrypt'
 import * as crypto from 'crypto'
+import { randomUUID } from 'crypto'
 import { PrismaService } from '../../prisma/prisma.service'
 import { EmailService } from '../email/email.service'
 import { RegisterDto } from './dto/register.dto'
@@ -28,6 +30,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly emailService: EmailService,
+    private readonly config: ConfigService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -63,9 +66,19 @@ export class AuthService {
       },
     })
 
-    // Welcome + E-Mail-Verifizierung (non-blocking via BullMQ)
+    // Generate email verification token
+    const verifyToken = randomUUID()
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerifyToken: verifyToken, emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000) }, // 24h
+    })
+
+    // Queue verification email (non-blocking)
     const lang = user.preferredLang ?? 'de'
-    await this.emailService.queueWelcome(user.email, lang, user.firstName).catch(() => {})
+    const verifyUrl = `${this.config.get('FRONTEND_URL') ?? 'http://localhost:3000'}/${lang}/auth/verify-email?token=${verifyToken}`
+    await this.emailService.queueEmailVerification(user.email, lang, user.firstName, verifyUrl).catch(() => {})
+
+    this.logger.log(`Email verification link for ${user.email}: ${verifyUrl}`)
 
     return this.generateTokens(user.id, user.email, user.role)
   }
@@ -96,6 +109,7 @@ export class AuthService {
 
     if (!isPasswordValid) {
       const newAttempts = user.loginAttempts + 1
+      const isAdmin = ['admin', 'super_admin'].includes(user.role)
 
       await this.prisma.user.update({
         where: { id: user.id },
@@ -107,6 +121,38 @@ export class AuthService {
               : null,
         },
       })
+
+      // Audit log for failed admin login
+      if (isAdmin) {
+        await this.prisma.adminAuditLog.create({
+          data: {
+            adminId: user.id,
+            action: 'ADMIN_LOGIN_FAILED',
+            entityType: 'auth',
+            entityId: user.id,
+            changes: { ip: ipAddress, userAgent, attempt: newAttempts, success: false },
+            ipAddress,
+          },
+        }).catch(() => {})
+
+        this.logger.warn(`Admin login FAILED: ${user.email} | attempt ${newAttempts} | IP: ${ipAddress}`)
+
+        // Alert main admin after 3 failed attempts
+        if (newAttempts >= 3) {
+          const mainAdmin = await this.prisma.user.findFirst({
+            where: { role: 'super_admin', isActive: true, deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            select: { email: true, firstName: true, preferredLang: true },
+          })
+          if (mainAdmin) {
+            this.emailService.queueAdminAlert(
+              mainAdmin.email,
+              mainAdmin.preferredLang ?? 'de',
+              `Sicherheitswarnung: ${newAttempts} fehlgeschlagene Login-Versuche für Admin "${user.email}" von IP ${ipAddress}`,
+            ).catch(() => {})
+          }
+        }
+      }
 
       if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
         throw new ForbiddenException(
@@ -138,14 +184,28 @@ export class AuthService {
       include: { user: true },
     })
 
-    if (!stored || stored.isRevoked || stored.expiresAt < new Date()) {
+    if (!stored || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Ungültiger oder abgelaufener Refresh Token')
     }
 
-    // Token Rotation — alten Token widerrufen
+    // Grace period: if token was revoked recently, allow reuse
+    // This prevents race conditions during rapid page refreshes (F5)
+    if (stored.isRevoked) {
+      // Token was created at createdAt. If it was revoked very recently
+      // (within last 15s based on lastUsedAt or fallback), allow reuse
+      const lastUsed = stored.lastUsedAt?.getTime() ?? stored.createdAt.getTime()
+      const gracePeriodMs = 15_000
+      if (Date.now() - lastUsed > gracePeriodMs) {
+        throw new UnauthorizedException('Ungültiger oder abgelaufener Refresh Token')
+      }
+      this.logger.debug(`Refresh grace period: token reused within 15s for user ${stored.user.email}`)
+      return this.generateTokens(stored.user.id, stored.user.email, stored.user.role)
+    }
+
+    // Token Rotation — revoke old token (but it stays valid for grace period via lastUsedAt)
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
-      data: { isRevoked: true },
+      data: { isRevoked: true, lastUsedAt: new Date() },
     })
 
     return this.generateTokens(stored.user.id, stored.user.email, stored.user.role)
@@ -177,6 +237,41 @@ export class AuthService {
     ).catch(() => {})
   }
 
+  async verifyEmail(token: string): Promise<{ success: boolean; email: string }> {
+    const user = await this.prisma.user.findFirst({
+      where: { emailVerifyToken: token, emailVerifyExpires: { gt: new Date() } },
+    })
+
+    if (!user) {
+      throw new BadRequestException('Verifizierungslink ungültig oder abgelaufen.')
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { isVerified: true, emailVerifyToken: null, emailVerifyExpires: null },
+    })
+
+    this.logger.log(`Email verified: ${user.email}`)
+    return { success: true, email: user.email }
+  }
+
+  async resendVerification(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new BadRequestException('User not found')
+    if (user.isVerified) throw new BadRequestException('Already verified')
+
+    const verifyToken = randomUUID()
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerifyToken: verifyToken, emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+    })
+
+    const lang = user.preferredLang ?? 'de'
+    const verifyUrl = `${this.config.get('FRONTEND_URL') ?? 'http://localhost:3000'}/${lang}/auth/verify-email?token=${verifyToken}`
+    await this.emailService.queueEmailVerification(user.email, lang, user.firstName, verifyUrl).catch(() => {})
+    this.logger.log(`Resent verification for ${user.email}: ${verifyUrl}`)
+  }
+
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const tokenHash = this.hashToken(token)
 
@@ -194,10 +289,10 @@ export class AuthService {
         where: { id: reset.id },
         data: { usedAt: new Date() },
       }),
-      // Passwort aktualisieren
+      // Passwort aktualisieren + Login-Sperre aufheben
       this.prisma.user.update({
         where: { id: reset.userId },
-        data: { passwordHash },
+        data: { passwordHash, loginAttempts: 0, lockedUntil: null },
       }),
       // Alle Refresh Tokens widerrufen (von allen Geräten abmelden)
       this.prisma.refreshToken.updateMany({

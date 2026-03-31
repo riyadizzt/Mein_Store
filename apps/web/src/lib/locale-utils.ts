@@ -46,7 +46,7 @@ export function translateColor(color: string | null | undefined, locale: string)
 
 // ── Movement type translations ────────────────────────────
 const MOVEMENT_MAP: Record<string, Record<string, string>> = {
-  purchase_received:    { de: 'Einkauf erhalten',    en: 'Purchase received',    ar: 'استلام مشتريات' },
+  purchase_received:    { de: 'Wareneingang',         en: 'Goods received',       ar: 'استلام بضاعة' },
   sale_online:          { de: 'Online-Verkauf',      en: 'Online sale',          ar: 'بيع أونلاين' },
   sale_pos:             { de: 'Ladenverkauf',        en: 'POS sale',             ar: 'بيع في المتجر' },
   sale_social:          { de: 'Social-Media-Verkauf', en: 'Social media sale',   ar: 'بيع عبر التواصل' },

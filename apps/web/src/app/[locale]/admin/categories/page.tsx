@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useConfirm } from '@/components/ui/confirm-modal'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   DragEndEvent, DragOverlay, DragStartEvent,
@@ -29,6 +30,9 @@ export default function AdminCategoriesPage() {
   const locale = useLocale()
   const t = useTranslations('admin')
   const qc = useQueryClient()
+  const confirmDialog = useConfirm()
+
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -102,11 +106,22 @@ export default function AdminCategoriesPage() {
     saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, sortOrder, translations } })
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selected) return
     const cnt = selected._count?.products ?? 0
-    if (cnt > 0) { alert(t('categories.deleteHasProducts', { count: cnt })); return }
-    if (confirm(t('categories.deleteConfirm'))) deleteMutation.mutate(selected.id)
+    if (cnt > 0) {
+      setDeleteError(t('categories.deleteHasProducts', { count: cnt }))
+      setTimeout(() => setDeleteError(null), 4000)
+      return
+    }
+    const ok = await confirmDialog({
+      title: t('categories.delete'),
+      description: t('categories.deleteConfirm'),
+      variant: 'danger',
+      confirmLabel: t('categories.delete'),
+      cancelLabel: t('categories.cancel'),
+    })
+    if (ok) deleteMutation.mutate(selected.id)
   }
 
   const autoSlug = () => {
@@ -304,6 +319,13 @@ export default function AdminCategoriesPage() {
                   <ImageIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                   <img src={imageUrl} alt="" className="h-16 w-16 rounded object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                   <span className="text-xs text-muted-foreground truncate flex-1">{imageUrl}</span>
+                </div>
+              )}
+
+              {/* Delete error toast */}
+              {deleteError && (
+                <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm font-medium flex items-center gap-2">
+                  <span>✕</span> {deleteError}
                 </div>
               )}
 

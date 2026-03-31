@@ -10,7 +10,15 @@ import {
   RotateCcw, Plus, Search, Printer, ArrowUpRight,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/store/auth-store'
 import { Button } from '@/components/ui/button'
+
+function hasPerm(user: any, p: string): boolean {
+  if (!user) return false
+  if (user.role === 'super_admin') return true
+  const perms: string[] = Array.isArray(user.permissions) ? user.permissions : []
+  return perms.includes(p)
+}
 
 // Lazy load charts (only on dashboard)
 const RevenueChart = dynamic(() => import('@/components/admin/revenue-chart').then((m) => m.RevenueChart), {
@@ -23,6 +31,7 @@ const PaymentPieChart = dynamic(() => import('@/components/admin/payment-pie-cha
 export default function AdminDashboard() {
   const locale = useLocale()
   const t = useTranslations('admin')
+  const adminUser = useAuthStore((s) => s.adminUser)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-dashboard'],
@@ -32,6 +41,12 @@ export default function AdminDashboard() {
     },
     refetchInterval: 30000,
   })
+
+  const canRevenue = hasPerm(adminUser, 'finance.revenue')
+  const canOrders = hasPerm(adminUser, 'orders.view')
+  const canProducts = hasPerm(adminUser, 'products.view')
+  const canInventory = hasPerm(adminUser, 'inventory.view')
+  const canShipping = hasPerm(adminUser, 'shipping.view')
 
   if (isLoading) {
     return (
@@ -57,63 +72,75 @@ export default function AdminDashboard() {
         <p className="text-sm text-muted-foreground">{new Date().toLocaleDateString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'de' ? 'de-DE' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions — only show relevant ones */}
       <div className="flex flex-wrap gap-2">
-        <Link href={`/${locale}/admin/products/new`}>
-          <Button size="sm" variant="outline" className="gap-1.5"><Plus className="h-3.5 w-3.5" />{t('dashboard.newProduct')}</Button>
-        </Link>
-        <Button size="sm" variant="outline" className="gap-1.5"><Search className="h-3.5 w-3.5" />{t('dashboard.searchOrder')}</Button>
-        <Link href={`/${locale}/admin/inventory`}>
-          <Button size="sm" variant="outline" className="gap-1.5"><Package className="h-3.5 w-3.5" />{t('dashboard.restockInventory')}</Button>
-        </Link>
-        <Link href={`/${locale}/admin/orders?status=confirmed`}>
-          <Button size="sm" variant="outline" className="gap-1.5"><Printer className="h-3.5 w-3.5" />{t('dashboard.printLabels')}</Button>
-        </Link>
+        {canProducts && <Link href={`/${locale}/admin/products/new`}><Button size="sm" variant="outline" className="gap-1.5"><Plus className="h-3.5 w-3.5" />{t('dashboard.newProduct')}</Button></Link>}
+        {canOrders && <Button size="sm" variant="outline" className="gap-1.5"><Search className="h-3.5 w-3.5" />{t('dashboard.searchOrder')}</Button>}
+        {canInventory && <Link href={`/${locale}/admin/inventory`}><Button size="sm" variant="outline" className="gap-1.5"><Package className="h-3.5 w-3.5" />{t('dashboard.restockInventory')}</Button></Link>}
+        {canShipping && <Link href={`/${locale}/admin/orders?status=confirmed`}><Button size="sm" variant="outline" className="gap-1.5"><Printer className="h-3.5 w-3.5" />{t('dashboard.printLabels')}</Button></Link>}
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards — filtered by permission */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          title={t('dashboard.revenueToday')}
-          value={`€${today.revenueGross ?? '0.00'}`}
-          subtitle={`${t('dashboard.net')}: €${today.revenueNet ?? '0.00'}`}
-          trend={data?.thisMonth?.monthOverMonth}
-        />
-        <KpiCard
-          title={t('dashboard.ordersToday')}
-          value={today.orderCount ?? 0}
-          subtitle={`${t('dashboard.avg')}: ${today.avgOrderValue ?? '0.00'} €`}
-        />
-        <KpiCard
-          title={t('dashboard.openOrders')}
-          value={openOrders}
-          subtitle={t('dashboard.pendingConfirmedProcessing')}
-          href={`/${locale}/admin/orders?status=pending`}
-        />
-        <KpiCard
-          title={t('dashboard.openDisputes')}
-          value={disputes}
-          subtitle={disputes > 0 ? `€${data?.disputes?.totalAmount ?? '0.00'}` : t('dashboard.noDisputes')}
-          alert={disputes > 0}
-        />
+        {canRevenue && (
+          <KpiCard
+            title={t('dashboard.revenueToday')}
+            value={`€${today.revenueGross ?? '0.00'}`}
+            subtitle={`${t('dashboard.net')}: €${today.revenueNet ?? '0.00'}`}
+            trend={data?.thisMonth?.monthOverMonth}
+          />
+        )}
+        {canOrders && (
+          <KpiCard
+            title={t('dashboard.ordersToday')}
+            value={today.orderCount ?? 0}
+            subtitle={`${t('dashboard.avg')}: ${today.avgOrderValue ?? '0.00'} €`}
+          />
+        )}
+        {canOrders && (
+          <KpiCard
+            title={t('dashboard.openOrders')}
+            value={openOrders}
+            subtitle={t('dashboard.pendingConfirmedProcessing')}
+            href={`/${locale}/admin/orders?status=pending`}
+          />
+        )}
+        {canInventory && !canOrders && (
+          <KpiCard
+            title={t('dashboard.lowStock')}
+            value={(data?.lowStock ?? []).length}
+            subtitle={locale === 'ar' ? 'منتجات بمخزون منخفض' : 'Produkte mit niedrigem Bestand'}
+            href={`/${locale}/admin/inventory`}
+          />
+        )}
+        {canRevenue && (
+          <KpiCard
+            title={t('dashboard.openDisputes')}
+            value={disputes}
+            subtitle={disputes > 0 ? `€${data?.disputes?.totalAmount ?? '0.00'}` : t('dashboard.noDisputes')}
+            alert={disputes > 0}
+          />
+        )}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-background border rounded-xl p-5">
-          <h3 className="font-semibold mb-4">{t('dashboard.revenueWeek')}</h3>
-          <RevenueChart />
+      {/* Charts Row — only for finance permission */}
+      {canRevenue && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-background border rounded-xl p-5">
+            <h3 className="font-semibold mb-4">{t('dashboard.revenueWeek')}</h3>
+            <RevenueChart />
+          </div>
+          <div className="bg-background border rounded-xl p-5">
+            <h3 className="font-semibold mb-4">{t('dashboard.paymentMethods')}</h3>
+            <PaymentPieChart data={data?.revenueByPaymentMethod ?? []} />
+          </div>
         </div>
-        <div className="bg-background border rounded-xl p-5">
-          <h3 className="font-semibold mb-4">{t('dashboard.paymentMethods')}</h3>
-          <PaymentPieChart data={data?.revenueByPaymentMethod ?? []} />
-        </div>
-      </div>
+      )}
 
       {/* Bottom Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Products */}
-        <div className="bg-background border rounded-xl p-5">
+        {/* Top Products — only with revenue permission */}
+        {canRevenue && <div className="bg-background border rounded-xl p-5">
           <h3 className="font-semibold mb-4">{t('dashboard.topProducts')}</h3>
           <div className="space-y-2">
             {(data?.topProducts ?? []).slice(0, 10).map((p: any, i: number) => (
@@ -135,10 +162,10 @@ export default function AdminDashboard() {
             ))}
             {(data?.topProducts ?? []).length === 0 && <p className="text-sm text-muted-foreground">{t('dashboard.noData')}</p>}
           </div>
-        </div>
+        </div>}
 
-        {/* Low Stock */}
-        <div className="bg-background border rounded-xl p-5">
+        {/* Low Stock — visible for inventory permission */}
+        {canInventory && <div className="bg-background border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">{t('dashboard.lowStock')}</h3>
             <Link href={`/${locale}/admin/inventory?lowStockOnly=true`} className="text-xs text-primary hover:underline">
@@ -161,13 +188,13 @@ export default function AdminDashboard() {
             ))}
             {(data?.lowStock ?? []).length === 0 && <p className="text-sm text-muted-foreground">{t('dashboard.allStockOk')}</p>}
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Live Feeds */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Orders */}
-        <div className="bg-background border rounded-xl p-5">
+        {/* Recent Orders — only with orders permission */}
+        {canOrders && <div className="bg-background border rounded-xl p-5">
           <h3 className="font-semibold mb-4">{t('dashboard.recentOrders')}</h3>
           <div className="space-y-2">
             {(data?.recentOrders ?? []).map((order: any) => (
@@ -187,32 +214,34 @@ export default function AdminDashboard() {
               </Link>
             ))}
           </div>
-        </div>
+        </div>}
 
-        {/* Recent Audit Actions */}
-        <div className="bg-background border rounded-xl p-5">
-          <h3 className="font-semibold mb-4">{t('dashboard.recentActions')}</h3>
-          <div className="space-y-2">
-            {(data?.recentAuditActions ?? []).map((action: any) => (
-              <div key={action.id} className="text-sm py-2 border-b last:border-b-0">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-xs">{action.action}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(action.createdAt).toLocaleTimeString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'de' ? 'de-DE' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+        {/* Recent Audit Actions — only for audit permission */}
+        {hasPerm(adminUser, 'audit.view') && (
+          <div className="bg-background border rounded-xl p-5">
+            <h3 className="font-semibold mb-4">{t('dashboard.recentActions')}</h3>
+            <div className="space-y-2">
+              {(data?.recentAuditActions ?? []).map((action: any) => (
+                <div key={action.id} className="text-sm py-2 border-b last:border-b-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-xs">{action.action}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(action.createdAt).toLocaleTimeString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'de' ? 'de-DE' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {action.entityType}:{action.entityId?.slice(0, 8)} — IP: {action.ipAddress ?? '—'}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {action.entityType}:{action.entityId?.slice(0, 8)} — IP: {action.ipAddress ?? '—'}
-                </p>
-              </div>
-            ))}
-            {(data?.recentAuditActions ?? []).length === 0 && <p className="text-sm text-muted-foreground">{t('dashboard.noData')}</p>}
+              ))}
+              {(data?.recentAuditActions ?? []).length === 0 && <p className="text-sm text-muted-foreground">{t('dashboard.noData')}</p>}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Pending Returns */}
-      {(data?.pendingReturns?.count ?? 0) > 0 && (
+      {/* Pending Returns — only for returns permission */}
+      {hasPerm(adminUser, 'returns.view') && (data?.pendingReturns?.count ?? 0) > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <RotateCcw className="h-5 w-5 text-orange-600" />

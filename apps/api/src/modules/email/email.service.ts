@@ -66,13 +66,12 @@ export class EmailService {
     })
   }
 
-  async queueEmailVerification(to: string, lang: string, firstName: string, token: string): Promise<void> {
-    const verificationUrl = `${this.config.get('APP_URL', 'https://malak-bekleidung.com')}/verify-email?token=${token}`
+  async queueEmailVerification(to: string, lang: string, firstName: string, verifyUrl: string): Promise<void> {
     await this.enqueue({
       to,
       type: 'email-verification',
       lang,
-      data: { firstName, verificationUrl, expiresIn: '24 Stunden' },
+      data: { firstName, verificationUrl: verifyUrl, expiresIn: '24 Stunden' },
     })
   }
 
@@ -118,6 +117,10 @@ export class EmailService {
 
   async queueGuestInvite(to: string, lang: string, data: Record<string, unknown>): Promise<void> {
     await this.enqueue({ to, type: 'guest-invite' as any, lang, data })
+  }
+
+  async queueAdminAlert(to: string, lang: string, message: string): Promise<void> {
+    await this.enqueue({ to, type: 'admin-alert' as any, lang, data: { message, timestamp: new Date().toISOString() } })
   }
 
   // ── Render full HTML email ───────────────────────────────────

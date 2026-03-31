@@ -9,6 +9,7 @@ import {
 import { useLocale, useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { translateColor, getProductName } from '@/lib/locale-utils'
+import { useConfirm } from '@/components/ui/confirm-modal'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { AddColorModal, AddSizeModal, VariantMatrix } from '@/components/admin/add-variant-modals'
 import { PrintLabelButton } from '@/components/admin/label-printer'
@@ -25,6 +26,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   const locale = useLocale()
   const t = useTranslations('admin')
   const qc = useQueryClient()
+  const confirmDialog = useConfirm()
 
   const [activeLang, setActiveLang] = useState('de')
   const [translations, setTranslations] = useState<Record<string, { name: string; description: string; metaTitle: string; metaDesc: string }>>({
@@ -65,7 +67,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      await api.put(`/products/${id}`, {
+      await api.put(`/admin/products/${id}`, {
         basePrice, salePrice,
         translations: Object.entries(translations)
           .filter(([, t]) => t.name)
@@ -118,9 +120,14 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   const productImages = product.images ?? []
   const productColors = [...new Map((product.variants ?? []).map((v: any) => [v.color, v.colorHex])).entries()].map(([name, hex]) => ({ name: name as string, hex: hex as string }))
 
-  // Group variants by color
+  // Group variants by color, sorted by size
+  const sizeSort = (a: any, b: any) => {
+    const na = parseFloat(a.size) || 0
+    const nb = parseFloat(b.size) || 0
+    return na - nb || (a.size ?? '').localeCompare(b.size ?? '')
+  }
   const colorGroups = new Map<string, any[]>()
-  for (const v of product.variants ?? []) {
+  for (const v of (product.variants ?? []).slice().sort(sizeSort)) {
     const key = v.color ?? 'default'
     if (!colorGroups.has(key)) colorGroups.set(key, [])
     colorGroups.get(key)!.push(v)
@@ -254,6 +261,14 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
           {locale === 'ar' ? 'تفاصيل المتغيرات' : 'Varianten-Details'} ({product.variants?.length ?? 0})
         </div>
         <div className="divide-y">
+          {/* Column headers */}
+          <div className="flex items-center gap-3 px-5 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <span className="w-6">{locale === 'ar' ? 'مقاس' : 'Gr.'}</span>
+            <span className="flex-1">SKU</span>
+            <span>{locale === 'ar' ? 'السعر النهائي' : 'Endpreis'}</span>
+            <span className="w-16 text-center">{locale === 'ar' ? 'تعديل ±' : 'Aufpreis ±'}</span>
+            <span className="w-16" />
+          </div>
           {[...colorGroups.entries()].map(([color, variants]) => {
             const hex = variants[0]?.colorHex ?? '#999'
             return (
@@ -274,21 +289,30 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                     <div key={v.id} className="flex items-center gap-3 px-5 py-2 group hover:bg-muted/10 transition-colors">
                       <span className="inline-flex items-center justify-center h-6 w-6 rounded-lg bg-muted text-[11px] font-bold">{v.size}</span>
                       <span className="font-mono text-[11px] text-muted-foreground flex-1 truncate">{v.sku}</span>
-                      <div className="w-24 text-end">
-                        {salePrice ? (
-                          <>
-                            <span className="text-xs font-bold text-red-600">{`€${salePrice.toFixed(2)}`}</span>
-                            <span className="text-[10px] text-muted-foreground line-through ml-1">{`€${basePrice.toFixed(2)}`}</span>
-                          </>
-                        ) : (
-                          <span className="text-xs font-medium">{`€${basePrice.toFixed(2)}`}</span>
-                        )}
-                        {Number(v.priceModifier ?? 0) !== 0 && (
-                          <span className="text-[9px] text-muted-foreground block">{Number(v.priceModifier) > 0 ? '+' : ''}{Number(v.priceModifier).toFixed(2)}</span>
-                        )}
+                      <div className="flex items-center gap-2">
+                        <div className="text-end">
+                          <span className="text-xs font-medium">€{customerPrice.toFixed(2)}</span>
+                          {salePrice && <span className="text-[9px] text-muted-foreground line-through ml-1">€{basePrice.toFixed(2)}</span>}
+                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          defaultValue={Number(v.priceModifier ?? 0)}
+                          className="w-16 h-7 text-center text-[11px] rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          title={locale === 'ar' ? 'تعديل السعر (+ أو -)' : 'Preisanpassung (+/-)'}
+                          placeholder="±0"
+                          onBlur={(e) => {
+                            const val = parseFloat(e.target.value)
+                            if (!isNaN(val) && val !== Number(v.priceModifier ?? 0)) {
+                              api.patch(`/admin/products/variants/${v.id}`, { priceModifier: val })
+                                .then(() => qc.invalidateQueries({ queryKey: ['admin-product'] }))
+                            }
+                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                        />
                       </div>
                       <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: customerPrice, stock }} productName={getProductName(product.translations, 'de')} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
-                      <button onClick={() => { if (confirm(t('inventory.deleteVariantConfirm'))) deleteMut.mutate(v.id) }} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button onClick={async () => { const ok = await confirmDialog({ title: t('inventory.deleteVariant'), description: t('inventory.deleteVariantConfirm'), variant: 'danger', confirmLabel: t('categories.delete'), cancelLabel: t('categories.cancel') }); if (ok) deleteMut.mutate(v.id) }} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   )
                 })}

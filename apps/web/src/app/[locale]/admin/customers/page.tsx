@@ -140,6 +140,11 @@ export default function AdminCustomersPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-customers'] }); setSelectedIds(new Set()) },
   })
 
+  const unblockOneMut = useMutation({
+    mutationFn: async (id: string) => { await api.post(`/admin/customers/${id}/unblock`) },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-customers'] }),
+  })
+
   // Helpers
   const toggleSort = (key: string) => { if (sortBy === key) setSortDir(sortDir === 'desc' ? 'asc' : 'desc'); else { setSortBy(key); setSortDir('desc') } }
   const toggleSelect = (id: string) => { const next = new Set(selectedIds); next.has(id) ? next.delete(id) : next.add(id); setSelectedIds(next) }
@@ -336,8 +341,12 @@ export default function AdminCustomersPage() {
                   <td className="px-4 py-3.5 text-muted-foreground text-[13px]">{fmtDate(u.createdAt)}</td>
                   <td className="px-4 py-3.5 text-center">
                     {u.isBlocked
-                      ? <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><ShieldAlert className="h-3 w-3" />{t('users.blocked')}</span>
-                      : <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><ShieldCheck className="h-3 w-3" />{t('users.activeStatus')}</span>}
+                      ? <button onClick={(e) => { e.stopPropagation(); unblockOneMut.mutate(u.id) }} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:ring-2 hover:ring-red-300 hover:ring-offset-1 cursor-pointer transition-all" title={locale === 'ar' ? 'انقر للإلغاء' : 'Klick zum Entsperren'}><ShieldAlert className="h-3 w-3" />{t('users.blocked')}</button>
+                      : u.lockedUntil && new Date(u.lockedUntil) > new Date()
+                        ? <button onClick={(e) => { e.stopPropagation(); unblockOneMut.mutate(u.id) }} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 hover:ring-2 hover:ring-orange-300 hover:ring-offset-1 cursor-pointer transition-all" title={locale === 'ar' ? 'انقر للإلغاء' : 'Klick zum Entsperren'}><ShieldAlert className="h-3 w-3" />{locale === 'ar' ? 'مقفل' : 'Gesperrt'}</button>
+                        : !u.isActive
+                          ? <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{locale === 'ar' ? 'غير نشط' : 'Inaktiv'}</span>
+                          : <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700"><ShieldCheck className="h-3 w-3" />{t('users.activeStatus')}</span>}
                   </td>
                   <td className="px-4 py-3.5">
                     <Link href={`/${locale}/admin/customers/${u.id}`} className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all opacity-0 group-hover:opacity-100 inline-flex"><Eye className="h-4 w-4" /></Link>

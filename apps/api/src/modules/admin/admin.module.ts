@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { PermissionGuard } from '../../common/permissions/permission.guard'
 import { PrismaModule } from '../../prisma/prisma.module'
 import { PaymentsModule } from '../payments/payments.module'
 import { EmailModule } from '../email/email.module'
@@ -28,6 +29,7 @@ import { AdminStaffService } from './services/admin-staff.service'
     AdminReturnsService,
     AdminStaffService,
     ShippingZonesService,
+    PermissionGuard,
   ],
   exports: [AuditService],
 })

@@ -87,16 +87,63 @@ export class OrdersService {
     }
 
     try {
-      // 2. Auto-resolve warehouse if not provided
+      // 2. Auto-resolve warehouse: pick the warehouse that has available stock
       const defaultWarehouse = await this.prisma.warehouse.findFirst({ where: { isDefault: true, isActive: true }, select: { id: true } })
       const defaultWarehouseId = defaultWarehouse?.id
       for (const item of dto.items) {
-        if (!item.warehouseId && defaultWarehouseId) {
-          item.warehouseId = defaultWarehouseId
+        if (!item.warehouseId) {
+          // Find a warehouse with available stock for this variant
+          const bestInventory = await this.prisma.inventory.findFirst({
+            where: {
+              variantId: item.variantId,
+              warehouse: { isActive: true },
+            },
+            orderBy: [
+              { warehouse: { isDefault: 'desc' } }, // prefer default warehouse
+              { quantityOnHand: 'desc' },            // then highest stock
+            ],
+            select: { warehouseId: true, quantityOnHand: true, quantityReserved: true },
+          })
+          if (bestInventory && (bestInventory.quantityOnHand - bestInventory.quantityReserved) >= item.quantity) {
+            item.warehouseId = bestInventory.warehouseId
+          } else {
+            // Fallback to default warehouse (reservation will fail with clear error)
+            item.warehouseId = defaultWarehouseId ?? ''
+          }
         }
       }
 
-      // 3. Varianten validieren + Preise snapshot-en
+      // 3. STOCK CHECK — Block overselling BEFORE creating order
+      const locale = dto.locale ?? 'de'
+      for (const item of dto.items) {
+        const totalAvailable = await this.prisma.inventory.aggregate({
+          where: { variantId: item.variantId, warehouse: { isActive: true } },
+          _sum: { quantityOnHand: true, quantityReserved: true },
+        })
+        const available = (totalAvailable._sum.quantityOnHand ?? 0) - (totalAvailable._sum.quantityReserved ?? 0)
+        if (available < item.quantity) {
+          const variant = await this.prisma.productVariant.findUnique({
+            where: { id: item.variantId },
+            select: { color: true, size: true, product: { select: { translations: { where: { language: (locale ?? 'de') as any }, take: 1 } } } },
+          })
+          const productName = variant?.product?.translations?.[0]?.name ?? ''
+          const detail = [variant?.color, variant?.size].filter(Boolean).join(' / ')
+          const msg = available <= 0
+            ? locale === 'ar'
+              ? `عذراً، "${productName}" (${detail}) غير متوفر حالياً`
+              : locale === 'en'
+                ? `Sorry, "${productName}" (${detail}) is currently out of stock`
+                : `"${productName}" (${detail}) ist leider nicht mehr verfügbar`
+            : locale === 'ar'
+              ? `عذراً، يتوفر فقط ${available} قطعة من "${productName}" (${detail})`
+              : locale === 'en'
+                ? `Sorry, only ${available} piece(s) of "${productName}" (${detail}) available`
+                : `Nur noch ${available} Stück von "${productName}" (${detail}) verfügbar`
+          throw new ConflictException(msg)
+        }
+      }
+
+      // 4. Varianten validieren + Preise snapshot-en
       const variantIds = dto.items.map((i) => i.variantId)
       const variants = await this.prisma.productVariant.findMany({
         where: { id: { in: variantIds }, isActive: true },
@@ -188,15 +235,39 @@ export class OrdersService {
       // 7. Bestellnummer generieren (atomic counter)
       const orderNumber = await this.generateOrderNumber()
 
-      // 8. Bestellung + Items anlegen
+      // 8. Auto-create guest customer if no userId
+      let resolvedUserId = userId
+      if (!resolvedUserId && dto.guestEmail) {
+        const existing = await this.prisma.user.findUnique({ where: { email: dto.guestEmail.toLowerCase() } })
+        if (existing) {
+          resolvedUserId = existing.id
+        } else {
+          const guest = await this.prisma.user.create({
+            data: {
+              email: dto.guestEmail.toLowerCase(),
+              firstName: dto.guestFirstName ?? '',
+              lastName: dto.guestLastName ?? '',
+              role: 'customer',
+              preferredLang: (dto.locale ?? 'de') as any,
+              isActive: true,
+              isVerified: false,
+              // No passwordHash = guest account (can claim later via "Konto erstellen")
+            },
+          })
+          resolvedUserId = guest.id
+          this.logger.log(`[${correlationId}] Guest customer created: ${guest.email} → ${guest.id}`)
+        }
+      }
+
+      // 9. Bestellung + Items anlegen
       const reservationSessionId = randomUUID()
 
       const order = await this.prisma.$transaction(async (tx) => {
         const created = await tx.order.create({
           data: {
             orderNumber,
-            userId,
-            guestEmail: dto.guestEmail,
+            userId: resolvedUserId,
+            guestEmail: !resolvedUserId ? dto.guestEmail : undefined,
             shippingAddressId: dto.shippingAddressId,
             status: 'pending',
             channel: (dto.channel ?? 'website') as any,
@@ -207,7 +278,7 @@ export class OrdersService {
             totalAmount,
             shippingZone: shipping.zoneName,
             couponCode: validatedCouponCode,
-            fulfillmentWarehouseId: defaultWarehouse?.id ?? null,
+            fulfillmentWarehouseId: dto.items[0]?.warehouseId ?? defaultWarehouse?.id ?? null,
             notes: JSON.stringify({
               ...(dto.notes ? { text: dto.notes } : {}),
               ...(dto.guestFirstName ? { guestFirstName: dto.guestFirstName } : {}),
@@ -266,16 +337,18 @@ export class OrdersService {
           ),
         )
 
-        // reservationIds[0] = Rückgabe des InventoryListeners
-        const rawIds = reservationIds?.[0]
-        const flatIds: string[] = Array.isArray(rawIds) ? rawIds.filter((id): id is string => typeof id === 'string') : []
+        // emitAsync returns results from ALL listeners — find the one with reservation IDs
+        const flatIds: string[] = (reservationIds ?? [])
+          .flat(2)
+          .filter((id): id is string => typeof id === 'string' && id.length > 10)
 
-        // Bestellnummer + reservationIds in JSON notes speichern für Storno
+        // Merge reservationIds into existing notes (don't overwrite guest data)
         if (flatIds.length > 0) {
           try {
+            const existingNotes = order.notes ? JSON.parse(order.notes as string) : {}
             await this.prisma.order.update({
               where: { id: order.id },
-              data: { notes: JSON.stringify({ reservationIds: flatIds }) },
+              data: { notes: JSON.stringify({ ...existingNotes, reservationIds: flatIds }) },
             })
           } catch {
             // Non-critical: notes save failed, order still valid
@@ -437,10 +510,45 @@ export class OrdersService {
     // Bestätigung → Inventory-Bestand physisch abziehen
     if (dto.status === 'confirmed') {
       const reservationIds = this.extractReservationIds(order.notes)
-      await this.eventEmitter.emitAsync(
-        ORDER_EVENTS.CONFIRMED,
-        new OrderConfirmedEvent(id, order.orderNumber, correlationId, reservationIds),
-      )
+      if (reservationIds.length > 0) {
+        // Normal path: confirm existing reservations
+        await this.eventEmitter.emitAsync(
+          ORDER_EVENTS.CONFIRMED,
+          new OrderConfirmedEvent(id, order.orderNumber, correlationId, reservationIds),
+        )
+      } else {
+        // Fallback: no reservations exist → deduct stock directly
+        this.logger.warn(`[${correlationId}] No reservationIds for ${order.orderNumber} — deducting stock directly`)
+        const fullOrder = await this.prisma.order.findUnique({
+          where: { id },
+          include: { items: true },
+        })
+        if (fullOrder) {
+          for (const item of fullOrder.items) {
+            const whId = fullOrder.fulfillmentWarehouseId
+            if (!whId) continue
+            const inv = await this.prisma.inventory.findUnique({
+              where: { variantId_warehouseId: { variantId: item.variantId, warehouseId: whId } },
+            })
+            if (inv && inv.quantityOnHand >= item.quantity) {
+              await this.prisma.$transaction([
+                this.prisma.inventory.update({
+                  where: { variantId_warehouseId: { variantId: item.variantId, warehouseId: whId } },
+                  data: { quantityOnHand: { decrement: item.quantity } },
+                }),
+                this.prisma.inventoryMovement.create({
+                  data: {
+                    variantId: item.variantId, warehouseId: whId, type: 'sale_online',
+                    quantity: -item.quantity, quantityBefore: inv.quantityOnHand,
+                    quantityAfter: inv.quantityOnHand - item.quantity,
+                    referenceId: id, notes: `Direkter Abzug — Bestellung ${order.orderNumber}`, createdBy: performedBy,
+                  },
+                }),
+              ])
+            }
+          }
+        }
+      }
     }
 
     // Storno → Inventory-Bestand freigeben

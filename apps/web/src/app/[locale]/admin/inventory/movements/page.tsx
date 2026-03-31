@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, ArrowRightLeft, PackagePlus, RotateCcw,
   ShoppingBag, ChevronLeft, ChevronRight, Search, Calendar,
-  Package, AlertTriangle, Filter, X,
+  Package, AlertTriangle, Filter, X, User, ChevronDown,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { translateColor, translateMovement, getProductName } from '@/lib/locale-utils'
@@ -63,6 +63,7 @@ export default function MovementsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const pageSize = 40
 
   const { data: warehouses } = useQuery({
@@ -91,22 +92,52 @@ export default function MovementsPage() {
   const totalPages = Math.ceil(total / pageSize)
   const hasFilters = warehouseFilter || typeFilter || search
 
-  // Group movements by date
+  // Group movements by date, then by product+type within each date
   const grouped = useMemo(() => {
-    const groups: { dateKey: string; label: string; items: any[] }[] = []
-    const map = new Map<string, any[]>()
+    const dateGroups: { dateKey: string; label: string; productGroups: { key: string; productName: string; productImage: string | null; type: string; totalQty: number; items: any[] }[] }[] = []
+    const dateMap = new Map<string, any[]>()
 
     for (const m of movements) {
       const key = getDateKey(m.createdAt)
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(m)
+      if (!dateMap.has(key)) dateMap.set(key, [])
+      dateMap.get(key)!.push(m)
     }
 
-    for (const [dateKey, items] of map) {
-      groups.push({ dateKey, label: getDateLabel(dateKey, locale), items })
+    for (const [dateKey, items] of dateMap) {
+      // Sub-group by productName + type
+      const pgMap = new Map<string, any[]>()
+      for (const item of items) {
+        const pName = item.productName ? getProductName(item.productName, locale) : item.sku || 'Unknown'
+        const pgKey = `${pName}__${item.type}`
+        if (!pgMap.has(pgKey)) pgMap.set(pgKey, [])
+        pgMap.get(pgKey)!.push(item)
+      }
+
+      const productGroups = [...pgMap.entries()].map(([pgKey, pgItems]) => {
+        const first = pgItems[0]
+        const pName = first.productName ? getProductName(first.productName, locale) : first.sku || ''
+        return {
+          key: `${dateKey}__${pgKey}`,
+          productName: pName,
+          productImage: first.productImage,
+          type: first.type,
+          totalQty: pgItems.reduce((s: number, i: any) => s + i.quantity, 0),
+          items: pgItems,
+        }
+      })
+
+      dateGroups.push({ dateKey, label: getDateLabel(dateKey, locale), productGroups })
     }
-    return groups
+    return dateGroups
   }, [movements, locale])
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
 
   const clearFilters = () => {
     setWarehouseFilter('')
@@ -232,81 +263,159 @@ export default function MovementsPage() {
             )}
           </div>
         ) : (
-          grouped.map((group) => (
-            <div key={group.dateKey}>
+          grouped.map((dateGroup) => (
+            <div key={dateGroup.dateKey}>
               {/* Date header */}
               <div className="flex items-center gap-3 mb-3">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60">
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold text-muted-foreground">{group.label}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">{dateGroup.label}</span>
                 </div>
                 <div className="flex-1 h-px bg-border" />
-                <span className="text-[11px] text-muted-foreground/60">{group.items.length} {locale === 'ar' ? 'حركة' : locale === 'en' ? 'entries' : 'Einträge'}</span>
+                <span className="text-[11px] text-muted-foreground/60">
+                  {dateGroup.productGroups.reduce((s, pg) => s + pg.items.length, 0)} {locale === 'ar' ? 'حركة' : locale === 'en' ? 'entries' : 'Einträge'}
+                </span>
               </div>
 
-              {/* Movements */}
-              <div className="bg-background border rounded-2xl overflow-hidden shadow-sm">
-                {group.items.map((m: any, i: number) => {
-                  const cfg = TYPE_CONFIG[m.type] ?? { icon: RotateCcw, bg: 'bg-muted', text: 'text-muted-foreground', ring: 'ring-muted' }
+              {/* Product groups */}
+              <div className="bg-background border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
+                {dateGroup.productGroups.map((pg) => {
+                  const cfg = TYPE_CONFIG[pg.type] ?? { icon: RotateCcw, bg: 'bg-muted', text: 'text-muted-foreground', ring: 'ring-muted' }
                   const Icon = cfg.icon
-                  const isPositive = m.quantity > 0
-                  const productName = m.productName ? getProductName(m.productName, locale) : ''
+                  const isPositive = pg.totalQty > 0
+                  const isZero = pg.totalQty === 0
+                  const isSingle = pg.items.length === 1
+                  const isExpanded = expandedGroups.has(pg.key)
+                  const firstItem = pg.items[0]
+                  // Truncate variant preview to max 3
+                  const variantPreview = pg.items.slice(0, 3).map((i: any) => `${translateColor(i.color, locale)}/${i.size}`).join(', ')
+                  const moreCount = pg.items.length > 3 ? pg.items.length - 3 : 0
+                  // Collect unique warehouses
+                  const warehouses = [...new Set(pg.items.map((i: any) => i.warehouseName).filter(Boolean))]
 
                   return (
-                    <div
-                      key={m.id}
-                      className={`flex items-center gap-4 px-5 py-3.5 transition-all hover:bg-muted/30 cursor-default group ${
-                        i < group.items.length - 1 ? 'border-b border-border/50' : ''
-                      }`}
-                      style={{ animationDelay: `${i * 20}ms`, animation: 'fadeIn 300ms ease-out both' }}
-                    >
-                      {/* Icon */}
-                      <div className={`h-10 w-10 rounded-xl ${cfg.bg} ${cfg.text} flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105`}>
-                        <Icon className="h-[18px] w-[18px]" />
-                      </div>
-
-                      {/* Main info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[13px] font-semibold">{translateMovement(m.type, locale)}</span>
-                          {m.warehouseName && (
-                            <span className="px-2 py-0.5 rounded-md bg-muted text-[10px] font-medium text-muted-foreground">
-                              {m.warehouseName}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                          {m.sku && <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded">{m.sku}</span>}
-                          {m.color && (
-                            <span>{translateColor(m.color, locale)}{m.size ? ` / ${m.size}` : ''}</span>
-                          )}
-                          {productName && <span className="truncate max-w-[200px] opacity-70">{productName}</span>}
-                        </div>
-                        {m.notes && (
-                          <div className="text-[10px] text-muted-foreground/50 mt-0.5 truncate max-w-[300px]">{m.notes}</div>
-                        )}
-                      </div>
-
-                      {/* Quantity badge */}
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <div className={`inline-flex items-center px-3 py-1 rounded-lg text-sm font-bold tabular-nums ${
-                          isPositive
-                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60'
-                            : 'bg-red-50 text-red-600 ring-1 ring-red-200/60'
-                        }`}>
-                          {isPositive ? '+' : ''}{m.quantity}
-                        </div>
-                        {m.quantityBefore != null && m.quantityAfter != null && (
-                          <div className="text-[10px] text-muted-foreground/60 font-mono tabular-nums">
-                            {m.quantityBefore} → {m.quantityAfter}
+                    <div key={pg.key}>
+                      {/* Group header — clickable if multiple items */}
+                      <div
+                        onClick={() => !isSingle && toggleGroup(pg.key)}
+                        className={`flex items-center gap-3 px-4 py-3 transition-all hover:bg-muted/30 ${!isSingle ? 'cursor-pointer' : 'cursor-default'}`}
+                        style={{ animation: 'fadeIn 300ms ease-out both' }}
+                      >
+                        {/* Product image */}
+                        {pg.productImage ? (
+                          <img src={pg.productImage} alt="" className="h-11 w-11 rounded-xl object-cover flex-shrink-0" />
+                        ) : (
+                          <div className={`h-11 w-11 rounded-xl ${cfg.bg} ${cfg.text} flex items-center justify-center flex-shrink-0`}>
+                            <Icon className="h-[18px] w-[18px]" />
                           </div>
                         )}
+
+                        {/* Main info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[13px] font-bold truncate max-w-[220px]">{pg.productName || firstItem.sku}</span>
+                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
+                              {translateMovement(pg.type, locale)}
+                            </span>
+                          </div>
+                          {isSingle ? (
+                            <>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
+                                <span className="font-mono text-[10px]">{firstItem.sku}</span>
+                                {firstItem.color && (
+                                  <>
+                                    <span className="text-muted-foreground/30">·</span>
+                                    <span>{translateColor(firstItem.color, locale)}{firstItem.size ? ` / ${firstItem.size}` : ''}</span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground/50">
+                                {firstItem.warehouseName && <span>{firstItem.warehouseName}</span>}
+                                {firstItem.createdByName && (
+                                  <>
+                                    {firstItem.warehouseName && <span className="text-muted-foreground/20">·</span>}
+                                    <span className="inline-flex items-center gap-0.5"><User className="h-2.5 w-2.5" />{firstItem.createdByName}</span>
+                                  </>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
+                                <span>{pg.items.length} {locale === 'ar' ? 'متغير' : locale === 'en' ? 'variants' : 'Varianten'}</span>
+                                <span className="text-muted-foreground/30">·</span>
+                                <span className="truncate max-w-[250px]">{variantPreview}{moreCount > 0 ? ` +${moreCount}` : ''}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground/50">
+                                {warehouses.length > 0 && <span>{warehouses.join(', ')}</span>}
+                                {firstItem.createdByName && (
+                                  <>
+                                    {warehouses.length > 0 && <span className="text-muted-foreground/20">·</span>}
+                                    <span className="inline-flex items-center gap-0.5"><User className="h-2.5 w-2.5" />{firstItem.createdByName}</span>
+                                  </>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Quantity + time + expand */}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          {!isSingle && (
+                            <ChevronDown className={`h-4 w-4 text-muted-foreground/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          )}
+                          <div className="w-[52px] text-end text-xs text-muted-foreground/50 tabular-nums">
+                            {getTimeOnly(firstItem.createdAt, locale)}
+                          </div>
+                          <div className="w-[64px] flex flex-col items-center gap-0.5">
+                            <div className={`w-full text-center px-2 py-1 rounded-xl text-base font-bold tabular-nums ${
+                              isZero
+                                ? 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/60'
+                                : isPositive
+                                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60'
+                                  : 'bg-red-50 text-red-600 ring-1 ring-red-200/60'
+                            }`}>
+                              {isZero ? '±0' : isPositive ? `+${pg.totalQty}` : pg.totalQty}
+                            </div>
+                            {isSingle && firstItem.quantityBefore != null && (
+                              <div className="text-[11px] text-muted-foreground/50 font-mono tabular-nums">
+                                {firstItem.quantityBefore} → {firstItem.quantityAfter}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Time */}
-                      <div className="text-[11px] text-muted-foreground/60 flex-shrink-0 w-14 text-end tabular-nums">
-                        {getTimeOnly(m.createdAt, locale)}
-                      </div>
+                      {/* Expanded variants */}
+                      {!isSingle && isExpanded && (
+                        <div className="bg-muted/20 divide-y divide-border/30">
+                          {pg.items.map((m: any) => (
+                            <div key={m.id} className="flex items-center gap-3 px-4 ltr:pl-[72px] rtl:pr-[72px] py-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                  <span className="font-mono text-[10px]">{m.sku}</span>
+                                  <span className="text-muted-foreground/25">·</span>
+                                  <span>{translateColor(m.color, locale)}{m.size ? ` / ${m.size}` : ''}</span>
+                                  {m.warehouseName && (
+                                    <>
+                                      <span className="text-muted-foreground/25">·</span>
+                                      <span className="text-muted-foreground/50">{m.warehouseName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className={`px-2 py-0.5 rounded text-xs font-bold tabular-nums ${m.quantity > 0 ? 'text-emerald-600' : m.quantity < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                {m.quantity > 0 ? '+' : ''}{m.quantity}
+                              </div>
+                              {m.quantityBefore != null && (
+                                <div className="text-[10px] text-muted-foreground/40 font-mono tabular-nums w-16 text-end">
+                                  {m.quantityBefore} → {m.quantityAfter}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

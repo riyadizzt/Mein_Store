@@ -82,6 +82,7 @@ export class AdminUsersService {
         select: {
           id: true, email: true, firstName: true, lastName: true, phone: true,
           role: true, isActive: true, isBlocked: true, isVerified: true,
+          lockedUntil: true, loginAttempts: true,
           preferredLang: true, passwordHash: true, profileImageUrl: true,
           tags: true, createdAt: true, lastLoginAt: true,
           _count: { select: { orders: true, wishlistItems: true, reviews: true } },
@@ -106,6 +107,7 @@ export class AdminUsersService {
     let result = users.map((u) => ({
       id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName,
       phone: u.phone, role: u.role, isActive: u.isActive, isBlocked: u.isBlocked,
+      lockedUntil: u.lockedUntil, loginAttempts: u.loginAttempts,
       isVerified: u.isVerified, preferredLang: u.preferredLang,
       isGuest: !u.passwordHash, profileImageUrl: u.profileImageUrl,
       tags: (u.tags as string[]) ?? [],
@@ -446,12 +448,16 @@ export class AdminUsersService {
   }
 
   async unblockUser(userId: string, adminId: string, ipAddress: string) {
-    const user = await this.prisma.user.findFirst({ where: { id: userId, isBlocked: true } })
-    if (!user) throw new NotFoundException('User not found or not blocked')
+    const user = await this.prisma.user.findFirst({ where: { id: userId } })
+    if (!user) throw new NotFoundException('User not found')
 
-    await this.prisma.user.update({ where: { id: userId }, data: { isBlocked: false, blockedAt: null, blockReason: null, blockedBy: null } })
+    // Reset both manual block AND login lock
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { isBlocked: false, blockedAt: null, blockReason: null, blockedBy: null, loginAttempts: 0, lockedUntil: null },
+    })
     await this.logActivity(userId, 'unblocked', { adminId })
-    await this.audit.log({ adminId, action: 'USER_UNBLOCKED', entityType: 'user', entityId: userId, changes: { before: { isBlocked: true }, after: { isBlocked: false } }, ipAddress })
+    await this.audit.log({ adminId, action: 'USER_UNBLOCKED', entityType: 'user', entityId: userId, changes: { before: { isBlocked: user.isBlocked, lockedUntil: user.lockedUntil }, after: { isBlocked: false, lockedUntil: null } }, ipAddress })
   }
 
   async bulkBlock(userIds: string[], reason: string, adminId: string, ipAddress: string) {

@@ -30,6 +30,15 @@ enum UserRole {
   super_admin
 }
 
+// Staff-specific role (only for admin/warehouse_staff users)
+enum StaffRole {
+  seller          // Verkäufer
+  warehouse       // Lagerarbeiter
+  manager         // Manager (alles ansehen, bearbeiten, nicht löschen)
+  full_access     // Wie Admin, aber kein Mitarbeiter/System-Zugriff
+  custom          // Benutzerdefiniert
+}
+
 enum Gender {
   men
   women
@@ -236,6 +245,14 @@ model User {
   blockReason          String?   @map("block_reason")
   blockedBy            String?   @map("blocked_by")
   tags                 Json      @default("[]") // ["VIP", "Stammkunde", "Problem"]
+  recoveryEmail        String?   @map("recovery_email")  // Emergency-only, DB-editable only
+  emailVerifyToken     String?   @map("email_verify_token")
+  emailVerifyExpires   DateTime? @map("email_verify_expires")
+  staffRole            StaffRole? @map("staff_role")
+  permissions          Json?      @default("[]")  // ["orders.view","orders.edit",...]
+  inviteToken          String?    @unique @map("invite_token")
+  inviteExpiresAt      DateTime?  @map("invite_expires_at")
+  invitedBy            String?    @map("invited_by")
   scheduledDeletionAt  DateTime? @map("scheduled_deletion_at")
   anonymizedAt         DateTime? @map("anonymized_at")
   deletedAt            DateTime? @map("deleted_at")

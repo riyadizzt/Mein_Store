@@ -409,7 +409,11 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
   const qc = useQueryClient()
 
   const colors = [...new Map(variants.map((v: any) => [v.color, v.colorHex])).entries()]
-  const sizes = [...new Set(variants.map((v: any) => v.size))]
+  const sizes = [...new Set(variants.map((v: any) => v.size))].sort((a, b) => {
+    const na = parseFloat(a) || 0
+    const nb = parseFloat(b) || 0
+    return na - nb || (a ?? '').localeCompare(b ?? '')
+  })
 
   const getVariant = (color: string, size: string) => variants.find((v: any) => v.color === color && v.size === size)
 

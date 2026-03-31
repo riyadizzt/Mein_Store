@@ -6,13 +6,14 @@ import { useAuthStore } from '@/store/auth-store'
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 /**
- * AuthProvider — runs on app mount to restore session from HttpOnly cookie.
- * Calls POST /auth/refresh → if cookie exists, gets new accessToken → user is logged in.
- * If no cookie or expired → user stays logged out (no error shown).
+ * AuthProvider — restores BOTH sessions (admin + customer) independently.
+ * Each session has its own cookie and token slot.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setUser = useAuthStore((s) => s.setUser)
   const setAccessToken = useAuthStore((s) => s.setAccessToken)
+  const setAdminUser = useAuthStore((s) => s.setAdminUser)
+  const setAdminAccessToken = useAuthStore((s) => s.setAdminAccessToken)
   const initialized = useRef(false)
   const [ready, setReady] = useState(false)
 
@@ -20,40 +21,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (initialized.current) return
     initialized.current = true
 
-    const restore = async () => {
+    const restoreSession = async (tokenType: 'admin' | 'customer') => {
       try {
         const refreshRes = await fetch(`${API_URL}/api/v1/auth/refresh`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ tokenType }),
         })
-        if (!refreshRes.ok) { setReady(true); return }
+        if (!refreshRes.ok) return
 
         const refreshData = await refreshRes.json()
         const accessToken = refreshData?.data?.accessToken
-        if (!accessToken) { setReady(true); return }
-
-        setAccessToken(accessToken)
+        if (!accessToken) return
 
         const meRes = await fetch(`${API_URL}/api/v1/auth/me`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           credentials: 'include',
         })
-        if (meRes.ok) {
-          const meData = await meRes.json()
-          setUser(meData?.data ?? meData)
+        if (!meRes.ok) return
+
+        const meData = await meRes.json()
+        const user = meData?.data ?? meData
+
+        if (tokenType === 'admin' && ['admin', 'super_admin', 'warehouse_staff'].includes(user.role)) {
+          setAdminAccessToken(accessToken)
+          setAdminUser(user)
+        } else if (tokenType === 'customer') {
+          setAccessToken(accessToken)
+          setUser(user)
         }
       } catch {
-        // No session — normal for first-time visitors
+        // No session for this type — normal
       }
-      setReady(true)
     }
 
-    restore()
-  }, [setUser, setAccessToken])
+    // Restore both sessions in parallel
+    Promise.all([
+      restoreSession('customer'),
+      restoreSession('admin'),
+    ]).finally(() => setReady(true))
+  }, [setUser, setAccessToken, setAdminUser, setAdminAccessToken])
 
-  // Prevent flash of unauthenticated content
   if (!ready) return null
 
   return <>{children}</>

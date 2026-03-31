@@ -23,11 +23,21 @@ export default function RegisterPage() {
 
   const validate = () => {
     const e: Record<string, string> = {}
-    if (!form.firstName) e.firstName = 'Pflichtfeld'
-    if (!form.lastName) e.lastName = 'Pflichtfeld'
+    const required = locale === 'ar' ? 'حقل مطلوب' : locale === 'en' ? 'Required' : 'Pflichtfeld'
+    if (!form.firstName) e.firstName = required
+    if (!form.lastName) e.lastName = required
     if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = t('errors.invalidEmail')
     if (form.password.length < 8) e.password = t('errors.passwordTooShort')
-    if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwörter stimmen nicht überein'
+    if (!/(?=.*[0-9])(?=.*[!@#$%^&*])/.test(form.password) && form.password.length >= 8) {
+      e.password = locale === 'ar' ? 'يجب أن تحتوي كلمة المرور على رقم وحرف خاص (!@#$%^&*)'
+        : locale === 'en' ? 'Password must contain a number and special character (!@#$%^&*)'
+        : 'Passwort muss eine Zahl und ein Sonderzeichen enthalten (!@#$%^&*)'
+    }
+    if (form.password !== form.confirmPassword) {
+      e.confirmPassword = locale === 'ar' ? 'كلمات المرور غير متطابقة'
+        : locale === 'en' ? 'Passwords do not match'
+        : 'Passwörter stimmen nicht überein'
+    }
     if (!gdprConsent) e.gdpr = t('errors.gdprRequired')
     setErrors(e)
     return Object.keys(e).length === 0
@@ -51,7 +61,8 @@ export default function RegisterPage() {
   }
 
   const apiError = register.error as any
-  const apiErrorMsg = apiError?.response?.data?.message
+  const rawMsg = apiError?.response?.data?.message ?? apiError?.message
+  const apiErrorMsg = Array.isArray(rawMsg) ? rawMsg.join('. ') : (typeof rawMsg === 'string' ? rawMsg : null)
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center py-12">
@@ -60,7 +71,7 @@ export default function RegisterPage() {
 
         {apiErrorMsg && (
           <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-sm text-destructive" role="alert">
-            {typeof apiErrorMsg === 'string' ? apiErrorMsg : apiErrorMsg[locale] ?? apiErrorMsg.de}
+            {apiErrorMsg}
           </div>
         )}
 
@@ -98,7 +109,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="text-sm font-medium mb-1.5 block">Passwort bestätigen</label>
+            <label htmlFor="confirmPassword" className="text-sm font-medium mb-1.5 block">{locale === 'ar' ? 'تأكيد كلمة المرور' : locale === 'en' ? 'Confirm password' : 'Passwort bestätigen'}</label>
             <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} autoComplete="new-password" />
             {errors.confirmPassword && <p className="text-xs text-destructive mt-1">{errors.confirmPassword}</p>}
           </div>

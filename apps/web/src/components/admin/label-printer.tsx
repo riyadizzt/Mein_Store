@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useLocale } from 'next-intl'
 import { Printer, Download, X, Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -30,6 +31,7 @@ const FORMATS: Record<LabelFormat, { wMm: number; hMm: number; wPx: number; hPx:
 }
 
 export function LabelPrinter({ items, onClose }: LabelPrinterProps) {
+  const locale = useLocale()
   const [format, setFormat] = useState<LabelFormat>('small')
   const [quantities, setQuantities] = useState<Record<string, number>>(() => {
     const q: Record<string, number> = {}
@@ -40,6 +42,7 @@ export function LabelPrinter({ items, onClose }: LabelPrinterProps) {
   const setQty = (sku: string, qty: number) => setQuantities({ ...quantities, [sku]: Math.max(1, qty) })
   const totalLabels = Object.values(quantities).reduce((s, q) => s + q, 0)
   const fmtPrice = (n: number) => `€ ${n.toFixed(2).replace('.', ',')}`
+  const hasZeroPrice = items.some((item) => !item.price || item.price <= 0)
 
   // ── PRINT ──
   const handlePrint = useCallback(() => {
@@ -127,8 +130,8 @@ ${labels.join('')}
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
-            <h3 className="text-lg font-bold flex items-center gap-2"><Printer className="h-5 w-5 text-[#d4a853]" />Labels drucken</h3>
-            <p className="text-xs text-muted-foreground">{items.length} Variante(n) / {totalLabels} Labels</p>
+            <h3 className="text-lg font-bold flex items-center gap-2"><Printer className="h-5 w-5 text-[#d4a853]" />{locale === 'ar' ? 'طباعة الملصقات' : locale === 'en' ? 'Print Labels' : 'Labels drucken'}</h3>
+            <p className="text-xs text-muted-foreground">{items.length} {locale === 'ar' ? 'متغير(ات)' : locale === 'en' ? 'variant(s)' : 'Variante(n)'} / {totalLabels} Labels</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"><X className="h-4 w-4" /></button>
         </div>
@@ -145,30 +148,46 @@ ${labels.join('')}
 
         {/* Items with live preview */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {items.map((item) => (
-            <div key={item.sku} className="flex items-start gap-4 p-3 rounded-xl border hover:border-primary/20 transition-colors">
-              {/* Live preview — exact proportions */}
-              <LabelPreview item={item} format={format} fmtPrice={fmtPrice} />
+          {items.map((item) => {
+            const itemHasNoPrice = !item.price || item.price <= 0
+            return (
+              <div key={item.sku} className={`flex items-start gap-4 p-3 rounded-xl border transition-colors ${itemHasNoPrice ? 'border-red-500 bg-red-50/50' : 'hover:border-primary/20'}`}>
+                {itemHasNoPrice ? (
+                  /* Zero-price warning instead of preview */
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">{item.productName}</div>
+                    <div className="text-xs text-muted-foreground">{item.sku} &middot; {item.color} / {item.size}</div>
+                    <div className="mt-2 text-sm font-medium text-red-600">
+                      {locale === 'ar' ? 'السعر مفقود — لا يمكن طباعة الملصق' : locale === 'en' ? 'Price missing — label cannot be printed' : 'Preis fehlt — Label kann nicht gedruckt werden'}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Live preview — exact proportions */}
+                    <LabelPreview item={item} format={format} fmtPrice={fmtPrice} locale={locale} />
 
-              {/* Info + Qty */}
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold truncate">{item.productName}</div>
-                <div className="text-xs text-muted-foreground">{item.sku}</div>
-                <div className="text-xs text-muted-foreground">{item.color} / {item.size} &middot; {fmtPrice(item.price)}</div>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <button onClick={() => setQty(item.sku, (quantities[item.sku] ?? 1) - 1)} className="h-7 w-7 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center"><Minus className="h-3 w-3" /></button>
-                  <span className="w-8 text-center text-sm font-bold">{quantities[item.sku] ?? 1}</span>
-                  <button onClick={() => setQty(item.sku, (quantities[item.sku] ?? 1) + 1)} className="h-7 w-7 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center"><Plus className="h-3 w-3" /></button>
-                </div>
+                    {/* Info + Qty */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">{item.productName}</div>
+                      <div className="text-xs text-muted-foreground">{item.sku}</div>
+                      <div className="text-xs text-muted-foreground">{item.color} / {item.size} &middot; {fmtPrice(item.price)}</div>
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <button onClick={() => setQty(item.sku, (quantities[item.sku] ?? 1) - 1)} className="h-7 w-7 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center"><Minus className="h-3 w-3" /></button>
+                        <span className="w-8 text-center text-sm font-bold">{quantities[item.sku] ?? 1}</span>
+                        <button onClick={() => setQty(item.sku, (quantities[item.sku] ?? 1) + 1)} className="h-7 w-7 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center"><Plus className="h-3 w-3" /></button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-3 px-6 py-4 border-t">
-          <Button variant="outline" className="flex-1 rounded-xl gap-2" onClick={handlePdf}><Download className="h-4 w-4" />PDF</Button>
-          <Button className="flex-1 rounded-xl gap-2" onClick={handlePrint}><Printer className="h-4 w-4" />Drucken ({totalLabels})</Button>
+          <Button variant="outline" className="flex-1 rounded-xl gap-2" onClick={handlePdf} disabled={hasZeroPrice}><Download className="h-4 w-4" />PDF</Button>
+          <Button className="flex-1 rounded-xl gap-2" onClick={handlePrint} disabled={hasZeroPrice}><Printer className="h-4 w-4" />{locale === 'ar' ? `طباعة (${totalLabels})` : locale === 'en' ? `Print (${totalLabels})` : `Drucken (${totalLabels})`}</Button>
         </div>
       </div>
       <style>{`
@@ -181,10 +200,10 @@ ${labels.join('')}
 
 // ── LIVE PREVIEW COMPONENT ───────────────────────────────
 
-function LabelPreview({ item, format, fmtPrice }: { item: LabelData; format: LabelFormat; fmtPrice: (n: number) => string }) {
+function LabelPreview({ item, format, fmtPrice, locale }: { item: LabelData; format: LabelFormat; fmtPrice: (n: number) => string; locale: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fmt = FORMATS[format]
-  const scale = 0.55
+  const scale = 0.75
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -220,7 +239,7 @@ function LabelPreview({ item, format, fmtPrice }: { item: LabelData; format: Lab
               <span style={{ fontSize: 14, fontWeight: 700 }}>{fmtPrice(item.price)}</span>
               <span style={{ fontSize: 8, color: '#444' }}>{item.color} / {item.size}</span>
             </div>
-            {item.stock != null && <div style={{ fontSize: 7, color: '#555', marginTop: 2 }}>Bestand: {item.stock} Stück</div>}
+            {item.stock != null && <div style={{ fontSize: 7, color: '#555', marginTop: 2 }}>{locale === 'ar' ? 'المخزون' : locale === 'en' ? 'Stock' : 'Bestand'}: {item.stock} {locale === 'ar' ? 'قطعة' : locale === 'en' ? 'pcs' : 'Stück'}</div>}
           </>
         ) : format === 'medium' ? (
           /* ── MEDIUM: Brand, barcode, SKU, name, variant, price, location ── */

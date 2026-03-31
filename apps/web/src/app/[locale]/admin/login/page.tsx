@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { Loader2, Shield, Eye, EyeOff, AlertCircle, Lock } from 'lucide-react'
-import { useLogin } from '@/hooks/use-auth'
+import { useAdminLogin } from '@/hooks/use-auth'
 import { useAuthStore } from '@/store/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,7 +61,7 @@ export default function AdminLoginPage() {
   const locale = useLocale()
   const t = useTranslations('admin')
   const router = useRouter()
-  const login = useLogin()
+  const login = useAdminLogin()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -73,17 +73,19 @@ export default function AdminLoginPage() {
 
     try {
       await login.mutateAsync({ email, password })
-      const currentUser = useAuthStore.getState().user
+      const adminUser = useAuthStore.getState().adminUser
 
-      if (currentUser && ['admin', 'super_admin'].includes(currentUser.role)) {
+      if (adminUser && ['admin', 'super_admin', 'warehouse_staff'].includes(adminUser.role)) {
         router.push(`/${locale}/admin/dashboard`)
       } else {
-        // User exists but is not admin
-        useAuthStore.getState().logout()
+        useAuthStore.getState().adminLogout()
         setRoleError(true)
       }
-    } catch {
-      // Error is in login.error — displayed below
+    } catch (err: any) {
+      // NOT_ADMIN = user exists but no admin role
+      if (err?.response?.data?.message === 'NOT_ADMIN') {
+        setRoleError(true)
+      }
     }
   }
 

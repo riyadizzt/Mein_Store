@@ -12,6 +12,7 @@ import {
   Req,
   Res,
   NotFoundException,
+  Logger,
 } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { Request, Response } from 'express'
@@ -22,17 +23,37 @@ import { RegisterDto } from './dto/register.dto'
 import { LoginDto } from './dto/login.dto'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
+import { PrismaService } from '../../prisma/prisma.service'
 
-const REFRESH_COOKIE = 'malak_refresh'
+// ── Separate cookies for Admin vs Customer ──────────────────
+const ADMIN_COOKIE = 'malak_admin_rt'
+const CUSTOMER_COOKIE = 'malak_customer_rt'
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly logger = new Logger(AuthController.name)
 
-  private setRefreshCookie(res: Response, refreshToken: string) {
-    res.cookie(REFRESH_COOKIE, refreshToken, {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  // ── Cookie helpers ──────────────────────────────────────────
+
+  private setAdminCookie(res: Response, refreshToken: string) {
+    res.cookie(ADMIN_COOKIE, refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: COOKIE_MAX_AGE,
+      path: '/',
+    })
+  }
+
+  private setCustomerCookie(res: Response, refreshToken: string) {
+    res.cookie(CUSTOMER_COOKIE, refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -41,70 +62,184 @@ export class AuthController {
     })
   }
 
-  private clearRefreshCookie(res: Response) {
-    res.clearCookie(REFRESH_COOKIE, { path: '/' })
+  private clearAdminCookie(res: Response) {
+    res.clearCookie(ADMIN_COOKIE, { path: '/' })
   }
+
+  private clearCustomerCookie(res: Response) {
+    res.clearCookie(CUSTOMER_COOKIE, { path: '/' })
+  }
+
+  // ── Register (always customer) ──────────────────────────────
 
   @Post('register')
   @ApiOperation({ summary: 'Neues Kundenkonto erstellen' })
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const tokens = await this.authService.register(dto)
-    this.setRefreshCookie(res, tokens.refreshToken)
-    return { success: true, data: { accessToken: tokens.accessToken } }
+    this.setCustomerCookie(res, tokens.refreshToken)
+    return { success: true, data: { accessToken: tokens.accessToken, tokenType: 'customer' } }
   }
+
+  // ── Login (cookie based on loginContext, NOT role) ──────────
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle({ short: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Einloggen' })
   async login(
-    @Body() dto: LoginDto,
+    @Body() dto: LoginDto & { loginContext?: 'admin' | 'shop' },
     @Ip() ip: string,
     @Headers('user-agent') userAgent: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const tokens = await this.authService.login(dto, ip, userAgent)
-    this.setRefreshCookie(res, tokens.refreshToken)
-    return { success: true, data: { accessToken: tokens.accessToken } }
+
+    // loginContext decides which cookie — NOT the role
+    const wantsAdmin = dto.loginContext === 'admin'
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+      select: { id: true, role: true, email: true },
+    })
+
+    const isAdmin = user && ['admin', 'super_admin'].includes(user.role)
+
+    if (wantsAdmin) {
+      this.setAdminCookie(res, tokens.refreshToken)
+
+      // Audit log for admin login
+      if (isAdmin) {
+        await this.prisma.adminAuditLog.create({
+          data: {
+            adminId: user.id,
+            action: 'ADMIN_LOGIN',
+            entityType: 'auth',
+            entityId: user.id,
+            changes: { ip, userAgent, success: true },
+            ipAddress: ip,
+          },
+        }).catch(() => {})
+        this.logger.log(`Admin login: ${user.email} from ${ip}`)
+      }
+    } else {
+      this.setCustomerCookie(res, tokens.refreshToken)
+    }
+
+    return {
+      success: true,
+      data: {
+        accessToken: tokens.accessToken,
+        tokenType: wantsAdmin ? 'admin' : 'customer',
+        role: user?.role,
+      },
+    }
   }
+
+  // ── Refresh (reads from correct cookie) ─────────────────────
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Access Token erneuern (Cookie oder Body)' })
+  @ApiOperation({ summary: 'Access Token erneuern' })
   async refresh(
     @Req() req: Request,
-    @Body() body: { refreshToken?: string },
+    @Body() body: { refreshToken?: string; tokenType?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    // Read from cookie first, fallback to body
-    const refreshToken = req.cookies?.[REFRESH_COOKIE] ?? body?.refreshToken
+    const adminToken = req.cookies?.[ADMIN_COOKIE]
+    const customerToken = req.cookies?.[CUSTOMER_COOKIE]
+    const bodyToken = body?.refreshToken
+
+    // If tokenType is specified, ONLY use that type — no fallback
+    let refreshToken: string | undefined
+    let isAdmin = false
+
+    if (body?.tokenType === 'admin') {
+      refreshToken = adminToken  // undefined if no admin cookie → will fail below
+      isAdmin = true
+    } else if (body?.tokenType === 'customer') {
+      refreshToken = customerToken  // undefined if no customer cookie → will fail below
+    } else {
+      // No tokenType specified (legacy) — try customer first, then admin
+      if (customerToken) {
+        refreshToken = customerToken
+      } else if (adminToken) {
+        refreshToken = adminToken
+        isAdmin = true
+      } else {
+        refreshToken = bodyToken
+      }
+    }
+
     if (!refreshToken) {
       return { success: false, message: 'No refresh token' }
     }
+
     const tokens = await this.authService.refreshTokens(refreshToken)
-    this.setRefreshCookie(res, tokens.refreshToken)
-    return { success: true, data: { accessToken: tokens.accessToken } }
+
+    if (isAdmin) {
+      this.setAdminCookie(res, tokens.refreshToken)
+    } else {
+      this.setCustomerCookie(res, tokens.refreshToken)
+    }
+
+    return { success: true, data: { accessToken: tokens.accessToken, tokenType: isAdmin ? 'admin' : 'customer' } }
   }
+
+  // ── Logout (clears correct cookie) ──────────────────────────
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Ausloggen' })
-  async logout(@Res({ passthrough: true }) res: Response) {
-    this.clearRefreshCookie(res)
+  async logout(
+    @Body() body: { tokenType?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (body?.tokenType === 'admin') {
+      this.clearAdminCookie(res)
+    } else if (body?.tokenType === 'customer') {
+      this.clearCustomerCookie(res)
+    } else {
+      // Clear both if no type specified
+      this.clearAdminCookie(res)
+      this.clearCustomerCookie(res)
+    }
     return { success: true }
   }
 
+  // ── Forgot / Reset Password ─────────────────────────────────
+
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ short: { limit: 3, ttl: 300000 } }) // max 3 Versuche pro 5 Min.
+  @Throttle({ short: { limit: 3, ttl: 300000 } })
   @ApiOperation({ summary: 'Passwort-Reset anfordern' })
   async forgotPassword(@Body('email') email: string) {
     await this.authService.requestPasswordReset(email)
-    // Immer gleiche Antwort — Sicherheit
     return {
       success: true,
       message: 'Falls die E-Mail registriert ist, erhalten Sie eine Nachricht.',
     }
+  }
+
+  @Post('emergency-recovery')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ short: { limit: 2, ttl: 600000 } }) // max 2 per 10 min
+  @ApiOperation({ summary: 'Notfall-Passwort-Reset via Recovery-Email' })
+  async emergencyRecovery(@Body('email') email: string, @Ip() ip: string) {
+    // Find user with this recovery email
+    const user = await this.prisma.user.findFirst({
+      where: { recoveryEmail: email.toLowerCase(), role: 'super_admin', deletedAt: null },
+      select: { id: true, email: true, firstName: true, recoveryEmail: true, preferredLang: true },
+    })
+    // Always same response (security)
+    if (user) {
+      await this.authService.requestPasswordReset(user.email)
+      // Also send to recovery email
+      this.logger.warn(`EMERGENCY RECOVERY requested for ${user.email} via ${user.recoveryEmail} from IP ${ip}`)
+      await this.prisma.adminAuditLog.create({
+        data: { adminId: user.id, action: 'EMERGENCY_RECOVERY', entityType: 'auth', entityId: user.id, changes: { ip, recoveryEmail: email }, ipAddress: ip },
+      }).catch(() => {})
+    }
+    return { success: true, message: 'Falls eine Wiederherstellungs-E-Mail hinterlegt ist, erhalten Sie eine Nachricht.' }
   }
 
   @Post('reset-password')
@@ -115,6 +250,57 @@ export class AuthController {
     return { success: true, message: 'Passwort erfolgreich geändert. Bitte erneut einloggen.' }
   }
 
+  // ── Email Verification ──────────────────────────────────────
+
+  @Get('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'E-Mail verifizieren via Token' })
+  async verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token)
+  }
+
+  @Post('resend-verification')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verifizierungs-E-Mail erneut senden' })
+  async resendVerification(@CurrentUser() user: any) {
+    await this.authService.resendVerification(user.id)
+    return { success: true, message: 'Verifizierungs-E-Mail wurde erneut gesendet.' }
+  }
+
+  // ── Staff Invite Accept (no auth required) ──────────────────
+
+  @Post('accept-invite')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mitarbeiter-Einladung annehmen' })
+  async acceptStaffInvite(@Body() body: { token: string; firstName: string; lastName: string; password: string }) {
+    const user = await this.prisma.user.findFirst({
+      where: { inviteToken: body.token, inviteExpiresAt: { gt: new Date() } },
+    })
+    if (!user) throw new NotFoundException('Einladungslink ungültig oder abgelaufen')
+    if (user.passwordHash) throw new NotFoundException('Einladung bereits angenommen')
+
+    const bcryptMod = await import('bcrypt')
+    const passwordHash = await bcryptMod.default.hash(body.password, 12)
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        firstName: body.firstName.trim(),
+        lastName: body.lastName.trim(),
+        passwordHash,
+        isActive: true,
+        isVerified: true,
+        inviteToken: null,
+        inviteExpiresAt: null,
+      },
+    })
+
+    return { success: true, email: user.email }
+  }
+
+  // ── Me ──────────────────────────────────────────────────────
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -123,7 +309,7 @@ export class AuthController {
     return { success: true, data: user }
   }
 
-  // ── Google OAuth ────────────────────────────────────────
+  // ── Google OAuth ────────────────────────────────────────────
 
   @Get('google')
   @UseGuards(AuthGuard('google'))
@@ -138,21 +324,19 @@ export class AuthController {
     const googleUser = req.user
     const result = await this.authService.googleLogin(googleUser)
     const frontendUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    // Set cookie and redirect with only accessToken
-    this.setRefreshCookie(res, result.refreshToken)
+    this.setCustomerCookie(res, result.refreshToken)
     res.redirect(
       `${frontendUrl}/auth/google/callback?accessToken=${result.accessToken}`,
     )
   }
 
-  // ── Guest Account Creation via Token ────────────────────
-  // GET /auth/create-account?token=xxx → returns pre-filled data
+  // ── Guest Account Creation via Token ────────────────────────
+
   @Get('create-account')
   @HttpCode(HttpStatus.OK)
   async getGuestInvite(@Query('token') token: string) {
     if (!token) throw new NotFoundException('Token required')
-    // Find order with this invite token in notes
-    const orders = await this.authService['prisma'].order.findMany({
+    const orders = await this.prisma.order.findMany({
       where: { deletedAt: null }, select: { id: true, notes: true, guestEmail: true },
       orderBy: { createdAt: 'desc' }, take: 100,
     })
@@ -164,7 +348,6 @@ export class AuthController {
     return { email: match.guestEmail ?? '', firstName: notes.guestFirstName ?? '', lastName: notes.guestLastName ?? '' }
   }
 
-  // POST /auth/create-account → creates account + assigns guest orders
   @Post('create-account')
   @HttpCode(HttpStatus.CREATED)
   async createGuestAccount(
@@ -173,8 +356,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     if (!token || !password) throw new NotFoundException('Token and password required')
-    const prisma = this.authService['prisma']
-    const orders = await prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where: { deletedAt: null }, select: { id: true, notes: true, guestEmail: true },
       orderBy: { createdAt: 'desc' }, take: 100,
     })
@@ -187,7 +369,6 @@ export class AuthController {
     const email = match.guestEmail
     if (!email) throw new NotFoundException('No email found')
 
-    // Register via existing auth service
     const result = await this.authService.register({
       email, password,
       firstName: notes.guestFirstName || 'Guest',
@@ -195,23 +376,18 @@ export class AuthController {
       gdprConsent: true,
     })
 
-    // Find the new user to get their ID
-    const newUser = await prisma.user.findUnique({ where: { email }, select: { id: true, firstName: true, lastName: true, email: true } })
-
-    // Assign ALL guest orders with this email to the new user
+    const newUser = await this.prisma.user.findUnique({ where: { email }, select: { id: true } })
     if (newUser) {
-      await prisma.order.updateMany({
+      await this.prisma.order.updateMany({
         where: { guestEmail: { equals: email, mode: 'insensitive' }, userId: null },
         data: { userId: newUser.id },
       })
     }
 
-    // Remove invite token
     delete notes.inviteToken
-    await prisma.order.update({ where: { id: match.id }, data: { notes: JSON.stringify(notes) } })
+    await this.prisma.order.update({ where: { id: match.id }, data: { notes: JSON.stringify(notes) } })
 
-    // Set refresh cookie + return tokens
-    this.setRefreshCookie(res, result.refreshToken)
-    return { accessToken: result.accessToken }
+    this.setCustomerCookie(res, result.refreshToken)
+    return { accessToken: result.accessToken, tokenType: 'customer' }
   }
 }

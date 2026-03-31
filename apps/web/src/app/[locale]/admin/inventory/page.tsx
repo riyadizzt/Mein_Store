@@ -11,12 +11,16 @@ import {
   Minus, Plus, RotateCcw, Eye, X, LayoutList, Layers, ArrowRightLeft,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/store/auth-store'
 import { translateColor, translateMovement, getProductName, formatCurrency, formatShortDate } from '@/lib/locale-utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { AddColorModal, AddSizeModal } from '@/components/admin/add-variant-modals'
 import { PrintLabelButton } from '@/components/admin/label-printer'
+import { useConfirm } from '@/components/ui/confirm-modal'
+import { Camera } from 'lucide-react'
+import { CameraBarcodeScannerOverlay } from '@/components/admin/camera-barcode-scanner'
 
 const STATUS_BADGE: Record<string, string> = {
   in_stock: 'bg-green-100 text-green-800',
@@ -28,6 +32,9 @@ export default function InventoryPage() {
   const locale = useLocale()
   const t = useTranslations('admin')
   const qc = useQueryClient()
+  const confirmDialog = useConfirm()
+  const adminUser = useAuthStore((s) => s.adminUser) as any
+  const canSeePrices = adminUser?.role === 'super_admin' || (Array.isArray(adminUser?.permissions) && adminUser.permissions.includes('scanner.view_prices'))
 
   const [search, setSearch] = useState('')
   const [warehouseId, setWarehouseId] = useState('')
@@ -63,9 +70,14 @@ export default function InventoryPage() {
   const [transferQty, setTransferQty] = useState(1)
   const [scanInput, setScanInput] = useState('')
   const [scannedProduct, setScannedProduct] = useState<any>(null)
-  const [scanQty, setScanQty] = useState(1)
+  // scanQty removed — batch mode uses per-item qty
   const [scanLog, setScanLog] = useState<any[]>([])
   const scanRef = useRef<HTMLInputElement>(null)
+  const [warehouseError, setWarehouseError] = useState<string | null>(null)
+  const [cameraBatchOpen, setCameraBatchOpen] = useState(false)
+  const [scanFlash, setScanFlash] = useState<{ text: string; type: 'new' | 'duplicate' | 'error' } | null>(null)
+  const [batchBooking, setBatchBooking] = useState(false)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
 
   const { data: stats } = useQuery({
     queryKey: ['inventory-stats', warehouseId],
@@ -123,19 +135,7 @@ export default function InventoryPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-inventory'] }); qc.invalidateQueries({ queryKey: ['inventory-stats'] }); setShowAdjustModal(false) },
   })
 
-  const intakeMut = useMutation({
-    mutationFn: async (p: { inventoryId: string; quantity: number; reason: string }) => {
-      await api.post('/admin/inventory/intake', { items: [{ inventoryId: p.inventoryId, quantity: p.quantity }], reason: p.reason })
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-inventory'] }); qc.invalidateQueries({ queryKey: ['inventory-stats'] }) },
-  })
-
-  const outputMut = useMutation({
-    mutationFn: async (p: { id: string; quantity: number; reason: string }) => {
-      await api.post(`/admin/inventory/${p.id}/output`, { quantity: p.quantity, reason: p.reason })
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-inventory'] }); qc.invalidateQueries({ queryKey: ['inventory-stats'] }) },
-  })
+  // intakeMut/outputMut removed — batch mode handles booking directly
 
   const transferMut = useMutation({
     mutationFn: async (p: { inventoryId: string; toWarehouseId: string; quantity: number }) => {
@@ -149,18 +149,47 @@ export default function InventoryPage() {
     },
   })
 
-  const handleBarcodeScan = useCallback(async (code: string) => {
+  // USB scanner fast keystroke detection — redirects to batch scan
+  const lastKeyTime = useRef(0)
+  const keyBuffer = useRef('')
+
+  // ── Batch scan: add to list instead of booking immediately ──
+  const handleBatchScan = useCallback(async (code: string) => {
     if (!code.trim()) return
+    setScanInput('')
     try {
       const { data } = await api.get(`/admin/inventory/barcode/${encodeURIComponent(code.trim())}`)
       setScannedProduct(data)
-      setScanQty(1)
-    } catch { setScannedProduct(null) }
-  }, [])
+      const variantId = data.variantId ?? data.id
+      setScanLog((prev) => {
+        const idx = prev.findIndex((item) => item.variantId === variantId)
+        if (idx >= 0) {
+          setScanFlash({ text: locale === 'ar' ? `تم تحديث الكمية (×${prev[idx].qty + 1})` : `Menge aktualisiert (×${prev[idx].qty + 1})`, type: 'duplicate' })
+          return prev.map((item, i) => i === idx ? { ...item, qty: item.qty + 1 } : item)
+        } else {
+          setScanFlash({ text: locale === 'ar' ? 'منتج جديد' : 'Neuer Artikel', type: 'new' })
+          return [...prev, {
+            variantId,
+            sku: data.sku,
+            productName: data.productName ?? [],
+            image: data.image,
+            color: data.color,
+            size: data.size,
+            inventoryId: data.inventory?.[0]?.id,
+            price: data.price ?? 0,
+            qty: 1,
+            mode: scannerMode,
+          }]
+        }
+      })
+    } catch {
+      setScannedProduct(null)
+      setScanFlash({ text: locale === 'ar' ? 'لم يتم العثور على الباركود' : 'Barcode nicht gefunden', type: 'error' })
+    }
+    setTimeout(() => scanRef.current?.focus(), 50)
+  }, [locale, scannerMode])
 
-  // USB scanner fast keystroke detection
-  const lastKeyTime = useRef(0)
-  const keyBuffer = useRef('')
+  // USB scanner keystroke → batch scan
   useEffect(() => {
     if (!showScannerOverlay) return
     const handler = (e: KeyboardEvent) => {
@@ -169,27 +198,54 @@ export default function InventoryPage() {
       if (now - lastKeyTime.current > 200) keyBuffer.current = ''
       lastKeyTime.current = now
       if (e.key === 'Enter' && keyBuffer.current.length > 3) {
-        handleBarcodeScan(keyBuffer.current)
+        handleBatchScan(keyBuffer.current)
         keyBuffer.current = ''
         e.preventDefault()
       } else if (e.key.length === 1) keyBuffer.current += e.key
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [showScannerOverlay, handleBarcodeScan])
+  }, [showScannerOverlay, handleBatchScan])
 
-  const handleScanConfirm = async () => {
-    if (!scannedProduct?.inventory?.[0]) return
-    const inv = scannedProduct.inventory[0]
-    if (scannerMode === 'intake') {
-      await intakeMut.mutateAsync({ inventoryId: inv.id, quantity: scanQty, reason: 'Barcode intake' })
-    } else {
-      await outputMut.mutateAsync({ id: inv.id, quantity: scanQty, reason: 'Barcode output' })
+  // Clear flash after 1.5s
+  useEffect(() => {
+    if (!scanFlash) return
+    const timer = setTimeout(() => setScanFlash(null), 1500)
+    return () => clearTimeout(timer)
+  }, [scanFlash])
+
+  const updateScanLogQty = useCallback((index: number, newQty: number) => {
+    if (newQty <= 0) return removeScanLogItem(index)
+    setScanLog((prev) => prev.map((item, i) => i === index ? { ...item, qty: newQty } : item))
+  }, [])
+
+  const removeScanLogItem = useCallback((index: number) => {
+    setScanLog((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handleBatchConfirm = useCallback(async () => {
+    if (scanLog.length === 0) return
+    setBatchBooking(true)
+    try {
+      if (scannerMode === 'intake') {
+        const items = scanLog.filter((item) => item.inventoryId).map((item) => ({ inventoryId: item.inventoryId, quantity: item.qty }))
+        if (items.length > 0) await api.post('/admin/inventory/intake', { items, reason: 'Batch scanner intake' })
+      } else {
+        // Output: process one by one
+        for (const item of scanLog) {
+          if (item.inventoryId) await api.post(`/admin/inventory/${item.inventoryId}/output`, { quantity: item.qty, reason: 'Batch scanner output' })
+        }
+      }
+      qc.invalidateQueries({ queryKey: ['admin-inventory'] })
+      qc.invalidateQueries({ queryKey: ['inventory-stats'] })
+      setScanLog([])
+      setScannedProduct(null)
+      setScanFlash({ text: locale === 'ar' ? 'تم الحجز بنجاح!' : 'Erfolgreich gebucht!', type: 'new' })
+    } catch {
+      setScanFlash({ text: locale === 'ar' ? 'خطأ في الحجز' : 'Fehler beim Buchen', type: 'error' })
     }
-    setScanLog((prev) => [...prev, { ...scannedProduct, qty: scanQty, mode: scannerMode }])
-    setScannedProduct(null); setScanInput(''); setScanQty(1)
-    setTimeout(() => scanRef.current?.focus(), 100)
-  }
+    setBatchBooking(false)
+  }, [scanLog, scannerMode, locale, qc])
 
   const hasFilters = warehouseId || categoryId || status || locationId
   const resetFilters = () => { setWarehouseId(''); setCategoryId(''); setStatus(''); setLocationId(''); setPage(0) }
@@ -249,8 +305,11 @@ export default function InventoryPage() {
         </Button>
         <Link href={`/${locale}/admin/inventory/stocktake`}><Button size="sm" variant="outline" className="rounded-xl gap-2"><ClipboardList className="h-4 w-4" />{t('inventory.stocktake')}</Button></Link>
         <Link href={`/${locale}/admin/inventory/movements`}><Button size="sm" variant="outline" className="rounded-xl gap-2"><ArrowRightLeft className="h-4 w-4" />{locale === 'ar' ? 'سجل الحركات' : 'Bewegungslog'}</Button></Link>
-        <Button size="sm" variant="outline" className="rounded-xl gap-2" onClick={() => { setShowScannerOverlay(true); setScannerMode('intake'); setScanLog([]); setScannedProduct(null); setScanInput('') }}>
+        <Button size="sm" variant="outline" className="rounded-xl gap-2 hidden lg:inline-flex" onClick={() => { setShowScannerOverlay(true); setScannerMode('intake'); setScanLog([]); setScannedProduct(null); setScanInput('') }}>
           <ScanBarcode className="h-4 w-4" />{t('inventory.scanner')}
+        </Button>
+        <Button size="sm" variant="outline" className="rounded-xl gap-2 lg:hidden" onClick={() => setCameraBatchOpen(true)}>
+          <Camera className="h-4 w-4" />{locale === 'ar' ? 'ماسح الكاميرا' : 'Kamera-Scanner'}
         </Button>
         <Button size="sm" variant="outline" className="rounded-xl gap-2" onClick={handleExport}><Download className="h-4 w-4" />{t('inventory.export')}</Button>
       </div>
@@ -422,7 +481,7 @@ export default function InventoryPage() {
                                       <ArrowRightLeft className="h-3.5 w-3.5" />
                                     </button>
                                   )}
-                                  <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: 0, stock, location: inv?.location?.name }} productName={getName(product.translations)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground" />
+                                  <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: v.price ?? 0, stock, location: inv?.location?.name }} productName={getName(product.translations)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground" />
                                 </div>
                               </td>
                             </tr>
@@ -559,38 +618,51 @@ export default function InventoryPage() {
       {/* ── Barcode Scanner Overlay ── */}
       {showScannerOverlay && (
         <div className="fixed inset-0 z-50 bg-[#0a0a1a] flex flex-col" style={{ animation: 'fadeIn 200ms ease-out' }}>
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-            <div className="flex items-center gap-3">
+          {/* ── Header ── */}
+          <div className="px-5 py-3 border-b border-white/10 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
               <ScanBarcode className="h-5 w-5 text-[#d4a853]" />
-              <h2 className="text-white font-bold">{t('inventory.scannerTitle')}</h2>
-              <div className="flex gap-1 ml-4">
-                <button onClick={() => setScannerMode('intake')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'intake' ? 'bg-green-600 text-white' : 'bg-white/10 text-white/60'}`}>{t('inventory.scannerIntake')}</button>
-                <button onClick={() => setScannerMode('output')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'output' ? 'bg-red-600 text-white' : 'bg-white/10 text-white/60'}`}>{t('inventory.scannerOutput')}</button>
-                <button onClick={() => { setScannerMode('csv'); setCsvData([]); setCsvResult(null) }} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'csv' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60'}`}>{t('inventory.intakeCsv')}</button>
-              </div>
-              {/* Warehouse selection for intake */}
-              <div className="flex items-center gap-2 ml-4">
-                <span className="text-white/40 text-xs">{locale === 'ar' ? 'الموقع:' : 'Standort:'}</span>
-                <select value={warehouseId || ''} onChange={(e) => setWarehouseId(e.target.value)}
-                  className="px-2 py-1 rounded-lg bg-white/10 border border-white/20 text-white text-xs">
-                  {(warehouses as any[])?.map((w: any) => <option key={w.id} value={w.id} className="text-black">{w.name}</option>)}
-                </select>
-              </div>
+              <h2 className="text-white font-bold text-sm">{t('inventory.scannerTitle')}</h2>
             </div>
-            <Button variant="outline" size="sm" className="rounded-xl text-white border-white/20 hover:bg-white/10" onClick={() => setShowScannerOverlay(false)}>
-              {t('inventory.scannerDone')} ({scanLog.length})
-            </Button>
+            <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
+              <button onClick={() => setScannerMode('intake')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'intake' ? 'bg-green-600 text-white shadow' : 'text-white/50 hover:text-white/80'}`}>{t('inventory.scannerIntake')}</button>
+              <button onClick={() => setScannerMode('output')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'output' ? 'bg-red-600 text-white shadow' : 'text-white/50 hover:text-white/80'}`}>{t('inventory.scannerOutput')}</button>
+              <button onClick={() => { setScannerMode('csv'); setCsvData([]); setCsvResult(null) }} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'csv' ? 'bg-blue-600 text-white shadow' : 'text-white/50 hover:text-white/80'}`}>{t('inventory.intakeCsv')}</button>
+            </div>
+            <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl">
+              <span className="text-white/40 text-xs">{locale === 'ar' ? 'الموقع:' : 'Standort:'}</span>
+              <select value={warehouseId || ''} onChange={(e) => setWarehouseId(e.target.value)}
+                className="bg-transparent text-white text-xs font-medium focus:outline-none cursor-pointer">
+                {(warehouses as any[])?.map((w: any) => <option key={w.id} value={w.id} className="text-black">{w.name}</option>)}
+              </select>
+            </div>
+            <div className="ltr:ml-auto rtl:mr-auto">
+              <button className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white border border-white/20 hover:bg-white/10 active:scale-95 transition-all" onClick={async () => {
+                if (scanLog.length > 0) {
+                  const ok = await confirmDialog({
+                    title: locale === 'ar' ? 'إغلاق الماسح' : 'Scanner schließen',
+                    description: locale === 'ar' ? `لديك ${scanLog.length} منتج لم يتم حجزه. هل تريد الإغلاق؟` : `${scanLog.length} Artikel noch nicht gebucht. Trotzdem schließen?`,
+                    variant: 'danger',
+                    confirmLabel: locale === 'ar' ? 'إغلاق' : 'Schließen',
+                    cancelLabel: locale === 'ar' ? 'متابعة' : 'Weiter scannen',
+                  })
+                  if (!ok) return
+                }
+                setShowScannerOverlay(false)
+              }}>
+                <X className="h-4 w-4" />{locale === 'ar' ? 'إغلاق' : 'Schließen'}
+              </button>
+            </div>
           </div>
 
-          <div className="flex-1 flex items-center justify-center p-6">
+          {/* ── Body ── */}
+          <div className="flex-1 flex min-h-0">
             {scannerMode === 'csv' ? (
               /* ── CSV Import Mode ── */
-              <div className="w-full max-w-2xl">
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <div className="flex-1 flex items-center justify-center p-6">
+                <div className="w-full max-w-2xl bg-white/5 border border-white/10 rounded-2xl p-6">
                   <h3 className="text-white font-bold mb-4">{t('inventory.intakeCsv')}</h3>
                   <p className="text-white/40 text-sm mb-4">CSV: SKU, {t('inventory.qty')} (1 {t('inventory.perPage')})</p>
-
-                  {/* File upload */}
                   <label className="block mb-4 cursor-pointer">
                     <div className="border-2 border-dashed border-white/20 rounded-xl p-8 text-center hover:border-[#d4a853]/50 transition-colors">
                       <Upload className="h-8 w-8 mx-auto mb-2 text-white/30" />
@@ -602,7 +674,7 @@ export default function InventoryPage() {
                       const reader = new FileReader()
                       reader.onload = (ev) => {
                         const text = ev.target?.result as string
-                        const lines = text.trim().split('\n').slice(1) // skip header
+                        const lines = text.trim().split('\n').slice(1)
                         const parsed = lines.map((line) => {
                           const [sku, qty] = line.split(/[;,]/).map((s) => s.trim())
                           return { sku, quantity: parseInt(qty) || 0 }
@@ -613,8 +685,6 @@ export default function InventoryPage() {
                       reader.readAsText(file)
                     }} />
                   </label>
-
-                  {/* Preview */}
                   {csvData.length > 0 && !csvResult && (
                     <div>
                       <div className="max-h-60 overflow-y-auto mb-4 rounded-xl border border-white/10">
@@ -643,8 +713,6 @@ export default function InventoryPage() {
                       </div>
                     </div>
                   )}
-
-                  {/* Result */}
                   {csvResult && !csvResult.error && (
                     <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4" style={{ animation: 'fadeSlideUp 300ms ease-out' }}>
                       <div className="text-green-400 font-bold mb-2">{t('inventory.intakeBooked')}</div>
@@ -657,73 +725,243 @@ export default function InventoryPage() {
                 </div>
               </div>
             ) : (
-            <div className="w-full max-w-lg">
-              <div className="mb-8 relative">
-                <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#d4a853]" />
+            <>
+            {/* ── Left Panel: Scan Input ── */}
+            <div className="flex-1 flex flex-col p-5 min-w-0">
+              {/* Search bar — always at the top */}
+              <div className="relative mb-4">
+                <ScanBarcode className="absolute ltr:left-4 rtl:right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#d4a853]" />
                 <input ref={scanRef} value={scanInput} onChange={(e) => setScanInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleBarcodeScan(scanInput) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleBatchScan(scanInput) } }}
                   placeholder={t('inventory.scannerReady')} autoFocus
-                  className="w-full h-14 pl-12 pr-4 rounded-2xl bg-white/10 border border-white/20 text-white text-lg font-mono placeholder:text-white/30 focus:outline-none focus:border-[#d4a853] focus:ring-2 focus:ring-[#d4a853]/20" />
+                  className="w-full h-14 ltr:pl-12 rtl:pr-12 ltr:pr-4 rtl:pl-4 rounded-2xl bg-white/10 border border-white/20 text-white text-lg font-mono placeholder:text-white/30 focus:outline-none focus:border-[#d4a853] focus:ring-2 focus:ring-[#d4a853]/20 transition-all" />
               </div>
 
-              {scannedProduct ? (
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-6" style={{ animation: 'fadeSlideUp 300ms ease-out' }}>
-                  <div className="flex items-center gap-4 mb-6">
-                    {scannedProduct.image ? <img src={scannedProduct.image} alt="" className="h-20 w-20 rounded-xl object-cover" />
-                      : <div className="h-20 w-20 rounded-xl bg-white/10 flex items-center justify-center"><Package className="h-8 w-8 text-white/20" /></div>}
-                    <div>
-                      <div className="text-white font-bold text-lg">{getName(scannedProduct.productName)}</div>
-                      <div className="text-white/50 text-sm font-mono">{scannedProduct.sku}</div>
-                      <div className="text-white/40 text-xs mt-1">{translateColor(scannedProduct.color, locale)} / {scannedProduct.size}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mb-6 px-4 py-3 rounded-xl bg-white/5">
-                    <span className="text-white/60 text-sm">{t('inventory.current')}:</span>
-                    <span className={`text-2xl font-bold ${(scannedProduct.inventory?.[0]?.available ?? 0) <= 0 ? 'text-red-400' : 'text-white'}`}>
-                      {scannedProduct.inventory?.[0]?.available ?? 0}
-                    </span>
-                  </div>
-                  {scannedProduct.inventory?.[0]?.available <= scannedProduct.inventory?.[0]?.reorderPoint && (
-                    <div className={`mb-4 px-4 py-2 rounded-xl text-sm font-medium ${scannedProduct.inventory[0].available <= 0 ? 'bg-red-500/20 text-red-300' : 'bg-orange-500/20 text-orange-300'}`}>
-                      {scannedProduct.inventory[0].available <= 0 ? t('inventory.scannerLastItem') : t('inventory.scannerReorder')}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 flex-1">
-                      <button onClick={() => setScanQty(Math.max(1, scanQty - 1))} className="h-12 w-12 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"><Minus className="h-5 w-5" /></button>
-                      <input type="number" value={scanQty} onChange={(e) => setScanQty(Math.max(1, +e.target.value))} className="h-12 flex-1 rounded-xl bg-white/10 border border-white/20 text-white text-center text-xl font-bold focus:outline-none focus:border-[#d4a853]" />
-                      <button onClick={() => setScanQty(scanQty + 1)} className="h-12 w-12 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"><Plus className="h-5 w-5" /></button>
-                    </div>
-                    <button onClick={handleScanConfirm} disabled={intakeMut.isPending || outputMut.isPending}
-                      className={`h-12 px-8 rounded-xl font-bold text-white transition-all ${scannerMode === 'intake' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
-                      {scannerMode === 'intake' ? t('inventory.scannerAdd') : t('inventory.scannerRemove')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="h-24 w-24 mx-auto mb-4 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center" style={{ animation: 'pulse 2s ease-in-out infinite' }}>
-                    <ScanBarcode className="h-10 w-10 text-white/20" />
-                  </div>
-                  <p className="text-white/40">{t('inventory.scannerReady')}</p>
+              {/* Flash feedback */}
+              {scanFlash && (
+                <div className={`mb-4 px-4 py-2.5 rounded-xl text-sm font-bold text-center ${
+                  scanFlash.type === 'new' ? 'bg-green-500/20 text-green-300 border border-green-500/20' :
+                  scanFlash.type === 'duplicate' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/20' :
+                  'bg-red-500/20 text-red-300 border border-red-500/20'
+                }`} style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                  {scanFlash.text}
                 </div>
               )}
 
-              {scanLog.length > 0 && (
-                <div className="mt-6 bg-white/5 border border-white/10 rounded-2xl p-4">
-                  <h3 className="text-white/60 text-xs font-semibold mb-3 uppercase">{t('inventory.scannerSummary')} ({scanLog.length})</h3>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">{scanLog.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-white/80">{getName(item.productName)}</span>
-                      <span className={`font-bold ${item.mode === 'intake' ? 'text-green-400' : 'text-red-400'}`}>{item.mode === 'intake' ? '+' : '-'}{item.qty}</span>
+              {/* Last scanned product */}
+              {scannedProduct && (
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-4" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                  <div className="flex items-center gap-3">
+                    {scannedProduct.image ? <img src={scannedProduct.image} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                      : <div className="h-16 w-16 rounded-xl bg-white/10 flex items-center justify-center"><Package className="h-6 w-6 text-white/20" /></div>}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-bold truncate">{getName(scannedProduct.productName)}</div>
+                      <div className="text-white/50 text-xs font-mono mt-0.5">{scannedProduct.sku}</div>
+                      <div className="text-white/40 text-xs mt-0.5">{translateColor(scannedProduct.color, locale)} / {scannedProduct.size}</div>
                     </div>
-                  ))}</div>
+                    <div className="text-end ltr:pl-3 rtl:pr-3 ltr:border-l rtl:border-r border-white/10">
+                      <span className="text-white/40 text-[10px] uppercase tracking-wider">{t('inventory.current')}</span>
+                      <div className={`text-2xl font-bold ${(scannedProduct.inventory?.[0]?.available ?? 0) <= 0 ? 'text-red-400' : (scannedProduct.inventory?.[0]?.available ?? 0) <= 5 ? 'text-orange-400' : 'text-white'}`}>
+                        {scannedProduct.inventory?.[0]?.available ?? 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!scannedProduct && scanLog.length === 0 && (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="relative h-24 w-24 mx-auto mb-5">
+                      <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-white/10" style={{ animation: 'pulse 3s ease-in-out infinite' }} />
+                      <div className="absolute inset-3 rounded-xl bg-white/5 flex items-center justify-center">
+                        <ScanBarcode className="h-8 w-8 text-[#d4a853]/40" />
+                      </div>
+                    </div>
+                    <p className="text-white/50 text-sm font-medium">{t('inventory.scannerReady')}</p>
+                    <p className="text-white/25 text-xs mt-2 max-w-[280px] mx-auto leading-relaxed">
+                      {locale === 'ar' ? 'امسح الباركود أو أدخله يدويًا\nستُجمع المنتجات تلقائيًا في القائمة' : 'Barcode scannen oder manuell eingeben\nArtikel werden automatisch gesammelt'}
+                    </p>
+                    <div className="flex items-center justify-center gap-4 mt-6">
+                      <div className="flex items-center gap-1.5 text-white/15 text-[10px]"><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/30 font-mono">Enter</kbd> {locale === 'ar' ? 'للمسح' : 'Scannen'}</div>
+                      <div className="flex items-center gap-1.5 text-white/15 text-[10px]"><kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/30 font-mono">Esc</kbd> {locale === 'ar' ? 'للإغلاق' : 'Schließen'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Scan stats when items exist but no current scan */}
+              {!scannedProduct && scanLog.length > 0 && (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="h-20 w-20 mx-auto mb-4 rounded-2xl bg-[#d4a853]/10 flex items-center justify-center">
+                      <ScanBarcode className="h-8 w-8 text-[#d4a853]" />
+                    </div>
+                    <p className="text-white/50 text-sm">{locale === 'ar' ? 'جاهز للمسح التالي' : 'Bereit für den nächsten Scan'}</p>
+                  </div>
                 </div>
               )}
             </div>
+
+            {/* ── Right Panel: Grouped batch list ── */}
+            <div className="w-[380px] flex-shrink-0 border-s border-white/10 bg-white/[0.02] flex flex-col min-h-0">
+                {scanLog.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center p-6">
+                    <div className="text-center">
+                      <div className="h-12 w-12 mx-auto mb-3 rounded-xl bg-white/5 flex items-center justify-center">
+                        <ClipboardList className="h-5 w-5 text-white/15" />
+                      </div>
+                      <p className="text-white/25 text-xs">{locale === 'ar' ? 'ستظهر المنتجات الممسوحة هنا' : 'Gescannte Artikel erscheinen hier'}</p>
+                    </div>
+                  </div>
+                ) : (() => {
+                  // Group scanLog items by product name
+                  const groups: { name: string; image: string | null; items: typeof scanLog }[] = []
+                  for (const item of scanLog) {
+                    const pName = getName(item.productName)
+                    let group = groups.find((g) => g.name === pName)
+                    if (!group) {
+                      group = { name: pName, image: item.image, items: [] }
+                      groups.push(group)
+                    }
+                    group.items.push(item)
+                  }
+                  const totalUnits = scanLog.reduce((s, i) => s + i.qty, 0)
+                  const totalValue = scanLog.reduce((s, i) => s + (i.price ?? 0) * i.qty, 0)
+                  const uniqueProducts = groups.length
+                  const allExpanded = groups.every((g) => expandedGroup === g.name)
+
+                  return (
+                    <div className="flex-1 flex flex-col min-h-0">
+                      {/* Header */}
+                      <div className="px-4 py-2.5 border-b border-white/10 flex items-center justify-between gap-2">
+                        <h3 className="text-white/70 text-xs font-semibold uppercase tracking-wider">
+                          {t('inventory.scannerSummary')}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setExpandedGroup(allExpanded ? null : '__all__')}
+                            className="p-1 rounded hover:bg-white/10 text-white/30 hover:text-white/60 transition-colors" title={locale === 'ar' ? 'طي/توسيع الكل' : 'Alle ein-/ausklappen'}>
+                            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${allExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          <span className="px-2 py-0.5 rounded-full bg-[#d4a853]/20 text-[#d4a853] text-xs font-bold">
+                            {uniqueProducts} {locale === 'ar' ? 'منتج' : 'Prod.'} · {totalUnits} {locale === 'ar' ? 'قطعة' : 'Stk.'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Grouped list */}
+                      <div className="flex-1 overflow-y-auto divide-y divide-white/5">
+                        {groups.map((group) => {
+                          const groupTotal = group.items.reduce((s, i) => s + i.qty, 0)
+                          const groupValue = group.items.reduce((s, i) => s + (i.price ?? 0) * i.qty, 0)
+                          const isExpanded = expandedGroup === group.name || expandedGroup === '__all__'
+                          const variantCount = group.items.length
+
+                          return (
+                            <div key={group.name}>
+                              {/* Group header — clickable */}
+                              <button
+                                onClick={() => setExpandedGroup(isExpanded ? null : group.name)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/5 transition-colors text-start"
+                              >
+                                {group.image
+                                  ? <img src={group.image} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                                  : <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0"><Package className="h-4 w-4 text-white/20" /></div>}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-white text-xs font-bold truncate">{group.name}</div>
+                                  <div className="text-white/30 text-[10px]">
+                                    {variantCount} {locale === 'ar' ? 'متغير' : variantCount === 1 ? 'Variante' : 'Varianten'}
+                                    {' · '}{group.items.map((i) => translateColor(i.color, locale) + '/' + i.size).join(', ')}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {canSeePrices && <span className="text-[#d4a853] text-[10px] font-mono">€{groupValue.toFixed(2)}</span>}
+                                  <span className="px-2 py-0.5 rounded-lg bg-white/10 text-white text-xs font-bold">×{groupTotal}</span>
+                                  <ChevronDown className={`h-3.5 w-3.5 text-white/30 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                </div>
+                              </button>
+
+                              {/* Expanded variants */}
+                              {isExpanded && (
+                                <div className="bg-white/[0.02] border-t border-white/5">
+                                  {group.items.map((item) => {
+                                    const idx = scanLog.indexOf(item)
+                                    return (
+                                      <div key={item.variantId || idx} className="flex items-center gap-2 px-4 ltr:pl-14 rtl:pr-14 py-1.5 hover:bg-white/5 transition-colors">
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-white/60 text-[11px]">{translateColor(item.color, locale)} / {item.size}</span>
+                                          {canSeePrices && item.price > 0 && <span className="text-white/25 text-[10px] ltr:ml-2 rtl:mr-2">€{(item.price * item.qty).toFixed(2)}</span>}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button onClick={() => updateScanLogQty(idx, item.qty - 1)}
+                                            className="h-5 w-5 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">
+                                            <Minus className="h-2.5 w-2.5" />
+                                          </button>
+                                          <input type="number" value={item.qty}
+                                            onChange={(e) => updateScanLogQty(idx, Math.max(1, parseInt(e.target.value) || 1))}
+                                            className="h-5 w-9 rounded bg-white/10 border border-white/20 text-white text-center text-[10px] font-bold focus:outline-none focus:border-[#d4a853]" />
+                                          <button onClick={() => updateScanLogQty(idx, item.qty + 1)}
+                                            className="h-5 w-5 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">
+                                            <Plus className="h-2.5 w-2.5" />
+                                          </button>
+                                        </div>
+                                        <button onClick={() => removeScanLogItem(idx)}
+                                          className="p-0.5 rounded hover:bg-red-500/20 text-white/15 hover:text-red-400">
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Footer: total + book button */}
+                      <div className="p-3 border-t border-white/10 space-y-2">
+                        {/* Total value — only for authorized users */}
+                        {canSeePrices && totalValue > 0 && (
+                          <div className="flex items-center justify-between px-2">
+                            <span className="text-white/40 text-xs">{locale === 'ar' ? 'القيمة الإجمالية' : 'Gesamtwert'}</span>
+                            <span className="text-[#d4a853] font-bold text-sm">€{totalValue.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <button onClick={handleBatchConfirm} disabled={batchBooking}
+                          className={`w-full h-11 rounded-xl font-bold text-white transition-all flex items-center justify-center gap-2 ${
+                            scannerMode === 'intake' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                          } disabled:opacity-50`}>
+                          {batchBooking
+                            ? <><div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />{locale === 'ar' ? 'جاري الحجز...' : 'Wird gebucht...'}</>
+                            : <><Check className="h-4 w-4" />{scannerMode === 'intake' ? t('inventory.intakeBook') : t('inventory.scannerRemove')} ({totalUnits} {locale === 'ar' ? 'قطعة' : 'Stück'})</>
+                          }
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
+            </div>
+            </>
             )}
           </div>
         </div>
+      )}
+
+      {/* Camera Batch Scanner (mobile) */}
+      {cameraBatchOpen && (
+        <CameraBarcodeScannerOverlay
+          mode="batch"
+          locale={locale}
+          warehouseId={warehouseId}
+          onBatchConfirm={() => {
+            qc.invalidateQueries({ queryKey: ['admin-inventory'] })
+            qc.invalidateQueries({ queryKey: ['inventory-stats'] })
+            setCameraBatchOpen(false)
+          }}
+          onClose={() => setCameraBatchOpen(false)}
+        />
       )}
 
       {/* Add Color/Size Modals */}
@@ -769,6 +1007,13 @@ export default function InventoryPage() {
         <Modal onClose={() => setShowAddWarehouse(false)} wide>
           <h3 className="text-lg font-bold mb-4">{locale === 'ar' ? 'إدارة المواقع' : 'Standorte verwalten'}</h3>
 
+          {/* Warehouse error toast */}
+          {warehouseError && (
+            <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm font-medium flex items-center gap-2">
+              <span>✕</span> {warehouseError}
+            </div>
+          )}
+
           {/* Existing warehouses */}
           <div className="space-y-2 mb-6">
             {(warehouses as any[])?.map((w: any) => (
@@ -780,7 +1025,8 @@ export default function InventoryPage() {
                 if ((res.data as any)?.deleted) {
                   qc.invalidateQueries({ queryKey: ['admin-warehouses'] })
                 } else {
-                  alert((res.data as any)?.message?.[locale] ?? (res.data as any)?.message?.de ?? 'Fehler')
+                  setWarehouseError((res.data as any)?.message?.[locale] ?? (res.data as any)?.message?.de ?? 'Fehler')
+                  setTimeout(() => setWarehouseError(null), 4000)
                 }
               }} />
             ))}
