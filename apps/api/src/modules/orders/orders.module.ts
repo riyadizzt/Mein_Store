@@ -1,16 +1,18 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { OrdersController } from './orders.controller'
+import { CouponsController } from './coupons.controller'
 import { OrdersService } from './orders.service'
 import { IdempotencyService } from './idempotency.service'
 import { InventoryListener } from './listeners/inventory.listener'
 import { ZoneBasedCalculator } from './shipping/zone-based.calculator'
 import { SHIPPING_CALCULATOR } from './shipping/shipping-calculator.interface'
 import { InventoryModule } from '../inventory/inventory.module'
+import { AdminModule } from '../admin/admin.module'
 
 @Module({
-  imports: [ConfigModule, InventoryModule],
-  controllers: [OrdersController],
+  imports: [ConfigModule, InventoryModule, AdminModule],
+  controllers: [OrdersController, CouponsController],
   providers: [
     OrdersService,
     IdempotencyService,

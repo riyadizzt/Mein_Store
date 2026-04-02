@@ -339,6 +339,97 @@ export class AdminInventoryService {
 
   // ── BARCODE LOOKUP ─────────────────────────────────────────
 
+  // ── Scan Return Barcode → auto-restock all items ──────────
+  async processReturnScan(returnNumber: string, adminId: string) {
+    const ret = await this.prisma.return.findFirst({
+      where: { returnNumber },
+      include: {
+        order: {
+          select: {
+            id: true, orderNumber: true,
+            items: { select: { id: true, variantId: true, snapshotName: true, snapshotSku: true, quantity: true } },
+          },
+        },
+      },
+    })
+
+    if (!ret) {
+      throw new NotFoundException({
+        message: { de: `Retoure "${returnNumber}" nicht gefunden.`, en: `Return "${returnNumber}" not found.`, ar: `لم يتم العثور على المرتجع "${returnNumber}".` },
+      })
+    }
+
+    // Block if already scanned/processed (received, inspected, refunded, rejected)
+    if (['received', 'inspected', 'refunded', 'rejected'].includes(ret.status)) {
+      return { alreadyProcessed: true, returnNumber, status: ret.status, message: { de: 'Retoure bereits verarbeitet', en: 'Return already processed', ar: 'تمت معالجة المرتجع بالفعل' } }
+    }
+
+    // Get items to restock (from returnItems JSON or order items)
+    const returnItems = ret.returnItems as any[] | null
+    const orderItemMap = new Map(ret.order.items.map((i: any) => [i.id, i]))
+    const items = returnItems?.length ? returnItems : ret.order.items
+    const restocked: any[] = []
+
+    for (const item of items) {
+      // returnItems JSON may not have variantId — look it up from order items
+      const variantId = item.variantId || orderItemMap.get(item.itemId)?.variantId
+      const qty = item.quantity ?? 1
+      if (!variantId || qty <= 0) continue
+
+      const inv = await this.prisma.inventory.findFirst({
+        where: { variantId },
+        orderBy: { quantityOnHand: 'desc' },
+      })
+
+      if (inv) {
+        await this.prisma.inventory.update({
+          where: { id: inv.id },
+          data: { quantityOnHand: { increment: qty } },
+        })
+        await this.prisma.inventoryMovement.create({
+          data: {
+            variantId, warehouseId: inv.warehouseId,
+            type: 'return_received', quantity: qty,
+            quantityBefore: inv.quantityOnHand, quantityAfter: inv.quantityOnHand + qty,
+            notes: `Return scan: ${returnNumber}`, createdBy: adminId,
+          },
+        })
+        restocked.push({ sku: item.sku ?? item.snapshotSku, name: item.name ?? item.snapshotName, quantity: qty })
+      }
+    }
+
+    // Update return status to received
+    if (ret.status === 'requested' || ret.status === 'label_sent' || ret.status === 'in_transit') {
+      await this.prisma.return.update({
+        where: { id: ret.id },
+        data: { status: 'received', receivedAt: new Date() },
+      })
+    }
+
+    // Audit log
+    try {
+      await this.prisma.adminAuditLog.create({
+        data: {
+          adminId,
+          action: 'RETURN_SCANNED',
+          entityType: 'return',
+          entityId: ret.id,
+          changes: { returnNumber, orderNumber: ret.order.orderNumber, itemsRestocked: restocked.length, items: restocked },
+          ipAddress: '::1',
+        },
+      })
+    } catch { /* silent */ }
+
+    return {
+      success: true,
+      returnNumber,
+      orderNumber: ret.order.orderNumber,
+      itemsRestocked: restocked.length,
+      items: restocked,
+      message: { de: `${restocked.length} Artikel zurückgebucht`, en: `${restocked.length} items restocked`, ar: `تم إعادة ${restocked.length} عنصر للمخزون` },
+    }
+  }
+
   async lookupBarcode(barcode: string) {
     const variant = await this.prisma.productVariant.findFirst({
       where: { OR: [{ barcode }, { sku: barcode }] },

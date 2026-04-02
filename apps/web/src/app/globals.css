@@ -2,9 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fix cursor: only show text cursor on actual input elements */
+* { cursor: default; }
+a, button, [role="button"], summary, select, label[for] { cursor: pointer; }
+input, textarea, [contenteditable="true"] { cursor: text; }
+input[type="checkbox"], input[type="radio"], input[type="range"] { cursor: pointer; }
+
 /* Force Latin numerals everywhere — even in Arabic locale */
 [lang="ar"] * {
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Force Western Arabic numerals (0-9) in Arabic locale */
+[lang="ar"] {
+  --number-locale: en-US;
+}
+[lang="ar"] .tabular-nums,
+[lang="ar"] time,
+[lang="ar"] [data-numeric],
+[lang="ar"] .font-mono {
+  unicode-bidi: plaintext;
+  direction: ltr;
+  display: inline-block;
 }
 
 @layer base {

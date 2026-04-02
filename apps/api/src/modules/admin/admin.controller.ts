@@ -35,9 +35,14 @@ import { AdminInventoryService } from './services/admin-inventory.service'
 import { AdminReturnsService } from './services/admin-returns.service'
 import { AdminStaffService } from './services/admin-staff.service'
 import { AuditService } from './services/audit.service'
+import { FinanceReportsService } from './services/finance-reports.service'
 import { EmailService } from '../email/email.service'
+import { InvoiceService } from '../payments/invoice.service'
+import { AdminMarketingService } from './services/admin-marketing.service'
+import { NotificationService } from './services/notification.service'
 import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
+import { Response } from 'express'
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
@@ -55,6 +60,10 @@ export class AdminController {
     private readonly emailService: EmailService,
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly finance: FinanceReportsService,
+    private readonly invoiceService: InvoiceService,
+    private readonly marketing: AdminMarketingService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   // ── Dashboard ─────────────────────────────────────────────
@@ -65,82 +74,45 @@ export class AdminController {
     return this.dashboard.getOverview()
   }
 
-  // ── Notifications ────────────────────────────────────────
+  // ── Notifications (DB-based) ──────────────────────────────
   @Get('notifications')
   @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
-  async getNotifications() {
-    const [newOrders, disputes, lowStock, pendingReturns, failedPayments] = await Promise.all([
-      this.prisma.order.findMany({
-        where: { status: { in: ['pending', 'confirmed'] }, deletedAt: null, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-        select: { id: true, orderNumber: true, totalAmount: true, createdAt: true, user: { select: { firstName: true, lastName: true } } },
-        orderBy: { createdAt: 'desc' }, take: 10,
-      }),
-      this.prisma.order.findMany({
-        where: { status: 'disputed', deletedAt: null },
-        select: { id: true, orderNumber: true, totalAmount: true, createdAt: true, user: { select: { firstName: true, lastName: true } } },
-        orderBy: { createdAt: 'desc' }, take: 5,
-      }),
-      this.prisma.inventory.findMany({
-        where: { quantityOnHand: { lte: 5 } },
-        select: { id: true, quantityOnHand: true, quantityReserved: true, reorderPoint: true,
-          variant: { select: { sku: true, color: true, size: true, product: { select: { translations: { select: { name: true, language: true } } } } } } },
-        take: 10,
-      }),
-      this.prisma.return.findMany({
-        where: { status: { in: ['requested', 'in_transit'] } },
-        select: { id: true, reason: true, createdAt: true, order: { select: { orderNumber: true, user: { select: { firstName: true, lastName: true } } } } },
-        orderBy: { createdAt: 'desc' }, take: 5,
-      }),
-      this.prisma.payment.findMany({
-        where: { status: 'failed', createdAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) } },
-        select: { id: true, orderId: true, provider: true, createdAt: true, order: { select: { orderNumber: true } } },
-        orderBy: { createdAt: 'desc' }, take: 5,
-      }),
-    ])
+  async getNotifications(@Query('limit') limit?: string, @Query('offset') offset?: string, @Query('isRead') isRead?: string, @Query('type') type?: string) {
+    return this.notificationService.findForAdmin({
+      limit: parseInt(limit ?? '20'),
+      offset: parseInt(offset ?? '0'),
+      isRead: isRead === 'true' ? true : isRead === 'false' ? false : undefined,
+      type: type || undefined,
+    })
+  }
 
-    const items: any[] = []
+  @Get('notifications/unread')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
+  async getUnreadCount() {
+    return this.notificationService.getUnreadCount('admin')
+  }
 
-    for (const o of newOrders) {
-      items.push({
-        id: `order-${o.id}`, type: 'new_order', entityType: 'order', entityId: o.id, createdAt: o.createdAt,
-        orderNumber: o.orderNumber, amount: Number(o.totalAmount).toFixed(2),
-        customer: `${o.user?.firstName ?? ''} ${o.user?.lastName ?? ''}`.trim(),
-      })
-    }
-    for (const d of disputes) {
-      items.push({
-        id: `dispute-${d.id}`, type: 'dispute', entityType: 'order', entityId: d.id, createdAt: d.createdAt,
-        orderNumber: d.orderNumber, amount: Number(d.totalAmount).toFixed(2),
-        customer: `${d.user?.firstName ?? ''} ${d.user?.lastName ?? ''}`.trim(),
-      })
-    }
-    for (const inv of lowStock) {
-      const avail = inv.quantityOnHand - inv.quantityReserved
-      if (avail <= inv.reorderPoint) {
-        const names: Record<string, string> = {}
-        for (const t of inv.variant?.product?.translations ?? []) names[t.language] = t.name
-        items.push({
-          id: `stock-${inv.id}`, type: 'low_stock', entityType: 'inventory', entityId: inv.id, createdAt: new Date(),
-          productName: names, available: avail, color: inv.variant?.color, size: inv.variant?.size,
-        })
-      }
-    }
-    for (const r of pendingReturns) {
-      items.push({
-        id: `return-${r.id}`, type: 'return', entityType: 'return', entityId: r.id, createdAt: r.createdAt,
-        orderNumber: r.order?.orderNumber, reason: r.reason,
-        customer: `${r.order?.user?.firstName ?? ''} ${r.order?.user?.lastName ?? ''}`.trim(),
-      })
-    }
-    for (const p of failedPayments) {
-      items.push({
-        id: `payment-${p.id}`, type: 'payment_failed', entityType: 'order', entityId: p.orderId, createdAt: p.createdAt,
-        orderNumber: p.order?.orderNumber, provider: p.provider,
-      })
-    }
+  @Post('notifications/read/:id')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
+  @HttpCode(HttpStatus.OK)
+  async markAsRead(@Param('id') id: string) {
+    await this.notificationService.markAsRead(id)
+    return { success: true }
+  }
 
-    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    return { items: items.slice(0, 20), total: items.length }
+  @Post('notifications/read-all')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
+  @HttpCode(HttpStatus.OK)
+  async markAllAsRead() {
+    await this.notificationService.markAllAsRead('admin')
+    return { success: true }
+  }
+
+  @Delete('notifications/:id')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteNotification(@Param('id') id: string) {
+    await this.prisma.notification.delete({ where: { id } }).catch(() => {})
   }
 
   // ── Orders ────────────────────────────────────────────────
@@ -197,6 +169,19 @@ export class AdminController {
     @Ip() ip: string,
   ) {
     return this.orders.cancelWithRefund(id, reason, req.user.id, ip)
+  }
+
+  @Post('orders/:id/cancel-items')
+  @RequirePermission(PERMISSIONS.ORDERS_CANCEL)
+  @HttpCode(HttpStatus.OK)
+  cancelOrderItems(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('itemIds') itemIds: string[],
+    @Body('reason') reason: string,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    return this.orders.cancelItems(id, itemIds, reason, req.user.id, ip)
   }
 
   @Post('orders/:id/notes')
@@ -696,6 +681,13 @@ export class AdminController {
   @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   lookupBarcode(@Param('code') code: string) { return this.inventory.lookupBarcode(code) }
 
+  @Post('inventory/return-scan/:code')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
+  @HttpCode(HttpStatus.OK)
+  processReturnScan(@Param('code') code: string, @Req() req: any) {
+    return this.inventory.processReturnScan(code, req.user.id)
+  }
+
   @Get('inventory')
   @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   getInventory(
@@ -937,34 +929,59 @@ export class AdminController {
     return this.returns.findAll({ status, search, limit: limit ? +limit : 50 })
   }
 
+  @Get('returns/stats')
+  @RequirePermission(PERMISSIONS.RETURNS_VIEW)
+  getReturnStats() {
+    return this.returns.getStats()
+  }
+
   @Get('returns/:id')
   @RequirePermission(PERMISSIONS.RETURNS_VIEW)
   getReturn(@Param('id', ParseUUIDPipe) id: string) {
     return this.returns.findOne(id)
   }
 
-  @Patch('returns/:id/status')
-  @RequirePermission(PERMISSIONS.RETURNS_EDIT)
-  updateReturnStatus(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body('status') status: string,
-    @Body('notes') notes: string,
-    @Req() req: any,
-    @Ip() ip: string,
-  ) {
-    return this.returns.updateStatus(id, status, notes, req.user.id, ip)
+  @Post('returns/:id/approve')
+  @RequirePermission(PERMISSIONS.RETURNS_APPROVE)
+  @HttpCode(HttpStatus.OK)
+  approveReturn(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.returns.approve(id, req.user.id, ip)
   }
 
-  @Patch('returns/:id/label')
+  @Post('returns/:id/reject')
+  @RequirePermission(PERMISSIONS.RETURNS_APPROVE)
+  @HttpCode(HttpStatus.OK)
+  rejectReturn(@Param('id', ParseUUIDPipe) id: string, @Body('reason') reason: string, @Req() req: any, @Ip() ip: string) {
+    return this.returns.reject(id, reason, req.user.id, ip)
+  }
+
+  @Post('returns/:id/received')
   @RequirePermission(PERMISSIONS.RETURNS_EDIT)
-  updateReturnLabel(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body('returnTrackingNumber') trackingNumber: string,
-    @Body('returnLabelUrl') labelUrl: string,
-    @Req() req: any,
-    @Ip() ip: string,
-  ) {
-    return this.returns.updateLabel(id, trackingNumber, labelUrl, req.user.id, ip)
+  @HttpCode(HttpStatus.OK)
+  markReturnReceived(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.returns.markReceived(id, req.user.id, ip)
+  }
+
+  @Post('returns/:id/inspect')
+  @RequirePermission(PERMISSIONS.RETURNS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  inspectReturn(@Param('id', ParseUUIDPipe) id: string, @Body('items') items: any[], @Req() req: any, @Ip() ip: string) {
+    return this.returns.inspect(id, items, req.user.id, ip)
+  }
+
+  @Post('returns/:id/refund')
+  @RequirePermission(PERMISSIONS.RETURNS_APPROVE)
+  @HttpCode(HttpStatus.OK)
+  processReturnRefund(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.returns.processRefund(id, req.user.id, ip)
+  }
+
+  @Get('returns/:id/label')
+  @RequirePermission(PERMISSIONS.RETURNS_VIEW)
+  async downloadReturnLabel(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    const buffer = await this.returns.generateReturnLabel(id)
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="return-label.pdf"`, 'Content-Length': buffer.length.toString() })
+    res.end(buffer)
   }
 
   // ── Shipments ─────────────────────────────────────────
@@ -1145,7 +1162,11 @@ export class AdminController {
       companyCeo: db.companyCeo ?? process.env.COMPANY_CEO ?? '',
       companyPhone: db.companyPhone ?? process.env.COMPANY_PHONE ?? '',
       companyEmail: db.companyEmail ?? process.env.COMPANY_CONTACT_EMAIL ?? '',
+      companyRegister: db.companyRegister ?? process.env.COMPANY_REGISTER ?? '',
       logoUrl: db.logoUrl ?? '',
+      bankName: db.bankName ?? '',
+      bankIban: db.bankIban ?? '',
+      bankBic: db.bankBic ?? '',
       stripeEnabled: db.stripeEnabled === 'true' || !!process.env.STRIPE_SECRET_KEY,
       klarnaEnabled: db.klarnaEnabled === 'true',
       paypalEnabled: db.paypalEnabled === 'true',
@@ -1162,7 +1183,9 @@ export class AdminController {
     const allowed = [
       // Company
       'companyName', 'companyAddress', 'companyVatId', 'companyCeo',
-      'companyPhone', 'companyEmail', 'logoUrl', 'faviconUrl',
+      'companyPhone', 'companyEmail', 'companyRegister', 'logoUrl', 'faviconUrl',
+      // Bank details (for invoices)
+      'bankName', 'bankIban', 'bankBic',
       // Payments
       'stripeEnabled', 'klarnaEnabled', 'paypalEnabled',
       // Shipping
@@ -1174,6 +1197,13 @@ export class AdminController {
       'heroBannerImage', 'heroBannerTitle_de', 'heroBannerTitle_en', 'heroBannerTitle_ar',
       'heroBannerSubtitle_de', 'heroBannerSubtitle_en', 'heroBannerSubtitle_ar',
       'heroBannerCta_de', 'heroBannerCta_en', 'heroBannerCta_ar', 'heroBannerCtaLink',
+      // Marketing
+      'welcomePopupEnabled', 'welcomeDiscountPercent',
+      // Returns
+      'returnsEnabled',
+      // Notifications
+      'notif_email_new_order', 'notif_email_low_stock', 'notif_sound_enabled',
+      'notif_daily_summary', 'notif_daily_summary_email',
       // Footer
       'instagramUrl', 'facebookUrl', 'tiktokUrl',
       // Legal pages (stored as HTML)
@@ -1429,5 +1459,318 @@ export class AdminController {
         .filter((c) => c.parentId === p.id)
         .map((c) => ({ ...c, children: all.filter((gc) => gc.parentId === c.id) })),
     }))
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // ██ FINANCE REPORTS
+  // ══════════════════════════════════════════════════════════
+
+  @Get('finance/daily')
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
+  getDailyReport(@Query('date') date?: string) {
+    return this.finance.getDailyReport(date)
+  }
+
+  @Get('finance/monthly')
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
+  getMonthlyReport(@Query('year') year: string, @Query('month') month: string) {
+    return this.finance.getMonthlyReport(parseInt(year) || new Date().getFullYear(), parseInt(month) || new Date().getMonth() + 1)
+  }
+
+  @Get('finance/profit')
+  @RequirePermission(PERMISSIONS.FINANCE_MARGINS)
+  getProfitReport(@Query('from') from: string, @Query('to') to: string) {
+    const dateFrom = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+    const dateTo = to || new Date().toISOString().slice(0, 10)
+    return this.finance.getProfitReport(dateFrom, dateTo)
+  }
+
+  @Get('finance/vat')
+  @RequirePermission(PERMISSIONS.FINANCE_VAT_REPORT)
+  getVatReport(@Query('from') from: string, @Query('to') to: string) {
+    const dateFrom = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+    const dateTo = to || new Date().toISOString().slice(0, 10)
+    return this.finance.getVatReport(dateFrom, dateTo)
+  }
+
+  @Get('finance/bestsellers')
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
+  getBestsellersReport(@Query('from') from: string, @Query('to') to: string, @Query('limit') limit?: string) {
+    const dateFrom = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+    const dateTo = to || new Date().toISOString().slice(0, 10)
+    return this.finance.getBestsellersReport(dateFrom, dateTo, parseInt(limit ?? '20'))
+  }
+
+  @Get('finance/customers')
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
+  getCustomerReport(@Query('from') from: string, @Query('to') to: string) {
+    const dateFrom = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+    const dateTo = to || new Date().toISOString().slice(0, 10)
+    return this.finance.getCustomerReport(dateFrom, dateTo)
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // ██ INVOICES MANAGEMENT
+  // ══════════════════════════════════════════════════════════
+
+  @Get('invoices')
+  @RequirePermission(PERMISSIONS.FINANCE_INVOICES)
+  async listInvoices(
+    @Query('search') search?: string,
+    @Query('type') type?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const take = Math.min(parseInt(limit ?? '50'), 200)
+    const skip = parseInt(offset ?? '0')
+    const where: any = {}
+
+    if (type) where.type = type
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(`${from}T00:00:00.000Z`)
+      if (to) where.createdAt.lte = new Date(`${to}T23:59:59.999Z`)
+    }
+    if (search) {
+      where.OR = [
+        { invoiceNumber: { contains: search, mode: 'insensitive' } },
+        { order: { orderNumber: { contains: search, mode: 'insensitive' } } },
+      ]
+    }
+
+    const [invoices, total] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        include: {
+          order: {
+            select: {
+              orderNumber: true,
+              user: { select: { firstName: true, lastName: true, email: true } },
+              guestEmail: true,
+            },
+          },
+          originalInvoice: { select: { invoiceNumber: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+      }),
+      this.prisma.invoice.count({ where }),
+    ])
+
+    return {
+      data: invoices.map((inv) => ({
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        type: inv.type,
+        orderNumber: inv.order.orderNumber,
+        customerName: inv.order.user ? `${inv.order.user.firstName} ${inv.order.user.lastName}` : inv.order.guestEmail ?? '—',
+        customerEmail: inv.order.user?.email ?? inv.order.guestEmail ?? '',
+        originalInvoiceNumber: inv.originalInvoice?.invoiceNumber ?? null,
+        netAmount: Number(inv.netAmount),
+        taxAmount: Number(inv.taxAmount),
+        grossAmount: Number(inv.grossAmount),
+        createdAt: inv.createdAt,
+      })),
+      meta: { total, limit: take, offset: skip },
+    }
+  }
+
+  @Get('invoices/:id/download')
+  @RequirePermission(PERMISSIONS.FINANCE_INVOICES)
+  async downloadInvoice(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    const { buffer, filename } = await this.invoiceService.getInvoicePdfById(id)
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length.toString(),
+    })
+    res.end(buffer)
+  }
+
+  @Get('orders/:id/delivery-note')
+  @RequirePermission(PERMISSIONS.ORDERS_VIEW)
+  async downloadDeliveryNote(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    const buffer = await this.invoiceService.generateDeliveryNote(id)
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Lieferschein-${id.slice(0, 8)}.pdf"`,
+      'Content-Length': buffer.length.toString(),
+    })
+    res.end(buffer)
+  }
+
+  @Get('invoices/export/csv')
+  @RequirePermission(PERMISSIONS.FINANCE_EXPORT)
+  async exportInvoicesCsv(@Query('from') from?: string, @Query('to') to?: string, @Res() res?: Response) {
+    const where: any = {}
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(`${from}T00:00:00.000Z`)
+      if (to) where.createdAt.lte = new Date(`${to}T23:59:59.999Z`)
+    }
+
+    const invoices = await this.prisma.invoice.findMany({
+      where,
+      include: { order: { select: { orderNumber: true } } },
+      orderBy: { createdAt: 'asc' },
+      take: 5000,
+    })
+
+    const csv = this.finance.exportReportCsv(
+      invoices.map((inv) => ({
+        invoiceNumber: inv.invoiceNumber,
+        type: inv.type,
+        orderNumber: inv.order.orderNumber,
+        netAmount: Number(inv.netAmount).toFixed(2),
+        taxAmount: Number(inv.taxAmount).toFixed(2),
+        grossAmount: Number(inv.grossAmount).toFixed(2),
+        date: inv.createdAt.toISOString().slice(0, 10),
+      })),
+      [
+        { key: 'invoiceNumber', label: 'Rechnungsnummer' },
+        { key: 'type', label: 'Typ' },
+        { key: 'orderNumber', label: 'Bestellnummer' },
+        { key: 'netAmount', label: 'Netto (EUR)' },
+        { key: 'taxAmount', label: 'MwSt (EUR)' },
+        { key: 'grossAmount', label: 'Brutto (EUR)' },
+        { key: 'date', label: 'Datum' },
+      ],
+    )
+
+    res!.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="Rechnungen-${from ?? 'alle'}-${to ?? 'heute'}.csv"`,
+    })
+    res!.send(csv)
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // ██ MARKETING — COUPONS
+  // ══════════════════════════════════════════════════════════
+
+  @Get('marketing/coupons')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
+  listCoupons(@Query('search') search?: string, @Query('isActive') isActive?: string, @Query('limit') limit?: string, @Query('offset') offset?: string) {
+    return this.marketing.findAllCoupons({
+      search: search || undefined,
+      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      limit: parseInt(limit ?? '50'),
+      offset: parseInt(offset ?? '0'),
+    })
+  }
+
+  @Post('marketing/coupons')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  @HttpCode(HttpStatus.CREATED)
+  createCoupon(@Body() body: any) {
+    return this.marketing.createCoupon(body)
+  }
+
+  @Patch('marketing/coupons/:id')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  updateCoupon(@Param('id', ParseUUIDPipe) id: string, @Body() body: any) {
+    return this.marketing.updateCoupon(id, body)
+  }
+
+  @Patch('marketing/coupons/:id/toggle')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  toggleCoupon(@Param('id', ParseUUIDPipe) id: string) {
+    return this.marketing.toggleCoupon(id)
+  }
+
+  @Delete('marketing/coupons/:id')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteCoupon(@Param('id', ParseUUIDPipe) id: string) {
+    // Delete usages first, then coupon
+    await this.prisma.couponUsage.deleteMany({ where: { couponId: id } })
+    await this.prisma.coupon.delete({ where: { id } })
+  }
+
+  @Get('marketing/coupons/:id/stats')
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
+  getCouponStats(@Param('id', ParseUUIDPipe) id: string) {
+    return this.marketing.getCouponStats(id)
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // ██ MARKETING — PROMOTIONS
+  // ══════════════════════════════════════════════════════════
+
+  @Get('marketing/promotions')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
+  listPromotions(@Query('isActive') isActive?: string, @Query('limit') limit?: string, @Query('offset') offset?: string) {
+    return this.marketing.findAllPromotions({
+      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      limit: parseInt(limit ?? '50'),
+      offset: parseInt(offset ?? '0'),
+    })
+  }
+
+  @Post('marketing/promotions')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  @HttpCode(HttpStatus.CREATED)
+  createPromotion(@Body() body: any) {
+    return this.marketing.createPromotion(body)
+  }
+
+  @Patch('marketing/promotions/:id')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  updatePromotion(@Param('id', ParseUUIDPipe) id: string, @Body() body: any) {
+    return this.marketing.updatePromotion(id, body)
+  }
+
+  @Patch('marketing/promotions/:id/toggle')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  togglePromotion(@Param('id', ParseUUIDPipe) id: string) {
+    return this.marketing.togglePromotion(id)
+  }
+
+  @Get('marketing/promotions/active')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
+  getActivePromotions() {
+    return this.marketing.getActivePromotions()
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // ██ MARKETING — NEWSLETTER SUBSCRIBERS
+  // ══════════════════════════════════════════════════════════
+
+  @Get('marketing/newsletter')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
+  async getNewsletterSubscribers(@Query('limit') limit?: string, @Query('offset') offset?: string) {
+    const take = Math.min(parseInt(limit ?? '50'), 200)
+    const skip = parseInt(offset ?? '0')
+
+    const [coupons, total] = await Promise.all([
+      this.prisma.coupon.findMany({
+        where: { code: { startsWith: 'WELCOME-' } },
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip,
+        select: { id: true, code: true, description: true, usedCount: true, isActive: true, expiresAt: true, createdAt: true },
+      }),
+      this.prisma.coupon.count({ where: { code: { startsWith: 'WELCOME-' } } }),
+    ])
+
+    return {
+      data: coupons.map((c) => {
+        // Extract email from description [email@example.com]
+        const match = c.description?.match(/\[([^\]]+)\]/)
+        return {
+          id: c.id,
+          email: match?.[1] ?? '—',
+          couponCode: c.code,
+          used: c.usedCount > 0,
+          isActive: c.isActive,
+          expiresAt: c.expiresAt,
+          subscribedAt: c.createdAt,
+        }
+      }),
+      meta: { total, limit: take, offset: skip },
+    }
   }
 }

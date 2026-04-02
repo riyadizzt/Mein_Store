@@ -15,10 +15,17 @@ import { AdminProductsService } from './services/admin-products.service'
 import { AdminInventoryService } from './services/admin-inventory.service'
 import { AdminReturnsService } from './services/admin-returns.service'
 import { AdminStaffService } from './services/admin-staff.service'
+import { FinanceReportsService } from './services/finance-reports.service'
+import { AdminMarketingService } from './services/admin-marketing.service'
+import { NotificationService } from './services/notification.service'
+import { NotificationListener } from './listeners/notification.listener'
+import { NotificationSseController } from './sse/notification-sse.controller'
+import { DailySummaryCron } from './cron/daily-summary.cron'
+import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
 
 @Module({
   imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule],
-  controllers: [AdminController, ShippingZonesController],
+  controllers: [AdminController, ShippingZonesController, NotificationSseController],
   providers: [
     AuditService,
     DashboardService,
@@ -29,8 +36,14 @@ import { AdminStaffService } from './services/admin-staff.service'
     AdminReturnsService,
     AdminStaffService,
     ShippingZonesService,
+    FinanceReportsService,
+    AdminMarketingService,
+    NotificationService,
+    NotificationListener,
+    DailySummaryCron,
+    ExpiryReminderCron,
     PermissionGuard,
   ],
-  exports: [AuditService],
+  exports: [AuditService, AdminMarketingService, NotificationService],
 })
 export class AdminModule {}

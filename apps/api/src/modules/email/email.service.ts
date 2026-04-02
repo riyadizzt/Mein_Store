@@ -1,20 +1,28 @@
-import { Injectable, Logger, Inject } from '@nestjs/common'
+import { Injectable, Logger, Inject, Optional } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Queue } from 'bullmq'
 import * as Handlebars from 'handlebars'
 import * as path from 'path'
 import * as fs from 'fs'
 import { EmailType, EMAIL_SUBJECTS, EMAIL_FROM_MAP } from './email.constants'
+import { IEmailProvider, EMAIL_PROVIDER } from './email-provider.interface'
 import { EmailRateLimiter } from './rate-limit/email-rate-limiter'
 import { PrismaService } from '../../prisma/prisma.service'
 
 // ── Job payload (goes into BullMQ EMAIL_QUEUE) ────────────────
+
+export interface EmailAttachmentPayload {
+  filename: string
+  contentBase64: string // PDF as base64 (for JSON serialization in BullMQ)
+  contentType?: string
+}
 
 export interface EmailJobPayload {
   to: string
   type: EmailType
   lang: string
   data: Record<string, unknown>
+  attachments?: EmailAttachmentPayload[]
 }
 
 @Injectable()
@@ -29,6 +37,7 @@ export class EmailService {
   constructor(
     private readonly config: ConfigService,
     @Inject('EMAIL_QUEUE') private readonly emailQueue: Queue,
+    @Inject(EMAIL_PROVIDER) @Optional() private readonly directProvider: IEmailProvider | null,
     private readonly rateLimiter: EmailRateLimiter,
     private readonly prisma: PrismaService,
   ) {
@@ -43,6 +52,30 @@ export class EmailService {
   // ── Public API: enqueue email (non-blocking) ─────────────────
 
   async enqueue(payload: EmailJobPayload): Promise<void> {
+    // Direct send mode: bypass queue, send immediately (useful for dev or when worker is down)
+    if (this.config.get('EMAIL_SEND_DIRECT') === 'true' && this.directProvider) {
+      try {
+        const { html, subject, from } = this.renderEmail(payload.type, payload.lang, payload.data)
+        await this.directProvider.send({
+          to: payload.to,
+          from,
+          subject,
+          html,
+          tags: [{ name: 'type', value: payload.type }, { name: 'lang', value: payload.lang }],
+          attachments: payload.attachments?.map((a) => ({
+            filename: a.filename,
+            content: a.contentBase64,
+            contentType: a.contentType ?? 'application/pdf',
+          })),
+        })
+        this.logger.log(`Email SENT directly: ${payload.type} → ${payload.to}`)
+        return
+      } catch (err: any) {
+        this.logger.error(`Direct email send failed: ${err.message}`)
+      }
+    }
+
+    // Queue mode: add to BullMQ for async processing
     await this.emailQueue.add('send-email', payload, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
@@ -105,6 +138,20 @@ export class EmailService {
 
   async queueOrderConfirmation(to: string, lang: string, data: Record<string, unknown>): Promise<void> {
     await this.enqueue({ to, type: 'order-confirmation', lang, data })
+  }
+
+  async queueInvoiceEmail(to: string, lang: string, data: Record<string, unknown>, pdfBuffer: Buffer, invoiceNumber: string): Promise<void> {
+    await this.enqueue({
+      to,
+      type: 'invoice',
+      lang,
+      data,
+      attachments: [{
+        filename: `${invoiceNumber}.pdf`,
+        contentBase64: pdfBuffer.toString('base64'),
+        contentType: 'application/pdf',
+      }],
+    })
   }
 
   async queueOrderStatus(to: string, lang: string, data: Record<string, unknown>): Promise<void> {

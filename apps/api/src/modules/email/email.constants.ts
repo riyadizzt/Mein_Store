@@ -10,6 +10,7 @@ export const EMAIL_TYPES = {
   ORDER_CANCELLATION: 'order-cancellation',
   RETURN_CONFIRMATION: 'return-confirmation',
   GUEST_INVITE: 'guest-invite',
+  INVOICE: 'invoice',
 } as const
 
 export type EmailType = (typeof EMAIL_TYPES)[keyof typeof EMAIL_TYPES]
@@ -62,6 +63,11 @@ export const EMAIL_SUBJECTS: Record<EmailType, Record<string, string>> = {
     en: 'Create your account — Malak Bekleidung',
     ar: 'أنشئ حسابك لدى ملبوسات ملك',
   },
+  [EMAIL_TYPES.INVOICE]: {
+    de: 'Ihre Rechnung zu Bestellung #{orderNumber}',
+    en: 'Your invoice for Order #{orderNumber}',
+    ar: '#{orderNumber} فاتورتك للطلب رقم',
+  },
 }
 
 // ── From address mapping ───────────────────────────────────────
@@ -76,4 +82,5 @@ export const EMAIL_FROM_MAP: Record<EmailType, string> = {
   [EMAIL_TYPES.ORDER_CANCELLATION]: 'EMAIL_FROM_ORDERS',
   [EMAIL_TYPES.RETURN_CONFIRMATION]: 'EMAIL_FROM_SUPPORT',
   [EMAIL_TYPES.GUEST_INVITE]: 'EMAIL_FROM_NOREPLY',
+  [EMAIL_TYPES.INVOICE]: 'EMAIL_FROM_ORDERS',
 }

@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 import { formatCurrency } from '@/lib/locale-utils'
 import {
-  TrendingUp, TrendingDown, Package,
+  TrendingUp, TrendingDown, Package, ShoppingCart,
   RotateCcw, Plus, Search, Printer, ArrowUpRight,
 } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -122,6 +122,28 @@ export default function AdminDashboard() {
           />
         )}
       </div>
+
+      {/* Abandoned Carts Card */}
+      {canRevenue && data?.abandonedCarts?.count > 0 && (
+        <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-orange-100 flex items-center justify-center">
+              <ShoppingCart className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-orange-900">
+                {data.abandonedCarts.count} {locale === 'ar' ? 'سلة متروكة اليوم' : locale === 'en' ? 'abandoned carts today' : 'verlassene Warenkörbe heute'}
+              </p>
+              <p className="text-xs text-orange-700">
+                {locale === 'ar' ? 'القيمة الإجمالية' : 'Gesamtwert'}: €{data.abandonedCarts.totalValue}
+              </p>
+            </div>
+          </div>
+          <Link href={`/${locale}/admin/marketing/coupons`} className="text-xs font-medium text-orange-700 hover:text-orange-900 hover:underline">
+            {locale === 'ar' ? 'إنشاء عرض' : locale === 'en' ? 'Create offer' : 'Rabattaktion erstellen'} →
+          </Link>
+        </div>
+      )}
 
       {/* Charts Row — only for finance permission */}
       {canRevenue && (

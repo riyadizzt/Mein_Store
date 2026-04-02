@@ -13,6 +13,7 @@ import { IPaymentProvider, PAYMENT_PROVIDERS } from './payment-provider.interfac
 import { CreatePaymentDto } from './dto/create-payment.dto'
 import { CreateRefundDto } from './dto/create-refund.dto'
 import { PaymentFailedException } from './exceptions/payment-failed.exception'
+import { InvoiceService } from './invoice.service'
 import { ORDER_EVENTS, OrderStatusChangedEvent } from '../orders/events/order.events'
 
 // Map PaymentMethod enum → PaymentProvider
@@ -36,6 +37,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly invoiceService: InvoiceService,
     @Inject(PAYMENT_PROVIDERS) providers: IPaymentProvider[],
   ) {
     this.providerMap = new Map(providers.map((p) => [p.providerName, p]))
@@ -87,6 +89,22 @@ export class PaymentsService {
     }
 
     this.logger.log(`Confirmation token for order ${orderId}: ${confirmationToken}`)
+
+    // Auto-generate invoice on manual confirm
+    try {
+      const { invoice, pdfBuffer } = await this.invoiceService.generateAndStoreInvoice(orderId)
+      this.eventEmitter.emit('invoice.generated', {
+        orderId,
+        orderNumber: currentOrder.orderNumber,
+        invoiceNumber: invoice.invoiceNumber,
+        grossAmount: Number(invoice.grossAmount).toFixed(2),
+        pdfBuffer,
+        correlationId: 'payment-confirm',
+      })
+    } catch (err) {
+      this.logger.error(`Invoice generation failed on manual confirm for order ${orderId}: ${err}`)
+    }
+
     return { status: 'captured', orderId, orderNumber: currentOrder.orderNumber, confirmationToken }
   }
 
@@ -289,6 +307,21 @@ export class PaymentsService {
     this.logger.log(
       `[${correlationId}] Payment SUCCESS: ${payment.id} | order=${payment.order.orderNumber} → confirmed`,
     )
+
+    // Auto-generate invoice and emit event for email
+    try {
+      const { invoice, pdfBuffer } = await this.invoiceService.generateAndStoreInvoice(payment.order.id)
+      this.eventEmitter.emit('invoice.generated', {
+        orderId: payment.order.id,
+        orderNumber: payment.order.orderNumber,
+        invoiceNumber: invoice.invoiceNumber,
+        grossAmount: Number(invoice.grossAmount).toFixed(2),
+        pdfBuffer,
+        correlationId,
+      })
+    } catch (err) {
+      this.logger.error(`Invoice auto-generation failed for order ${payment.order.orderNumber}: ${err}`)
+    }
   }
 
   // ── HANDLE PAYMENT FAILURE (called from webhook) ───────────
@@ -481,6 +514,13 @@ export class PaymentsService {
     this.logger.log(
       `[${correlationId}] Refund: ${refund.id} | payment=${payment.id} | amount=${dto.amount} cents | ${isFullRefund ? 'FULL' : 'PARTIAL'} | by=${performedBy}`,
     )
+
+    // Auto-generate credit note (Gutschrift)
+    try {
+      await this.invoiceService.generateCreditNote(payment.orderId, dto.amount / 100)
+    } catch (err) {
+      this.logger.error(`Credit note generation failed for payment ${payment.id}: ${err}`)
+    }
 
     return refund
   }

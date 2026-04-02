@@ -7,6 +7,7 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 import { ArrowLeft, Loader2, CreditCard, Lock, Shield } from 'lucide-react'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { useCartStore } from '@/store/cart-store'
+import { CouponInput } from '@/components/coupon-input'
 import { useShopSettings } from '@/hooks/use-shop-settings'
 import { getStripe } from '@/lib/stripe'
 import { api } from '@/lib/api'
@@ -259,7 +260,7 @@ function StepPaymentInner() {
             {isProcessing ? (
               <><Loader2 className="h-5 w-5 animate-spin" />{t('processing')}</>
             ) : (
-              <><Lock className="h-4 w-4" />{t('placeOrderAmount', { amount: totalAmount.toFixed(2) })}</>
+              <><Lock className="h-4 w-4" />{t('placeOrderAmount', { amount: (totalAmount - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2) })}</>
             )}
           </Button>
 
@@ -296,8 +297,18 @@ function StepPaymentInner() {
             <div className="border-t pt-3 space-y-1.5 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{cartSubtotal.toFixed(2)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>{shippingCost === 0 ? t('shippingStep.free') : `€${shippingCost.toFixed(2)}`}</span></div>
-              <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{totalAmount.toFixed(2)}</span></div>
+              {useCheckoutStore.getState().discountAmount > 0 && (
+                <div className="flex justify-between text-green-600 text-xs font-medium">
+                  <span>{locale === 'ar' ? 'خصم' : locale === 'en' ? 'Discount' : 'Rabatt'} ({useCheckoutStore.getState().couponCode})</span>
+                  <span>-€{useCheckoutStore.getState().discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{(totalAmount - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2)}</span></div>
               <p className="text-[11px] text-muted-foreground text-right">{t('inclVat')}</p>
+              {/* Coupon Input */}
+              <div className="pt-3 border-t">
+                <CouponInput subtotal={cartSubtotal} />
+              </div>
             </div>
           </div>
         </div>

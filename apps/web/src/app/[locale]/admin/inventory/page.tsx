@@ -157,6 +157,49 @@ export default function InventoryPage() {
   const handleBatchScan = useCallback(async (code: string) => {
     if (!code.trim()) return
     setScanInput('')
+
+    // Check if it's a return barcode (RET-XXXX-XXXXX)
+    if (code.trim().startsWith('RET-')) {
+      try {
+        const { data } = await api.post(`/admin/inventory/return-scan/${encodeURIComponent(code.trim())}`)
+        if (data.alreadyProcessed) {
+          setScanFlash({ text: locale === 'ar' ? 'تمت معالجة المرتجع بالفعل' : 'Retoure bereits verarbeitet', type: 'error' })
+        } else if (data.success && data.items?.length > 0) {
+          // Show all returned items in the scan list
+          setScanFlash({ text: locale === 'ar' ? `إرجاع ${data.items.length} عنصر — ${data.orderNumber}` : `Retoure: ${data.items.length} Artikel — ${data.orderNumber}`, type: 'new' })
+          setScanLog((prev) => {
+            const newItems = [...prev]
+            for (const item of data.items) {
+              const existing = newItems.findIndex((i) => i.sku === item.sku)
+              if (existing >= 0) {
+                newItems[existing] = { ...newItems[existing], qty: newItems[existing].qty + item.quantity }
+              } else {
+                newItems.push({
+                  variantId: item.variantId ?? '',
+                  sku: item.sku,
+                  productName: [{ name: item.name, language: 'de' }],
+                  image: null,
+                  color: '',
+                  size: '',
+                  inventoryId: '',
+                  price: 0,
+                  qty: item.quantity,
+                  mode: 'intake',
+                })
+              }
+            }
+            return newItems
+          })
+        } else {
+          setScanFlash({ text: locale === 'ar' ? 'لا توجد عناصر في المرتجع' : 'Keine Artikel in Retoure', type: 'error' })
+        }
+      } catch {
+        setScanFlash({ text: locale === 'ar' ? 'رقم المرتجع غير موجود' : 'Retoure nicht gefunden', type: 'error' })
+      }
+      setTimeout(() => scanRef.current?.focus(), 50)
+      return
+    }
+
     try {
       const { data } = await api.get(`/admin/inventory/barcode/${encodeURIComponent(code.trim())}`)
       setScannedProduct(data)

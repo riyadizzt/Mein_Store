@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNotificationStream } from '@/hooks/use-notification-stream'
+import { useNotificationSound } from '@/hooks/use-notification-sound'
 import {
   LayoutDashboard, Package, ShoppingBag, Users, Warehouse, Tag,
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
-  ScanBarcode,
+  ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -24,6 +26,7 @@ const NAV_GROUPS = [
       { key: 'dashboard', labelKey: 'dashboard', href: '/admin/dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
       { key: 'orders', labelKey: 'orders', href: '/admin/orders', icon: ShoppingBag, badgeKey: 'openOrders', permission: 'orders.view' },
       { key: 'customers', labelKey: 'users', href: '/admin/customers', icon: Users, permission: 'customers.view' },
+      { key: 'notifications', labelKey: 'notifications', href: '/admin/notifications', icon: Bell, badgeKey: 'unreadNotifications', permission: 'dashboard.view' },
     ],
   },
   {
@@ -38,8 +41,22 @@ const NAV_GROUPS = [
     label: { de: 'Fulfillment', en: 'Fulfillment', ar: 'التنفيذ' },
     items: [
       { key: 'shipping-zones', labelKey: 'shippingZones', href: '/admin/shipping-zones', icon: MapPin, permission: 'settings.view' },
-      { key: 'returns', labelKey: 'returns', href: '/admin/returns', icon: RotateCcw, permission: 'returns.view' },
+      { key: 'returns', labelKey: 'returns', href: '/admin/returns', icon: RotateCcw, badgeKey: 'pendingReturns', permission: 'returns.view' },
       { key: 'shipments', labelKey: 'shipments', href: '/admin/shipments', icon: Truck, permission: 'shipping.view' },
+    ],
+  },
+  {
+    label: { de: 'Finanzen', en: 'Finance', ar: 'المالية' },
+    items: [
+      { key: 'finance', labelKey: 'finance', href: '/admin/finance', icon: TrendingUp, permission: 'finance.revenue' },
+      { key: 'invoices', labelKey: 'invoices', href: '/admin/invoices', icon: Receipt, permission: 'finance.invoices' },
+    ],
+  },
+  {
+    label: { de: 'Marketing', en: 'Marketing', ar: 'التسويق' },
+    items: [
+      { key: 'coupons', labelKey: 'coupons', href: '/admin/marketing/coupons', icon: Ticket, permission: 'settings.view' },
+      { key: 'promotions', labelKey: 'promotions', href: '/admin/marketing/promotions', icon: Megaphone, permission: 'settings.view' },
     ],
   },
   {
@@ -88,14 +105,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { data: notifications } = useQuery({
     queryKey: ['admin-notifications'],
     queryFn: async () => {
-      const { data } = await api.get('/admin/dashboard')
+      const [{ data: dash }, { data: unread }] = await Promise.all([
+        api.get('/admin/dashboard'),
+        api.get('/admin/notifications/unread'),
+      ])
       return {
-        openOrders: data?.ordersByStatus
+        openOrders: dash?.ordersByStatus
           ?.filter((s: any) => ['pending', 'confirmed', 'processing'].includes(s.status))
           .reduce((sum: number, s: any) => sum + s.count, 0) ?? 0,
-        lowStock: data?.lowStock?.length ?? 0,
-        disputes: data?.disputes?.count ?? 0,
-        pendingReturns: data?.pendingReturns?.count ?? 0,
+        lowStock: dash?.lowStock?.length ?? 0,
+        disputes: dash?.disputes?.count ?? 0,
+        pendingReturns: dash?.pendingReturns?.count ?? 0,
+        unreadNotifications: unread?.count ?? 0,
       }
     },
     refetchInterval: 30000,
@@ -284,175 +305,202 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 function NotificationBell({ locale }: { count: number; locale: string }) {
   const t = useTranslations('admin')
   const navRouter = useRouter()
+  const qc = useQueryClient()
   const [open, setOpen] = useState(false)
-  const [readIds, setReadIds] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    try { return new Set(JSON.parse(localStorage.getItem('admin-notif-read') ?? '[]')) } catch { return new Set() }
-  })
 
+  // SSE real-time stream
+  const { lastNotification } = useNotificationStream()
+
+  // Sound on new order
+  const { playDing, enableSound } = useNotificationSound()
+
+  // Request browser push permission on first click
+  const pushAsked = useRef(false)
+
+  // Fetch notifications from DB
   const { data } = useQuery({
-    queryKey: ['admin-notif-items'],
-    queryFn: async () => { const { data } = await api.get('/admin/notifications'); return data },
+    queryKey: ['admin-notifications'],
+    queryFn: async () => { const { data } = await api.get('/admin/notifications', { params: { limit: 15 } }); return data },
     refetchInterval: 30000,
   })
 
-  const items = (data?.items ?? []) as any[]
-  const unreadCount = items.filter((n) => !readIds.has(n.id)).length
+  // Unread count
+  const { data: unreadData } = useQuery({
+    queryKey: ['admin-notifications-unread'],
+    queryFn: async () => { const { data } = await api.get('/admin/notifications/unread'); return data },
+    refetchInterval: 30000,
+  })
 
-  const persist = (ids: Set<string>) => {
-    setReadIds(ids)
-    try { localStorage.setItem('admin-notif-read', JSON.stringify([...ids])) } catch {}
-  }
+  const items = (data?.data ?? data?.items ?? []) as any[]
+  const unreadCount = unreadData?.count ?? items.filter((n: any) => !n.isRead).length
 
-  const handleClickItem = (n: any) => {
-    // 1. Mark as read
-    const next = new Set(readIds)
-    next.add(n.id)
-    persist(next)
-    // 2. Close dropdown
+  // Enable sound on first user interaction anywhere on the page
+  useEffect(() => {
+    const handler = () => { enableSound(); document.removeEventListener('click', handler) }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [enableSound])
+
+  // React to SSE notification — play sound + push for important types
+  const SOUND_TYPES = ['new_order', 'order_cancelled', 'return_submitted', 'payment_failed']
+  useEffect(() => {
+    if (!lastNotification) return
+    if (SOUND_TYPES.includes(lastNotification.type)) {
+      playDing()
+    }
+    // Browser push if tab is hidden
+    if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      const translated = translateNotif(lastNotification)
+      const n = new Notification(translated.title, {
+        body: translated.body,
+        icon: '/favicon.ico',
+        tag: lastNotification.id,
+      })
+      n.onclick = () => { window.focus(); navRouter.push(`/${locale}/admin/orders/${lastNotification.entityId}`) }
+    }
+  }, [lastNotification]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleClickItem = async (n: any) => {
+    if (!n.isRead) await api.post(`/admin/notifications/read/${n.id}`)
+    qc.invalidateQueries({ queryKey: ['admin-notifications'] })
+    qc.invalidateQueries({ queryKey: ['admin-notifications-unread'] })
     setOpen(false)
-    // 3. Navigate
-    const link = getLink(n)
+    const link = n.entityType === 'order' ? `/${locale}/admin/orders/${n.entityId}` :
+                 n.entityType === 'return' ? `/${locale}/admin/returns` :
+                 n.entityType === 'inventory' ? `/${locale}/admin/inventory` :
+                 `/${locale}/admin/dashboard`
     navRouter.push(link)
   }
 
-  const handleMarkAllRead = () => {
-    const all = new Set(items.map((n: any) => n.id))
-    persist(all)
+  const handleMarkAllRead = async () => {
+    await api.post('/admin/notifications/read-all')
+    qc.invalidateQueries({ queryKey: ['admin-notifications'] })
+    qc.invalidateQueries({ queryKey: ['admin-notifications-unread'] })
   }
 
-  const getLink = (n: any): string => {
-    switch (n.entityType) {
-      case 'order': return `/${locale}/admin/orders/${n.entityId}`
-      case 'return': return `/${locale}/admin/returns`
-      case 'inventory': return `/${locale}/admin/inventory`
-      default: return `/${locale}/admin/dashboard`
-    }
-  }
-
-  const getTitle = (n: any) => {
-    const pn = typeof n.productName === 'object' ? (n.productName[locale] ?? n.productName.de ?? '') : (n.productName ?? '')
-    switch (n.type) {
-      case 'new_order': return t('notif.newOrder', { order: n.orderNumber ?? '', amount: n.amount ?? '' })
-      case 'dispute': return t('notif.dispute', { order: n.orderNumber ?? '' })
-      case 'low_stock': return t('notif.lowStock', { product: pn })
-      case 'return': return t('notif.return', { order: n.orderNumber ?? '' })
-      case 'payment_failed': return t('notif.paymentFailed', { order: n.orderNumber ?? '' })
-      default: return ''
-    }
-  }
-
-  const getSub = (n: any) => {
-    switch (n.type) {
-      case 'new_order': return t('notif.newOrderSub', { customer: n.customer ?? '' })
-      case 'dispute': return t('notif.disputeSub', { customer: n.customer ?? '', amount: n.amount ?? '' })
-      case 'low_stock': return t('notif.lowStockSub', { count: n.available ?? 0 })
-      case 'return': return t('notif.returnSub', { customer: n.customer ?? '' })
-      case 'payment_failed': return t('notif.paymentFailedSub', { provider: n.provider ?? '' })
-      default: return ''
+  const handleBellClick = () => {
+    enableSound()
+    setOpen(!open)
+    // Ask for push permission once
+    if (!pushAsked.current && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      pushAsked.current = true
+      Notification.requestPermission()
     }
   }
 
   const timeAgo = (date: string) => {
     const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-    if (s < 60) return t('notif.ago_just')
-    if (s < 3600) return t('notif.ago_min', { n: Math.floor(s / 60) })
-    if (s < 86400) return t('notif.ago_hour', { n: Math.floor(s / 3600) })
-    return t('notif.ago_day', { n: Math.floor(s / 86400) })
+    if (s < 60) return locale === 'ar' ? 'الآن' : locale === 'en' ? 'just now' : 'gerade'
+    if (s < 3600) return `${Math.floor(s / 60)} ${locale === 'ar' ? 'د' : 'min'}`
+    if (s < 86400) return `${Math.floor(s / 3600)} ${locale === 'ar' ? 'س' : 'h'}`
+    return `${Math.floor(s / 86400)} ${locale === 'ar' ? 'ي' : 'd'}`
   }
 
-  // Lucide icon per type
-  const NotifIcon = ({ type }: { type: string }) => {
-    const cfg: Record<string, { Icon: typeof Bell; bg: string; fg: string }> = {
-      new_order: { Icon: ShoppingBag, bg: 'bg-blue-100', fg: 'text-blue-600' },
-      dispute: { Icon: Bell, bg: 'bg-red-100', fg: 'text-red-600' },
-      low_stock: { Icon: Warehouse, bg: 'bg-orange-100', fg: 'text-orange-600' },
-      return: { Icon: RotateCcw, bg: 'bg-yellow-100', fg: 'text-yellow-700' },
-      payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600' },
+  // Translate notification title/body based on type + data + locale
+  const translateNotif = (n: any) => {
+    const d = n.data ?? {}
+    const l = locale
+    const t = (de: string, en: string, ar: string) => l === 'ar' ? ar : l === 'en' ? en : de
+    const on = d.orderNumber ?? ''
+    switch (n.type) {
+      case 'new_order': return { title: t(`Neue Bestellung #${on}`, `New Order #${on}`, `طلب جديد #${on}`), body: d.amount ? `€${d.amount} ${t('von', 'from', 'من')} ${d.customerName ?? ''}` : '' }
+      case 'order_cancelled': return { title: t(`Bestellung storniert ${on ? '#' + on : ''}`, `Order cancelled ${on ? '#' + on : ''}`, `طلب ملغى ${on ? '#' + on : ''}`), body: d.reason ?? '' }
+      case 'low_stock': return { title: t(`Mindestbestand: ${d.sku ?? ''}`, `Low stock: ${d.sku ?? ''}`, `مخزون منخفض: ${d.sku ?? ''}`), body: t(`Noch ${d.available ?? 0} Stück`, `${d.available ?? 0} left`, `${d.available ?? 0} متبقي`) }
+      case 'customer_registered': return { title: t('Neuer Kunde', 'New customer', 'عميل جديد'), body: d.name ?? d.email ?? '' }
+      case 'return_submitted': return { title: t(`Neue Retoure ${on ? '#' + on : ''}`, `New return ${on ? '#' + on : ''}`, `إرجاع جديد ${on ? '#' + on : ''}`), body: d.reason ?? '' }
+      case 'return_approved': return { title: t(`Retoure genehmigt`, `Return approved`, `تمت الموافقة على الإرجاع`), body: on ? t(`Bestellung #${on}`, `Order #${on}`, `طلب #${on}`) : '' }
+      case 'return_refunded': return { title: t(`Erstattung verarbeitet`, `Refund processed`, `تم معالجة الاسترداد`), body: d.refundAmount ? `€${Number(d.refundAmount).toFixed(2)}` : '' }
+      case 'payment_failed': return { title: t(`Zahlung fehlgeschlagen ${on ? '#' + on : ''}`, `Payment failed ${on ? '#' + on : ''}`, `فشل الدفع ${on ? '#' + on : ''}`), body: d.provider ?? '' }
+      case 'coupon_expiring': return { title: t(`Gutschein läuft ab`, `Coupon expiring`, `قسيمة على وشك الانتهاء`), body: d.code ?? '' }
+      case 'promotion_expiring': return { title: t(`Aktion endet bald`, `Promotion ending`, `عرض على وشك الانتهاء`), body: d.name ?? '' }
+      default: return { title: n.title ?? '', body: n.body ?? '' }
     }
-    const c = cfg[type] ?? { Icon: Bell, bg: 'bg-muted', fg: 'text-muted-foreground' }
-    return (
-      <div className={`h-10 w-10 rounded-full ${c.bg} flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-105`}>
-        <c.Icon className={`h-4.5 w-4.5 ${c.fg}`} />
-      </div>
-    )
   }
 
-  const dotColor: Record<string, string> = {
-    new_order: 'bg-blue-500', dispute: 'bg-red-500', low_stock: 'bg-orange-500',
-    return: 'bg-yellow-500', payment_failed: 'bg-red-500',
+  const typeConfig: Record<string, { Icon: any; bg: string; fg: string; dot: string }> = {
+    new_order: { Icon: ShoppingBag, bg: 'bg-blue-100', fg: 'text-blue-600', dot: 'bg-blue-500' },
+    order_cancelled: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
+    low_stock: { Icon: Warehouse, bg: 'bg-orange-100', fg: 'text-orange-600', dot: 'bg-orange-500' },
+    return_submitted: { Icon: RotateCcw, bg: 'bg-yellow-100', fg: 'text-yellow-700', dot: 'bg-yellow-500' },
+    return_approved: { Icon: RotateCcw, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
+    return_refunded: { Icon: RotateCcw, bg: 'bg-emerald-100', fg: 'text-emerald-600', dot: 'bg-emerald-500' },
+    payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
+    customer_registered: { Icon: Users, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
+    coupon_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },
+    promotion_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },
   }
 
   return (
     <div className="relative">
-      <button
-        className={`relative p-2 rounded-lg transition-all duration-200 hover:bg-muted active:scale-95 ${unreadCount > 0 ? 'animate-[bell-shake_4s_ease-in-out_infinite]' : ''}`}
-        onClick={() => setOpen(!open)}
-      >
+      <button className={`relative p-2 rounded-lg transition-all hover:bg-muted active:scale-95 ${unreadCount > 0 ? 'animate-[bell-shake_4s_ease-in-out_infinite]' : ''}`}
+        onClick={handleBellClick}>
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 h-5 min-w-[20px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-1 animate-[badge-pulse_2s_ease-in-out_infinite]">
-            {unreadCount}
+          <span className="absolute -top-0.5 ltr:-right-0.5 rtl:-left-0.5 h-5 min-w-[20px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-1 animate-[badge-pulse_2s_ease-in-out_infinite]">
+            {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
       <style>{`
-        @keyframes bell-shake { 0%,100%{transform:rotate(0)} 2%{transform:rotate(8deg)} 4%{transform:rotate(-8deg)} 6%{transform:rotate(4deg)} 8%{transform:rotate(0)} }
-        @keyframes badge-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
-        @keyframes notif-slide { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes notif-fade { from{opacity:0;transform:translateY(-4px)scale(.98)} to{opacity:1;transform:translateY(0)scale(1)} }
+        @keyframes bell-shake{0%,100%{transform:rotate(0)}2%{transform:rotate(8deg)}4%{transform:rotate(-8deg)}6%{transform:rotate(4deg)}8%{transform:rotate(0)}}
+        @keyframes badge-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+        @keyframes nf-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 rtl:right-auto rtl:left-0 top-full mt-2 w-96 bg-background border rounded-2xl shadow-2xl z-50 overflow-hidden" style={{ animation: 'notif-fade 200ms ease-out' }}>
+          <div className="absolute ltr:right-0 rtl:left-0 top-full mt-2 w-[380px] max-w-[calc(100vw-2rem)] bg-background border rounded-2xl shadow-2xl z-50 overflow-hidden"
+            style={{ animation: 'nf-in 200ms ease-out' }}>
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b bg-muted/20">
-              <div>
-                <h3 className="text-sm font-bold">{t('notif.title')}</h3>
-                {unreadCount > 0 && <p className="text-xs text-muted-foreground">{t('notif.unread', { count: unreadCount })}</p>}
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <h3 className="text-sm font-bold">{t('notif.title')}</h3>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button onClick={handleMarkAllRead} className="text-[11px] text-[#d4a853] hover:underline font-medium">
+                    {t('notif.markAllRead')}
+                  </button>
+                )}
               </div>
-              {unreadCount > 0 && (
-                <button onClick={handleMarkAllRead} className="text-xs text-primary hover:underline font-medium transition-colors">
-                  {t('notif.markAllRead')}
-                </button>
-              )}
             </div>
 
             {/* Items */}
-            <div className="max-h-[28rem] overflow-y-auto">
+            <div className="max-h-[400px] overflow-y-auto">
               {items.length === 0 ? (
-                <div className="px-5 py-12 text-center">
-                  <Bell className="h-10 w-10 mx-auto mb-3 text-muted-foreground/20" />
+                <div className="py-12 text-center">
+                  <Bell className="h-10 w-10 mx-auto mb-3 text-muted-foreground/15" />
                   <p className="text-sm text-muted-foreground">{t('notif.empty')}</p>
                 </div>
-              ) : items.slice(0, 10).map((n: any, i: number) => {
-                const isUnread = !readIds.has(n.id)
-                const isDanger = n.type === 'dispute' || n.type === 'payment_failed'
+              ) : items.map((n: any, i: number) => {
+                const cfg = typeConfig[n.type] ?? { Icon: Bell, bg: 'bg-muted', fg: 'text-muted-foreground', dot: 'bg-muted-foreground' }
+                const Icon = cfg.Icon
                 return (
-                  <button
-                    key={n.id}
-                    type="button"
-                    style={{ animation: `notif-slide 300ms ease-out ${i * 40}ms both` }}
-                    className={`group w-full text-left rtl:text-right flex items-start gap-3.5 px-5 py-3.5 transition-all duration-200 hover:bg-muted/50 ${isUnread ? 'bg-primary/[0.04]' : ''}`}
-                    onClick={() => handleClickItem(n)}
-                  >
-                    <NotifIcon type={n.type} />
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <div className="flex items-center gap-2">
-                        <p className={`text-[13px] leading-snug ${isUnread ? 'font-bold' : 'font-medium'} ${isDanger ? 'text-red-600' : ''}`}>
-                          {getTitle(n)}
-                        </p>
-                        {isUnread && <span className={`h-2 w-2 rounded-full flex-shrink-0 ${dotColor[n.type] ?? 'bg-primary'}`} />}
+                  <button key={n.id} type="button" onClick={() => handleClickItem(n)}
+                    style={{ animationDelay: `${i * 30}ms`, animation: 'nf-in 200ms ease-out both' }}
+                    className={`w-full flex items-start gap-3 px-4 py-3 text-start transition-colors hover:bg-muted/40 border-b border-border/30 last:border-0 ${!n.isRead ? 'bg-[#d4a853]/[0.04]' : ''}`}>
+                    <div className={`h-9 w-9 rounded-xl ${cfg.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                      <Icon className={`h-4 w-4 ${cfg.fg}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className={`text-[13px] leading-tight truncate ${!n.isRead ? 'font-bold' : 'font-medium'}`}>{translateNotif(n).title}</p>
+                        {!n.isRead && <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{getSub(n)}</p>
-                      <p className="text-[10px] text-muted-foreground/50 mt-1">{timeAgo(n.createdAt)}</p>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">{translateNotif(n).body}</p>
+                      <p className="text-[10px] text-muted-foreground/40 mt-1">{timeAgo(n.createdAt)}</p>
                     </div>
                   </button>
                 )
               })}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t px-4 py-2">
+              <button onClick={() => { setOpen(false); navRouter.push(`/${locale}/admin/notifications`) }}
+                className="w-full text-center text-xs text-[#d4a853] font-medium hover:underline py-1">
+                {locale === 'ar' ? 'عرض جميع الإشعارات' : locale === 'en' ? 'View all notifications' : 'Alle Benachrichtigungen'}
+              </button>
             </div>
           </div>
         </>

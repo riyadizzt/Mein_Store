@@ -5,12 +5,14 @@ import {
   Body,
   Param,
   Req,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
   Headers,
 } from '@nestjs/common'
+import { Response } from 'express'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { JwtOptionalGuard } from '../../common/guards/jwt-optional.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'
@@ -57,12 +59,21 @@ export class PaymentsController {
     return this.paymentsService.createRefund(dto, req.user.id, correlationId ?? 'no-corr')
   }
 
+  // ── Invoice PDF Download (streams actual PDF) ────────────
   @Get('orders/:orderId/invoice')
   @UseGuards(JwtAuthGuard)
   async getInvoice(
     @Param('orderId', ParseUUIDPipe) orderId: string,
     @Req() req: any,
+    @Res() res: Response,
   ) {
-    return this.invoiceService.getOrGenerateInvoice(orderId, req.user.id)
+    const pdfBuffer = await this.invoiceService.getOrGenerateInvoice(orderId, req.user.id)
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Rechnung-${orderId.slice(0, 8)}.pdf"`,
+      'Content-Length': pdfBuffer.length.toString(),
+    })
+    res.end(pdfBuffer)
   }
 }

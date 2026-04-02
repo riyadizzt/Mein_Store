@@ -1,59 +1,138 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { PrismaService } from '../../../prisma/prisma.service'
+import { PaymentsService } from '../../payments/payments.service'
+import { NotificationService } from './notification.service'
 import { AuditService } from './audit.service'
+import { EmailService } from '../../email/email.service'
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const PDFDocument = require('pdfkit')
+
+// ── Types ────────────────────────────────────────────────────
+
+interface ReturnFindAllQuery {
+  status?: string
+  search?: string
+  reason?: string
+  limit?: number
+  offset?: number
+}
+
+interface InspectItemInput {
+  itemId: string
+  condition: 'ok' | 'damaged'
+}
+
+interface ReturnItemJson {
+  itemId: string
+  sku?: string
+  name?: string
+  quantity: number
+  unitPrice: number
+  variantId?: string
+  condition?: string
+  productId?: string
+}
+
+// ── Valid Status Transitions (STRICT) ────────────────────────
+//
+// requested  → label_sent (approve) OR rejected
+// label_sent → in_transit OR received (skip transit)
+// in_transit → received
+// received   → inspected
+// inspected  → refunded (processRefund) OR rejected
+//
+
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  requested: ['label_sent', 'rejected'],
+  label_sent: ['in_transit', 'received'],
+  in_transit: ['received'],
+  received: ['inspected'],
+  inspected: ['refunded', 'rejected'],
+}
 
 @Injectable()
 export class AdminReturnsService {
+  private readonly logger = new Logger(AdminReturnsService.name)
+
   constructor(
     private readonly prisma: PrismaService,
+    private readonly paymentsService: PaymentsService,
+    private readonly notificationService: NotificationService,
     private readonly audit: AuditService,
+    private readonly emailService: EmailService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async findAll(query: { status?: string; search?: string; limit?: number }) {
-    const where: any = {}
-    if (query.status) where.status = query.status
+  // ── 1. findAll ─────────────────────────────────────────────
 
-    if (query.search) {
-      where.order = {
-        OR: [
-          { orderNumber: { contains: query.search, mode: 'insensitive' } },
-          { user: { OR: [
-            { firstName: { contains: query.search, mode: 'insensitive' } },
-            { lastName: { contains: query.search, mode: 'insensitive' } },
-            { email: { contains: query.search, mode: 'insensitive' } },
-          ] } },
-        ],
-      }
+  async findAll(query: ReturnFindAllQuery) {
+    const limit = query.limit ?? 50
+    const offset = query.offset ?? 0
+
+    const where: Record<string, unknown> = {}
+
+    if (query.status) {
+      where.status = query.status
     }
 
-    return this.prisma.return.findMany({
-      where,
-      include: {
-        order: {
-          select: {
-            orderNumber: true,
-            totalAmount: true,
-            createdAt: true,
-            items: {
-              select: {
-                id: true,
-                snapshotName: true,
-                snapshotSku: true,
-                quantity: true,
-                unitPrice: true,
-                totalPrice: true,
-                variant: { select: { id: true, color: true, size: true } },
+    if (query.reason) {
+      where.reason = query.reason
+    }
+
+    if (query.search) {
+      where.OR = [
+        { returnNumber: { contains: query.search, mode: 'insensitive' } },
+        { order: { orderNumber: { contains: query.search, mode: 'insensitive' } } },
+      ]
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.return.findMany({
+        where,
+        include: {
+          order: {
+            select: {
+              orderNumber: true,
+              totalAmount: true,
+              createdAt: true,
+              items: {
+                select: {
+                  id: true,
+                  snapshotName: true,
+                  snapshotSku: true,
+                  quantity: true,
+                  unitPrice: true,
+                  totalPrice: true,
+                  variant: { select: { id: true, color: true, size: true } },
+                },
               },
+              user: { select: { firstName: true, lastName: true, email: true } },
+              payment: { select: { provider: true, method: true, status: true, providerPaymentId: true } },
             },
-            user: { select: { firstName: true, lastName: true, email: true } },
           },
+          shipment: { select: { trackingNumber: true, carrier: true, deliveredAt: true } },
         },
-        shipment: { select: { trackingNumber: true, carrier: true, deliveredAt: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: query.limit ?? 50,
-    })
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+      }),
+      this.prisma.return.count({ where }),
+    ])
+
+    return {
+      data,
+      meta: { total, limit, offset },
+    }
   }
+
+  // ── 2. findOne ─────────────────────────────────────────────
 
   async findOne(id: string) {
     const ret = await this.prisma.return.findUnique({
@@ -79,142 +158,946 @@ export class AdminReturnsService {
                 variant: { select: { id: true, color: true, size: true, sku: true } },
               },
             },
-            user: { select: { firstName: true, lastName: true, email: true, phone: true } },
-            payment: { select: { provider: true, method: true, status: true, providerPaymentId: true } },
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                preferredLang: true,
+              },
+            },
+            payment: {
+              select: {
+                id: true,
+                provider: true,
+                method: true,
+                status: true,
+                providerPaymentId: true,
+                amount: true,
+              },
+            },
           },
         },
         shipment: { select: { trackingNumber: true, carrier: true, deliveredAt: true } },
       },
     })
-    if (!ret) throw new NotFoundException('Return not found')
-    return ret
-  }
 
-  async updateStatus(
-    id: string,
-    newStatus: string,
-    notes: string | undefined,
-    adminId: string,
-    ip: string,
-  ) {
-    const ret = await this.prisma.return.findUnique({ where: { id } })
-    if (!ret) throw new NotFoundException('Return not found')
-
-    const validTransitions: Record<string, string[]> = {
-      requested: ['label_sent', 'rejected'],
-      label_sent: ['in_transit', 'rejected'],
-      in_transit: ['received'],
-      received: ['inspected'],
-      inspected: ['approved', 'rejected'],
-      approved: ['refunded'],
-    }
-
-    const allowed = validTransitions[ret.status] ?? []
-    if (!allowed.includes(newStatus)) {
-      throw new BadRequestException({
-        statusCode: 400,
+    if (!ret) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'ReturnNotFound',
         message: {
-          de: `Ungültiger Statuswechsel: ${ret.status} → ${newStatus}`,
-          en: `Invalid status transition: ${ret.status} → ${newStatus}`,
-          ar: `انتقال حالة غير صالح: ${ret.status} → ${newStatus}`,
+          de: 'Retoure nicht gefunden.',
+          en: 'Return not found.',
+          ar: 'المرتجع غير موجود.',
         },
       })
     }
 
-    const data: any = { status: newStatus }
-    if (notes) data.notes = notes
-    if (newStatus === 'received') data.receivedAt = new Date()
-    if (newStatus === 'inspected') data.inspectedAt = new Date()
-    if (newStatus === 'refunded') data.refundedAt = new Date()
+    // Enrich with timeline from audit log
+    const timeline = await this.audit.getByEntity('return', id)
 
-    // Auto-set refund amount on approval
-    if (newStatus === 'approved') {
-      const order = await this.prisma.order.findUnique({ where: { id: ret.orderId }, select: { totalAmount: true } })
-      if (order) data.refundAmount = order.totalAmount
-    }
+    return { ...ret, timeline }
+  }
 
-    const updated = await this.prisma.return.update({ where: { id }, data })
+  // ── 3. generateReturnNumber ────────────────────────────────
 
-    // Restock inventory on "received"
-    if (newStatus === 'received') {
-      await this.restockItems(ret.orderId)
-    }
+  async generateReturnNumber(): Promise<string> {
+    const year = new Date().getFullYear().toString()
+    const yearKey = `RET-${year}`
 
-    await this.audit.log({
-      adminId,
-      action: `RETURN_STATUS_${newStatus.toUpperCase()}`,
-      entityType: 'return',
-      entityId: id,
-      changes: { before: { status: ret.status }, after: { status: newStatus, notes } },
-      ipAddress: ip,
+    const result = await this.prisma.$queryRaw<Array<{ seq: number }>>`
+      INSERT INTO return_sequences (year_key, seq)
+      VALUES (${yearKey}, 1)
+      ON CONFLICT (year_key) DO UPDATE SET seq = return_sequences.seq + 1
+      RETURNING seq
+    `
+
+    const seq = result[0].seq
+    return `RET-${year}-${String(seq).padStart(5, '0')}`
+  }
+
+  // ── 4. approve ─────────────────────────────────────────────
+
+  async approve(id: string, adminId: string, ip: string) {
+    const ret = await this.prisma.return.findUnique({
+      where: { id },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            user: { select: { email: true, firstName: true, preferredLang: true } },
+          },
+        },
+      },
     })
+
+    if (!ret) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'ReturnNotFound',
+        message: {
+          de: 'Retoure nicht gefunden.',
+          en: 'Return not found.',
+          ar: 'المرتجع غير موجود.',
+        },
+      })
+    }
+
+    this.validateTransition(ret.status, 'label_sent')
+
+    // Assign return number if not yet set
+    const returnNumber = ret.returnNumber ?? await this.generateReturnNumber()
+
+    const updated = await this.prisma.return.update({
+      where: { id },
+      data: {
+        status: 'label_sent',
+        returnNumber,
+        approvedAt: new Date(),
+        approvedBy: adminId,
+      },
+    })
+
+    // Side effects — wrapped in try/catch to not block the main flow
+    try {
+      this.eventEmitter.emit('return.status_changed', {
+        returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'label_sent', adminId,
+      })
+    } catch (e: any) { this.logger.error(`Event emit failed: ${e.message}`) }
+
+    try {
+      const customerEmail = ret.order.user?.email
+      const lang = ret.order.user?.preferredLang ?? 'de'
+      if (customerEmail) {
+        await this.emailService.enqueue({
+          to: customerEmail, type: 'return-confirmation' as any, lang,
+          data: { firstName: ret.order.user?.firstName ?? '', returnNumber, orderNumber: ret.order.orderNumber, status: 'approved', returnAddress: await this.getReturnAddress(), message: this.getStatusMessage('label_sent', lang) },
+        })
+      }
+    } catch (e: any) { this.logger.error(`Email failed: ${e.message}`) }
+
+    try {
+      await this.notificationService.createForAllAdmins({
+        type: 'return_approved', title: `Retoure ${returnNumber} genehmigt`,
+        body: `Retoure für Bestellung ${ret.order.orderNumber} wurde genehmigt.`, entityType: 'return', entityId: id,
+      })
+    } catch (e: any) { this.logger.error(`Notification failed: ${e.message}`) }
+
+    try {
+      await this.audit.log({
+        adminId, action: 'RETURN_APPROVED', entityType: 'return', entityId: id,
+        changes: { before: { status: ret.status }, after: { status: 'label_sent', returnNumber } }, ipAddress: ip,
+      })
+    } catch (e: any) { this.logger.error(`Audit failed: ${e.message}`) }
 
     return updated
   }
 
-  async updateLabel(
+  // ── 5. reject ──────────────────────────────────────────────
+
+  async reject(id: string, reason: string, adminId: string, ip: string) {
+    if (!reason || reason.trim().length === 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'RejectionReasonRequired',
+        message: {
+          de: 'Ein Ablehnungsgrund ist erforderlich.',
+          en: 'A rejection reason is required.',
+          ar: 'سبب الرفض مطلوب.',
+        },
+      })
+    }
+
+    const ret = await this.prisma.return.findUnique({
+      where: { id },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            user: { select: { email: true, firstName: true, preferredLang: true } },
+          },
+        },
+      },
+    })
+
+    if (!ret) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'ReturnNotFound',
+        message: {
+          de: 'Retoure nicht gefunden.',
+          en: 'Return not found.',
+          ar: 'المرتجع غير موجود.',
+        },
+      })
+    }
+
+    // Can reject from 'requested' or 'inspected'
+    this.validateTransition(ret.status, 'rejected')
+
+    const updated = await this.prisma.return.update({
+      where: { id },
+      data: {
+        status: 'rejected',
+        rejectionReason: reason.trim(),
+      },
+    })
+
+    // Side effects (safe)
+    try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'rejected', adminId }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
+    try {
+      const email = ret.order.user?.email; const lang = ret.order.user?.preferredLang ?? 'de'
+      if (email) await this.emailService.enqueue({ to: email, type: 'return-confirmation' as any, lang, data: { firstName: ret.order.user?.firstName ?? '', returnNumber: ret.returnNumber ?? id.slice(0, 8), orderNumber: ret.order.orderNumber, status: 'rejected', rejectionReason: reason.trim(), message: this.getStatusMessage('rejected', lang) } })
+    } catch (e: any) { this.logger.error(`Email: ${e.message}`) }
+    try { await this.audit.log({ adminId, action: 'RETURN_REJECTED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'rejected', rejectionReason: reason.trim() } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
+
+    return updated
+  }
+
+  // ── 6. markReceived ────────────────────────────────────────
+
+  async markReceived(id: string, adminId: string, ip: string) {
+    const ret = await this.prisma.return.findUnique({
+      where: { id },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            user: { select: { email: true, firstName: true, preferredLang: true } },
+          },
+        },
+      },
+    })
+
+    if (!ret) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'ReturnNotFound',
+        message: {
+          de: 'Retoure nicht gefunden.',
+          en: 'Return not found.',
+          ar: 'المرتجع غير موجود.',
+        },
+      })
+    }
+
+    this.validateTransition(ret.status, 'received')
+
+    const updated = await this.prisma.return.update({
+      where: { id },
+      data: {
+        status: 'received',
+        receivedAt: new Date(),
+      },
+    })
+
+    try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'received', adminId }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
+
+    // Send email: "Paket eingetroffen, wird geprüft"
+    const customerEmail = ret.order.user?.email
+    const lang = ret.order.user?.preferredLang ?? 'de'
+
+    if (customerEmail) {
+      await this.emailService.enqueue({
+        to: customerEmail,
+        type: 'return-confirmation' as never,
+        lang,
+        data: {
+          firstName: ret.order.user?.firstName ?? '',
+          returnNumber: ret.returnNumber ?? id.slice(0, 8),
+          orderNumber: ret.order.orderNumber,
+          status: 'received',
+          message: this.getStatusMessage('received', lang),
+        },
+      })
+    }
+
+    try { await this.audit.log({ adminId, action: 'RETURN_RECEIVED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'received' } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
+
+    return updated
+  }
+
+  // ── 7. inspect ─────────────────────────────────────────────
+
+  async inspect(
     id: string,
-    returnTrackingNumber: string | undefined,
-    returnLabelUrl: string | undefined,
+    items: InspectItemInput[],
     adminId: string,
     ip: string,
   ) {
-    const ret = await this.prisma.return.findUnique({ where: { id } })
-    if (!ret) throw new NotFoundException('Return not found')
-
-    const data: any = {}
-    if (returnTrackingNumber !== undefined) data.returnTrackingNumber = returnTrackingNumber
-    if (returnLabelUrl !== undefined) data.returnLabelUrl = returnLabelUrl
-
-    const updated = await this.prisma.return.update({ where: { id }, data })
-
-    await this.audit.log({
-      adminId,
-      action: 'RETURN_LABEL_UPDATED',
-      entityType: 'return',
-      entityId: id,
-      changes: { after: { returnTrackingNumber, returnLabelUrl } },
-      ipAddress: ip,
+    const ret = await this.prisma.return.findUnique({
+      where: { id },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            items: {
+              select: {
+                id: true,
+                variantId: true,
+                quantity: true,
+                unitPrice: true,
+                snapshotName: true,
+                snapshotSku: true,
+              },
+            },
+          },
+        },
+      },
     })
+
+    if (!ret) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'ReturnNotFound',
+        message: {
+          de: 'Retoure nicht gefunden.',
+          en: 'Return not found.',
+          ar: 'المرتجع غير موجود.',
+        },
+      })
+    }
+
+    this.validateTransition(ret.status, 'inspected')
+
+    // Build a map of order items by ID for quick lookup
+    const orderItemMap = new Map(
+      ret.order.items.map((item) => [item.id, item]),
+    )
+
+    let refundAmount = 0
+    const inspectionResults: Array<{
+      itemId: string
+      condition: string
+      restocked: boolean
+      amount: number
+    }> = []
+
+    // Process each item
+    for (const input of items) {
+      const orderItem = orderItemMap.get(input.itemId)
+      if (!orderItem) {
+        throw new BadRequestException({
+          statusCode: 400,
+          error: 'InvalidItemId',
+          message: {
+            de: `Bestellposition ${input.itemId} nicht gefunden.`,
+            en: `Order item ${input.itemId} not found.`,
+            ar: `عنصر الطلب ${input.itemId} غير موجود.`,
+          },
+        })
+      }
+
+      const itemTotal = Number(orderItem.unitPrice) * orderItem.quantity
+
+      if (input.condition === 'ok') {
+        // Restock: increment quantityOnHand + create InventoryMovement
+        refundAmount += itemTotal
+
+        if (orderItem.variantId) {
+          await this.restockItem(
+            orderItem.variantId,
+            orderItem.quantity,
+            ret.orderId,
+            ret.returnNumber ?? id,
+          )
+        }
+
+        inspectionResults.push({
+          itemId: input.itemId,
+          condition: 'ok',
+          restocked: true,
+          amount: itemTotal,
+        })
+      } else {
+        // Damaged: create InventoryMovement type 'damaged', do NOT restock
+        if (orderItem.variantId) {
+          await this.createDamagedMovement(
+            orderItem.variantId,
+            orderItem.quantity,
+            ret.orderId,
+            ret.returnNumber ?? id,
+          )
+        }
+
+        inspectionResults.push({
+          itemId: input.itemId,
+          condition: 'damaged',
+          restocked: false,
+          amount: 0,
+        })
+      }
+    }
+
+    // Update return with inspection data and calculated refund amount
+    const existingReturnItems = (ret.returnItems as ReturnItemJson[] | null) ?? []
+    const updatedReturnItems = existingReturnItems.map((ri) => {
+      const inspection = items.find((i) => i.itemId === ri.itemId)
+      if (inspection) {
+        return { ...ri, condition: inspection.condition }
+      }
+      return ri
+    })
+
+    const updated = await this.prisma.return.update({
+      where: { id },
+      data: {
+        status: 'inspected',
+        inspectedAt: new Date(),
+        inspectedBy: adminId,
+        refundAmount,
+        returnItems: updatedReturnItems as unknown as undefined,
+      },
+    })
+
+    try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'inspected', adminId, refundAmount }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
+
+    try { await this.audit.log({ adminId, action: 'RETURN_INSPECTED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'inspected', refundAmount } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
 
     return updated
   }
 
-  private async restockItems(orderId: string) {
-    const items = await this.prisma.orderItem.findMany({
-      where: { orderId },
-      select: { variantId: true, quantity: true },
+  // ── 8. processRefund (1-CLICK BUTTON) ──────────────────────
+
+  async processRefund(id: string, adminId: string, ip: string) {
+    const ret = await this.prisma.return.findUnique({
+      where: { id },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            user: { select: { id: true, email: true, firstName: true, preferredLang: true } },
+            payment: {
+              select: {
+                id: true,
+                orderId: true,
+                status: true,
+                amount: true,
+              },
+            },
+          },
+        },
+      },
     })
 
-    for (const item of items) {
-      if (!item.variantId) continue
-
-      // Find inventory for this variant in default warehouse
-      const inv = await this.prisma.inventory.findFirst({
-        where: { variantId: item.variantId },
-        orderBy: { warehouse: { isDefault: 'desc' } },
+    if (!ret) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'ReturnNotFound',
+        message: {
+          de: 'Retoure nicht gefunden.',
+          en: 'Return not found.',
+          ar: 'المرتجع غير موجود.',
+        },
       })
+    }
 
-      if (inv) {
-        await this.prisma.$transaction([
-          this.prisma.inventory.update({
-            where: { id: inv.id },
-            data: { quantityOnHand: { increment: item.quantity } },
-          }),
-          this.prisma.inventoryMovement.create({
-            data: {
-              variantId: item.variantId,
-              warehouseId: inv.warehouseId,
-              type: 'return_received',
-              quantity: item.quantity,
-              quantityBefore: inv.quantityOnHand,
-              quantityAfter: inv.quantityOnHand + item.quantity,
-              referenceId: orderId,
-              notes: `Return restock for order ${orderId}`,
-            },
-          }),
-        ])
+    this.validateTransition(ret.status, 'refunded')
+
+    // CRITICAL: Prevent double-refund
+    const existingRefund = await this.prisma.refund.findFirst({
+      where: {
+        payment: { orderId: ret.orderId },
+        status: 'PROCESSED',
+      },
+    })
+
+    if (existingRefund) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'RefundAlreadyProcessed',
+        message: {
+          de: 'Erstattung wurde bereits verarbeitet.',
+          en: 'Refund already processed.',
+          ar: 'تم معالجة الاسترداد بالفعل.',
+        },
+      })
+    }
+
+    // Validate payment exists
+    const payment = ret.order.payment
+    if (!payment) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'NoPaymentFound',
+        message: {
+          de: 'Keine Zahlung für diese Bestellung gefunden.',
+          en: 'No payment found for this order.',
+          ar: 'لم يتم العثور على دفع لهذا الطلب.',
+        },
+      })
+    }
+
+    // Calculate amount in cents
+    const refundAmountEur = Number(ret.refundAmount ?? 0)
+    if (refundAmountEur <= 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'InvalidRefundAmount',
+        message: {
+          de: 'Erstattungsbetrag muss größer als 0 sein. Bitte zuerst inspizieren.',
+          en: 'Refund amount must be greater than 0. Please inspect first.',
+          ar: 'يجب أن يكون مبلغ الاسترداد أكبر من 0. يرجى الفحص أولاً.',
+        },
+      })
+    }
+
+    const amountCents = Math.round(refundAmountEur * 100)
+    const returnNumber = ret.returnNumber ?? id.slice(0, 8)
+
+    // Call PaymentsService.createRefund — this AUTOMATICALLY creates:
+    // - Stripe/Klarna/PayPal refund
+    // - Gutschrift (GS-XXXX credit note) via InvoiceService
+    // - Updates payment status (refunded / partially_refunded)
+    await this.paymentsService.createRefund(
+      {
+        paymentId: payment.id,
+        amount: amountCents,
+        reason: `Return ${returnNumber}`,
+        idempotencyKey: ret.id,
+      },
+      adminId,
+      `return-refund-${ret.id}`,
+    )
+
+    // Update return status
+    const updated = await this.prisma.return.update({
+      where: { id },
+      data: {
+        status: 'refunded',
+        refundedAt: new Date(),
+      },
+    })
+
+    try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'refunded', adminId, refundAmount: refundAmountEur }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
+
+    // Send email to customer
+    const customerEmail = ret.order.user?.email
+    const lang = ret.order.user?.preferredLang ?? 'de'
+
+    if (customerEmail) {
+      await this.emailService.enqueue({
+        to: customerEmail,
+        type: 'return-confirmation' as never,
+        lang,
+        data: {
+          firstName: ret.order.user?.firstName ?? '',
+          returnNumber,
+          orderNumber: ret.order.orderNumber,
+          status: 'refunded',
+          refundAmount: refundAmountEur.toFixed(2),
+          message: this.getStatusMessage('refunded', lang),
+        },
+      })
+    }
+
+    try { await this.notificationService.createForAllAdmins({ type: 'return_refunded', title: `Erstattung ${returnNumber}`, body: `${refundAmountEur.toFixed(2)} EUR erstattet für Bestellung ${ret.order.orderNumber}.`, entityType: 'return', entityId: id }) } catch (e: any) { this.logger.error(`Notification: ${e.message}`) }
+    try { await this.audit.log({ adminId, action: 'RETURN_REFUNDED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'refunded', refundAmount: refundAmountEur } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
+
+    this.logger.log(
+      `Return ${returnNumber} refunded: ${refundAmountEur.toFixed(2)} EUR | order=${ret.order.orderNumber} | by=${adminId}`,
+    )
+
+    return updated
+  }
+
+  // ── 9. getStats ────────────────────────────────────────────
+
+  async getStats() {
+    const now = new Date()
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    // Retourenquote: returns / orders (last 30 days, online channels only)
+    const onlineChannels = ['website', 'mobile', 'facebook', 'instagram', 'tiktok']
+
+    const [returnsLast30, ordersLast30] = await Promise.all([
+      this.prisma.return.count({
+        where: {
+          createdAt: { gte: thirtyDaysAgo },
+          order: { channel: { in: onlineChannels as never[] } },
+        },
+      }),
+      this.prisma.order.count({
+        where: {
+          createdAt: { gte: thirtyDaysAgo },
+          channel: { in: onlineChannels as never[] },
+          deletedAt: null,
+        },
+      }),
+    ])
+
+    const returnRate = ordersLast30 > 0
+      ? Number(((returnsLast30 / ordersLast30) * 100).toFixed(2))
+      : 0
+
+    // Häufigste Gründe: groupBy reason with count
+    const reasonBreakdown = await this.prisma.return.groupBy({
+      by: ['reason'],
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+    })
+
+    const topReasons = reasonBreakdown.map((r) => ({
+      reason: r.reason,
+      count: r._count.id,
+    }))
+
+    // Gesamtwert Erstattungen diesen Monat
+    const refundsThisMonth = await this.prisma.return.aggregate({
+      _sum: { refundAmount: true },
+      where: {
+        refundedAt: { gte: startOfMonth },
+        status: 'refunded',
+      },
+    })
+
+    const totalRefundsThisMonth = Number(refundsThisMonth._sum.refundAmount ?? 0)
+
+    // Top 10 meistretournierte Produkte (from returnItems JSON)
+    const recentReturns = await this.prisma.return.findMany({
+      where: {
+        returnItems: { not: undefined },
+      },
+      select: {
+        returnItems: true,
+      },
+      take: 500,
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const productCounts = new Map<string, { name: string; sku: string; count: number }>()
+
+    for (const ret of recentReturns) {
+      const items = ret.returnItems as ReturnItemJson[] | null
+      if (!items || !Array.isArray(items)) continue
+
+      for (const item of items) {
+        const key = item.sku ?? item.itemId
+        const existing = productCounts.get(key)
+        if (existing) {
+          existing.count += item.quantity ?? 1
+        } else {
+          productCounts.set(key, {
+            name: item.name ?? key,
+            sku: item.sku ?? '',
+            count: item.quantity ?? 1,
+          })
+        }
       }
     }
+
+    const topReturnedProducts = Array.from(productCounts.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+
+    // Status breakdown
+    const statusBreakdown = await this.prisma.return.groupBy({
+      by: ['status'],
+      _count: { id: true },
+    })
+
+    const byStatus = Object.fromEntries(
+      statusBreakdown.map((s) => [s.status, s._count.id]),
+    )
+
+    return {
+      returnRate,
+      returnsLast30Days: returnsLast30,
+      ordersLast30Days: ordersLast30,
+      topReasons,
+      totalRefundsThisMonth,
+      topReturnedProducts,
+      byStatus,
+    }
+  }
+
+  // ── 10. generateReturnLabel ────────────────────────────────
+
+  async generateReturnLabel(id: string): Promise<Buffer> {
+    const ret = await this.prisma.return.findUnique({
+      where: { id },
+      include: {
+        order: {
+          select: {
+            orderNumber: true,
+            items: {
+              select: {
+                snapshotName: true,
+                snapshotSku: true,
+                quantity: true,
+              },
+            },
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    })
+
+    if (!ret) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'ReturnNotFound',
+        message: {
+          de: 'Retoure nicht gefunden.',
+          en: 'Return not found.',
+          ar: 'المرتجع غير موجود.',
+        },
+      })
+    }
+
+    // Get shop return address from ShopSettings
+    const returnAddress = await this.getReturnAddress()
+    const returnNumber = ret.returnNumber ?? id.slice(0, 8)
+
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 })
+      const chunks: Buffer[] = []
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+      doc.on('end', () => resolve(Buffer.concat(chunks)))
+      doc.on('error', reject)
+
+      // ── Header ──────────────────────────────────────
+      doc.fontSize(18).font('Helvetica-Bold').fillColor('#1a1a2e')
+        .text('Retourenetikett / Return Label', 50, 50)
+
+      doc.moveTo(50, 80).lineTo(545, 80).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+
+      // ── Return Number (large, scannable) ────────────
+      doc.fontSize(14).font('Helvetica-Bold').fillColor('#1a1a2e')
+        .text('Retourennummer:', 50, 100)
+      doc.fontSize(24).font('Helvetica-Bold').fillColor('#dc2626')
+        .text(returnNumber, 50, 120)
+
+      // Barcode representation (Code39-style text barcode)
+      doc.fontSize(28).font('Courier-Bold').fillColor('#000000')
+        .text(`*${returnNumber}*`, 50, 160, { characterSpacing: 2 })
+
+      doc.moveTo(50, 200).lineTo(545, 200).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+
+      // ── Return-To Address ───────────────────────────
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#4b5563')
+        .text('Rücksendung an / Return to:', 50, 215)
+      doc.fontSize(11).font('Helvetica').fillColor('#1a1a2e')
+        .text(returnAddress, 50, 232, { width: 250, lineGap: 3 })
+
+      // ── Customer ────────────────────────────────────
+      const customerName = ret.order.user
+        ? `${ret.order.user.firstName} ${ret.order.user.lastName}`
+        : 'Kunde'
+
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#4b5563')
+        .text('Absender / From:', 320, 215)
+      doc.fontSize(11).font('Helvetica').fillColor('#1a1a2e')
+        .text(customerName, 320, 232)
+
+      // ── Order Reference ─────────────────────────────
+      doc.fontSize(10).font('Helvetica').fillColor('#4b5563')
+        .text(`Bestellnummer: ${ret.order.orderNumber}`, 320, 260)
+
+      doc.moveTo(50, 300).lineTo(545, 300).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+
+      // ── Items List ──────────────────────────────────
+      doc.fontSize(12).font('Helvetica-Bold').fillColor('#1a1a2e')
+        .text('Retoure-Artikel / Items to Return:', 50, 315)
+
+      let y = 340
+      // Table header
+      doc.rect(50, y - 4, 495, 18).fill('#f3f4f6')
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#4b5563')
+      doc.text('Pos.', 55, y, { width: 25 })
+      doc.text('Artikel', 82, y, { width: 260 })
+      doc.text('SKU', 345, y, { width: 100 })
+      doc.text('Menge', 450, y, { width: 90, align: 'center' })
+      y += 20
+
+      doc.font('Helvetica').fontSize(9).fillColor('#1a1a2e')
+
+      // Use returnItems JSON if available, otherwise fall back to order items
+      const returnItems = ret.returnItems as ReturnItemJson[] | null
+
+      // Simple table rows — NO per-item barcodes (one RET barcode at top is enough)
+      const renderItem = (name: string, sku: string, qty: number, idx: number) => {
+        if (idx % 2 === 1) doc.rect(50, y - 3, 495, 16).fill('#fafafa')
+        doc.fillColor('#1a1a2e')
+        doc.text(`${idx + 1}`, 55, y, { width: 25 })
+        doc.text(name ?? '—', 82, y, { width: 260 })
+        doc.text(sku ?? '—', 345, y, { width: 100 })
+        doc.text(`${qty}`, 450, y, { width: 90, align: 'center' })
+        y += 16
+      }
+
+      if (returnItems && Array.isArray(returnItems)) {
+        returnItems.forEach((item, i) => renderItem(item.name ?? '—', item.sku ?? '—', item.quantity, i))
+      } else {
+        ret.order.items.forEach((item, i) => renderItem(item.snapshotName, item.snapshotSku, item.quantity, i))
+      }
+
+      // ── Instructions ────────────────────────────────
+      y += 20
+      doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+      y += 15
+
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#4b5563')
+        .text('Hinweise / Instructions:', 50, y)
+      y += 14
+      doc.font('Helvetica').fontSize(8).fillColor('#6b7280')
+      doc.text('1. Bitte legen Sie dieses Etikett dem Paket bei.', 50, y, { width: 495 })
+      y += 12
+      doc.text('2. Verpacken Sie die Ware sicher in der Originalverpackung.', 50, y, { width: 495 })
+      y += 12
+      doc.text('3. Geben Sie das Paket bei einem DHL-Paketshop oder einer Filiale ab.', 50, y, { width: 495 })
+
+      // ── Footer ──────────────────────────────────────
+      doc.fontSize(7).fillColor('#9ca3af')
+        .text(
+          `Retourennummer: ${returnNumber} | Erstellt: ${new Date().toLocaleDateString('de-DE')}`,
+          50, 780,
+          { align: 'center', width: 495 },
+        )
+
+      doc.end()
+    })
+  }
+
+  // ── Private Helpers ────────────────────────────────────────
+
+  private validateTransition(currentStatus: string, targetStatus: string): void {
+    const allowed = VALID_TRANSITIONS[currentStatus] ?? []
+    if (!allowed.includes(targetStatus)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'InvalidStatusTransition',
+        message: {
+          de: `Ungültiger Statuswechsel: ${currentStatus} \u2192 ${targetStatus}`,
+          en: `Invalid status transition: ${currentStatus} \u2192 ${targetStatus}`,
+          ar: `\u0627\u0646\u062A\u0642\u0627\u0644 \u062D\u0627\u0644\u0629 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D: ${currentStatus} \u2192 ${targetStatus}`,
+        },
+      })
+    }
+  }
+
+  private async restockItem(
+    variantId: string,
+    quantity: number,
+    orderId: string,
+    returnNumber: string,
+  ): Promise<void> {
+    // Find inventory for this variant in default warehouse
+    const inv = await this.prisma.inventory.findFirst({
+      where: { variantId },
+      orderBy: { warehouse: { isDefault: 'desc' } },
+    })
+
+    if (!inv) {
+      this.logger.warn(`No inventory record found for variant ${variantId} — skipping restock`)
+      return
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.inventory.update({
+        where: { id: inv.id },
+        data: { quantityOnHand: { increment: quantity } },
+      }),
+      this.prisma.inventoryMovement.create({
+        data: {
+          variantId,
+          warehouseId: inv.warehouseId,
+          type: 'return_received',
+          quantity,
+          quantityBefore: inv.quantityOnHand,
+          quantityAfter: inv.quantityOnHand + quantity,
+          referenceId: orderId,
+          notes: `Return restock: ${returnNumber}`,
+        },
+      }),
+    ])
+  }
+
+  private async createDamagedMovement(
+    variantId: string,
+    quantity: number,
+    orderId: string,
+    returnNumber: string,
+  ): Promise<void> {
+    const inv = await this.prisma.inventory.findFirst({
+      where: { variantId },
+      orderBy: { warehouse: { isDefault: 'desc' } },
+    })
+
+    if (!inv) {
+      this.logger.warn(`No inventory record found for variant ${variantId} — skipping damaged movement`)
+      return
+    }
+
+    await this.prisma.inventoryMovement.create({
+      data: {
+        variantId,
+        warehouseId: inv.warehouseId,
+        type: 'damaged',
+        quantity: -quantity, // Documented as loss
+        quantityBefore: inv.quantityOnHand,
+        quantityAfter: inv.quantityOnHand,
+        referenceId: orderId,
+        notes: `Return damaged: ${returnNumber}`,
+      },
+    })
+  }
+
+  private async getReturnAddress(): Promise<string> {
+    try {
+      const settings = await this.prisma.shopSetting.findMany({
+        where: { key: { in: ['companyName', 'companyAddress', 'returnAddress'] } },
+      })
+      const map = new Map(settings.map((s) => [s.key, s.value]))
+
+      // Prefer dedicated returnAddress, fall back to company address
+      const returnAddr = map.get('returnAddress')
+      if (returnAddr) return returnAddr
+
+      const name = map.get('companyName') ?? 'Malak Bekleidung'
+      const address = map.get('companyAddress') ?? ''
+      return `${name}\n${address}`
+    } catch {
+      return 'Malak Bekleidung\n(Adresse nicht konfiguriert)'
+    }
+  }
+
+  private getStatusMessage(
+    status: string,
+    lang: string,
+  ): string {
+    const messages: Record<string, Record<string, string>> = {
+      label_sent: {
+        de: 'Ihre Retoure wurde genehmigt. Bitte senden Sie die Ware an die unten angegebene Adresse.',
+        en: 'Your return has been approved. Please send the items to the address below.',
+        ar: '\u062A\u0645\u062A \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0644\u0649 \u0627\u0644\u0625\u0631\u062C\u0627\u0639. \u064A\u0631\u062C\u0649 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A \u0625\u0644\u0649 \u0627\u0644\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0645\u0630\u0643\u0648\u0631 \u0623\u062F\u0646\u0627\u0647.',
+      },
+      rejected: {
+        de: 'Ihre Retoure wurde leider abgelehnt.',
+        en: 'Your return has been rejected.',
+        ar: '\u062A\u0645 \u0631\u0641\u0636 \u0637\u0644\u0628 \u0627\u0644\u0625\u0631\u062C\u0627\u0639.',
+      },
+      received: {
+        de: 'Ihr Paket ist eingetroffen und wird nun gepr\u00FCft.',
+        en: 'Your package has arrived and is being inspected.',
+        ar: '\u0648\u0635\u0644\u062A \u0627\u0644\u0637\u0631\u062F \u0648\u064A\u062A\u0645 \u0641\u062D\u0635\u0647\u0627 \u0627\u0644\u0622\u0646.',
+      },
+      refunded: {
+        de: 'Ihre Erstattung wurde verarbeitet. Der Betrag wird in den n\u00E4chsten Tagen auf Ihrem Konto gutgeschrieben.',
+        en: 'Your refund has been processed. The amount will be credited to your account within the next few days.',
+        ar: '\u062A\u0645 \u0645\u0639\u0627\u0644\u062C\u0629 \u0627\u0644\u0627\u0633\u062A\u0631\u062F\u0627\u062F. \u0633\u064A\u062A\u0645 \u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u0645\u0628\u0644\u063A \u0625\u0644\u0649 \u062D\u0633\u0627\u0628\u0643 \u062E\u0644\u0627\u0644 \u0627\u0644\u0623\u064A\u0627\u0645 \u0627\u0644\u0642\u0627\u062F\u0645\u0629.',
+      },
+    }
+
+    return messages[status]?.[lang] ?? messages[status]?.de ?? ''
   }
 }

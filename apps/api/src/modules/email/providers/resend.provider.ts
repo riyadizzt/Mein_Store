@@ -20,6 +20,11 @@ export class ResendProvider implements IEmailProvider {
       html: options.html,
       replyTo: options.replyTo,
       tags: options.tags,
+      attachments: options.attachments?.map((a) => ({
+        filename: a.filename,
+        content: typeof a.content === 'string' ? Buffer.from(a.content, 'base64') : a.content,
+        content_type: a.contentType ?? 'application/pdf',
+      })),
     })
 
     if (error) {

@@ -30,6 +30,9 @@ export const PERMISSIONS = {
   FINANCE_REVENUE: 'finance.revenue',
   FINANCE_MARGINS: 'finance.margins',
   FINANCE_PURCHASE_PRICES: 'finance.purchase_prices',
+  FINANCE_INVOICES: 'finance.invoices',
+  FINANCE_VAT_REPORT: 'finance.vat_report',
+  FINANCE_EXPORT: 'finance.export',
 
   // Returns
   RETURNS_VIEW: 'returns.view',
@@ -98,7 +101,7 @@ export const ROLE_PRESETS: Record<string, string[]> = {
     PERMISSIONS.INVENTORY_VIEW, PERMISSIONS.INVENTORY_INTAKE, PERMISSIONS.INVENTORY_TRANSFER, PERMISSIONS.INVENTORY_STOCKTAKE,
     PERMISSIONS.SCANNER_VIEW_PRICES,
     PERMISSIONS.CUSTOMERS_VIEW, PERMISSIONS.CUSTOMERS_EDIT,
-    PERMISSIONS.FINANCE_REVENUE, PERMISSIONS.FINANCE_MARGINS,
+    PERMISSIONS.FINANCE_REVENUE, PERMISSIONS.FINANCE_MARGINS, PERMISSIONS.FINANCE_INVOICES, PERMISSIONS.FINANCE_VAT_REPORT, PERMISSIONS.FINANCE_EXPORT,
     PERMISSIONS.RETURNS_VIEW, PERMISSIONS.RETURNS_EDIT, PERMISSIONS.RETURNS_APPROVE,
     PERMISSIONS.SHIPPING_VIEW, PERMISSIONS.SHIPPING_LABELS, PERMISSIONS.SHIPPING_STATUS,
     PERMISSIONS.EMAILS_VIEW,
@@ -159,6 +162,9 @@ export const PERMISSION_GROUPS: { key: string; label: { de: string; en: string; 
       { key: PERMISSIONS.FINANCE_REVENUE, label: { de: 'Umsätze', en: 'Revenue', ar: 'الإيرادات' } },
       { key: PERMISSIONS.FINANCE_MARGINS, label: { de: 'Gewinnmargen', en: 'Margins', ar: 'هوامش الربح' } },
       { key: PERMISSIONS.FINANCE_PURCHASE_PRICES, label: { de: 'Einkaufspreise', en: 'Purchase prices', ar: 'أسعار الشراء' } },
+      { key: PERMISSIONS.FINANCE_INVOICES, label: { de: 'Rechnungen', en: 'Invoices', ar: 'الفواتير' } },
+      { key: PERMISSIONS.FINANCE_VAT_REPORT, label: { de: 'MwSt-Bericht', en: 'VAT Report', ar: 'تقرير الضريبة' } },
+      { key: PERMISSIONS.FINANCE_EXPORT, label: { de: 'Export (PDF/CSV)', en: 'Export (PDF/CSV)', ar: 'تصدير (PDF/CSV)' } },
     ],
   },
   {

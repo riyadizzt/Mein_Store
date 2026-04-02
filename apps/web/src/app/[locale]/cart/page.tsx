@@ -5,7 +5,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Shield, Truck, RotateCcw } from 'lucide-react'
 import { useCartStore } from '@/store/cart-store'
+import { useCheckoutStore } from '@/store/checkout-store'
 import { Button } from '@/components/ui/button'
+import { CouponInput } from '@/components/coupon-input'
 
 export default function CartPage() {
   const t = useTranslations('cart')
@@ -110,14 +112,25 @@ export default function CartPage() {
                 <span className="text-muted-foreground">{t('shipping')}</span>
                 <span className="text-green-600 font-medium">{subtotal() >= 100 ? t('free') : '€4.99'}</span>
               </div>
+              {useCheckoutStore.getState().discountAmount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>{useCheckoutStore.getState().appliedCoupon?.description || 'Rabatt'}</span>
+                  <span className="font-medium">-€{useCheckoutStore.getState().discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between text-lg font-bold">
                 <span>{t('total')}</span>
-                <span>&euro;{(subtotal() + (subtotal() >= 100 ? 0 : 4.99)).toFixed(2)}</span>
+                <span>&euro;{(subtotal() + (subtotal() >= 100 ? 0 : 4.99) - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2)}</span>
               </div>
             </div>
 
-            <Link href={`/${locale}/checkout`} className="block mt-6">
+            {/* Coupon Code Input */}
+            <div className="mt-4">
+              <CouponInput subtotal={subtotal()} />
+            </div>
+
+            <Link href={`/${locale}/checkout`} className="block mt-4">
               <Button size="lg" className="w-full gap-2 text-base btn-press">
                 {t('checkout')} <ArrowRight className="h-4 w-4" />
               </Button>

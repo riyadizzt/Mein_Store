@@ -47,6 +47,8 @@ export class PublicSettingsController {
       stripeEnabled: true,
       klarnaEnabled: s.klarnaEnabled === 'true',
       paypalEnabled: s.paypalEnabled === 'true',
+      welcomePopupEnabled: s.welcomePopupEnabled !== 'false', // default: true
+      welcomeDiscountPercent: Number(s.welcomeDiscountPercent || '10'),
     }
   }
 }

@@ -10,6 +10,7 @@ const MobileNav = dynamic(() => import('./mobile-nav').then((m) => ({ default: m
 const CartDrawer = dynamic(() => import('./cart-drawer').then((m) => ({ default: m.CartDrawer })), { ssr: false })
 const CookieBanner = dynamic(() => import('./cookie-banner').then((m) => ({ default: m.CookieBanner })), { ssr: false })
 const OfflineToast = dynamic(() => import('./offline-toast').then((m) => ({ default: m.OfflineToast })), { ssr: false })
+const WelcomePopup = dynamic(() => import('../welcome-popup').then((m) => ({ default: m.WelcomePopup })), { ssr: false })
 
 /**
  * StoreShell — renders store chrome (header, footer, mobile nav, cart, cookies)
@@ -32,6 +33,7 @@ export function StoreShell({ locale, children }: { locale: string; children: Rea
       <CartDrawer locale={locale} />
       <CookieBanner />
       <OfflineToast />
+      <WelcomePopup />
     </>
   )
 }

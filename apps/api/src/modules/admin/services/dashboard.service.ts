@@ -211,6 +211,7 @@ export class DashboardService {
         available: Number(inv.quantity_on_hand) - Number(inv.quantity_reserved),
         reorderPoint: Number(inv.reorder_point),
       })),
+      abandonedCarts: await this.getAbandonedCartsToday(todayStart),
     }
     } catch (err) {
       this.logger.error('Dashboard getOverview failed', err)
@@ -226,7 +227,19 @@ export class DashboardService {
         pendingReturns: { count: 0, items: [] },
         revenueByPaymentMethod: [],
         topProducts: [],
+        abandonedCarts: { count: 0, totalValue: '0.00' },
       }
+    }
+  }
+
+  private async getAbandonedCartsToday(todayStart: Date) {
+    const carts = await this.prisma.abandonedCart.findMany({
+      where: { recoveredAt: null, createdAt: { gte: todayStart } },
+      select: { totalAmount: true },
+    })
+    return {
+      count: carts.length,
+      totalValue: carts.reduce((s, c) => s + Number(c.totalAmount), 0).toFixed(2),
     }
   }
 }

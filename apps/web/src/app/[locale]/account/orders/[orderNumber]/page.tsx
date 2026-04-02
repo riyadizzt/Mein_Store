@@ -60,6 +60,13 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
     },
   })
 
+  // Check if returns are enabled globally — MUST be before any early returns
+  const { data: shopSettings } = useQuery({
+    queryKey: ['public-settings-returns'],
+    queryFn: async () => { const { data } = await api.get('/settings/public'); return data },
+    staleTime: 60000,
+  })
+
   if (isLoading) {
     return <div className="space-y-4">{[1, 2, 3].map((i) => <div key={i} className="h-20 animate-pulse bg-muted rounded-lg" />)}</div>
   }
@@ -70,7 +77,9 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
 
   const currentStepIndex = TIMELINE_STEPS.indexOf(order.status)
   const deliveredAt = order.shipment?.deliveredAt ? new Date(order.shipment.deliveredAt) : null
-  const canReturn = order.status === 'delivered' && deliveredAt && (Date.now() - deliveredAt.getTime()) < 14 * 24 * 60 * 60 * 1000
+  const returnsEnabled = shopSettings?.returnsEnabled !== false && shopSettings?.returnsEnabled !== 'false'
+  const daysLeft = deliveredAt ? Math.max(0, 14 - Math.floor((Date.now() - deliveredAt.getTime()) / 86400000)) : 0
+  const canReturn = returnsEnabled && order.status === 'delivered' && deliveredAt && daysLeft > 0
 
   const handleReorder = () => {
     for (const item of order.items ?? []) {

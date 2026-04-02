@@ -16,9 +16,10 @@ export class EmailWorker implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    // Skip workers in development to avoid burning Upstash Redis requests
-    if (process.env.NODE_ENV !== 'production') {
-      this.logger.log('Email worker SKIPPED (not production)')
+    // Enable with EMAIL_WORKER_ENABLED=true or automatically in production
+    const enabled = process.env.EMAIL_WORKER_ENABLED === 'true' || process.env.NODE_ENV === 'production'
+    if (!enabled) {
+      this.logger.log('Email worker SKIPPED — set EMAIL_WORKER_ENABLED=true in .env to activate')
       return
     }
 
@@ -56,7 +57,7 @@ export class EmailWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleSendEmail(job: Job<EmailJobPayload>): Promise<void> {
-    const { to, type, lang, data } = job.data
+    const { to, type, lang, data, attachments } = job.data
 
     const { html, subject, from } = this.emailService.renderEmail(type, lang, data)
 
@@ -69,6 +70,11 @@ export class EmailWorker implements OnModuleInit, OnModuleDestroy {
         { name: 'type', value: type },
         { name: 'lang', value: lang },
       ],
+      attachments: attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.contentBase64, // Resend provider decodes base64
+        contentType: a.contentType ?? 'application/pdf',
+      })),
     })
   }
 }

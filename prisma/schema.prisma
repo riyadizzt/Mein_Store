@@ -275,6 +275,7 @@ model User {
   customerNotes       CustomerNote[]
   activities          CustomerActivity[]
   abandonedCarts      AbandonedCart[]
+  notifications       Notification[]  @relation("UserNotifications")
 
   @@map("users")
 }
@@ -398,6 +399,8 @@ model Category {
   children     Category[] @relation("CategoryHierarchy")
   translations CategoryTranslation[]
   products     Product[]
+  coupons      Coupon[]
+  promotions   Promotion[]
 
   @@map("categories")
 }
@@ -427,6 +430,8 @@ model Product {
   taxRate     Decimal  @default(19.00) @map("tax_rate") @db.Decimal(5, 2)
   isActive    Boolean  @default(true) @map("is_active")
   isFeatured  Boolean  @default(false) @map("is_featured")
+  excludeFromReturns Boolean @default(false) @map("exclude_from_returns")
+  returnExclusionReason String? @map("return_exclusion_reason") // hygiene, custom_made, sealed
   publishedAt DateTime? @map("published_at")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -439,6 +444,8 @@ model Product {
   reviews        ProductReview[]
   wishlistItems  WishlistItem[]
   channelListings ChannelProductListing[]
+  coupons        Coupon[]
+  promotions     Promotion[]
 
   @@map("products")
 }
@@ -668,6 +675,7 @@ model Order {
   currency          String       @default("EUR")
   shippingZone      String?      @map("shipping_zone")
   couponCode        String?      @map("coupon_code")
+  promotionId       String?      @map("promotion_id")
   notes                  String?
   fulfillmentWarehouseId String?  @map("fulfillment_warehouse_id")
   cancelledAt            DateTime?    @map("cancelled_at")
@@ -811,19 +819,24 @@ model Refund {
 }
 
 model Invoice {
-  id            String      @id @default(uuid())
-  orderId       String      @map("order_id")
-  invoiceNumber String      @unique @map("invoice_number")
-  type          InvoiceType @default(INVOICE)
-  pdfUrl        String?     @map("pdf_url")
-  netAmount     Decimal     @map("net_amount") @db.Decimal(10, 2)
-  taxAmount     Decimal     @map("tax_amount") @db.Decimal(10, 2)
-  grossAmount   Decimal     @map("gross_amount") @db.Decimal(10, 2)
-  createdAt     DateTime    @default(now()) @map("created_at")
+  id                String      @id @default(uuid())
+  orderId           String      @map("order_id")
+  invoiceNumber     String      @unique @map("invoice_number")
+  type              InvoiceType @default(INVOICE)
+  pdfUrl            String?     @map("pdf_url")
+  storagePath       String?     @map("storage_path")
+  originalInvoiceId String?     @map("original_invoice_id")
+  netAmount         Decimal     @map("net_amount") @db.Decimal(10, 2)
+  taxAmount         Decimal     @map("tax_amount") @db.Decimal(10, 2)
+  grossAmount       Decimal     @map("gross_amount") @db.Decimal(10, 2)
+  createdAt         DateTime    @default(now()) @map("created_at")
 
-  order Order @relation(fields: [orderId], references: [id])
+  order           Order    @relation(fields: [orderId], references: [id])
+  originalInvoice Invoice? @relation("CreditNoteToInvoice", fields: [originalInvoiceId], references: [id])
+  creditNotes     Invoice[] @relation("CreditNoteToInvoice")
 
   @@index([orderId])
+  @@index([originalInvoiceId])
   @@map("invoices")
 }
 
@@ -879,16 +892,24 @@ model Shipment {
 
 model Return {
   id                    String       @id @default(uuid())
+  returnNumber          String?      @unique @map("return_number")
   orderId               String       @map("order_id")
   shipmentId            String?      @map("shipment_id")
   reason                ReturnReason
   status                ReturnStatus @default(requested)
   notes                 String?
+  adminNotes            String?      @map("admin_notes")
+  rejectionReason       String?      @map("rejection_reason")
+  returnItems           Json?        @map("return_items") // [{itemId, sku, name, quantity, unitPrice, condition}]
+  customerPhotos        Json?        @map("customer_photos") // [url1, url2]
   returnLabelUrl        String?      @map("return_label_url")
   returnTrackingNumber  String?      @map("return_tracking_number")
   deadline              DateTime?    // delivery_date + 14 days
+  approvedAt            DateTime?    @map("approved_at")
+  approvedBy            String?      @map("approved_by")
   receivedAt            DateTime?    @map("received_at")
   inspectedAt           DateTime?    @map("inspected_at")
+  inspectedBy           String?      @map("inspected_by")
   refundedAt            DateTime?    @map("refunded_at")
   refundAmount          Decimal?     @map("refund_amount") @db.Decimal(10, 2)
   createdAt             DateTime     @default(now()) @map("created_at")
@@ -898,7 +919,15 @@ model Return {
   shipment Shipment? @relation(fields: [shipmentId], references: [id])
 
   @@index([orderId])
+  @@index([returnNumber])
   @@map("returns")
+}
+
+model ReturnSequence {
+  yearKey String @id @map("year_key") // RET-2026
+  seq     Int    @default(1)
+
+  @@map("return_sequences")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -958,20 +987,44 @@ model ChannelSyncLog {
 // PROMOTIONS
 // ─────────────────────────────────────────────────────────────
 
+enum CouponType {
+  percentage
+  fixed_amount
+  free_shipping
+}
+
+enum PromotionType {
+  seasonal
+  quantity_discount
+  flash_sale
+}
+
 model Coupon {
-  id              String   @id @default(uuid())
-  code            String   @unique
-  discountPercent Decimal? @map("discount_percent") @db.Decimal(5, 2)
-  discountAmount  Decimal? @map("discount_amount") @db.Decimal(10, 2)
-  minOrderAmount  Decimal? @map("min_order_amount") @db.Decimal(10, 2)
-  maxUsageCount   Int?     @map("max_usage_count")
-  usedCount       Int      @default(0) @map("used_count")
-  isActive        Boolean  @default(true) @map("is_active")
-  expiresAt       DateTime? @map("expires_at")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id                 String     @id @default(uuid())
+  code               String     @unique
+  type               CouponType @default(percentage)
+  description        String?
+  discountPercent    Decimal?   @map("discount_percent") @db.Decimal(5, 2)
+  discountAmount     Decimal?   @map("discount_amount") @db.Decimal(10, 2)
+  freeShipping       Boolean    @default(false) @map("free_shipping")
+  minOrderAmount     Decimal?   @map("min_order_amount") @db.Decimal(10, 2)
+  maxUsageCount      Int?       @map("max_usage_count")
+  usedCount          Int        @default(0) @map("used_count")
+  onePerCustomer     Boolean    @default(false) @map("one_per_customer")
+  isActive           Boolean    @default(true) @map("is_active")
+  startAt            DateTime?  @map("start_at")
+  expiresAt          DateTime?  @map("expires_at")
+  appliesToCategoryId String?   @map("applies_to_category_id")
+  appliesToProductId  String?   @map("applies_to_product_id")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
 
-  usages CouponUsage[]
+  appliesToCategory  Category?  @relation(fields: [appliesToCategoryId], references: [id])
+  appliesToProduct   Product?   @relation(fields: [appliesToProductId], references: [id])
+  usages             CouponUsage[]
 
+  @@index([code])
+  @@index([isActive])
   @@map("coupons")
 }
 
@@ -979,13 +1032,40 @@ model CouponUsage {
   id        String   @id @default(uuid())
   couponId  String   @map("coupon_id")
   orderId   String   @map("order_id")
+  userId    String?  @map("user_id")
+  email     String?
   createdAt DateTime @default(now()) @map("created_at")
 
   coupon Coupon @relation(fields: [couponId], references: [id])
   order  Order  @relation(fields: [orderId], references: [id])
 
   @@unique([couponId, orderId])
+  @@index([couponId, userId])
+  @@index([couponId, email])
   @@map("coupon_usages")
+}
+
+model Promotion {
+  id              String        @id @default(uuid())
+  name            String
+  type            PromotionType
+  description     String?
+  discountPercent Decimal?      @map("discount_percent") @db.Decimal(5, 2)
+  discountAmount  Decimal?      @map("discount_amount") @db.Decimal(10, 2)
+  minQuantity     Int?          @map("min_quantity")
+  categoryId      String?       @map("category_id")
+  productId       String?       @map("product_id")
+  isActive        Boolean       @default(true) @map("is_active")
+  startAt         DateTime      @map("start_at")
+  endAt           DateTime      @map("end_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  category Category? @relation(fields: [categoryId], references: [id])
+  product  Product?  @relation(fields: [productId], references: [id])
+
+  @@index([isActive, startAt, endAt])
+  @@map("promotions")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1174,6 +1254,30 @@ model AbandonedCart {
   @@index([userId])
   @@index([createdAt])
   @@map("abandoned_carts")
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  type        String                            // new_order, order_cancelled, low_stock, return_submitted, payment_failed, customer_registered, coupon_expiring, promotion_expiring, order_confirmed, order_shipped, order_delivered, refund_processed
+  title       String
+  body        String
+  entityType  String?  @map("entity_type")      // order, product, return, coupon, promotion, user
+  entityId    String?  @map("entity_id")
+  channel     String   @default("admin")        // admin, customer
+  isRead      Boolean  @default(false) @map("is_read")
+  data        Json?                             // { orderNumber, amount, sku, productName, ... }
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User? @relation("UserNotifications", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
+  @@index([channel, isRead, createdAt])
+  @@map("notifications")
 }
 
 model EmailLog {

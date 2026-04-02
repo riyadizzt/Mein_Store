@@ -99,7 +99,7 @@ export default function OrdersPage() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(order.createdAt).toLocaleDateString(locale === 'ar' ? 'ar-EG' : locale === 'en' ? 'en-GB' : 'de-DE')} &middot; {t('orders.itemCount', { count: (order.items ?? []).length })}
+                    {new Date(order.createdAt).toLocaleDateString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'en' ? 'en-GB' : 'de-DE')} &middot; {t('orders.itemCount', { count: (order.items ?? []).length })}
                   </p>
                 </div>
 

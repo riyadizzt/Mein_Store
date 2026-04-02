@@ -36,6 +36,10 @@ interface CheckoutState {
   shippingOption: ShippingOption | null
   paymentMethod: PaymentMethod | null
 
+  couponCode: string | null
+  appliedCoupon: { code: string; type: string; discountPercent: number | null; discountAmount: number | null; freeShipping: boolean; description: string | null } | null
+  discountAmount: number
+
   termsAccepted: boolean
   orderId: string | null
   orderNumber: string | null
@@ -51,6 +55,8 @@ interface CheckoutState {
   setSavedAddressId: (id: string | null) => void
   setShippingOption: (option: ShippingOption) => void
   setPaymentMethod: (method: PaymentMethod) => void
+  setCoupon: (code: string, coupon: CheckoutState['appliedCoupon'], discount: number) => void
+  removeCoupon: () => void
   setTermsAccepted: (accepted: boolean) => void
   setOrder: (orderId: string, orderNumber: string) => void
   setProcessing: (processing: boolean) => void
@@ -69,6 +75,9 @@ const initialState = {
   savedAddressId: null,
   shippingOption: null,
   paymentMethod: null,
+  couponCode: null,
+  appliedCoupon: null,
+  discountAmount: 0,
   termsAccepted: false,
   orderId: null,
   orderNumber: null,
@@ -88,6 +97,8 @@ export const useCheckoutStore = create<CheckoutState>()((set) => ({
   setSavedAddressId: (id) => set({ savedAddressId: id }),
   setShippingOption: (option) => set({ shippingOption: option }),
   setPaymentMethod: (method) => set({ paymentMethod: method }),
+  setCoupon: (code, coupon, discount) => set({ couponCode: code, appliedCoupon: coupon, discountAmount: discount }),
+  removeCoupon: () => set({ couponCode: null, appliedCoupon: null, discountAmount: 0 }),
   setTermsAccepted: (accepted) => set({ termsAccepted: accepted }),
   setOrder: (orderId, orderNumber) => set({ orderId, orderNumber }),
   setProcessing: (processing) => set({ isProcessing: processing }),

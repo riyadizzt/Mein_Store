@@ -304,6 +304,25 @@ export class OrdersService {
           },
         })
 
+        // ── Sofortige Bestandsreservierung INNERHALB der Transaktion ──
+        // Verhindert Überverkauf bei gleichzeitigen Bestellungen
+        for (const item of dto.items) {
+          const inv = await tx.inventory.findFirst({
+            where: { variantId: item.variantId, warehouse: { isActive: true } },
+            orderBy: { quantityOnHand: 'desc' },
+          })
+          if (inv) {
+            const avail = inv.quantityOnHand - inv.quantityReserved
+            if (avail < item.quantity) {
+              throw new ConflictException('Nicht genügend Bestand verfügbar')
+            }
+            await tx.inventory.update({
+              where: { id: inv.id },
+              data: { quantityReserved: { increment: item.quantity } },
+            })
+          }
+        }
+
         // Coupon-Verwendung erfassen
         if (validatedCouponCode) {
           const coupon = await tx.coupon.findFirst({ where: { code: validatedCouponCode } })

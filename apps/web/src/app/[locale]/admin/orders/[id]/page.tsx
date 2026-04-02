@@ -1,49 +1,83 @@
 'use client'
-
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useLocale, useTranslations } from 'next-intl'
+import { useLocale } from 'next-intl'
+import Link from 'next/link'
 import Image from 'next/image'
-import { Check, Truck, Download, Ban, Loader2, ExternalLink, StickyNote } from 'lucide-react'
+import {
+  Check, Truck, Download, Ban, Loader2, ExternalLink, StickyNote,
+  Package, CreditCard, MapPin, User, Clock, FileText,
+  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro
+} from 'lucide-react'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/store/auth-store'
+import { useConfirm } from '@/components/ui/confirm-modal'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/locale-utils'
+import { getImageUrl } from '@/lib/imagekit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 
+// ── Status Helpers ───────────────────────────────────────────
+const STATUS_FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] as const
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800', confirmed: 'bg-blue-100 text-blue-800',
+  processing: 'bg-purple-100 text-purple-800', shipped: 'bg-indigo-100 text-indigo-800',
+  delivered: 'bg-green-100 text-green-800', cancelled: 'bg-red-100 text-red-800',
+  refunded: 'bg-orange-100 text-orange-800',
+}
+const NEXT_STATUS: Record<string, string> = {
+  pending: 'confirmed', confirmed: 'processing', processing: 'shipped', shipped: 'delivered',
+}
+const NEXT_BTN_COLORS: Record<string, string> = {
+  pending: 'bg-blue-600 hover:bg-blue-700', confirmed: 'bg-purple-600 hover:bg-purple-700',
+  processing: 'bg-indigo-600 hover:bg-indigo-700', shipped: 'bg-green-600 hover:bg-green-700',
+}
+const PROVIDER_COLORS: Record<string, string> = {
+  stripe: 'bg-violet-100 text-violet-800', paypal: 'bg-blue-100 text-blue-800',
+  klarna: 'bg-pink-100 text-pink-800',
+}
+
 export default function AdminOrderDetailPage({ params: { id } }: { params: { id: string; locale: string } }) {
   const locale = useLocale()
-  const t = useTranslations('admin')
   const queryClient = useQueryClient()
-  const [notes, setNotes] = useState('')
-  const [statusChange, setStatusChange] = useState('')
-  const [statusNotes, setStatusNotes] = useState('')
-  const [cancelReason, setCancelReason] = useState('')
-  const [changingFulfillment, setChangingFulfillment] = useState(false)
+  const confirm = useConfirm()
+  const notesRef = useRef<HTMLInputElement>(null)
+  const adminUser = useAuthStore((s) => s.adminUser) as any
+  const canCancel = adminUser?.role === 'super_admin' || adminUser?.permissions?.includes('orders.cancel')
 
+  const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
+
+  const [notes, setNotes] = useState('')
+  const [statusNotes, setStatusNotes] = useState('')
+  const [partialCancelIds, setPartialCancelIds] = useState<Set<string>>(new Set())
+  const [partialCancelReason, setPartialCancelReason] = useState('')
+  const [showPartialCancel, setShowPartialCancel] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null)
+
+  // ── Queries ────────────────────────────────────────────────
   const { data: order, isLoading } = useQuery({
     queryKey: ['admin-order', id],
     queryFn: async () => { const { data } = await api.get(`/admin/orders/${id}`); return data },
   })
 
-  const { data: warehouses } = useQuery({
-    queryKey: ['admin-warehouses'],
-    queryFn: async () => { const { data } = await api.get('/admin/warehouses'); return data },
-  })
-
-  const fulfillmentMutation = useMutation({
-    mutationFn: (warehouseId: string) => api.patch(`/admin/orders/${id}/fulfillment`, { warehouseId }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setChangingFulfillment(false) },
-  })
-
+  // ── Mutations ──────────────────────────────────────────────
   const statusMutation = useMutation({
-    mutationFn: () => api.patch(`/admin/orders/${id}/status`, { status: statusChange, notes: statusNotes }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setStatusChange(''); setStatusNotes('') },
+    mutationFn: (nextStatus: string) => api.patch(`/admin/orders/${id}/status`, { status: nextStatus, notes: statusNotes }),
+    onMutate: (nextStatus) => { setOptimisticStatus(nextStatus) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setStatusNotes(''); setOptimisticStatus(null) },
+    onError: () => { setOptimisticStatus(null) },
   })
 
   const cancelMutation = useMutation({
-    mutationFn: () => api.post(`/admin/orders/${id}/cancel`, { reason: cancelReason }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setCancelReason('') },
+    mutationFn: (reason: string) => api.post(`/admin/orders/${id}/cancel`, { reason }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }) },
+  })
+
+  const partialCancelMutation = useMutation({
+    mutationFn: () => api.post(`/admin/orders/${id}/cancel-items`, { itemIds: [...partialCancelIds], reason: partialCancelReason }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setPartialCancelIds(new Set()); setPartialCancelReason(''); setShowPartialCancel(false) },
   })
 
   const noteMutation = useMutation({
@@ -51,216 +85,473 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setNotes('') },
   })
 
-  if (isLoading) return <div className="space-y-4">{[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse bg-muted rounded-xl" />)}</div>
-  if (!order) return <p>{t('orders.notFound')}</p>
+  // ── Keyboard Shortcuts ─────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return
+      if (e.key === 'p') downloadInvoice()
+      if (e.key === 'l') downloadDeliveryNote()
+      if (e.key === 'n') { e.preventDefault(); notesRef.current?.focus() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [id])
+
+  // ── Downloads ──────────────────────────────────────────────
+  const downloadInvoice = useCallback(async () => {
+    if (!order?.invoices?.length) return
+    const inv = order.invoices.find((i: any) => i.type === 'invoice') ?? order.invoices[0]
+    try {
+      const token = useAuthStore.getState().adminAccessToken
+      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const res = await fetch(`${API}/api/v1/admin/invoices/${inv.id}/download`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return
+      const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a')
+      a.href = url; a.download = `${inv.invoiceNumber}.pdf`; a.click(); URL.revokeObjectURL(url)
+    } catch { /* silent */ }
+  }, [order])
+
+  const downloadDeliveryNote = useCallback(async () => {
+    try {
+      const token = useAuthStore.getState().adminAccessToken
+      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const res = await fetch(`${API}/api/v1/admin/orders/${id}/delivery-note`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return
+      const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a')
+      a.href = url; a.download = `lieferschein-${order?.orderNumber ?? id}.pdf`; a.click(); URL.revokeObjectURL(url)
+    } catch { /* silent */ }
+  }, [id, order])
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000)
+  }
+
+  // ── Status Helpers ─────────────────────────────────────────
+  const currentStatus = optimisticStatus ?? order?.status
+  const statusLabel = (s: string) => {
+    const map: Record<string, string> = {
+      pending: t3('Ausstehend', 'Pending', 'معلق'), confirmed: t3('Bestätigt', 'Confirmed', 'مؤكد'),
+      processing: t3('In Bearbeitung', 'Processing', 'قيد المعالجة'), shipped: t3('Versendet', 'Shipped', 'تم الشحن'),
+      delivered: t3('Zugestellt', 'Delivered', 'تم التسليم'), cancelled: t3('Storniert', 'Cancelled', 'ملغى'),
+      refunded: t3('Erstattet', 'Refunded', 'مسترد'),
+    }
+    return map[s] ?? s
+  }
+
+  const progressStepLabels = [
+    t3('Bestellt', 'Ordered', 'تم الطلب'), t3('Bestätigt', 'Confirmed', 'مؤكد'),
+    t3('In Bearbeitung', 'Processing', 'قيد المعالجة'), t3('Versendet', 'Shipped', 'تم الشحن'),
+    t3('Zugestellt', 'Delivered', 'تم التسليم'),
+  ]
+
+  const nextStatusLabel: Record<string, string> = {
+    pending: t3('Bestätigen', 'Confirm', 'تأكيد'), confirmed: t3('In Bearbeitung', 'Start Processing', 'بدء المعالجة'),
+    processing: t3('Als versendet markieren', 'Mark as Shipped', 'تحديد كمشحون'),
+    shipped: t3('Als zugestellt markieren', 'Mark as Delivered', 'تحديد كمُسلّم'),
+  }
+
+  // ── Loading Skeleton ───────────────────────────────────────
+  if (isLoading) return (
+    <div className="space-y-6">
+      <div className="h-8 w-48 animate-pulse bg-muted rounded-lg" />
+      <div className="h-32 animate-pulse bg-muted rounded-2xl" />
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 space-y-6">
+          {[1, 2, 3].map((i) => <div key={i} className="h-48 animate-pulse bg-muted rounded-2xl" />)}
+        </div>
+        <div className="w-full lg:w-[380px] space-y-6">
+          {[1, 2, 3, 4].map((i) => <div key={i} className="h-36 animate-pulse bg-muted rounded-2xl" />)}
+        </div>
+      </div>
+    </div>
+  )
+  if (!order) return <p className="text-muted-foreground py-12 text-center">{t3('Bestellung nicht gefunden', 'Order not found', 'الطلب غير موجود')}</p>
+
+  const isCancelled = currentStatus === 'cancelled' || currentStatus === 'refunded'
+  const currentStepIndex = STATUS_FLOW.indexOf(currentStatus as any)
+  const historyMap = new Map<string, string>()
+  for (const h of order.statusHistory ?? []) {
+    if (h.toStatus && h.createdAt) historyMap.set(h.toStatus, h.createdAt)
+  }
+
+  // Merge timeline: status history + admin notes
+  const timelineEntries = [
+    ...(order.statusHistory ?? []).map((h: any) => ({ type: 'status', date: h.createdAt, from: h.fromStatus, to: h.toStatus, source: h.source, notes: h.notes, by: h.createdBy })),
+    ...(order.adminNotes ?? []).map((n: any) => ({ type: 'note', date: n.createdAt, content: n.content, by: n.admin ? `${n.admin.firstName} ${n.admin.lastName}` : '' })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return (
     <div>
-      <AdminBreadcrumb items={[{ label: t('orders.title'), href: `/${locale}/admin/orders` }, { label: order?.orderNumber ?? '...' }]} />
+      <style>{`
+        @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+      `}</style>
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold font-mono">{order.orderNumber}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {formatDate(order.createdAt, locale)} — Kunde: {order.user?.firstName ?? (() => { try { return JSON.parse(order.notes ?? '{}').guestFirstName } catch { return '' } })()} {order.user?.lastName ?? (() => { try { return JSON.parse(order.notes ?? '{}').guestLastName } catch { return '' } })()} ({order.user?.email ?? order.guestEmail ?? t('users.guest')})
-            {(() => { try { const loc = JSON.parse(order.notes ?? '{}').locale ?? order.user?.preferredLang; return loc ? <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded ${loc === 'ar' ? 'bg-green-100 text-green-800' : loc === 'en' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>{loc.toUpperCase()}</span> : null } catch { return null } })()}
-          </p>
-        </div>
-      </div>
+      <AdminBreadcrumb items={[{ label: t3('Bestellungen', 'Orders', 'الطلبات'), href: `/${locale}/admin/orders` }, { label: order.orderNumber }]} />
 
-      {/* Fulfillment-Standort */}
-      <div className="bg-background border rounded-xl p-4 mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center"><Truck className="h-4 w-4 text-blue-600" /></div>
+      {/* ── HEADER ─────────────────────────────────────────── */}
+      <div className="bg-[#1a1a2e] text-white rounded-2xl p-6 mb-6" style={{ animation: 'fadeSlideUp 300ms ease-out' }}>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
-            <div className="text-xs text-muted-foreground">{locale === 'ar' ? 'موقع التنفيذ' : 'Fulfillment-Standort'}</div>
-            <div className="text-sm font-semibold">
-              {order.fulfillmentWarehouse?.name ?? (locale === 'ar' ? 'غير محدد' : 'Nicht zugewiesen')}
-              {order.fulfillmentWarehouse?.type && (
-                <span className="text-[10px] text-muted-foreground font-normal ml-1.5">
-                  ({order.fulfillmentWarehouse.type === 'STORE' ? (locale === 'ar' ? 'متجر' : 'Geschäft') : (locale === 'ar' ? 'مستودع' : 'Lager')})
-                </span>
-              )}
-            </div>
+            <h1 className="text-2xl font-bold font-mono tracking-wide">{order.orderNumber}</h1>
+            <p className="text-sm text-white/60 mt-1">{formatDateTime(order.createdAt, locale)} &middot; {order.channel?.toUpperCase()}</p>
+            <p className="text-sm text-white/80 mt-2">
+              {order.user ? `${order.user.firstName} ${order.user.lastName}` : (order.guestEmail ?? t3('Gast', 'Guest', 'ضيف'))}
+              {order.user?.email && <span className="text-white/50 ltr:ml-2 rtl:mr-2">{order.user.email}</span>}
+            </p>
           </div>
+          <span className={`${STATUS_COLORS[currentStatus] ?? 'bg-gray-100 text-gray-800'} rounded-full px-4 py-1.5 text-xs font-semibold self-start`}>
+            {statusLabel(currentStatus)}
+          </span>
         </div>
-        {!changingFulfillment ? (
-          <button onClick={() => setChangingFulfillment(true)} className="text-xs text-primary hover:underline font-medium">
-            {locale === 'ar' ? 'تغيير' : 'Ändern'}
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            <select
-              defaultValue={order.fulfillmentWarehouseId ?? ''}
-              onChange={(e) => { if (e.target.value) fulfillmentMutation.mutate(e.target.value) }}
-              className="px-3 py-1.5 rounded-lg border text-xs bg-background"
-            >
-              <option value="" disabled>{locale === 'ar' ? 'اختر الموقع' : 'Standort wählen'}</option>
-              {(warehouses as any[])?.map((w: any) => (
-                <option key={w.id} value={w.id}>{w.name} ({w.type === 'STORE' ? (locale === 'ar' ? 'متجر' : 'Geschäft') : (locale === 'ar' ? 'مستودع' : 'Lager')})</option>
-              ))}
-            </select>
-            <button onClick={() => setChangingFulfillment(false)} className="text-xs text-muted-foreground hover:text-foreground">{locale === 'ar' ? 'إلغاء' : 'Abbrechen'}</button>
-          </div>
-        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Details */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Items */}
-          <div className="bg-background border rounded-xl p-5">
-            <h3 className="font-semibold mb-4">{t('orders.items')}</h3>
-            <div className="divide-y">
-              {(order.items ?? []).map((item: any) => (
-                <div key={item.id} className="flex gap-3 py-3">
-                  <div className="w-12 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
-                    {item.variant?.product?.images?.[0]?.url && (
-                      <Image src={item.variant.product.images[0].url} alt="" width={48} height={48} className="w-full h-full object-cover" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{item.snapshotName}</p>
-                    <p className="text-xs text-muted-foreground">{item.snapshotSku} {item.variant?.color ? `/ ${item.variant.color}` : ''} {item.variant?.size ? `/ ${item.variant.size}` : ''}</p>
-                  </div>
-                  <div className="text-right text-sm">
-                    <p>{item.quantity} × {formatCurrency(Number(item.unitPrice), locale)}</p>
-                    <p className="font-semibold">{formatCurrency(Number(item.totalPrice), locale)}</p>
-                  </div>
+      {/* ── PROGRESS BAR ───────────────────────────────────── */}
+      <div className="bg-background border rounded-2xl p-5 mb-6" style={{ animation: 'fadeSlideUp 300ms ease-out 50ms both' }}>
+        <div className="flex items-center justify-between relative">
+          {progressStepLabels.map((label, i) => {
+            const isCompleted = !isCancelled && currentStepIndex >= i
+            const isCurrent = !isCancelled && currentStepIndex === i
+            const isCancelledHere = isCancelled && currentStepIndex === i
+            const stepStatus = STATUS_FLOW[i] ?? 'pending'
+            const stepDate = i === 0 ? order.createdAt : historyMap.get(stepStatus)
+            return (
+              <div key={i} className="flex flex-col items-center flex-1 relative z-10">
+                <div className={`h-9 w-9 rounded-full flex items-center justify-center transition-all duration-500 text-sm font-bold
+                  ${isCancelledHere ? 'bg-red-500 text-white' : isCompleted ? (isCurrent ? 'bg-[#d4a853] text-white ring-4 ring-[#d4a853]/20' : 'bg-green-500 text-white') : 'bg-muted text-muted-foreground'}`}>
+                  {isCancelledHere ? <Ban className="h-4 w-4" /> : isCompleted && !isCurrent ? <Check className="h-4 w-4" /> : i + 1}
                 </div>
-              ))}
-            </div>
-            <div className="border-t pt-3 mt-3 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">{t('orders.subtotal')}</span><span>{formatCurrency(Number(order.subtotal), locale)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t('orders.shipping')}</span><span>{formatCurrency(Number(order.shippingCost), locale)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t('orders.tax')}</span><span>{formatCurrency(Number(order.taxAmount), locale)}</span></div>
-              <div className="flex justify-between font-bold text-base pt-1 border-t"><span>{t('orders.total')}</span><span>{formatCurrency(Number(order.totalAmount), locale)}</span></div>
-            </div>
-          </div>
-
-          {/* Status Timeline */}
-          <div className="bg-background border rounded-xl p-5">
-            <h3 className="font-semibold mb-4">{t('orders.statusHistory')}</h3>
-            <div className="space-y-3">
-              {(order.statusHistory ?? []).map((h: any) => (
-                <div key={h.id} className="flex items-start gap-3">
-                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Check className="h-3 w-3 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{h.fromStatus ?? '—'} → {h.toStatus}</p>
-                    <p className="text-xs text-muted-foreground">{formatDateTime(h.createdAt, locale)} — {h.source} {h.notes ? `— ${h.notes}` : ''}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Internal Notes */}
-          <div className="bg-background border rounded-xl p-5">
-            <h3 className="font-semibold mb-4 flex items-center gap-2"><StickyNote className="h-4 w-4" />{t('orders.internalNotes')}</h3>
-            {(order.adminNotes ?? []).map((note: any) => (
-              <div key={note.id} className="text-sm border-b pb-2 mb-2 last:border-b-0">
-                <p>{note.content}</p>
-                <p className="text-xs text-muted-foreground mt-1">{formatDateTime(note.createdAt, locale)}</p>
+                <span className={`text-[11px] mt-2 text-center font-medium transition-colors duration-300 ${isCurrent ? 'text-[#d4a853]' : isCompleted ? 'text-foreground' : 'text-muted-foreground'}`}>{isCancelledHere ? t3('Storniert', 'Cancelled', 'ملغى') : label}</span>
+                {stepDate && isCompleted && <span className="text-[10px] text-muted-foreground mt-0.5">{formatDate(stepDate, locale)}</span>}
               </div>
-            ))}
-            <div className="flex gap-2 mt-3">
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('orders.notePlaceholder')} className="flex-1" />
-              <Button size="sm" onClick={() => noteMutation.mutate()} disabled={!notes.trim() || noteMutation.isPending}>
-                {noteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t('orders.addNote')}
-              </Button>
+            )
+          })}
+          {/* Connecting lines */}
+          <div className="absolute top-[18px] ltr:left-[10%] rtl:right-[10%] ltr:right-[10%] rtl:left-[10%] h-[2px] bg-muted -z-0" />
+          <div className="absolute top-[18px] ltr:left-[10%] rtl:right-[10%] h-[2px] bg-green-500 -z-0 transition-all duration-700"
+            style={{ width: `${Math.max(0, Math.min(currentStepIndex, 4)) * 20}%` }} />
+        </div>
+      </div>
+
+      {/* ── TWO COLUMN LAYOUT ──────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row gap-6">
+
+        {/* ── LEFT COLUMN ──────────────────────────────────── */}
+        <div className="flex-1 space-y-6">
+
+          {/* Products */}
+          <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 100ms both' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <Package className="h-4 w-4" /> {t3('Artikel', 'Items', 'المنتجات')} ({order.items?.length ?? 0})
+              </h3>
+            </div>
+            <div className="divide-y">
+              {(order.items ?? []).map((item: any) => {
+                const isCancelledItem = item.quantity === 0
+                const imgUrl = item.variant?.product?.images?.[0]?.url
+                return (
+                  <div key={item.id} className={`flex gap-4 py-4 ${isCancelledItem ? 'opacity-50' : ''}`}>
+                    <div className="w-20 h-20 bg-muted rounded-xl overflow-hidden flex-shrink-0">
+                      {imgUrl ? <Image src={getImageUrl(imgUrl, { width: 160, height: 160, fit: 'cover' })} alt="" width={80} height={80} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="h-6 w-6 text-muted-foreground" /></div>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <Link href={`/${locale}/admin/products/${item.variant?.product?.slug ?? ''}`} className={`text-sm font-semibold hover:text-[#d4a853] transition-colors ${isCancelledItem ? 'line-through' : ''}`}>
+                            {item.snapshotName}
+                          </Link>
+                          <div className="flex items-center gap-2 mt-1">
+                            {item.variant?.color && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><span className="h-3 w-3 rounded-full border" style={{ backgroundColor: item.variant.color.toLowerCase() }} />{item.variant.color}</span>}
+                            {item.variant?.size && <span className="text-[10px] font-semibold bg-muted px-2 py-0.5 rounded-md">{item.variant.size}</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1 font-mono">{item.snapshotSku}</p>
+                        </div>
+                        <div className="text-end flex-shrink-0">
+                          {isCancelledItem ? (
+                            <span className="text-xs bg-red-100 text-red-700 rounded-full px-3 py-1 font-semibold">{t3('Storniert', 'Cancelled', 'ملغى')}</span>
+                          ) : (
+                            <>
+                              <p className="text-sm text-muted-foreground">{item.quantity} &times; {formatCurrency(Number(item.unitPrice), locale)}</p>
+                              <p className="text-sm font-bold mt-0.5">{formatCurrency(Number(item.totalPrice), locale)}</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Price Summary */}
+          <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 150ms both' }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"><Euro className="h-4 w-4" /> {t3('Zusammenfassung', 'Summary', 'الملخص')}</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">{t3('Zwischensumme', 'Subtotal', 'المجموع الفرعي')}</span><span>{formatCurrency(Number(order.subtotal), locale)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t3('Versand', 'Shipping', 'الشحن')}</span><span>{formatCurrency(Number(order.shippingCost), locale)}</span></div>
+              {order.couponCode && (
+                <div className="flex justify-between"><span className="text-green-600 flex items-center gap-1">{t3('Gutschein', 'Coupon', 'كوبون')} <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-mono">{order.couponCode}</span></span><span className="text-green-600">-{formatCurrency(Number(order.discountAmount), locale)}</span></div>
+              )}
+              <div className="flex justify-between"><span className="text-muted-foreground">{t3('MwSt. 19%', 'VAT 19%', 'ض.ق.م 19%')}</span><span>{formatCurrency(Number(order.taxAmount), locale)}</span></div>
+              <div className="flex justify-between font-bold text-lg pt-3 border-t"><span>{t3('Gesamt', 'Total', 'الإجمالي')}</span><span className="text-[#d4a853]">{formatCurrency(Number(order.totalAmount), locale)}</span></div>
+            </div>
+          </div>
+
+          {/* Timeline */}
+          <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 200ms both' }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2"><Clock className="h-4 w-4" /> {t3('Verlauf', 'Timeline', 'السجل')}</h3>
+            <div className="relative">
+              <div className="absolute ltr:left-[11px] rtl:right-[11px] top-3 bottom-3 w-[2px] bg-muted" />
+              <div className="space-y-4">
+                {timelineEntries.map((entry, i) => (
+                  <div key={i} className="flex items-start gap-3 relative">
+                    {entry.type === 'status' ? (
+                      <div className={`h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${entry.to === 'cancelled' ? 'bg-red-500' : entry.to === 'delivered' ? 'bg-green-500' : 'bg-[#d4a853]'}`}>
+                        {entry.to === 'cancelled' ? <Ban className="h-3 w-3 text-white" /> : <Check className="h-3 w-3 text-white" />}
+                      </div>
+                    ) : (
+                      <div className="h-6 w-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 z-10">
+                        <StickyNote className="h-3 w-3 text-amber-700" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 pb-1">
+                      {entry.type === 'status' ? (
+                        <>
+                          <p className="text-sm font-medium">{statusLabel(entry.from ?? '')} <ChevronRight className="h-3 w-3 inline-block mx-1 text-muted-foreground" /> {statusLabel(entry.to)}</p>
+                          {entry.notes && <p className="text-xs text-muted-foreground mt-0.5">{entry.notes}</p>}
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium">{t3('Notiz', 'Note', 'ملاحظة')}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{entry.content}</p>
+                        </>
+                      )}
+                      <p className="text-[10px] text-muted-foreground mt-1">{formatDateTime(entry.date, locale)}{entry.by ? ` — ${entry.by}` : ''}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right: Actions */}
-        <div className="space-y-6">
-          {/* Shipping */}
-          {order.shipment ? (
-            <div className="bg-background border rounded-xl p-5">
-              <h3 className="font-semibold mb-3 flex items-center gap-2"><Truck className="h-4 w-4" />{t('orders.shipment')}</h3>
-              <p className="text-sm">Tracking: <span className="font-mono">{order.shipment.trackingNumber ?? '—'}</span></p>
-              {order.shipment.trackingUrl && (
-                <a href={order.shipment.trackingUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary flex items-center gap-1 mt-1 hover:underline">
-                  {t('orders.dhlTracking')} <ExternalLink className="h-3 w-3" />
-                </a>
+        {/* ── RIGHT COLUMN ─────────────────────────────────── */}
+        <div className="w-full lg:w-[380px] space-y-5">
+
+          {/* Customer */}
+          <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 100ms both' }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"><User className="h-4 w-4" /> {t3('Kunde', 'Customer', 'العميل')}</h3>
+            <div className="flex items-center gap-3">
+              {order.user?.profileImageUrl ? (
+                <Image src={getImageUrl(order.user.profileImageUrl, { width: 80, height: 80 })} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover" />
+              ) : (
+                <div className="h-10 w-10 rounded-full bg-[#d4a853]/10 text-[#d4a853] flex items-center justify-center font-bold text-sm">
+                  {(order.user?.firstName?.[0] ?? order.guestEmail?.[0] ?? 'G').toUpperCase()}
+                </div>
               )}
-              {order.shipment.labelUrl && (
-                <a href={order.shipment.labelUrl} target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" size="sm" className="mt-2 gap-1.5 w-full">
-                    <Download className="h-3.5 w-3.5" />{t('orders.downloadLabel')}
-                  </Button>
-                </a>
+              <div className="flex-1 min-w-0">
+                {order.user ? (
+                  <Link href={`/${locale}/admin/customers/${order.user.id}`} className="text-sm font-semibold hover:text-[#d4a853] transition-colors">
+                    {order.user.firstName} {order.user.lastName}
+                  </Link>
+                ) : (
+                  <span className="text-sm font-semibold">{t3('Gast', 'Guest', 'ضيف')}</span>
+                )}
+                <a href={`mailto:${order.user?.email ?? order.guestEmail ?? ''}`} className="text-xs text-muted-foreground hover:underline block truncate">{order.user?.email ?? order.guestEmail}</a>
+              </div>
+              {order.user?.preferredLang && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${order.user.preferredLang === 'ar' ? 'bg-green-100 text-green-800' : order.user.preferredLang === 'en' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>{order.user.preferredLang.toUpperCase()}</span>
               )}
             </div>
-          ) : ['confirmed', 'processing', 'pending'].includes(order.status) ? (
-            <div className="bg-background border border-primary/20 rounded-xl p-5">
-              <h3 className="font-semibold mb-3 flex items-center gap-2"><Truck className="h-4 w-4" />{t('orders.shipment')}</h3>
-              <Button
-                size="sm"
-                className="w-full gap-1.5"
-                onClick={async () => {
-                  try {
-                    await api.post('/shipments', { orderId: order.id, carrier: 'dhl' })
-                    queryClient.invalidateQueries({ queryKey: ['admin-order', id] })
-                  } catch {}
-                }}
-              >
-                <Truck className="h-3.5 w-3.5" />Versandlabel erstellen (DHL)
-              </Button>
-            </div>
-          ) : null}
-
-          {/* Print */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-1.5"
-            onClick={() => window.open(`/${locale}/admin/orders/${id}/print`, '_blank')}
-          >
-            {t('orders.printSlip')}
-          </Button>
-
-          {/* Status Change */}
-          <div className="bg-background border rounded-xl p-5">
-            <h3 className="font-semibold mb-3">{t('orders.changeStatus')}</h3>
-            <select value={statusChange} onChange={(e) => setStatusChange(e.target.value)} className="w-full h-9 px-3 rounded-lg border bg-background text-sm mb-2">
-              <option value="">{t('orders.selectStatus')}</option>
-              <option value="confirmed">{t('status.confirmed')}</option>
-              <option value="processing">{t('status.processing')}</option>
-              <option value="shipped">{t('status.shipped')}</option>
-              <option value="delivered">{t('status.delivered')}</option>
-            </select>
-            <Input value={statusNotes} onChange={(e) => setStatusNotes(e.target.value)} placeholder={t('orders.reasonPlaceholder')} className="mb-2" />
-            <Button size="sm" className="w-full" disabled={!statusChange || statusMutation.isPending} onClick={() => statusMutation.mutate()}>
-              {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              {t('orders.changeStatusBtn')}
-            </Button>
+            {/* Shipping Address */}
+            {order.shippingAddress && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2"><MapPin className="h-3.5 w-3.5" /> {t3('Lieferadresse', 'Shipping Address', 'عنوان الشحن')}</div>
+                <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
+                {order.shippingAddress.company && <p className="text-sm text-muted-foreground">{order.shippingAddress.company}</p>}
+                <p className="text-sm">{order.shippingAddress.street} {order.shippingAddress.houseNumber}</p>
+                <p className="text-sm">{order.shippingAddress.postalCode} {order.shippingAddress.city}</p>
+                <p className="text-sm text-muted-foreground">{order.shippingAddress.country}</p>
+              </div>
+            )}
           </div>
 
-          {/* Cancel */}
-          {!['cancelled', 'refunded'].includes(order.status) && (
-            <div className="bg-background border border-destructive/20 rounded-xl p-5">
-              <h3 className="font-semibold mb-3 text-destructive flex items-center gap-2"><Ban className="h-4 w-4" />{t('orders.cancelRefund')}</h3>
-              <Input value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder={t('orders.cancelReasonPlaceholder')} className="mb-2" />
-              <Button variant="destructive" size="sm" className="w-full" disabled={!cancelReason || cancelMutation.isPending} onClick={() => cancelMutation.mutate()}>
-                {cancelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                {t('orders.cancelBtn')}
+          {/* Shipping */}
+          <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 150ms both' }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"><Truck className="h-4 w-4" /> {t3('Versand', 'Shipping', 'الشحن')}</h3>
+            {order.shipment ? (
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Versanddienstleister', 'Carrier', 'شركة الشحن')}</span><span className="font-semibold">{order.shipment.carrier ?? 'DHL'}</span></div>
+                {order.shipment.trackingNumber && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Tracking</span>
+                    <button onClick={() => copyToClipboard(order.shipment.trackingNumber)} className="font-mono text-xs bg-muted px-2 py-1 rounded-lg hover:bg-muted/80 flex items-center gap-1.5">
+                      {order.shipment.trackingNumber} <Copy className="h-3 w-3" />{copied && <Check className="h-3 w-3 text-green-500" />}
+                    </button>
+                  </div>
+                )}
+                {order.shipment.trackingUrl && (
+                  <a href={order.shipment.trackingUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#d4a853] flex items-center gap-1 hover:underline">
+                    {t3('Sendungsverfolgung', 'Track Shipment', 'تتبع الشحنة')} <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+                {order.shipment.estimatedDelivery && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Voraussichtlich', 'Estimated', 'المتوقع')}</span><span>{formatDate(order.shipment.estimatedDelivery, locale)}</span></div>}
+                <div className="flex gap-2 pt-2">
+                  {order.shipment.labelUrl && (
+                    <a href={order.shipment.labelUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                      <Button variant="outline" size="sm" className="w-full gap-1.5 rounded-xl text-xs"><Download className="h-3.5 w-3.5" />{t3('Versandlabel', 'Shipping Label', 'بطاقة الشحن')}</Button>
+                    </a>
+                  )}
+                  <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs" onClick={downloadDeliveryNote}><FileText className="h-3.5 w-3.5" />{t3('Lieferschein', 'Delivery Note', 'إشعار التسليم')}</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">{t3('Noch kein Versand', 'No shipment yet', 'لم يتم الشحن بعد')}</p>
+                {!['cancelled', 'refunded', 'pending'].includes(order.status) && (
+                  <div className="space-y-2">
+                    <Button size="sm" className="w-full gap-2 rounded-xl bg-[#d4a853] hover:bg-[#c49843] text-white"
+                      onClick={async () => {
+                        const tracking = prompt(t3('Tracking-Nummer eingeben:', 'Enter tracking number:', 'أدخل رقم التتبع:'))
+                        if (tracking) {
+                          await api.patch(`/admin/orders/${id}/status`, { status: 'shipped', notes: `Tracking: ${tracking}` })
+                          queryClient.invalidateQueries({ queryKey: ['admin-order', id] })
+                        }
+                      }}>
+                      <Truck className="h-4 w-4" />
+                      {t3('Als versendet markieren', 'Mark as shipped', 'تحديد كمرسل')}
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full gap-2 rounded-xl text-xs" onClick={downloadDeliveryNote}>
+                      <FileText className="h-3.5 w-3.5" />{t3('Lieferschein drucken', 'Print delivery note', 'طباعة إشعار التسليم')}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Payment */}
+          {order.payment && (
+            <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 200ms both' }}>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"><CreditCard className="h-4 w-4" /> {t3('Zahlung', 'Payment', 'الدفع')}</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">{t3('Anbieter', 'Provider', 'المزود')}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${PROVIDER_COLORS[order.payment.provider?.toLowerCase()] ?? 'bg-gray-100 text-gray-800'}`}>{order.payment.provider}</span>
+                </div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Methode', 'Method', 'الطريقة')}</span><span className="font-medium">{order.payment.method}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Status</span><span className="font-medium">{order.payment.status}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Betrag', 'Amount', 'المبلغ')}</span><span className="font-bold">{formatCurrency(Number(order.payment.amount), locale)}</span></div>
+                {order.payment.paidAt && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Bezahlt am', 'Paid at', 'تاريخ الدفع')}</span><span>{formatDateTime(order.payment.paidAt, locale)}</span></div>}
+                {order.payment.providerPaymentId && (
+                  <button onClick={() => copyToClipboard(order.payment.providerPaymentId)} className="w-full text-start mt-1 font-mono text-[10px] text-muted-foreground bg-muted px-3 py-1.5 rounded-lg hover:bg-muted/80 flex items-center gap-1.5 truncate">
+                    {order.payment.providerPaymentId} <Copy className="h-3 w-3 flex-shrink-0" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Documents */}
+          <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 250ms both' }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"><FileText className="h-4 w-4" /> {t3('Dokumente', 'Documents', 'المستندات')}</h3>
+            <div className="space-y-2">
+              {(order.invoices ?? []).map((inv: any) => (
+                <Button key={inv.id} variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl text-xs" onClick={downloadInvoice}>
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="font-mono">{inv.invoiceNumber}</span>
+                  <span className="text-muted-foreground ltr:ml-auto rtl:mr-auto">{inv.type === 'credit_note' ? t3('Gutschrift', 'Credit Note', 'إشعار دائن') : t3('Rechnung', 'Invoice', 'فاتورة')}</span>
+                </Button>
+              ))}
+              <Button variant="outline" size="sm" className="w-full justify-start gap-2 rounded-xl text-xs" onClick={downloadDeliveryNote}>
+                <Printer className="h-3.5 w-3.5" /> {t3('Lieferschein', 'Delivery Note', 'إشعار التسليم')}
+              </Button>
+            </div>
+          </div>
+
+          {/* Actions */}
+          {!isCancelled && NEXT_STATUS[currentStatus] && (
+            <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 300ms both' }}>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">{t3('Aktion', 'Action', 'الإجراء')}</h3>
+              <Input value={statusNotes} onChange={(e) => setStatusNotes(e.target.value)} placeholder={t3('Notizen (optional)', 'Notes (optional)', 'ملاحظات (اختياري)')} className="mb-3 rounded-xl text-sm" />
+              <Button className={`w-full rounded-xl text-white font-semibold ${NEXT_BTN_COLORS[currentStatus] ?? ''}`} disabled={statusMutation.isPending}
+                onClick={() => statusMutation.mutate(NEXT_STATUS[currentStatus])}>
+                {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin ltr:mr-2 rtl:ml-2" /> : <Check className="h-4 w-4 ltr:mr-2 rtl:ml-2" />}
+                {nextStatusLabel[currentStatus]}
               </Button>
             </div>
           )}
 
-          {/* Payment Info */}
-          {order.payment && (
-            <div className="bg-background border rounded-xl p-5">
-              <h3 className="font-semibold mb-3">{t('orders.paymentInfo')}</h3>
-              <div className="text-sm space-y-1">
-                <div className="flex justify-between"><span className="text-muted-foreground">{t('orders.provider')}</span><span>{order.payment.provider}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">{t('orders.method')}</span><span>{order.payment.method}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">{t('orders.status')}</span><span className="font-medium">{order.payment.status}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">ID</span><span className="font-mono text-xs">{order.payment.providerPaymentId}</span></div>
-              </div>
+          {/* Notes */}
+          <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 350ms both' }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"><StickyNote className="h-4 w-4" /> {t3('Interne Notizen', 'Internal Notes', 'ملاحظات داخلية')}</h3>
+            <div className="flex gap-2">
+              <Input ref={notesRef} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t3('Notiz hinzufügen...', 'Add a note...', 'أضف ملاحظة...')} className="flex-1 rounded-xl text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter' && notes.trim()) noteMutation.mutate() }} />
+              <Button size="sm" className="rounded-xl bg-[#d4a853] hover:bg-[#c4983f] text-white" disabled={!notes.trim() || noteMutation.isPending} onClick={() => noteMutation.mutate()}>
+                {noteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t3('Hinzufügen', 'Add', 'إضافة')}
+              </Button>
+            </div>
+          </div>
+
+          {/* Danger Zone */}
+          {canCancel && !isCancelled && (
+            <div className="bg-background border-2 border-red-200 rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 400ms both' }}>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-red-600 mb-3 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> {t3('Gefahrenzone', 'Danger Zone', 'منطقة الخطر')}</h3>
+              <Button variant="destructive" className="w-full rounded-xl font-semibold gap-2" disabled={cancelMutation.isPending}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t3('Bestellung stornieren & erstatten', 'Cancel & Refund Order', 'إلغاء الطلب واسترداد المبلغ'),
+                    description: t3(
+                      `Bestellung ${order.orderNumber} wird storniert und der Betrag von ${formatCurrency(Number(order.totalAmount), locale)} erstattet. Diese Aktion kann nicht rückgängig gemacht werden.`,
+                      `Order ${order.orderNumber} will be cancelled and ${formatCurrency(Number(order.totalAmount), locale)} will be refunded. This action cannot be undone.`,
+                      `سيتم إلغاء الطلب ${order.orderNumber} واسترداد مبلغ ${formatCurrency(Number(order.totalAmount), locale)}. لا يمكن التراجع عن هذا الإجراء.`
+                    ),
+                    confirmLabel: t3('Stornieren & Erstatten', 'Cancel & Refund', 'إلغاء واسترداد'),
+                    cancelLabel: t3('Abbrechen', 'Go Back', 'رجوع'),
+                    variant: 'danger',
+                  })
+                  if (ok) cancelMutation.mutate(t3('Admin-Stornierung', 'Admin cancellation', 'إلغاء من المسؤول'))
+                }}>
+                {cancelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                {t3('Stornieren + Erstatten', 'Cancel + Refund', 'إلغاء + استرداد')}
+              </Button>
+
+              {/* Partial Cancel */}
+              {order.items?.length > 1 && (
+                <div className="mt-4 pt-4 border-t border-red-100">
+                  <button onClick={() => setShowPartialCancel(!showPartialCancel)} className="w-full flex items-center justify-between text-xs font-semibold text-orange-700 hover:text-orange-800">
+                    <span className="flex items-center gap-1.5"><RotateCcw className="h-3.5 w-3.5" /> {t3('Einzelne Artikel stornieren', 'Cancel Individual Items', 'إلغاء عناصر محددة')}</span>
+                    <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showPartialCancel ? 'rotate-90' : ''}`} />
+                  </button>
+                  {showPartialCancel && (
+                    <div className="mt-3 space-y-2">
+                      {(order.items ?? []).filter((i: any) => i.quantity > 0).map((item: any) => (
+                        <label key={item.id} className={`flex items-center gap-3 p-2.5 rounded-xl border text-sm cursor-pointer transition-all ${partialCancelIds.has(item.id) ? 'border-orange-400 bg-orange-50' : 'hover:bg-muted/30'}`}>
+                          <input type="checkbox" checked={partialCancelIds.has(item.id)} onChange={() => { const n = new Set(partialCancelIds); n.has(item.id) ? n.delete(item.id) : n.add(item.id); setPartialCancelIds(n) }} className="h-4 w-4 rounded accent-orange-500" />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium truncate block">{item.snapshotName}</span>
+                            <span className="text-xs text-muted-foreground">{item.quantity}x &middot; {formatCurrency(Number(item.totalPrice), locale)}</span>
+                          </div>
+                        </label>
+                      ))}
+                      {partialCancelIds.size > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <div className="bg-orange-50 rounded-xl p-3 text-xs text-orange-800 font-medium">
+                            {t3('Erstattungsbetrag', 'Refund Amount', 'مبلغ الاسترداد')}: <strong>{formatCurrency((order.items ?? []).filter((i: any) => partialCancelIds.has(i.id)).reduce((s: number, i: any) => s + Number(i.totalPrice), 0), locale)}</strong>
+                          </div>
+                          <Input value={partialCancelReason} onChange={(e) => setPartialCancelReason(e.target.value)} placeholder={t3('Grund der Teilstornierung', 'Reason for partial cancellation', 'سبب الإلغاء الجزئي')} className="rounded-xl text-sm" />
+                          <Button variant="outline" size="sm" className="w-full rounded-xl border-orange-300 text-orange-700 hover:bg-orange-50" disabled={!partialCancelReason || partialCancelMutation.isPending} onClick={() => partialCancelMutation.mutate()}>
+                            {partialCancelMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin ltr:mr-1.5 rtl:ml-1.5" />}
+                            {t3(`${partialCancelIds.size} Artikel stornieren`, `Cancel ${partialCancelIds.size} Item(s)`, `إلغاء ${partialCancelIds.size} عنصر`)}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

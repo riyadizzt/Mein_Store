@@ -1,3 +1,9 @@
+export interface EmailAttachment {
+  filename: string
+  content: Buffer | string // Buffer or base64 string
+  contentType?: string
+}
+
 export interface SendEmailOptions {
   to: string
   from: string
@@ -5,6 +11,7 @@ export interface SendEmailOptions {
   html: string
   replyTo?: string
   tags?: Array<{ name: string; value: string }>
+  attachments?: EmailAttachment[]
 }
 
 export interface SendEmailResult {
