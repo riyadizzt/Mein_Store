@@ -382,21 +382,28 @@ export default function AdminStaffPage() {
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '15%' }} />
+              </colgroup>
               <thead>
-                <tr className="border-b bg-gray-50/80">
-                  <th className="text-left px-5 py-3.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">
+                <tr className="border-b bg-muted/30">
+                  <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Mitarbeiter', 'Staff', 'الموظف')}
                   </th>
-                  <th className="text-left px-5 py-3.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">
+                  <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Rolle', 'Role', 'الدور')}
                   </th>
-                  <th className="text-left px-5 py-3.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">
+                  <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Status', 'Status', 'الحالة')}
                   </th>
-                  <th className="text-left px-5 py-3.5 font-semibold text-gray-600 text-xs uppercase tracking-wider hidden md:table-cell">
+                  <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">
                     {t3(locale, 'Letzter Login', 'Last Login', 'آخر تسجيل دخول')}
                   </th>
-                  <th className="text-right px-5 py-3.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">
+                  <th className="text-end px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Aktionen', 'Actions', 'الإجراءات')}
                   </th>
                 </tr>
@@ -405,7 +412,7 @@ export default function AdminStaffPage() {
                 {staffLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-b border-gray-100">
-                      <td className="px-5 py-4">
+                      <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 bg-gray-200 rounded-full animate-pulse" />
                           <div className="space-y-2">
@@ -415,13 +422,13 @@ export default function AdminStaffPage() {
                         </div>
                       </td>
                       {Array.from({ length: 4 }).map((_, j) => (
-                        <td key={j} className="px-5 py-4"><div className="h-4 w-20 bg-gray-200 rounded animate-pulse" /></td>
+                        <td key={j} className="px-4 py-4"><div className="h-4 w-20 bg-gray-200 rounded animate-pulse" /></td>
                       ))}
                     </tr>
                   ))
                 ) : filteredStaff.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-16 text-center">
+                    <td colSpan={5} className="px-4 py-16 text-center">
                       <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                       <p className="text-gray-500 font-medium">
                         {t3(locale, 'Keine Mitarbeiter gefunden', 'No staff found', 'لم يتم العثور على موظفين')}
@@ -442,11 +449,11 @@ export default function AdminStaffPage() {
                         className={`border-b border-gray-100 cursor-pointer transition-all duration-200 ${
                           isSelected
                             ? 'bg-[#d4a853]/5 hover:bg-[#d4a853]/10'
-                            : 'hover:bg-gray-50/80'
+                            : 'hover:bg-muted/30'
                         }`}
                       >
                         {/* Name + Email */}
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-4">
                           <div className="flex items-center gap-3">
                             {s.profileImageUrl ? (
                               <img
@@ -472,14 +479,14 @@ export default function AdminStaffPage() {
                         </td>
 
                         {/* Role Badge */}
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-4">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${ROLE_BADGE_COLORS[s.staffRole ?? s.role] ?? 'bg-gray-100 text-gray-800 border-gray-200'}`}>
                             {roleLabel ? t3(locale, roleLabel.de, roleLabel.en, roleLabel.ar) : (s.staffRole ?? s.role)}
                           </span>
                         </td>
 
                         {/* Status Badge */}
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-4">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border ${statusInfo.colors}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${
                               status === 'active' ? 'bg-emerald-500' :
@@ -491,12 +498,12 @@ export default function AdminStaffPage() {
                         </td>
 
                         {/* Last Login */}
-                        <td className="px-5 py-4 text-gray-500 text-sm hidden md:table-cell">
+                        <td className="px-4 py-4 text-gray-500 text-sm hidden md:table-cell">
                           {s.lastLoginAt ? formatDateTime(s.lastLoginAt, locale) : '—'}
                         </td>
 
                         {/* Actions */}
-                        <td className="px-5 py-4 text-right">
+                        <td className="px-4 py-4 text-end">
                           <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                             {s.isActive ? (
                               <button
@@ -671,7 +678,7 @@ function InviteModal({
                       setSelectedRole(role)
                       if (role !== 'custom') setCustomPerms([])
                     }}
-                    className={`relative text-left p-4 rounded-xl border-2 transition-all duration-200 ${
+                    className={`relative text-start p-4 rounded-xl border-2 transition-all duration-200 ${
                       isSelected
                         ? 'border-[#d4a853] bg-[#d4a853]/5 shadow-md'
                         : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
@@ -827,7 +834,7 @@ function StaffDetailPanel({
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden animate-in slide-in-from-right-4 duration-300">
       {/* Panel Header */}
-      <div className="bg-[#1a1a2e] px-5 py-5">
+      <div className="bg-[#1a1a2e] px-4 py-5">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             {staff.profileImageUrl ? (
@@ -1109,7 +1116,7 @@ function StaffDetailPanel({
                         {a.entityType} {a.entityId ? `· ${a.entityId.slice(0, 8)}...` : ''}
                       </p>
                     </div>
-                    <div className="text-right shrink-0">
+                    <div className="text-end shrink-0">
                       <p className="text-[10px] text-gray-400">{formatDateTime(a.createdAt, locale)}</p>
                       {a.ipAddress && <p className="text-[10px] text-gray-300">{a.ipAddress}</p>}
                     </div>

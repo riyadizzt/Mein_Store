@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Loader2, Plus, Trash2, Save, Upload, Star, X,
-  Image as ImageIcon,
+  Image as ImageIcon, Globe, ShoppingBag,
 } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
@@ -36,6 +36,9 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   })
   const [basePrice, setBasePrice] = useState(0)
   const [salePrice, setSalePrice] = useState<number | null>(null)
+  const [channelFacebook, setChannelFacebook] = useState(false)
+  const [channelTiktok, setChannelTiktok] = useState(false)
+  const [channelGoogle, setChannelGoogle] = useState(false)
   const [showAddColor, setShowAddColor] = useState(false)
   const [showAddSize, setShowAddSize] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -58,6 +61,9 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
     setTranslations(t)
     setBasePrice(Number(product.basePrice) || 0)
     setSalePrice(product.salePrice ? Number(product.salePrice) : null)
+    setChannelFacebook(product.channelFacebook ?? false)
+    setChannelTiktok(product.channelTiktok ?? false)
+    setChannelGoogle(product.channelGoogle ?? false)
   }, [product?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteMut = useMutation({
@@ -69,6 +75,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
     mutationFn: async () => {
       await api.put(`/admin/products/${id}`, {
         basePrice, salePrice,
+        channelFacebook, channelTiktok, channelGoogle,
         translations: Object.entries(translations)
           .filter(([, t]) => t.name)
           .map(([lang, t]) => ({
@@ -86,7 +93,8 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   // Image upload to Supabase
   const handleImageUpload = async (files: FileList | File[], colorName?: string) => {
     setUploading(true)
-    const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
+    const store = (await import('@/store/auth-store')).useAuthStore.getState()
+    const token = store.adminAccessToken || store.accessToken
     for (const file of Array.from(files)) {
       const formData = new FormData()
       formData.append('file', file)
@@ -100,7 +108,8 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   }
 
   const handleDeleteImage = async (imageId: string) => {
-    const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
+    const store = (await import('@/store/auth-store')).useAuthStore.getState()
+    const token = store.adminAccessToken || store.accessToken
     await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/images/${imageId}`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
     })
@@ -146,7 +155,12 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
         </div>
         <div className="p-6">
           {/* Upload zone */}
-          <label className="block border-2 border-dashed rounded-xl p-5 text-center cursor-pointer hover:border-[#d4a853]/50 hover:bg-[#d4a853]/5 transition-all mb-4">
+          <label
+            className="block border-2 border-dashed rounded-xl p-5 text-center cursor-pointer hover:border-[#d4a853]/50 hover:bg-[#d4a853]/5 transition-all mb-4"
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('border-[#d4a853]', 'bg-[#d4a853]/10') }}
+            onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-[#d4a853]', 'bg-[#d4a853]/10') }}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('border-[#d4a853]', 'bg-[#d4a853]/10'); if (e.dataTransfer.files?.length) handleImageUpload(e.dataTransfer.files) }}
+          >
             {uploading ? <Loader2 className="h-6 w-6 mx-auto mb-1 animate-spin text-[#d4a853]" /> : <Upload className="h-6 w-6 mx-auto mb-1 text-muted-foreground/40" />}
             <p className="text-sm text-muted-foreground">{t('wizard.uploadZone')}</p>
             <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) handleImageUpload(e.target.files) }} />
@@ -233,6 +247,78 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.salePrice')}</label><Input type="number" min={0} step={0.01} value={salePrice ?? ''} onChange={(e) => setSalePrice(e.target.value ? +e.target.value : null)} className="rounded-xl" /></div>
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.taxRate')}</label><Input value={19} readOnly className="rounded-xl bg-muted" /></div>
           </div>
+        </div>
+      </section>
+
+      {/* ══════════ VERKAUFSKANÄLE ══════════ */}
+      <section className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Globe className="h-4 w-4 text-muted-foreground" />
+          <span className="font-semibold text-sm">{locale === 'ar' ? 'قنوات البيع' : 'Verkaufskanäle'}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {(() => {
+            const productActive = product?.isActive !== false
+            const channels = [
+              { key: 'shop', name: locale === 'ar' ? 'المتجر' : 'Shop', sub: locale === 'ar' ? 'الموقع' : 'Website', color: '#d4a853', ownToggle: true, isShop: true,
+                toggle: () => {},
+                logo: <ShoppingBag className="h-[18px] w-[18px]" /> },
+              { key: 'facebook', name: 'Facebook', sub: 'Instagram', color: '#1877F2', ownToggle: channelFacebook,
+                toggle: () => setChannelFacebook(!channelFacebook),
+                logo: <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> },
+              { key: 'tiktok', name: 'TikTok', sub: 'Shop', color: '#010101', ownToggle: channelTiktok,
+                toggle: () => setChannelTiktok(!channelTiktok),
+                logo: <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.51a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.98a8.21 8.21 0 004.76 1.52V7.05a4.84 4.84 0 01-1-.36z"/></svg> },
+              { key: 'google', name: 'Google', sub: 'Shopping', color: '#EA4335', ownToggle: channelGoogle,
+                toggle: () => setChannelGoogle(!channelGoogle),
+                logo: <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> },
+            ]
+            return channels.map((ch) => {
+              // Effective state: product must be active AND channel must be on
+              const effectiveOn = productActive && ch.ownToggle
+              const disabled = !!ch.isShop || !productActive
+
+              return (
+                <div key={ch.key} className="relative overflow-hidden rounded-2xl border bg-background transition-all duration-300">
+                  {/* Color accent bar — start side */}
+                  <div
+                    className="absolute top-0 bottom-0 ltr:left-0 rtl:right-0 w-1 transition-all duration-300"
+                    style={{ backgroundColor: effectiveOn ? ch.color : 'transparent' }}
+                  />
+
+                  {/* Frost overlay when OFF */}
+                  <div className={`absolute inset-0 bg-white/60 dark:bg-[#1a1a2e]/60 rounded-2xl pointer-events-none transition-opacity duration-300 ${effectiveOn ? 'opacity-0' : 'opacity-100'}`} style={{ zIndex: 1 }} />
+
+                  {/* Content */}
+                  <div className="relative flex items-center gap-3 p-3.5 ltr:pl-4 rtl:pr-4" style={{ zIndex: 2 }}>
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 ${effectiveOn ? '' : 'grayscale opacity-40'}`}
+                      style={{ backgroundColor: effectiveOn ? ch.color + '18' : undefined, color: effectiveOn ? ch.color : undefined }}
+                    >
+                      {ch.logo}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[13px] font-semibold leading-tight transition-colors duration-300 ${effectiveOn ? '' : 'text-muted-foreground'}`}>{ch.name}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                        {!productActive && !ch.isShop
+                          ? (locale === 'ar' ? 'المنتج غير نشط' : 'Produkt inaktiv')
+                          : ch.sub}
+                      </p>
+                    </div>
+                    <button
+                      onClick={disabled ? undefined : ch.toggle}
+                      disabled={disabled}
+                      className={`w-10 h-[22px] rounded-full flex-shrink-0 transition-colors duration-300 ${disabled ? 'cursor-not-allowed' : ''}`}
+                      style={{ backgroundColor: effectiveOn ? ch.color : 'hsl(var(--muted))' }}
+                      title={!productActive ? (locale === 'ar' ? 'المنتج غير نشط — فعّله أولا' : 'Produkt inaktiv — zuerst aktivieren') : ch.isShop ? (locale === 'ar' ? 'نشط دائما' : 'Immer aktiv') : undefined}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-300 mt-[3px] ${effectiveOn ? 'ltr:translate-x-[21px] rtl:-translate-x-[21px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'}`} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })
+          })()}
         </div>
       </section>
 

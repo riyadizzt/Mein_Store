@@ -502,6 +502,10 @@
       "pages": "الصفحات",
       "staff": "الموظفون",
       "emails": "البريد الإلكتروني",
+      "channels": "قنوات البيع",
+      "suppliers": "الموردون",
+      "receiving": "استلام بضاعة",
+      "supplierPayments": "المدفوعات",
       "logout": "تسجيل الخروج"
     },
     "dashboard": {

@@ -68,6 +68,12 @@ export const PERMISSIONS = {
   // Categories
   CATEGORIES_VIEW: 'categories.view',
   CATEGORIES_EDIT: 'categories.edit',
+
+  // Suppliers (nur super_admin / Inhaber)
+  SUPPLIERS_VIEW: 'suppliers.view',
+  SUPPLIERS_EDIT: 'suppliers.edit',
+  SUPPLIERS_PAYMENTS: 'suppliers.payments',
+  SUPPLIERS_RECEIVING: 'suppliers.receiving',
 } as const
 
 export type PermissionKey = typeof PERMISSIONS[keyof typeof PERMISSIONS]

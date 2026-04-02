@@ -19,6 +19,7 @@ const ACTION_COLORS: Record<string, string> = {
   PRODUCT_CREATED: 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
   PRODUCT_UPDATED: 'bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300',
   PRODUCT_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
+  PRODUCT_RESTORED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
   PRODUCT_DUPLICATED: 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
   PRODUCT_PRICE_CHANGED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
   PRODUCTS_ACTIVATED: 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300',
@@ -65,6 +66,15 @@ const ACTION_COLORS: Record<string, string> = {
   CUSTOMER_TAGS_CHANGED: 'bg-pink-100 text-pink-800 dark:bg-pink-500/20 dark:text-pink-300',
   SETTINGS_UPDATED: 'bg-slate-100 text-slate-800 dark:bg-slate-500/20 dark:text-slate-300',
   COUPON_CREATED: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-300',
+  SUPPLIER_CREATED: 'bg-lime-100 text-lime-800 dark:bg-lime-500/20 dark:text-lime-300',
+  SUPPLIER_UPDATED: 'bg-lime-100 text-lime-800 dark:bg-lime-500/20 dark:text-lime-300',
+  SUPPLIER_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
+  SUPPLIER_DELIVERY_RECEIVED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
+  SUPPLIER_PAYMENT: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  SUPPLIER_PAYMENT_UPDATED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  SUPPLIER_PAYMENT_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
+  SUPPLIER_DELIVERY_CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
+  INVENTORY_BATCH_TRANSFER: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-300',
 }
 
 const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
@@ -76,6 +86,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   PRODUCT_CREATED: { de: 'Produkt erstellt', en: 'Product created', ar: 'منتج جديد' },
   PRODUCT_UPDATED: { de: 'Produkt bearbeitet', en: 'Product updated', ar: 'تعديل المنتج' },
   PRODUCT_DELETED: { de: 'Produkt gelöscht', en: 'Product deleted', ar: 'حذف المنتج' },
+  PRODUCT_RESTORED: { de: 'Produkt wiederhergestellt', en: 'Product restored', ar: 'استعادة المنتج' },
   INVENTORY_INTAKE: { de: 'Wareneingang', en: 'Stock received', ar: 'استلام بضاعة' },
   INVENTORY_OUTPUT: { de: 'Warenausgang', en: 'Stock output', ar: 'صرف بضاعة' },
   INVENTORY_ADJUSTED: { de: 'Bestand korrigiert', en: 'Stock adjusted', ar: 'تعديل المخزون' },
@@ -124,6 +135,15 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   VARIANT_DELETED: { de: 'Variante gelöscht', en: 'Variant deleted', ar: 'حذف المتغير' },
   VARIANT_SIZE_ADDED: { de: 'Größe hinzugefügt', en: 'Size added', ar: 'إضافة مقاس' },
   VARIANT_UPDATED: { de: 'Variante aktualisiert', en: 'Variant updated', ar: 'تحديث المتغير' },
+  SUPPLIER_CREATED: { de: 'Lieferant erstellt', en: 'Supplier created', ar: 'إنشاء مورد' },
+  SUPPLIER_UPDATED: { de: 'Lieferant bearbeitet', en: 'Supplier updated', ar: 'تعديل المورد' },
+  SUPPLIER_DELETED: { de: 'Lieferant gelöscht', en: 'Supplier deleted', ar: 'حذف المورد' },
+  SUPPLIER_DELIVERY_RECEIVED: { de: 'Wareneingang', en: 'Delivery received', ar: 'استلام بضاعة من مورد' },
+  SUPPLIER_PAYMENT: { de: 'Lieferantenzahlung', en: 'Supplier payment', ar: 'دفع للمورد' },
+  SUPPLIER_PAYMENT_UPDATED: { de: 'Zahlung bearbeitet', en: 'Payment updated', ar: 'تعديل الدفعة' },
+  SUPPLIER_PAYMENT_DELETED: { de: 'Zahlung gelöscht', en: 'Payment deleted', ar: 'حذف الدفعة' },
+  SUPPLIER_DELIVERY_CANCELLED: { de: 'Lieferung storniert', en: 'Delivery cancelled', ar: 'إلغاء التوريد' },
+  INVENTORY_BATCH_TRANSFER: { de: 'Sammel-Transfer', en: 'Batch transfer', ar: 'نقل جماعي بين المستودعات' },
 }
 
 function getActionLabel(action: string, locale: string): string {
@@ -213,9 +233,12 @@ export default function AuditLogPage() {
           category: locale === 'ar' ? 'فئة' : locale === 'en' ? 'Category' : 'Kategorie',
           coupon: locale === 'ar' ? 'قسيمة' : locale === 'en' ? 'Coupon' : 'Gutschein',
           settings: locale === 'ar' ? 'الإعدادات' : locale === 'en' ? 'Settings' : 'Einstellungen',
+          supplier: locale === 'ar' ? 'مورد' : locale === 'en' ? 'Supplier' : 'Lieferant',
+          supplier_delivery: locale === 'ar' ? 'توريد' : locale === 'en' ? 'Delivery' : 'Wareneingang',
+          shipment: locale === 'ar' ? 'شحنة' : locale === 'en' ? 'Shipment' : 'Sendung',
         }
         const entityLink = (type: string, id: string) => {
-          const links: Record<string, string> = { order: `/${locale}/admin/orders/${id}`, product: `/${locale}/admin/products/${id}`, user: `/${locale}/admin/customers/${id}`, return: `/${locale}/admin/returns`, inventory: `/${locale}/admin/inventory` }
+          const links: Record<string, string> = { order: `/${locale}/admin/orders/${id}`, product: `/${locale}/admin/products/${id}`, user: `/${locale}/admin/customers/${id}`, return: `/${locale}/admin/returns`, inventory: `/${locale}/admin/inventory`, supplier: `/${locale}/admin/suppliers/${id}`, supplier_delivery: `/${locale}/admin/suppliers` }
           return links[type]
         }
 

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
 
@@ -65,9 +65,11 @@ export class AdminProductsService {
   async findAll(query: {
     search?: string
     isActive?: boolean
+    status?: string       // active | inactive | deleted | all
     categoryId?: string
     parentCategoryId?: string
     stockStatus?: string  // in_stock | low | out_of_stock
+    channel?: string      // facebook | tiktok | google
     priceMin?: number
     priceMax?: number
     sortBy?: string       // name | price | stock | date
@@ -77,9 +79,20 @@ export class AdminProductsService {
   }) {
     const limit = Math.min(query.limit ?? 25, 200)
     const offset = query.offset ?? 0
-    const where: any = { deletedAt: null }
+    const where: any = {}
+
+    // Status filter: active (default), inactive, deleted, all
+    if (query.status === 'deleted') {
+      where.deletedAt = { not: null }
+    } else if (query.status === 'all') {
+      // no deletedAt filter — show everything
+    } else {
+      where.deletedAt = null
+    }
 
     if (query.isActive !== undefined) where.isActive = query.isActive
+    if (query.status === 'inactive') { where.isActive = false; where.deletedAt = null }
+    if (query.status === 'active') { where.isActive = true; where.deletedAt = null }
     if (query.search) {
       where.OR = [
         { slug: { contains: query.search, mode: 'insensitive' } },
@@ -104,6 +117,11 @@ export class AdminProductsService {
       if (query.priceMax != null) where.basePrice.lte = query.priceMax
     }
 
+    // Channel filter
+    if (query.channel === 'facebook') where.channelFacebook = true
+    else if (query.channel === 'tiktok') where.channelTiktok = true
+    else if (query.channel === 'google') where.channelGoogle = true
+
     // Sorting
     const dir = query.sortDir === 'asc' ? 'asc' : 'desc'
     let orderBy: any = { createdAt: 'desc' }
@@ -120,7 +138,7 @@ export class AdminProductsService {
             where: { isActive: true },
             select: {
               id: true, sku: true, barcode: true, color: true, colorHex: true, size: true,
-              priceModifier: true, purchasePrice: true,
+              priceModifier: true,
               inventory: { select: { quantityOnHand: true, quantityReserved: true, reorderPoint: true } },
             },
           },
@@ -189,6 +207,10 @@ export class AdminProductsService {
         salePrice: (p as any).salePrice ? Number((p as any).salePrice) : null,
         isActive: p.isActive,
         isFeatured: p.isFeatured,
+        channelFacebook: (p as any).channelFacebook ?? false,
+        channelTiktok: (p as any).channelTiktok ?? false,
+        channelGoogle: (p as any).channelGoogle ?? false,
+        deletedAt: p.deletedAt,
         createdAt: p.createdAt,
         translations: p.translations,
         missingLangs: [!hasDE && 'de', !hasEN && 'en', !hasAR && 'ar'].filter(Boolean),
@@ -552,7 +574,7 @@ export class AdminProductsService {
   }
 
   async updateVariant(variantId: string, data: {
-    priceModifier?: number; barcode?: string; purchasePrice?: number;
+    priceModifier?: number; barcode?: string;
   }, adminId: string, ipAddress: string) {
     const variant = await this.prisma.productVariant.findUnique({ where: { id: variantId } })
     if (!variant) throw new NotFoundException('Variant not found')
@@ -560,7 +582,6 @@ export class AdminProductsService {
     const updateData: any = {}
     if (data.priceModifier !== undefined) updateData.priceModifier = data.priceModifier
     if (data.barcode !== undefined) updateData.barcode = data.barcode || null
-    if (data.purchasePrice !== undefined) updateData.purchasePrice = data.purchasePrice
 
     const updated = await this.prisma.productVariant.update({ where: { id: variantId }, data: updateData })
 
@@ -620,6 +641,48 @@ export class AdminProductsService {
       changes: { after: { isActive, count: result.count } }, ipAddress,
     })
     return { updated: result.count }
+  }
+
+  async softDelete(productId: string, adminId: string, ipAddress: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: null },
+      include: { translations: { where: { language: 'de' }, select: { name: true } } },
+    })
+    if (!product) throw new NotFoundException('Product not found')
+
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { deletedAt: new Date(), isActive: false },
+    })
+
+    await this.audit.log({
+      adminId, action: 'PRODUCT_DELETED', entityType: 'product', entityId: productId,
+      changes: { before: { name: product.translations[0]?.name, isActive: product.isActive }, after: { deletedAt: new Date().toISOString() } },
+      ipAddress,
+    })
+
+    return { deleted: true, name: product.translations[0]?.name }
+  }
+
+  async restore(productId: string, adminId: string, ipAddress: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: { not: null } },
+      include: { translations: { where: { language: 'de' }, select: { name: true } } },
+    })
+    if (!product) throw new NotFoundException('Product not found or not deleted')
+
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: { deletedAt: null },
+    })
+
+    await this.audit.log({
+      adminId, action: 'PRODUCT_RESTORED', entityType: 'product', entityId: productId,
+      changes: { after: { name: product.translations[0]?.name, restored: true } },
+      ipAddress,
+    })
+
+    return { restored: true, name: product.translations[0]?.name }
   }
 
   async bulkDelete(productIds: string[], adminId: string, ipAddress: string) {
@@ -683,6 +746,45 @@ export class AdminProductsService {
       where: { productId },
       orderBy: { sortOrder: 'asc' },
     })
+  }
+
+  // ── CHANNEL MANAGEMENT ──────────────────────────────────
+
+  async bulkUpdateChannels(productIds: string[], channel: string, enabled: boolean, adminId: string, ipAddress: string) {
+    const fieldMap: Record<string, string> = { facebook: 'channelFacebook', tiktok: 'channelTiktok', google: 'channelGoogle' }
+    const field = fieldMap[channel]
+    if (!field) throw new BadRequestException(`Invalid channel: ${channel}`)
+    const result = await this.prisma.product.updateMany({
+      where: { id: { in: productIds }, deletedAt: null },
+      data: { [field]: enabled },
+    })
+    await this.audit.log({
+      adminId, action: enabled ? 'PRODUCTS_CHANNEL_ENABLED' : 'PRODUCTS_CHANNEL_DISABLED',
+      entityType: 'product', entityId: productIds.join(','),
+      changes: { after: { channel, enabled, count: result.count } }, ipAddress,
+    })
+    return { updated: result.count }
+  }
+
+  async getChannelStats() {
+    const [total, facebook, tiktok, google, ordersByChannel] = await Promise.all([
+      this.prisma.product.count({ where: { isActive: true, deletedAt: null } }),
+      this.prisma.product.count({ where: { isActive: true, deletedAt: null, channelFacebook: true } }),
+      this.prisma.product.count({ where: { isActive: true, deletedAt: null, channelTiktok: true } }),
+      this.prisma.product.count({ where: { isActive: true, deletedAt: null, channelGoogle: true } }),
+      this.prisma.order.groupBy({ by: ['channel'], _count: true, where: { deletedAt: null } }),
+    ])
+    const orders: Record<string, number> = {}
+    for (const g of ordersByChannel) orders[g.channel] = g._count
+    return {
+      total, facebook, tiktok, google, website: total,
+      orders: {
+        website: orders['website'] ?? 0,
+        facebook: orders['facebook'] ?? 0,
+        instagram: orders['instagram'] ?? 0,
+        tiktok: orders['tiktok'] ?? 0,
+      },
+    }
   }
 
   async exportCsv() {

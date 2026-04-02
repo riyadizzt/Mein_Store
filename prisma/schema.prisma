@@ -176,6 +176,7 @@ enum ReviewRejectionReason {
 
 enum InventoryMovementType {
   purchase_received
+  supplier_delivery
   sale_online
   sale_pos
   sale_social
@@ -432,6 +433,9 @@ model Product {
   isFeatured  Boolean  @default(false) @map("is_featured")
   excludeFromReturns Boolean @default(false) @map("exclude_from_returns")
   returnExclusionReason String? @map("return_exclusion_reason") // hygiene, custom_made, sealed
+  channelFacebook Boolean @default(true) @map("channel_facebook")
+  channelTiktok   Boolean @default(true) @map("channel_tiktok")
+  channelGoogle   Boolean @default(true) @map("channel_google")
   publishedAt DateTime? @map("published_at")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -1309,48 +1313,94 @@ model ShopSetting {
 // ─────────────────────────────────────────────────────────────
 
 model Supplier {
-  id        String   @id @default(uuid())
-  name      String
-  email     String?
-  phone     String?
-  address   String?
-  notes     String?
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  name            String
+  contactPerson   String?  @map("contact_person")
+  email           String?
+  phone           String?
+  address         String?
+  country         String?  // Türkei, Syrien, Deutschland, etc.
+  notes           String?
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  purchaseOrders PurchaseOrder[]
+  deliveries SupplierDelivery[]
+  payments   SupplierPayment[]
 
   @@map("suppliers")
 }
 
-model PurchaseOrder {
-  id          String   @id @default(uuid())
-  supplierId  String   @map("supplier_id")
-  status      String   @default("draft") // draft | sent | received | cancelled
-  notes       String?
-  expectedAt  DateTime? @map("expected_at")
-  receivedAt  DateTime? @map("received_at")
-  createdBy   String?  @map("created_by")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+model SupplierDelivery {
+  id            String   @id @default(uuid())
+  supplierId    String   @map("supplier_id")
+  deliveryNumber String  @unique @map("delivery_number") // WE-2026-00001
+  totalAmount   Decimal  @default(0) @map("total_amount") @db.Decimal(10, 2)
+  itemCount     Int      @default(0) @map("item_count")
+  status        String   @default("received") // received | partially_paid | paid
+  notes         String?
+  receivedBy    String?  @map("received_by")
+  receivedAt    DateTime @default(now()) @map("received_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  supplier Supplier            @relation(fields: [supplierId], references: [id])
-  items    PurchaseOrderItem[]
+  supplier Supplier               @relation(fields: [supplierId], references: [id])
+  items    SupplierDeliveryItem[]
 
-  @@map("purchase_orders")
+  @@index([supplierId])
+  @@index([receivedAt])
+  @@map("supplier_deliveries")
 }
 
-model PurchaseOrderItem {
+model SupplierDeliveryItem {
   id              String   @id @default(uuid())
-  purchaseOrderId String   @map("purchase_order_id")
-  variantId       String   @map("variant_id")
-  quantityOrdered Int      @map("quantity_ordered")
-  quantityReceived Int     @default(0) @map("quantity_received")
-  unitCost        Decimal? @map("unit_cost") @db.Decimal(10, 2)
+  deliveryId      String   @map("delivery_id")
+  variantId       String?  @map("variant_id")
+  productId       String?  @map("product_id")
+  isNewProduct    Boolean  @default(false) @map("is_new_product")
+  productName     String?  @map("product_name")
+  sku             String?
+  color           String?
+  size            String?
+  quantity        Int
+  unitCost        Decimal  @map("unit_cost") @db.Decimal(10, 2)
+  totalCost       Decimal  @map("total_cost") @db.Decimal(10, 2)
   createdAt       DateTime @default(now()) @map("created_at")
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  delivery SupplierDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
-  @@map("purchase_order_items")
+  @@index([deliveryId])
+  @@map("supplier_delivery_items")
+}
+
+model SupplierPayment {
+  id          String   @id @default(uuid())
+  supplierId  String   @map("supplier_id")
+  amount      Decimal  @map("amount") @db.Decimal(10, 2)
+  method      String   // cash | bank_transfer
+  notes       String?
+  paidAt      DateTime @default(now()) @map("paid_at")
+  recordedBy  String?  @map("recorded_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId])
+  @@index([paidAt])
+  @@map("supplier_payments")
+}
+
+model SupplierDeliverySequence {
+  id      String @id @default("singleton")
+  year    Int
+  lastNum Int    @default(0) @map("last_num")
+
+  @@map("supplier_delivery_sequences")
+}
+
+model SkuSequence {
+  id      String @id @default("singleton")
+  lastNum Int    @default(0) @map("last_num")
+
+  @@map("sku_sequences")
 }

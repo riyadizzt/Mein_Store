@@ -108,6 +108,14 @@ export default function AdminShipmentsPage() {
         </div>
       )}
 
+      {/* Address warnings from shipment creation */}
+      {(shipments ?? []).some((s: any) => s.addressWarnings?.length > 0) && (
+        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+          <span className="text-amber-500">⚠</span>
+          {locale === 'ar' ? 'بعض العناوين لم يتم التحقق منها بواسطة DHL — يرجى المراجعة' : locale === 'en' ? 'Some addresses could not be verified by DHL — please review' : 'Einige Adressen konnten nicht von DHL verifiziert werden — bitte prüfen'}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
@@ -130,15 +138,24 @@ export default function AdminShipmentsPage() {
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '10%' }} />
+              </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left px-4 py-3 font-medium">{t('shipments.order')}</th>
-                  <th className="text-left px-4 py-3 font-medium">{t('shipments.customer')}</th>
-                  <th className="text-left px-4 py-3 font-medium">{t('shipments.carrier')}</th>
-                  <th className="text-left px-4 py-3 font-medium">{t('shipments.tracking')}</th>
-                  <th className="text-left px-4 py-3 font-medium">{t('shipments.status')}</th>
-                  <th className="text-left px-4 py-3 font-medium">{t('shipments.date')}</th>
-                  <th className="text-right px-4 py-3 font-medium">{t('shipments.actions')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t('shipments.order')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t('shipments.customer')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t('shipments.carrier')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t('shipments.tracking')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t('shipments.status')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t('shipments.date')}</th>
+                  <th className="text-end px-4 py-3 font-medium">{t('shipments.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,7 +182,7 @@ export default function AdminShipmentsPage() {
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[s.status] ?? 'bg-gray-100'}`}>{t(`shipments.status_${s.status}`)}</span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-sm">{formatDate(s.createdAt, locale)}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-end">
                         {s.labelUrl && (
                           <a href={s.labelUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
                             <Download className="h-3 w-3" />{t('shipments.downloadLabel')}

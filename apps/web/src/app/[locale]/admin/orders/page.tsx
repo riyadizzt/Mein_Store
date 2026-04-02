@@ -115,14 +115,22 @@ export default function AdminOrdersPage() {
       <div className="bg-background border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
+            <colgroup>
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '22%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '13%' }} />
+            </colgroup>
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left px-4 py-3 font-medium">{t('orders.order')}</th>
-                <th className="text-left px-4 py-3 font-medium">{t('orders.customer')}</th>
-                <th className="text-left px-4 py-3 font-medium">{t('orders.date')}</th>
-                <th className="text-left px-4 py-3 font-medium">{t('orders.status')}</th>
-                <th className="text-right px-4 py-3 font-medium">{t('orders.amount')}</th>
-                <th className="text-left px-4 py-3 font-medium">{t('orders.payment')}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('orders.order')}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('orders.customer')}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('orders.date')}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('orders.status')}</th>
+                <th className="text-end px-4 py-3 font-medium">{t('orders.amount')}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('orders.payment')}</th>
               </tr>
             </thead>
             <tbody>
@@ -160,7 +168,7 @@ export default function AdminOrdersPage() {
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
                       </td>
-                      <td className="px-4 py-3 text-right font-medium">{formatCurrency(Number(order.totalAmount), locale)}</td>
+                      <td className="px-4 py-3 text-end font-medium">{formatCurrency(Number(order.totalAmount), locale)}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">{order.payment?.provider ?? '—'}</td>
                     </tr>
                   )

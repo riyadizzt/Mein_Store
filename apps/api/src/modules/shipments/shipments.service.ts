@@ -87,6 +87,21 @@ export class ShipmentsService {
       0,
     )
 
+    // Validate address before creating shipment (non-blocking)
+    let addressWarnings: string[] = []
+    try {
+      if (provider.providerName === 'dhl' && (provider as any).validateAddress) {
+        const validation = await (provider as any).validateAddress({
+          street: order.shippingAddress.street,
+          houseNumber: order.shippingAddress.houseNumber,
+          postalCode: order.shippingAddress.postalCode,
+          city: order.shippingAddress.city,
+          country: order.shippingAddress.country,
+        })
+        if (!validation.valid) addressWarnings = validation.warnings
+      }
+    } catch {}
+
     // Try to create shipment via provider API
     let trackingNumber: string | null = null
     let trackingUrl: string | null = null
@@ -195,8 +210,11 @@ export class ShipmentsService {
       trackingUrl,
       labelUrl,
       isManualMode,
+      addressWarnings: addressWarnings.length > 0 ? addressWarnings : undefined,
       message: isManualMode
         ? 'Sendung erstellt — bitte Label manuell im DHL Geschäftskundenportal erstellen und hier hochladen.'
+        : addressWarnings.length > 0
+        ? 'Sendung erstellt — Adresse konnte nicht von DHL verifiziert werden. Bitte prüfen.'
         : undefined,
     }
   }

@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Search, Package, AlertTriangle, XCircle, TrendingUp,
+  Search, Package, AlertTriangle, XCircle, ArrowLeftRight,
   ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Check,
   Download, Upload, ScanBarcode, ClipboardList, PackagePlus, PackageMinus,
   Minus, Plus, RotateCcw, Eye, X, LayoutList, Layers, ArrowRightLeft,
@@ -317,7 +317,6 @@ export default function InventoryPage() {
     { key: 'total', label: t('inventory.totalStock'), value: `${stats?.totalUnits ?? 0}`, sub: `${stats?.totalItems ?? 0} ${t('inventory.variant')}`, icon: Package, color: 'bg-blue-50 text-blue-600' },
     { key: 'low', label: t('inventory.lowStock'), value: String(stats?.lowStock ?? 0), icon: AlertTriangle, color: 'bg-orange-50 text-orange-600', click: () => { setStatus('low'); setPage(0) }, alert: (stats?.lowStock ?? 0) > 0 },
     { key: 'out', label: t('inventory.outOfStock'), value: String(stats?.outOfStock ?? 0), icon: XCircle, color: 'bg-red-50 text-red-600', click: () => { setStatus('out_of_stock'); setPage(0) }, alert: (stats?.outOfStock ?? 0) > 0 },
-    { key: 'value', label: t('inventory.warehouseValue'), value: fmtCur(stats?.warehouseValue ?? 0), icon: TrendingUp, color: 'bg-green-50 text-green-600' },
   ]
 
   return (
@@ -346,6 +345,7 @@ export default function InventoryPage() {
         <Button size="sm" variant="outline" className="rounded-xl gap-2 border-red-200 text-red-600 hover:bg-red-50" onClick={() => { setScannerMode('output'); setShowScannerOverlay(true); setScanLog([]); setScannedProduct(null); setScanInput('') }}>
           <PackageMinus className="h-4 w-4" />{t('inventory.output')}
         </Button>
+        <Link href={`/${locale}/admin/inventory/transfer`}><Button size="sm" variant="outline" className="rounded-xl gap-2 border-[#d4a853]/50 text-[#d4a853] hover:bg-[#d4a853]/10"><ArrowLeftRight className="h-4 w-4" />{locale === 'ar' ? 'نقل بين المستودعات' : locale === 'en' ? 'Transfer' : 'Lager-Transfer'}</Button></Link>
         <Link href={`/${locale}/admin/inventory/stocktake`}><Button size="sm" variant="outline" className="rounded-xl gap-2"><ClipboardList className="h-4 w-4" />{t('inventory.stocktake')}</Button></Link>
         <Link href={`/${locale}/admin/inventory/movements`}><Button size="sm" variant="outline" className="rounded-xl gap-2"><ArrowRightLeft className="h-4 w-4" />{locale === 'ar' ? 'سجل الحركات' : 'Bewegungslog'}</Button></Link>
         <Button size="sm" variant="outline" className="rounded-xl gap-2 hidden lg:inline-flex" onClick={() => { setShowScannerOverlay(true); setScannerMode('intake'); setScanLog([]); setScannedProduct(null); setScanInput('') }}>

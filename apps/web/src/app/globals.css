@@ -28,6 +28,11 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { cursor: point
 }
 
 @layer base {
+  /* Fix table header alignment — browser default for th is text-align:center */
+  th {
+    text-align: start;
+  }
+
   :root {
     /* Premium Fashion Palette — Elegant & Modern */
     --background: 0 0% 100%;

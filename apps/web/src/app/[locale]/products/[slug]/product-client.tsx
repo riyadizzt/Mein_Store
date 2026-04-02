@@ -1,12 +1,14 @@
 'use client'
 
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Share2, Truck } from 'lucide-react'
+import { Share2, Truck, MessageCircle } from 'lucide-react'
 import { useCartStore } from '@/store/cart-store'
 import { ImageGallery } from '@/components/product/image-gallery'
 import { VariantSelector } from '@/components/product/variant-selector'
 import { AddToCart, StickyAddToCart } from '@/components/product/add-to-cart'
+import { trackMetaEvent, trackTikTokEvent } from '@/components/tracking-pixels'
+import { getWhatsAppShareUrl } from '@/components/whatsapp-button'
 
 interface ProductClientProps {
   product: any
@@ -24,12 +26,29 @@ interface ProductClientProps {
   }
 }
 
-export function ProductClient({ product, translations: t, computed }: ProductClientProps) {
+export function ProductClient({ product, locale, translations: t, computed }: ProductClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const addCartItem = useCartStore((s) => s.addItem)
 
   const { name, description, categoryName, price: serverPrice, hasDiscount: serverHasDiscount, deliveryDate, basePrice: serverBasePrice } = computed
+
+  // Current URL for sharing (safe for SSR)
+  const [currentUrl, setCurrentUrl] = useState('')
+  useEffect(() => { setCurrentUrl(window.location.href) }, [])
+
+  // Track ViewContent on mount
+  useEffect(() => {
+    const eventData = {
+      content_name: name,
+      content_ids: [product.id],
+      content_type: 'product',
+      value: serverPrice,
+      currency: 'EUR',
+    }
+    trackMetaEvent('ViewContent', eventData)
+    trackTikTokEvent('ViewContent', eventData)
+  }, [product.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Selected variant
   const selectedVariantId = searchParams.get('variant')
@@ -143,9 +162,14 @@ export function ProductClient({ product, translations: t, computed }: ProductCli
           {/* Share */}
           <div className="flex items-center gap-3 pt-2">
             <span className="text-sm text-muted-foreground">{t.share}:</span>
-            <a href={`https://wa.me/?text=${encodeURIComponent(`${name} — €${price.toFixed(2)} ${typeof window !== 'undefined' ? window.location.href : ''}`)}`}
+            <a
+              href={currentUrl ? getWhatsAppShareUrl(name, `€${price.toFixed(2)}`, currentUrl, locale) : '#'}
               target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"
-              className="h-9 px-4 rounded-full border flex items-center justify-center hover:bg-muted transition-all text-sm font-bold text-green-600">W</a>
+              className="h-9 px-4 rounded-full border flex items-center gap-2 justify-center hover:bg-green-50 hover:border-green-300 transition-all text-sm font-medium text-green-600"
+            >
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
+            </a>
             <button onClick={() => { if (typeof navigator !== 'undefined') navigator.clipboard.writeText(window.location.href) }}
               className="h-9 px-4 rounded-full border flex items-center justify-center hover:bg-muted transition-all" aria-label={t.copyLink}>
               <Share2 className="h-4 w-4" />

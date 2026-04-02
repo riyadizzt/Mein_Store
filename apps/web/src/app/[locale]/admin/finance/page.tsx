@@ -78,7 +78,7 @@ export default function AdminFinancePage() {
   const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 
   const hasAccess = adminUser?.role === 'super_admin' || adminUser?.permissions?.includes('finance.revenue')
-  const hasMargins = adminUser?.role === 'super_admin' || adminUser?.permissions?.includes('finance.margins')
+  const hasMargins = true // Produkt-Tab zeigt nur Umsatz, keine Einkaufspreise
 
   const [tab, setTab] = useState<Tab>('overview')
   const [dailyDate, setDailyDate] = useState(() => new Date().toISOString().slice(0, 10))
@@ -648,7 +648,7 @@ function ProductProfitTable({ title, items, t3 }: { title: string; items: any[];
             <tr key={i} className="border-t">
               <td className="p-3 font-medium">{p.productName}</td>
               <td className="p-3 text-end tabular-nums">{fmt(p.revenue)}</td>
-              <td className="p-3 text-end tabular-nums">{p.quantity ?? '—'}</td>
+              <td className="p-3 text-end tabular-nums">{p.quantitySold ?? p.quantity ?? '—'}</td>
             </tr>
           ))}
         </tbody>

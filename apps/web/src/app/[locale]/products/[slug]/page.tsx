@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { ProductClient } from './product-client'
+import { generateProductOGTags } from '@/components/product-og-tags'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -29,11 +30,10 @@ export async function generateMetadata({ params: { slug, locale } }: { params: {
   const name = product.name ?? product.translations?.[0]?.name ?? slug
   const description = product.description ?? product.translations?.[0]?.description ?? ''
   const image = product.images?.find((i: any) => i.isPrimary)?.url ?? product.images?.[0]?.url
-  return {
-    title: name,
-    description: description?.slice(0, 160),
-    openGraph: { title: name, description: description?.slice(0, 160), images: image ? [{ url: image }] : [] },
-  }
+  const price = Number(product.basePrice ?? 0)
+  const salePrice = product.salePrice ? Number(product.salePrice) : null
+
+  return generateProductOGTags({ name, description, price, salePrice, image, slug }, locale)
 }
 
 export default async function ProductDetailPage({

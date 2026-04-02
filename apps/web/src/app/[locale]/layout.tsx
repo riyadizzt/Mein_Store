@@ -8,6 +8,8 @@ import { QueryProvider } from '@/providers/query-provider'
 import { AuthProvider } from '@/providers/auth-provider'
 import { ConfirmProvider } from '@/components/ui/confirm-modal'
 import { StoreShell } from '@/components/layout/store-shell'
+import { TrackingPixels } from '@/components/tracking-pixels'
+import { WhatsAppButton } from '@/components/whatsapp-button'
 import '../globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
@@ -59,6 +61,8 @@ export default async function LocaleLayout({
                 <StoreShell locale={locale}>
                   {children}
                 </StoreShell>
+                <TrackingPixels />
+                <WhatsAppButton />
               </ConfirmProvider>
             </AuthProvider>
           </QueryProvider>

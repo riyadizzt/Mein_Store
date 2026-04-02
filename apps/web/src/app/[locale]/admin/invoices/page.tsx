@@ -7,66 +7,36 @@ import { api } from '@/lib/api'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { formatDate, formatCurrency } from '@/lib/locale-utils'
 import { useAuthStore } from '@/store/auth-store'
-import {
-  Search, Download, FileText, Receipt, CreditCard,
-  Calendar, ChevronLeft, ChevronRight, X,
-} from 'lucide-react'
+import { Search, Download, FileText, Receipt, CreditCard, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DateTimePicker } from '@/components/ui/datetime-picker'
 
-const LABELS: Record<string, Record<string, string>> = {
-  title:        { de: 'Rechnungen',         en: 'Invoices',           ar: 'الفواتير' },
-  search:       { de: 'Suche nach Nummer, Kunde...', en: 'Search by number, customer...', ar: 'بحث برقم، عميل...' },
-  csvExport:    { de: 'CSV Export',          en: 'CSV Export',         ar: 'تصدير CSV' },
-  all:          { de: 'Alle',                en: 'All',                ar: 'الكل' },
-  invoice:      { de: 'Rechnung',            en: 'Invoice',            ar: 'فاتورة' },
-  creditNote:   { de: 'Gutschrift',          en: 'Credit Note',        ar: 'إشعار دائن' },
-  number:       { de: 'Nummer',              en: 'Number',             ar: 'الرقم' },
-  type:         { de: 'Typ',                 en: 'Type',               ar: 'النوع' },
-  order:        { de: 'Bestellung',          en: 'Order',              ar: 'الطلب' },
-  customer:     { de: 'Kunde',               en: 'Customer',           ar: 'العميل' },
-  date:         { de: 'Datum',               en: 'Date',               ar: 'التاريخ' },
-  net:          { de: 'Netto',               en: 'Net',                ar: 'صافي' },
-  tax:          { de: 'MwSt',                en: 'VAT',                ar: 'ضريبة' },
-  gross:        { de: 'Brutto',              en: 'Gross',              ar: 'إجمالي' },
-  actions:      { de: 'Aktionen',            en: 'Actions',            ar: 'إجراءات' },
-  download:     { de: 'Herunterladen',       en: 'Download',           ar: 'تحميل' },
-  noInvoices:   { de: 'Keine Rechnungen gefunden', en: 'No invoices found', ar: 'لم يتم العثور على فواتير' },
-  from:         { de: 'Von',                 en: 'From',               ar: 'من' },
-  to:           { de: 'Bis',                 en: 'To',                 ar: 'إلى' },
-  page:         { de: 'Seite',               en: 'Page',               ar: 'صفحة' },
-  of:           { de: 'von',                 en: 'of',                 ar: 'من' },
-  refFor:       { de: 'Ref:',                en: 'Ref:',               ar: 'مرجع:' },
-  filters:      { de: 'Filter',              en: 'Filters',            ar: 'تصفية' },
-  clearFilters: { de: 'Filter zurücksetzen', en: 'Clear filters',      ar: 'مسح التصفية' },
+const L: Record<string, Record<string, string>> = {
+  title: { de: 'Rechnungen', en: 'Invoices', ar: 'الفواتير' },
+  search: { de: 'Suche nach Nummer, Kunde...', en: 'Search by number, customer...', ar: 'بحث برقم، عميل...' },
+  csv: { de: 'CSV Export', en: 'CSV Export', ar: 'تصدير CSV' },
+  all: { de: 'Alle', en: 'All', ar: 'الكل' },
+  invoice: { de: 'Rechnung', en: 'Invoice', ar: 'فاتورة' },
+  credit: { de: 'Gutschrift', en: 'Credit Note', ar: 'إشعار دائن' },
+  number: { de: 'Nummer', en: 'Number', ar: 'الرقم' },
+  type: { de: 'Typ', en: 'Type', ar: 'النوع' },
+  order: { de: 'Bestellung', en: 'Order', ar: 'الطلب' },
+  customer: { de: 'Kunde', en: 'Customer', ar: 'العميل' },
+  date: { de: 'Datum', en: 'Date', ar: 'التاريخ' },
+  net: { de: 'Netto', en: 'Net', ar: 'صافي' },
+  tax: { de: 'MwSt', en: 'VAT', ar: 'ضريبة' },
+  gross: { de: 'Brutto', en: 'Gross', ar: 'إجمالي' },
+  noData: { de: 'Keine Rechnungen', en: 'No invoices', ar: 'لا توجد فواتير' },
+  clear: { de: 'Zurücksetzen', en: 'Clear', ar: 'مسح' },
+  page: { de: 'Seite', en: 'Page', ar: 'صفحة' },
+  of: { de: 'von', en: 'of', ar: 'من' },
+  ref: { de: 'Ref:', en: 'Ref:', ar: 'مرجع:' },
 }
-
-function t3(key: string, locale: string): string {
-  return LABELS[key]?.[locale] ?? LABELS[key]?.de ?? key
-}
+const t = (k: string, loc: string) => L[k]?.[loc] ?? L[k]?.de ?? k
 
 const LIMIT = 50
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-interface Invoice {
-  id: string
-  invoiceNumber: string
-  type: string
-  orderNumber: string
-  customerName: string
-  customerEmail: string
-  originalInvoiceNumber: string | null
-  netAmount: number
-  taxAmount: number
-  grossAmount: number
-  createdAt: string
-}
-
-interface InvoiceMeta {
-  total: number
-  limit: number
-  offset: number
-}
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 export default function AdminInvoicesPage() {
   const locale = useLocale()
@@ -80,216 +50,144 @@ export default function AdminInvoicesPage() {
     queryKey: ['admin-invoices', search, typeFilter, dateFrom, dateTo, offset],
     queryFn: async () => {
       const { data } = await api.get('/admin/invoices', {
-        params: {
-          search: search || undefined,
-          type: typeFilter || undefined,
-          from: dateFrom || undefined,
-          to: dateTo || undefined,
-          limit: LIMIT,
-          offset,
-        },
+        params: { search: search || undefined, type: typeFilter || undefined, from: dateFrom || undefined, to: dateTo || undefined, limit: LIMIT, offset },
       })
-      return data as { data: Invoice[]; meta: InvoiceMeta }
+      return data as { data: any[]; meta: { total: number } }
     },
   })
 
-  const invoices = data?.data ?? []
-  const meta = data?.meta ?? { total: 0, limit: LIMIT, offset: 0 }
-  const totalPages = Math.max(1, Math.ceil(meta.total / LIMIT))
-  const currentPage = Math.floor(offset / LIMIT) + 1
+  const rows = data?.data ?? []
+  const total = data?.meta?.total ?? 0
+  const pages = Math.max(1, Math.ceil(total / LIMIT))
+  const page = Math.floor(offset / LIMIT) + 1
 
-  const handleDownload = async (id: string, invoiceNumber: string) => {
-    const token = useAuthStore.getState().adminAccessToken
-    const res = await fetch(`${API_URL}/api/v1/admin/invoices/${id}/download`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: 'include',
-    })
-    if (!res.ok) return
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${invoiceNumber}.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
+  const dl = async (id: string, num: string) => {
+    const tk = useAuthStore.getState().adminAccessToken
+    const r = await fetch(`${API}/api/v1/admin/invoices/${id}/download`, { headers: { Authorization: `Bearer ${tk}` }, credentials: 'include' })
+    if (!r.ok) return
+    const b = await r.blob(); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `${num}.pdf`; a.click(); URL.revokeObjectURL(u)
   }
 
-  const handleExportCsv = async () => {
-    const token = useAuthStore.getState().adminAccessToken
-    const params = new URLSearchParams()
-    if (dateFrom) params.set('from', dateFrom)
-    if (dateTo) params.set('to', dateTo)
-    const qs = params.toString()
-    const res = await fetch(`${API_URL}/api/v1/admin/invoices/export/csv${qs ? `?${qs}` : ''}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: 'include',
-    })
-    if (!res.ok) return
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `rechnungen-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  const csv = async () => {
+    const tk = useAuthStore.getState().adminAccessToken
+    const p = new URLSearchParams(); if (dateFrom) p.set('from', dateFrom); if (dateTo) p.set('to', dateTo); const q = p.toString()
+    const r = await fetch(`${API}/api/v1/admin/invoices/export/csv${q ? `?${q}` : ''}`, { headers: { Authorization: `Bearer ${tk}` }, credentials: 'include' })
+    if (!r.ok) return
+    const b = await r.blob(); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `rechnungen-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(u)
   }
 
-  const hasFilters = !!typeFilter || !!dateFrom || !!dateTo
-  const clearFilters = () => {
-    setTypeFilter('')
-    setDateFrom('')
-    setDateTo('')
-    setOffset(0)
-  }
+  const hasF = !!typeFilter || !!dateFrom || !!dateTo
+  const clr = () => { setTypeFilter(''); setDateFrom(''); setDateTo(''); setOffset(0) }
+  const fc = (n: number) => formatCurrency(n, locale)
 
   return (
     <div>
-      <AdminBreadcrumb items={[{ label: t3('title', locale) }]} />
+      <AdminBreadcrumb items={[{ label: t('title', locale) }]} />
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Receipt className="h-6 w-6" style={{ color: '#d4a853' }} />
-          {t3('title', locale)}
+          {t('title', locale)}
         </h1>
-        <Button variant="outline" size="sm" onClick={handleExportCsv} className="gap-1.5">
-          <Download className="h-3.5 w-3.5" />
-          {t3('csvExport', locale)}
+        <Button variant="outline" size="sm" onClick={csv} className="gap-1.5">
+          <Download className="h-3.5 w-3.5" />{t('csv', locale)}
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-6 items-end">
+      {/* Filters — same pattern as orders */}
+      <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground rtl:left-auto rtl:right-3" />
-          <Input
-            placeholder={t3('search', locale)}
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setOffset(0) }}
-            className="pl-10 rtl:pl-3 rtl:pr-10"
-          />
+          <Input placeholder={t('search', locale)} value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0) }} className="pl-10 rtl:pl-3 rtl:pr-10" />
         </div>
-        <select
-          value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value); setOffset(0) }}
-          className="h-10 px-3 rounded-lg border bg-background text-sm min-w-[140px]"
-        >
-          <option value="">{t3('all', locale)}</option>
-          <option value="INVOICE">{t3('invoice', locale)}</option>
-          <option value="CREDIT_NOTE">{t3('creditNote', locale)}</option>
+        <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setOffset(0) }} className="h-10 px-3 rounded-lg border bg-background text-sm min-w-[140px]">
+          <option value="">{t('all', locale)}</option>
+          <option value="INVOICE">{t('invoice', locale)}</option>
+          <option value="CREDIT_NOTE">{t('credit', locale)}</option>
         </select>
         <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setOffset(0) }}
-            className="h-10 px-3 rounded-lg border bg-background text-sm"
-            title={t3('from', locale)}
-          />
+          <DateTimePicker value={dateFrom} onChange={(v) => { setDateFrom(v); setOffset(0) }} placeholder="tt.mm.jjjj" showTime={false} />
           <span className="text-muted-foreground text-sm">—</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setOffset(0) }}
-            className="h-10 px-3 rounded-lg border bg-background text-sm"
-            title={t3('to', locale)}
-          />
+          <DateTimePicker value={dateTo} onChange={(v) => { setDateTo(v); setOffset(0) }} placeholder="tt.mm.jjjj" showTime={false} />
         </div>
-        {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-muted-foreground">
-            <X className="h-3.5 w-3.5" />
-            {t3('clearFilters', locale)}
+        {hasF && (
+          <Button variant="ghost" size="sm" onClick={clr} className="gap-1 text-muted-foreground">
+            <X className="h-3.5 w-3.5" />{t('clear', locale)}
           </Button>
         )}
       </div>
 
-      {/* Table */}
+      {/* Table — EXACT same structure as orders/page.tsx */}
       <div className="bg-background border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
+            <colgroup>
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '3%' }} />
+            </colgroup>
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('number', locale)}</th>
-                <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('type', locale)}</th>
-                <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('order', locale)}</th>
-                <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('customer', locale)}</th>
-                <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('date', locale)}</th>
-                <th className="text-right rtl:text-left px-4 py-3 font-medium">{t3('net', locale)}</th>
-                <th className="text-right rtl:text-left px-4 py-3 font-medium">{t3('tax', locale)}</th>
-                <th className="text-right rtl:text-left px-4 py-3 font-medium">{t3('gross', locale)}</th>
-                <th className="text-center px-4 py-3 font-medium">{t3('actions', locale)}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('number', locale)}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('type', locale)}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('order', locale)}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('customer', locale)}</th>
+                <th className="text-start px-4 py-3 font-medium">{t('date', locale)}</th>
+                <th className="text-end px-4 py-3 font-medium">{t('net', locale)}</th>
+                <th className="text-end px-4 py-3 font-medium">{t('tax', locale)}</th>
+                <th className="text-end px-4 py-3 font-medium">{t('gross', locale)}</th>
+                <th className="px-2 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
+                Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b">
                     {Array.from({ length: 9 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="h-4 bg-muted rounded animate-pulse" />
-                      </td>
+                      <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>
                     ))}
                   </tr>
                 ))
-              ) : invoices.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
-                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    {t3('noInvoices', locale)}
-                  </td>
-                </tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">{t('noData', locale)}</td></tr>
               ) : (
-                invoices.map((inv) => (
+                rows.map((inv: any) => (
                   <tr key={inv.id} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 font-mono font-medium text-primary">
-                      {inv.invoiceNumber}
+                    <td className="px-4 py-3">
+                      <span className="font-mono font-medium text-primary">{inv.invoiceNumber}</span>
                     </td>
                     <td className="px-4 py-3">
                       {inv.type === 'INVOICE' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <FileText className="h-3 w-3" />
-                          {t3('invoice', locale)}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <FileText className="h-3 w-3" />{t('invoice', locale)}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          <CreditCard className="h-3 w-3" />
-                          {t3('creditNote', locale)}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          <CreditCard className="h-3 w-3" />{t('credit', locale)}
                         </span>
                       )}
-                      {inv.originalInvoiceNumber && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {t3('refFor', locale)} {inv.originalInvoiceNumber}
-                        </p>
-                      )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs">{inv.orderNumber}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      <span className="font-mono text-xs">{inv.orderNumber}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-medium">{inv.customerName}</p>
                       <p className="text-xs text-muted-foreground">{inv.customerEmail}</p>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatDate(inv.createdAt, locale)}
-                    </td>
-                    <td className="px-4 py-3 text-right rtl:text-left font-medium tabular-nums">
-                      {formatCurrency(Number(inv.netAmount), locale)}
-                    </td>
-                    <td className="px-4 py-3 text-right rtl:text-left text-muted-foreground tabular-nums">
-                      {formatCurrency(Number(inv.taxAmount), locale)}
-                    </td>
-                    <td className="px-4 py-3 text-right rtl:text-left font-bold tabular-nums">
-                      {formatCurrency(Number(inv.grossAmount), locale)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDownload(inv.id, inv.invoiceNumber)}
-                        className="gap-1 hover:text-[#d4a853]"
-                        title={t3('download', locale)}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
+                    <td className="px-4 py-3 text-muted-foreground">{formatDate(inv.createdAt, locale)}</td>
+                    <td className="px-4 py-3 text-end font-medium">{fc(Number(inv.netAmount))}</td>
+                    <td className="px-4 py-3 text-end text-muted-foreground text-xs">{fc(Number(inv.taxAmount))}</td>
+                    <td className="px-4 py-3 text-end font-bold">{fc(Number(inv.grossAmount))}</td>
+                    <td className="px-2 py-3">
+                      <button onClick={() => dl(inv.id, inv.invoiceNumber)} className="p-1 rounded hover:bg-muted" title={inv.invoiceNumber}>
+                        <Download className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -297,37 +195,22 @@ export default function AdminInvoicesPage() {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination */}
-        {meta.total > LIMIT && (
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
-            <p className="text-sm text-muted-foreground">
-              {t3('page', locale)} {currentPage} {t3('of', locale)} {totalPages}
-              <span className="ml-2 text-xs">({meta.total})</span>
-            </p>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - LIMIT))}
-                className="h-8 w-8 p-0"
-              >
-                <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={offset + LIMIT >= meta.total}
-                onClick={() => setOffset(offset + LIMIT)}
-                className="h-8 w-8 p-0"
-              >
-                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Pagination */}
+      {total > LIMIT && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-muted-foreground">{t('page', locale)} {page} {t('of', locale)} {pages}</p>
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))} className="h-8 w-8 p-0">
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+            </Button>
+            <Button variant="outline" size="sm" disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)} className="h-8 w-8 p-0">
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

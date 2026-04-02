@@ -17,7 +17,7 @@ export class AdminInventoryService {
 
     const allInv = await this.prisma.inventory.findMany({
       where: whId ? { warehouseId: whId } : {},
-      include: { variant: { select: { purchasePrice: true, product: { select: { deletedAt: true } } } } },
+      include: { variant: { select: { product: { select: { deletedAt: true } } } } },
     })
 
     const active = allInv.filter((i) => !i.variant.product.deletedAt)
@@ -25,7 +25,6 @@ export class AdminInventoryService {
     let totalUnits = 0
     let lowStock = 0
     let outOfStock = 0
-    let warehouseValue = 0
 
     for (const inv of active) {
       totalItems++
@@ -33,12 +32,9 @@ export class AdminInventoryService {
       totalUnits += inv.quantityOnHand
       if (avail <= 0) outOfStock++
       else if (avail <= inv.reorderPoint) lowStock++
-      if (inv.variant.purchasePrice) {
-        warehouseValue += inv.quantityOnHand * Number(inv.variant.purchasePrice)
-      }
     }
 
-    return { totalItems, totalUnits, lowStock, outOfStock, warehouseValue }
+    return { totalItems, totalUnits, lowStock, outOfStock }
   }
 
   // ── LIST ───────────────────────────────────────────────────
@@ -103,7 +99,7 @@ export class AdminInventoryService {
         variant: {
           select: {
             id: true, sku: true, barcode: true, color: true, colorHex: true,
-            size: true, purchasePrice: true, priceModifier: true,
+            size: true, priceModifier: true,
             product: {
               select: {
                 id: true, basePrice: true, salePrice: true, categoryId: true,
@@ -178,7 +174,6 @@ export class AdminInventoryService {
         color: inv.variant.color,
         colorHex: inv.variant.colorHex,
         size: inv.variant.size,
-        purchasePrice: inv.variant.purchasePrice ? Number(inv.variant.purchasePrice) : null,
         salePrice: Number(inv.variant.product.salePrice ?? inv.variant.product.basePrice),
         productId: inv.variant.product.id,
         productName: inv.variant.product.translations,
@@ -237,7 +232,6 @@ export class AdminInventoryService {
             where: { isActive: true },
             select: {
               id: true, sku: true, barcode: true, color: true, colorHex: true, size: true,
-              purchasePrice: true,
               inventory: {
                 where: whFilter,
                 select: { id: true, quantityOnHand: true, quantityReserved: true, reorderPoint: true, maxStock: true, location: { select: { name: true } }, warehouse: { select: { name: true } } },
@@ -630,6 +624,63 @@ export class AdminInventoryService {
     return { transferred: quantity }
   }
 
+  async batchTransfer(
+    fromWarehouseId: string,
+    toWarehouseId: string,
+    items: { sku: string; quantity: number }[],
+    adminId: string,
+    ipAddress: string,
+  ) {
+    if (fromWarehouseId === toWarehouseId) {
+      throw new BadRequestException({ statusCode: 400, error: 'SameWarehouse',
+        message: { de: 'Quell- und Ziellager dürfen nicht gleich sein.', en: 'Source and target warehouse must be different.', ar: 'المستودع المصدر والهدف يجب أن يكونا مختلفين.' } })
+    }
+
+    const results: { sku: string; quantity: number; success: boolean; error?: string }[] = []
+
+    for (const item of items) {
+      try {
+        const variant = await this.prisma.productVariant.findFirst({
+          where: { OR: [{ sku: item.sku }, { barcode: item.sku }] },
+        })
+        if (!variant) { results.push({ sku: item.sku, quantity: item.quantity, success: false, error: 'Not found' }); continue }
+
+        const inv = await this.prisma.inventory.findFirst({
+          where: { variantId: variant.id, warehouseId: fromWarehouseId },
+        })
+        if (!inv) { results.push({ sku: item.sku, quantity: item.quantity, success: false, error: 'No stock in source' }); continue }
+
+        const available = inv.quantityOnHand - inv.quantityReserved
+        if (item.quantity > available) { results.push({ sku: item.sku, quantity: item.quantity, success: false, error: `Only ${available} available` }); continue }
+
+        await this.prisma.$transaction(async (tx) => {
+          await tx.inventory.update({ where: { id: inv.id }, data: { quantityOnHand: { decrement: item.quantity } } })
+          await tx.inventory.upsert({
+            where: { variantId_warehouseId: { variantId: variant.id, warehouseId: toWarehouseId } },
+            create: { variantId: variant.id, warehouseId: toWarehouseId, quantityOnHand: item.quantity },
+            update: { quantityOnHand: { increment: item.quantity } },
+          })
+          await tx.inventoryMovement.createMany({ data: [
+            { variantId: variant.id, warehouseId: fromWarehouseId, type: 'transfer', quantity: -item.quantity, quantityBefore: inv.quantityOnHand, quantityAfter: inv.quantityOnHand - item.quantity, referenceId: toWarehouseId, notes: `Batch transfer out`, createdBy: adminId },
+            { variantId: variant.id, warehouseId: toWarehouseId, type: 'transfer', quantity: item.quantity, referenceId: fromWarehouseId, notes: `Batch transfer in`, createdBy: adminId },
+          ] })
+        })
+
+        results.push({ sku: item.sku, quantity: item.quantity, success: true })
+      } catch (e: any) {
+        results.push({ sku: item.sku, quantity: item.quantity, success: false, error: e.message })
+      }
+    }
+
+    const transferred = results.filter((r) => r.success).length
+    const failed = results.filter((r) => !r.success).length
+
+    await this.audit.log({ adminId, action: 'INVENTORY_BATCH_TRANSFER', entityType: 'inventory', entityId: fromWarehouseId,
+      changes: { after: { from: fromWarehouseId, to: toWarehouseId, transferred, failed, items: results.length } }, ipAddress })
+
+    return { results, summary: { total: items.length, transferred, failed } }
+  }
+
   // ── BULK ADJUST ────────────────────────────────────────────
 
   async bulkAdjust(items: { inventoryId: string; quantity: number }[], reason: string, adminId: string, ipAddress: string) {
@@ -743,11 +794,11 @@ export class AdminInventoryService {
 
   async exportCsv(query: { warehouseId?: string; categoryId?: string; status?: string }) {
     const result = await this.findAll({ ...query, limit: 5000, offset: 0 })
-    const header = 'SKU;Barcode;Produkt;Farbe;Größe;Kategorie;Bestand;Reserviert;Verfügbar;Min-Bestand;Max-Bestand;Einkaufspreis;Verkaufspreis;Lager;Lagerort;Status\n'
+    const header = 'SKU;Barcode;Produkt;Farbe;Größe;Kategorie;Bestand;Reserviert;Verfügbar;Min-Bestand;Max-Bestand;Verkaufspreis;Lager;Lagerort;Status\n'
     const rows = result.data.map((i: any) => {
       const name = (i.productName ?? []).find((t: any) => t.language === 'de')?.name ?? ''
       const cat = (i.category?.translations ?? []).find((t: any) => t.language === 'de')?.name ?? ''
-      return `${i.sku};${i.barcode ?? ''};${name};${i.color ?? ''};${i.size ?? ''};${cat};${i.quantityOnHand};${i.quantityReserved};${i.available};${i.reorderPoint};${i.maxStock};${i.purchasePrice ?? ''};${i.salePrice};${i.warehouse?.name ?? ''};${i.location?.name ?? ''};${i.status}`
+      return `${i.sku};${i.barcode ?? ''};${name};${i.color ?? ''};${i.size ?? ''};${cat};${i.quantityOnHand};${i.quantityReserved};${i.available};${i.reorderPoint};${i.maxStock};${i.salePrice};${i.warehouse?.name ?? ''};${i.location?.name ?? ''};${i.status}`
     }).join('\n')
     return header + rows
   }

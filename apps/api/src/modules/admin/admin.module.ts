@@ -22,6 +22,8 @@ import { NotificationListener } from './listeners/notification.listener'
 import { NotificationSseController } from './sse/notification-sse.controller'
 import { DailySummaryCron } from './cron/daily-summary.cron'
 import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
+import { AdminSuppliersService } from './services/admin-suppliers.service'
+import { TranslationService } from '../../common/services/translation.service'
 
 @Module({
   imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule],
@@ -42,6 +44,8 @@ import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
     NotificationListener,
     DailySummaryCron,
     ExpiryReminderCron,
+    AdminSuppliersService,
+    TranslationService,
     PermissionGuard,
   ],
   exports: [AuditService, AdminMarketingService, NotificationService],

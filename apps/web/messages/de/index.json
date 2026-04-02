@@ -502,6 +502,10 @@
       "pages": "Seiten",
       "staff": "Mitarbeiter",
       "emails": "E-Mails",
+      "channels": "Verkaufskanäle",
+      "suppliers": "Lieferanten",
+      "receiving": "Wareneingang",
+      "supplierPayments": "Zahlungen",
       "logout": "Abmelden"
     },
     "dashboard": {

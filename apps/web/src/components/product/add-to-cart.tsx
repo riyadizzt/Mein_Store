@@ -6,6 +6,7 @@ import { Minus, Plus, Heart, Check, ShoppingBag } from 'lucide-react'
 import { useCartStore } from '@/store/cart-store'
 import { useWishlist } from '@/hooks/use-wishlist'
 import { Button } from '@/components/ui/button'
+import { trackMetaEvent, trackTikTokEvent } from '@/components/tracking-pixels'
 
 interface AddToCartProps {
   variantId: string
@@ -57,6 +58,17 @@ export function AddToCart({
       unitPrice: price,
       quantity: Math.min(quantity, available), // Never exceed stock
     })
+
+    // Track AddToCart pixel events
+    const eventData = {
+      content_name: name,
+      content_ids: [productId],
+      content_type: 'product',
+      value: price * Math.min(quantity, available),
+      currency: 'EUR',
+    }
+    trackMetaEvent('AddToCart', eventData)
+    trackTikTokEvent('AddToCart', eventData)
 
     setAdded(true)
     setTimeout(() => {

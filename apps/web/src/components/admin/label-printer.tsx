@@ -35,7 +35,7 @@ export function LabelPrinter({ items, onClose }: LabelPrinterProps) {
   const [format, setFormat] = useState<LabelFormat>('small')
   const [quantities, setQuantities] = useState<Record<string, number>>(() => {
     const q: Record<string, number> = {}
-    for (const item of items) q[item.sku] = 1
+    for (const item of items) q[item.sku] = item.stock ?? 1
     return q
   })
 

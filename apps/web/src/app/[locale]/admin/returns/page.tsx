@@ -298,15 +298,24 @@ export default function AdminReturnsPage() {
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <colgroup>
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '14%' }} />
+              </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('RET-Nr', 'RET No', '\u0631\u0642\u0645 \u0627\u0644\u0645\u0631\u062a\u062c\u0639')}</th>
-                  <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('Bestell-Nr', 'Order No', '\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628')}</th>
-                  <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('Kunde', 'Customer', '\u0627\u0644\u0639\u0645\u064a\u0644')}</th>
-                  <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('Grund', 'Reason', '\u0627\u0644\u0633\u0628\u0628')}</th>
-                  <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('Status', 'Status', '\u0627\u0644\u062d\u0627\u0644\u0629')}</th>
-                  <th className="text-right rtl:text-left px-4 py-3 font-medium">{t3('Betrag', 'Amount', '\u0627\u0644\u0645\u0628\u0644\u063a')}</th>
-                  <th className="text-left rtl:text-right px-4 py-3 font-medium">{t3('Datum', 'Date', '\u0627\u0644\u062a\u0627\u0631\u064a\u062e')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t3('RET-Nr', 'RET No', '\u0631\u0642\u0645 \u0627\u0644\u0645\u0631\u062a\u062c\u0639')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t3('Bestell-Nr', 'Order No', '\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t3('Kunde', 'Customer', '\u0627\u0644\u0639\u0645\u064a\u0644')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t3('Grund', 'Reason', '\u0627\u0644\u0633\u0628\u0628')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t3('Status', 'Status', '\u0627\u0644\u062d\u0627\u0644\u0629')}</th>
+                  <th className="text-end px-4 py-3 font-medium">{t3('Betrag', 'Amount', '\u0627\u0644\u0645\u0628\u0644\u063a')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t3('Datum', 'Date', '\u0627\u0644\u062a\u0627\u0631\u064a\u062e')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -323,25 +332,25 @@ export default function AdminReturnsPage() {
                       className={`border-b cursor-pointer transition-colors ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                       onClick={() => openDetail(ret)}
                     >
-                      <td className="px-4 py-3 font-mono font-medium text-[#d4a853]">{ret.returnNumber}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</td>
-                      <td className="px-4 py-3">
+                      <td className="text-start px-4 py-3 font-mono font-medium text-[#d4a853]">{ret.returnNumber}</td>
+                      <td className="text-start px-4 py-3 font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</td>
+                      <td className="text-start px-4 py-3">
                         <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
                         <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="text-start px-4 py-3">
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="text-start px-4 py-3">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
                           {statusLabel(ret.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right rtl:text-left font-medium">
+                      <td className="text-end px-4 py-3 font-medium">
                         {ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground text-sm">{formatDate(ret.createdAt, locale)}</td>
+                      <td className="text-start px-4 py-3 text-muted-foreground text-sm">{formatDate(ret.createdAt, locale)}</td>
                     </tr>
                   ))
                 )}
@@ -432,7 +441,7 @@ export default function AdminReturnsPage() {
                           <p className="font-medium">{item.snapshotName ?? item.name ?? '—'}</p>
                           <p className="text-xs text-muted-foreground">{item.snapshotSku ?? item.sku ?? ''}</p>
                         </div>
-                        <div className="text-right text-xs">
+                        <div className="text-end text-xs">
                           <p>{item.quantity}x</p>
                           {item.totalPrice && <p className="font-medium">{formatCurrency(Number(item.totalPrice), locale)}</p>}
                         </div>

@@ -30,6 +30,7 @@ export default function AdminProductsPage() {
   const [categoryId, setCategoryId] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [stockFilter, setStockFilter] = useState('')
+  const [channelFilter, setChannelFilter] = useState('')
   const [sortBy, setSortBy] = useState('date')
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
   const [pageSize, setPageSize] = useState(25)
@@ -45,14 +46,15 @@ export default function AdminProductsPage() {
   })
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['admin-products', search, categoryId, statusFilter, stockFilter, sortBy, sortDir, pageSize, page],
+    queryKey: ['admin-products', search, categoryId, statusFilter, stockFilter, channelFilter, sortBy, sortDir, pageSize, page],
     queryFn: async () => {
       const { data } = await api.get('/admin/products', {
         params: {
           search: search || undefined,
           parentCategoryId: categoryId || undefined,
-          isActive: statusFilter === 'active' ? 'true' : statusFilter === 'inactive' ? 'false' : undefined,
+          status: statusFilter || undefined,
           stockStatus: stockFilter || undefined,
+          channel: channelFilter || undefined,
           sortBy, sortDir, limit: pageSize, offset: page * pageSize,
         },
       })
@@ -74,6 +76,12 @@ export default function AdminProductsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-products'] }); setSelected(new Set()) },
   })
 
+  const channelMut = useMutation({
+    mutationFn: ({ ids, channel, enabled }: { ids: string[]; channel: string; enabled: boolean }) =>
+      api.post('/admin/products/bulk/channels', { productIds: ids, channel, enabled }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-products'] }); setSelected(new Set()) },
+  })
+
   const toggleStatusMut = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       api.post('/admin/products/bulk/status', { productIds: [id], isActive }),
@@ -85,6 +93,19 @@ export default function AdminProductsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-products'] }),
   })
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/products/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-products'] }); setDeleteTarget(null); setDeleteConfirmText('') },
+  })
+
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/products/${id}/restore`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-products'] }),
+  })
+
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+
   // Helpers
   const getName = (ts: any[]) => getProductName(ts, locale)
   const catName = (cat: any) => { if (!cat?.parent) return getCategoryName(cat, locale); return getCategoryName(cat.parent, locale) }
@@ -94,8 +115,8 @@ export default function AdminProductsPage() {
   const toggleSelect = (id: string) => { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n) }
   const toggleSelectAll = () => { if (selected.size === products.length) setSelected(new Set()); else setSelected(new Set(products.map((p: any) => p.id))) }
   const toggleSort = (key: string) => { if (sortBy === key) setSortDir(sortDir === 'desc' ? 'asc' : 'desc'); else { setSortBy(key); setSortDir('desc') } }
-  const hasFilters = categoryId || statusFilter || stockFilter
-  const resetFilters = () => { setCategoryId(''); setStatusFilter(''); setStockFilter(''); setPage(0) }
+  const hasFilters = categoryId || statusFilter || stockFilter || channelFilter
+  const resetFilters = () => { setCategoryId(''); setStatusFilter(''); setStockFilter(''); setChannelFilter(''); setPage(0) }
 
   const handleExport = async () => {
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/export`, {
@@ -142,12 +163,19 @@ export default function AdminProductsPage() {
           <option value="">{t('products.allStatus')}</option>
           <option value="active">{t('products.active')}</option>
           <option value="inactive">{t('products.inactive')}</option>
+          <option value="deleted">{locale === 'ar' ? 'محذوف' : locale === 'en' ? 'Deleted' : 'Gelöscht'}</option>
         </select>
         <select value={stockFilter} onChange={(e) => { setStockFilter(e.target.value); setPage(0) }} className={`px-3 py-2 rounded-xl text-xs font-medium border bg-background cursor-pointer ${stockFilter ? 'border-primary/50 text-primary bg-primary/5' : ''}`}>
           <option value="">{t('products.stockAll')}</option>
           <option value="in_stock">{t('products.stockInStock')}</option>
           <option value="low">{t('products.stockLow')}</option>
           <option value="out_of_stock">{t('products.stockOut')}</option>
+        </select>
+        <select value={channelFilter} onChange={(e) => { setChannelFilter(e.target.value); setPage(0) }} className={`px-3 py-2 rounded-xl text-xs font-medium border bg-background cursor-pointer ${channelFilter ? 'border-primary/50 text-primary bg-primary/5' : ''}`}>
+          <option value="">{locale === 'ar' ? 'كل القنوات' : 'Alle Kanäle'}</option>
+          <option value="facebook">Facebook / Instagram</option>
+          <option value="tiktok">TikTok Shop</option>
+          <option value="google">Google Shopping</option>
         </select>
         {hasFilters && <button onClick={resetFilters} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50"><RotateCcw className="h-3 w-3" />{t('products.filterReset')}</button>}
 
@@ -170,10 +198,18 @@ export default function AdminProductsPage() {
           ))}
         </div>
         {selected.size > 0 && (
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-medium text-primary">{selected.size} {t('products.selected')}</span>
             <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => bulkMut.mutate({ action: 'activate', ids: [...selected] })}>{t('products.bulkActivate')}</Button>
             <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => bulkMut.mutate({ action: 'deactivate', ids: [...selected] })}>{t('products.bulkDeactivate')}</Button>
+            <span className="w-px h-5 bg-border" />
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg text-blue-600 border-blue-200" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'facebook', enabled: true })}>{locale === 'ar' ? '+ فيسبوك' : '+ Facebook'}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'facebook', enabled: false })}>{locale === 'ar' ? '− فيسبوك' : '− Facebook'}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'tiktok', enabled: true })}>{locale === 'ar' ? '+ تيك توك' : '+ TikTok'}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'tiktok', enabled: false })}>{locale === 'ar' ? '− تيك توك' : '− TikTok'}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'google', enabled: true })}>{locale === 'ar' ? '+ جوجل' : '+ Google'}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'google', enabled: false })}>{locale === 'ar' ? '− جوجل' : '− Google'}</Button>
+            <span className="w-px h-5 bg-border" />
             <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg text-red-600 border-red-200" onClick={() => bulkMut.mutate({ action: 'delete', ids: [...selected] })}><Trash2 className="h-3 w-3 mr-1" />{t('products.bulkDelete')}</Button>
           </div>
         )}
@@ -274,8 +310,16 @@ export default function AdminProductsPage() {
                       {/* Name + SKU + Missing langs */}
                       <td className="px-3 py-3">
                         <Link href={`/${locale}/admin/products/${p.id}`} className="group/link">
-                          <div className="font-semibold text-[13px] group-hover/link:text-primary transition-colors line-clamp-1">{getName(p.translations)}</div>
+                          <div className={`font-semibold text-[13px] group-hover/link:text-primary transition-colors line-clamp-1 ${p.deletedAt ? 'line-through text-muted-foreground' : ''}`}>{getName(p.translations)}</div>
+                          {p.deletedAt && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300">{locale === 'ar' ? 'محذوف' : locale === 'en' ? 'Deleted' : 'Gelöscht'}</span>}
                           {p.variants[0]?.sku && <div className="text-[11px] text-muted-foreground font-mono mt-0.5">{p.variants[0].sku}</div>}
+                          {(p.channelFacebook || p.channelTiktok || p.channelGoogle) && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {p.channelFacebook && <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>}
+                              {p.channelTiktok && <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.51a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.98a8.21 8.21 0 004.76 1.52V7.05a4.84 4.84 0 01-1-.36z"/></svg>}
+                              {p.channelGoogle && <svg viewBox="0 0 24 24" className="h-3.5 w-3.5"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>}
+                            </div>
+                          )}
                           {p.missingLangs?.length > 0 && (
                             <div className="flex items-center gap-1 mt-1 text-[10px] text-orange-600"><AlertTriangle className="h-3 w-3" />{p.missingLangs.map((l: string) => l.toUpperCase()).join(', ')} {t('products.missingTranslation')}</div>
                           )}
@@ -317,6 +361,15 @@ export default function AdminProductsPage() {
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                           <Link href={`/${locale}/admin/products/${p.id}`} className="p-1.5 rounded-lg hover:bg-muted"><Edit3 className="h-3.5 w-3.5 text-muted-foreground" /></Link>
                           <button onClick={() => dupMut.mutate(p.id)} className="p-1.5 rounded-lg hover:bg-muted"><Copy className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                          {p.deletedAt ? (
+                            <button onClick={() => restoreMut.mutate(p.id)} className="p-1.5 rounded-lg hover:bg-green-100" title={locale === 'ar' ? 'استعادة' : 'Wiederherstellen'}>
+                              <RotateCcw className="h-3.5 w-3.5 text-green-600" />
+                            </button>
+                          ) : (
+                            <button onClick={() => setDeleteTarget({ id: p.id, name: getName(p.translations) })} className="p-1.5 rounded-lg hover:bg-red-100" title={locale === 'ar' ? 'حذف' : 'Löschen'}>
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -383,6 +436,44 @@ export default function AdminProductsPage() {
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       `}</style>
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { setDeleteTarget(null); setDeleteConfirmText('') }}>
+          <div className="bg-background border rounded-2xl p-6 w-full max-w-md mx-4 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-red-500">
+              {locale === 'ar' ? 'حذف المنتج' : locale === 'en' ? 'Delete Product' : 'Produkt löschen'}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {locale === 'ar'
+                ? <>هل أنت متأكد من حذف <strong>{deleteTarget.name}</strong>؟ اكتب اسم المنتج للتأكيد.</>
+                : locale === 'en'
+                ? <>Are you sure you want to delete <strong>{deleteTarget.name}</strong>? Type the product name to confirm.</>
+                : <>Bist du sicher, dass du <strong>{deleteTarget.name}</strong> löschen möchtest? Gib den Produktnamen zur Bestätigung ein.</>
+              }
+            </p>
+            <input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder={deleteTarget.name}
+              className="w-full h-10 px-3 rounded-lg border bg-background text-sm"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteConfirmText('') }}>
+                {locale === 'ar' ? 'إلغاء' : locale === 'en' ? 'Cancel' : 'Abbrechen'}
+              </Button>
+              <Button
+                onClick={() => deleteMut.mutate(deleteTarget.id)}
+                disabled={deleteConfirmText !== deleteTarget.name || deleteMut.isPending}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                {deleteMut.isPending ? '...' : locale === 'ar' ? 'حذف' : locale === 'en' ? 'Delete' : 'Löschen'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

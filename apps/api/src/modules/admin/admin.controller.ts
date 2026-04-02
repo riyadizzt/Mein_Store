@@ -40,6 +40,8 @@ import { EmailService } from '../email/email.service'
 import { InvoiceService } from '../payments/invoice.service'
 import { AdminMarketingService } from './services/admin-marketing.service'
 import { NotificationService } from './services/notification.service'
+import { AdminSuppliersService } from './services/admin-suppliers.service'
+import { TranslationService } from '../../common/services/translation.service'
 import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
 import { Response } from 'express'
@@ -64,6 +66,8 @@ export class AdminController {
     private readonly invoiceService: InvoiceService,
     private readonly marketing: AdminMarketingService,
     private readonly notificationService: NotificationService,
+    private readonly suppliers: AdminSuppliersService,
+    private readonly translation: TranslationService,
   ) {}
 
   // ── Dashboard ─────────────────────────────────────────────
@@ -449,9 +453,11 @@ export class AdminController {
   getProducts(
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
+    @Query('status') status?: string,
     @Query('categoryId') categoryId?: string,
     @Query('parentCategoryId') parentCategoryId?: string,
     @Query('stockStatus') stockStatus?: string,
+    @Query('channel') channel?: string,
     @Query('priceMin') priceMin?: string,
     @Query('priceMax') priceMax?: string,
     @Query('sortBy') sortBy?: string,
@@ -462,13 +468,20 @@ export class AdminController {
     return this.products.findAll({
       search,
       isActive: isActive !== undefined ? isActive === 'true' : undefined,
-      categoryId, parentCategoryId, stockStatus,
+      status,
+      categoryId, parentCategoryId, stockStatus, channel,
       priceMin: priceMin ? +priceMin : undefined,
       priceMax: priceMax ? +priceMax : undefined,
       sortBy, sortDir,
       limit: limit ? +limit : 25,
       offset: offset ? +offset : 0,
     })
+  }
+
+  @Get('products/channel-stats')
+  @RequirePermission(PERMISSIONS.PRODUCTS_VIEW)
+  getChannelStats() {
+    return this.products.getChannelStats()
   }
 
   @Get('products/:id')
@@ -481,7 +494,11 @@ export class AdminController {
   @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   async updateProduct(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { basePrice?: number; salePrice?: number | null; translations?: { language: string; name: string; description?: string; metaTitle?: string; metaDesc?: string }[] },
+    @Body() body: {
+      basePrice?: number; salePrice?: number | null;
+      channelFacebook?: boolean; channelTiktok?: boolean; channelGoogle?: boolean;
+      translations?: { language: string; name: string; description?: string; metaTitle?: string; metaDesc?: string }[]
+    },
   ) {
     const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } })
     if (!product) throw new NotFoundException('Product not found')
@@ -489,6 +506,9 @@ export class AdminController {
     const data: any = {}
     if (body.basePrice !== undefined) data.basePrice = body.basePrice
     if (body.salePrice !== undefined) data.salePrice = body.salePrice
+    if (body.channelFacebook !== undefined) data.channelFacebook = body.channelFacebook
+    if (body.channelTiktok !== undefined) data.channelTiktok = body.channelTiktok
+    if (body.channelGoogle !== undefined) data.channelGoogle = body.channelGoogle
 
     await this.prisma.product.update({ where: { id }, data })
 
@@ -538,6 +558,33 @@ export class AdminController {
     @Ip() ip: string,
   ) {
     return this.products.bulkDelete(productIds, req.user.id, ip)
+  }
+
+  @Post('products/bulk/channels')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  bulkUpdateProductChannels(
+    @Body('productIds') productIds: string[],
+    @Body('channel') channel: string,
+    @Body('enabled') enabled: boolean,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    return this.products.bulkUpdateChannels(productIds, channel, enabled, req.user.id, ip)
+  }
+
+  @Delete('products/:id')
+  @RequirePermission(PERMISSIONS.PRODUCTS_DELETE)
+  @HttpCode(HttpStatus.OK)
+  softDeleteProduct(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.products.softDelete(id, req.user.id, ip)
+  }
+
+  @Post('products/:id/restore')
+  @RequirePermission(PERMISSIONS.PRODUCTS_DELETE)
+  @HttpCode(HttpStatus.OK)
+  restoreProduct(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.products.restore(id, req.user.id, ip)
   }
 
   @Post('products/:id/duplicate')
@@ -630,7 +677,7 @@ export class AdminController {
   @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   updateVariant(
     @Param('variantId', ParseUUIDPipe) variantId: string,
-    @Body() body: { priceModifier?: number; barcode?: string; purchasePrice?: number },
+    @Body() body: { priceModifier?: number; barcode?: string },
     @Req() req: any, @Ip() ip: string,
   ) {
     return this.products.updateVariant(variantId, body, req.user.id, ip)
@@ -798,6 +845,13 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   transferStock(@Param('id', ParseUUIDPipe) id: string, @Body('toWarehouseId') toWarehouseId: string, @Body('quantity') quantity: number, @Req() req: any, @Ip() ip: string) {
     return this.inventory.transfer(id, toWarehouseId, quantity, req.user.id, ip)
+  }
+
+  @Post('inventory/batch-transfer')
+  @RequirePermission(PERMISSIONS.INVENTORY_TRANSFER)
+  @HttpCode(HttpStatus.OK)
+  batchTransfer(@Body() body: { fromWarehouseId: string; toWarehouseId: string; items: { sku: string; quantity: number }[] }, @Req() req: any, @Ip() ip: string) {
+    return this.inventory.batchTransfer(body.fromWarehouseId, body.toWarehouseId, body.items, req.user.id, ip)
   }
 
   @Post('inventory/bulk-adjust')
@@ -1215,6 +1269,10 @@ export class AdminController {
       'contactEmail', 'contactPhone', 'contactAddress', 'contactHours',
       // Email
       'orderConfirmationEnabled',
+      // Channels / Feeds / Pixels
+      'meta_pixel_id', 'tiktok_pixel_id',
+      'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar',
+      'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled',
     ]
     const entries = Object.entries(body).filter(([k]) => allowed.includes(k))
 
@@ -1478,7 +1536,7 @@ export class AdminController {
   }
 
   @Get('finance/profit')
-  @RequirePermission(PERMISSIONS.FINANCE_MARGINS)
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
   getProfitReport(@Query('from') from: string, @Query('to') to: string) {
     const dateFrom = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
     const dateTo = to || new Date().toISOString().slice(0, 10)
@@ -1772,5 +1830,137 @@ export class AdminController {
       }),
       meta: { total, limit: take, offset: skip },
     }
+  }
+
+  // ── Suppliers (NUR super_admin) ──────────────────────────────
+
+  @Get('suppliers')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getSuppliers(@Query() query: any) {
+    return this.suppliers.findAll({
+      search: query.search,
+      country: query.country,
+      isActive: query.isActive !== undefined ? query.isActive === 'true' : undefined,
+      limit: query.limit ? +query.limit : 50,
+      offset: query.offset ? +query.offset : 0,
+    })
+  }
+
+  @Get('suppliers/stats')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getSupplierStats() {
+    return this.suppliers.getStats()
+  }
+
+  @Get('suppliers/warnings')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getSupplierWarnings() {
+    return this.suppliers.getOverdueWarnings()
+  }
+
+  @Get('suppliers/countries')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getSupplierCountries() {
+    return this.suppliers.getCountries()
+  }
+
+  @Get('suppliers/search-products')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_RECEIVING)
+  searchProductsForReceiving(@Query('q') q: string) {
+    return this.suppliers.searchProducts(q || '')
+  }
+
+  @Get('suppliers/:id')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getSupplier(@Param('id', ParseUUIDPipe) id: string) {
+    return this.suppliers.findOne(id)
+  }
+
+  @Post('suppliers')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_EDIT)
+  createSupplier(@Body() body: any, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.create(body, req.user.id, ip)
+  }
+
+  @Put('suppliers/:id')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_EDIT)
+  updateSupplier(@Param('id', ParseUUIDPipe) id: string, @Body() body: any, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.update(id, body, req.user.id, ip)
+  }
+
+  @Delete('suppliers/:id')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_EDIT)
+  removeSupplier(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.remove(id, req.user.id, ip)
+  }
+
+  @Get('suppliers/:id/deliveries')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getSupplierDeliveries(@Param('id', ParseUUIDPipe) id: string, @Query() query: any) {
+    return this.suppliers.getDeliveries(id, query.limit ? +query.limit : 50, query.offset ? +query.offset : 0)
+  }
+
+  @Get('suppliers/:id/payments')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_PAYMENTS)
+  getSupplierPayments(@Param('id', ParseUUIDPipe) id: string, @Query() query: any) {
+    return this.suppliers.getPayments(id, query.limit ? +query.limit : 50, query.offset ? +query.offset : 0)
+  }
+
+  @Get('suppliers/:id/timeline')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getSupplierTimeline(@Param('id', ParseUUIDPipe) id: string) {
+    return this.suppliers.getTimeline(id)
+  }
+
+  @Post('suppliers/deliveries')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_RECEIVING)
+  createDelivery(@Body() body: any, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.createDelivery(body, req.user.id, ip)
+  }
+
+  @Get('suppliers/deliveries/:deliveryId')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_VIEW)
+  getDeliveryDetail(@Param('deliveryId', ParseUUIDPipe) deliveryId: string) {
+    return this.suppliers.getDeliveryDetail(deliveryId)
+  }
+
+  @Post('suppliers/deliveries/:deliveryId/cancel')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  cancelDelivery(@Param('deliveryId', ParseUUIDPipe) deliveryId: string, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.cancelDelivery(deliveryId, req.user.id, ip)
+  }
+
+  @Post('suppliers/:id/payments')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_PAYMENTS)
+  createSupplierPayment(@Param('id', ParseUUIDPipe) id: string, @Body() body: any, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.createPayment({ ...body, supplierId: id }, req.user.id, ip)
+  }
+
+  @Put('suppliers/payments/:paymentId')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_PAYMENTS)
+  updateSupplierPayment(@Param('paymentId', ParseUUIDPipe) paymentId: string, @Body() body: any, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.updatePayment(paymentId, body, req.user.id, ip)
+  }
+
+  @Delete('suppliers/payments/:paymentId')
+  @RequirePermission(PERMISSIONS.SUPPLIERS_PAYMENTS)
+  @HttpCode(HttpStatus.OK)
+  deleteSupplierPayment(@Param('paymentId', ParseUUIDPipe) paymentId: string, @Req() req: any, @Ip() ip: string) {
+    return this.suppliers.deletePayment(paymentId, req.user.id, ip)
+  }
+
+  // ── Translation (DeepL) ──────────────────────────────────────
+
+  @Post('translate')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
+  async translateText(@Body() body: { text: string; sourceLang: string; targetLang: string }) {
+    return this.translation.translate(body.text, body.sourceLang, body.targetLang)
+  }
+
+  @Post('translate/batch')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
+  async translateBatch(@Body() body: { texts: string[]; sourceLang: string; targetLang: string }) {
+    return this.translation.translateBatch(body.texts, body.sourceLang, body.targetLang)
   }
 }

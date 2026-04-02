@@ -28,14 +28,7 @@ interface PaymentBreakdown {
   count: number
 }
 
-interface ProfitProduct {
-  productId: string
-  productName: string
-  revenue: number
-  cost: number
-  profit: number
-  margin: number
-}
+// Revenue-only product data (no cost/profit — Einkaufspreise nur im Lieferanten-System)
 
 interface VatLine {
   rate: number
@@ -353,19 +346,21 @@ export class FinanceReportsService {
     const start = new Date(`${dateFrom}T00:00:00.000Z`)
     const end = new Date(`${dateTo}T23:59:59.999Z`)
 
+    // Nur Umsatz pro Produkt — KEIN Einkaufspreis, KEINE Gewinnberechnung
+    // Einkaufspreise sind ausschließlich im Lieferanten-System sichtbar
     const rows = await this.prisma.$queryRaw<
       Array<{
         product_id: string
         product_name: string
         revenue: number
-        cost: number
+        quantity_sold: number
       }>
     >`
       SELECT
         pv.product_id,
         COALESCE(pt.name, oi.snapshot_name) AS product_name,
         COALESCE(SUM(CAST(oi.total_price AS DECIMAL(10,2))), 0) AS revenue,
-        COALESCE(SUM(oi.quantity * CAST(COALESCE(pv.purchase_price, 0) AS DECIMAL(10,2))), 0) AS cost
+        COALESCE(SUM(oi.quantity), 0) AS quantity_sold
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
       JOIN product_variants pv ON pv.id = oi.variant_id
@@ -380,47 +375,29 @@ export class FinanceReportsService {
       ORDER BY revenue DESC
     `
 
-    const products: ProfitProduct[] = rows.map((r) => {
-      const revenue = Number(r.revenue)
-      const cost = Number(r.cost)
-      const profit = revenue - cost
-      const margin = revenue > 0 ? (profit / revenue) * 100 : 0
-
-      return {
-        productId: r.product_id,
-        productName: r.product_name,
-        revenue,
-        cost,
-        profit,
-        margin: Number(margin.toFixed(2)),
-      }
-    })
+    const products = rows.map((r) => ({
+      productId: r.product_id,
+      productName: r.product_name,
+      revenue: Number(r.revenue),
+      quantitySold: Number(r.quantity_sold),
+    }))
 
     const totalRevenue = products.reduce((sum, p) => sum + p.revenue, 0)
-    const totalCost = products.reduce((sum, p) => sum + p.cost, 0)
-    const totalProfit = totalRevenue - totalCost
-    const overallMarginPercent =
-      totalRevenue > 0
-        ? Number(((totalProfit / totalRevenue) * 100).toFixed(2))
-        : 0
 
-    // Top 10 by profit
+    // Top 10 by revenue
     const topProducts = [...products]
-      .sort((a, b) => b.profit - a.profit)
+      .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10)
 
-    // Bottom 10 by margin (lowest margin, including negative)
+    // Bottom 10 by revenue
     const bottomProducts = [...products]
-      .sort((a, b) => a.margin - b.margin)
+      .sort((a, b) => a.revenue - b.revenue)
       .slice(0, 10)
 
     return {
       dateFrom,
       dateTo,
       totalRevenue: Number(totalRevenue.toFixed(2)),
-      totalCost: Number(totalCost.toFixed(2)),
-      totalProfit: Number(totalProfit.toFixed(2)),
-      overallMarginPercent,
       topProducts,
       bottomProducts,
       allProducts: products,

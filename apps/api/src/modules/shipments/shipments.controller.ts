@@ -152,6 +152,14 @@ export class ShipmentsController {
   }
 
   // ── DHL API Status Check ──────────────────────────────
+  @Post('shipments/validate-address')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin', 'warehouse_staff')
+  @HttpCode(HttpStatus.OK)
+  async validateAddress(@Body() body: { street: string; houseNumber?: string; postalCode: string; city: string; country: string }) {
+    return this.dhlProvider.validateAddress(body)
+  }
+
   @Get('shipments/dhl-status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin', 'warehouse_staff')

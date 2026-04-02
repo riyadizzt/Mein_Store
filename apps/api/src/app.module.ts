@@ -18,6 +18,7 @@ import { ShipmentsModule } from './modules/shipments/shipments.module'
 import { ChannelsModule } from './modules/channels/channels.module'
 import { WmsModule } from './modules/wms/wms.module'
 import { AdminModule } from './modules/admin/admin.module'
+import { FeedsModule } from './modules/feeds/feeds.module'
 import { EmailModule } from './modules/email/email.module'
 import { StorageModule } from './common/services/storage.module'
 
@@ -73,6 +74,7 @@ import { StorageModule } from './common/services/storage.module'
     ChannelsModule,
     WmsModule,
     AdminModule,
+    FeedsModule,
     EmailModule,
   ],
 })

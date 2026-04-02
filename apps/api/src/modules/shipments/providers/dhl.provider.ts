@@ -55,6 +55,47 @@ export class DHLProvider implements IShipmentProvider {
     return this.isConfigured
   }
 
+  async validateAddress(address: { street: string; houseNumber?: string; postalCode: string; city: string; country: string }): Promise<{
+    valid: boolean
+    warnings: string[]
+  }> {
+    const warnings: string[] = []
+
+    // Basic validation
+    if (!address.street?.trim()) warnings.push('Street is missing')
+    if (!address.postalCode?.trim()) warnings.push('Postal code is missing')
+    if (!address.city?.trim()) warnings.push('City is missing')
+    if (!address.country?.trim()) warnings.push('Country is missing')
+
+    // German PLZ format check (5 digits)
+    if (address.country?.toUpperCase() === 'DE' && address.postalCode) {
+      if (!/^\d{5}$/.test(address.postalCode.trim())) {
+        warnings.push('German postal code must be 5 digits')
+      }
+    }
+
+    // Austrian PLZ format (4 digits)
+    if (address.country?.toUpperCase() === 'AT' && address.postalCode) {
+      if (!/^\d{4}$/.test(address.postalCode.trim())) {
+        warnings.push('Austrian postal code must be 4 digits')
+      }
+    }
+
+    // Swiss PLZ format (4 digits)
+    if (address.country?.toUpperCase() === 'CH' && address.postalCode) {
+      if (!/^\d{4}$/.test(address.postalCode.trim())) {
+        warnings.push('Swiss postal code must be 4 digits')
+      }
+    }
+
+    // House number check for DE
+    if (address.country?.toUpperCase() === 'DE' && !address.houseNumber?.trim()) {
+      warnings.push('House number is missing (required for German addresses)')
+    }
+
+    return { valid: warnings.length === 0, warnings }
+  }
+
   async createShipment(input: CreateShipmentInput): Promise<ShipmentResult> {
     if (!this.isConfigured) {
       this.logger.warn(`DHL API nicht konfiguriert — manuelles Label für ${input.orderNumber}`)

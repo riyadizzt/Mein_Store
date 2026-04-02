@@ -502,6 +502,10 @@
       "pages": "Pages",
       "staff": "Staff",
       "emails": "Emails",
+      "channels": "Channels",
+      "suppliers": "Suppliers",
+      "receiving": "Receiving",
+      "supplierPayments": "Payments",
       "logout": "Logout"
     },
     "dashboard": {

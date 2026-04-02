@@ -12,6 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone,
+  HandCoins, PackageOpen,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -57,6 +58,20 @@ const NAV_GROUPS = [
     items: [
       { key: 'coupons', labelKey: 'coupons', href: '/admin/marketing/coupons', icon: Ticket, permission: 'settings.view' },
       { key: 'promotions', labelKey: 'promotions', href: '/admin/marketing/promotions', icon: Megaphone, permission: 'settings.view' },
+    ],
+  },
+  {
+    label: { de: 'Verkaufskanäle', en: 'Channels', ar: 'قنوات البيع' },
+    items: [
+      { key: 'channels', labelKey: 'channels', href: '/admin/channels', icon: Globe, permission: 'settings.view' },
+    ],
+  },
+  {
+    label: { de: 'Einkauf', en: 'Purchasing', ar: 'المشتريات' },
+    ownerOnly: true,
+    items: [
+      { key: 'suppliers', labelKey: 'suppliers', href: '/admin/suppliers', icon: HandCoins, permission: 'suppliers.view' },
+      { key: 'receiving', labelKey: 'receiving', href: '/admin/suppliers/receiving', icon: PackageOpen, permission: 'suppliers.receiving' },
     ],
   },
   {
@@ -133,7 +148,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Not authenticated: show nothing (redirect is happening via useEffect)
   if (!isAuthenticated || !['admin', 'super_admin', 'warehouse_staff'].includes(user?.role ?? '')) return null
 
-  const isActive = (href: string) => pathname.includes(href)
+  const isActive = (href: string) => {
+    const fullPath = `/${locale}${href}`
+    return pathname === fullPath || (pathname.startsWith(fullPath + '/') && !href.endsWith('/'))
+  }
 
   const handleLogout = () => {
     logout()
@@ -199,6 +217,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Nav — scrollable with groups */}
           <nav className="flex-1 px-3 pb-3 overflow-y-auto space-y-4">
             {NAV_GROUPS.map((group) => {
+              // ownerOnly groups: nur super_admin sieht sie
+              if ((group as any).ownerOnly && user?.role !== 'super_admin') return null
               const visibleItems = group.items.filter((item) => hasPermission(user, item.permission))
               if (visibleItems.length === 0) return null
               return (
@@ -211,7 +231,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <div className="space-y-0.5">
                     {visibleItems.map((item) => {
                       const active = isActive(item.href)
-                      const badge = item.badgeKey ? (notifications as any)?.[item.badgeKey] : 0
+                      const badge = (item as any).badgeKey ? (notifications as any)?.[(item as any).badgeKey] : 0
                       return (
                         <Link
                           key={item.key}

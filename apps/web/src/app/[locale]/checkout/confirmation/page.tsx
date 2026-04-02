@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/store/auth-store'
 import { useCartStore } from '@/store/cart-store'
+import { trackMetaEvent, trackTikTokEvent } from '@/components/tracking-pixels'
 
 /* ── Confetti Canvas ──────────────────────────────────── */
 function ConfettiCanvas() {
@@ -86,6 +87,9 @@ function ConfirmationContent() {
   const clearCart = useCartStore((s) => s.clearCart)
   useEffect(() => { clearCart() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Track Purchase pixel events once order data is available
+  const [pixelFired, setPixelFired] = useState(false)
+
   // Read saved order data from sessionStorage (set by step-payment before redirect)
   const [savedOrder, setSavedOrder] = useState<any>(null)
   useEffect(() => {
@@ -111,6 +115,23 @@ function ConfirmationContent() {
   })
 
   const order = fetchedOrder ?? savedOrder
+
+  // Fire purchase pixel events once
+  useEffect(() => {
+    if (pixelFired || !order) return
+    const total = Number(order.totalAmount ?? 0)
+    const contentIds = order.items?.map((i: any) => i.variantId ?? i.id) ?? []
+    const eventData = {
+      content_ids: contentIds,
+      content_type: 'product',
+      value: total,
+      currency: 'EUR',
+      num_items: order.items?.length ?? 0,
+    }
+    trackMetaEvent('Purchase', { ...eventData, order_id: orderNumber })
+    trackTikTokEvent('CompletePayment', eventData)
+    setPixelFired(true)
+  }, [order, pixelFired, orderNumber])
 
   // Animations
   useEffect(() => {
