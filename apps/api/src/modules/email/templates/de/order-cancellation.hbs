@@ -1,16 +1,35 @@
-<h1 style="margin:0 0 16px;font-size:22px;color:#1a1a2e;">Bestellung storniert</h1>
-<p>Hallo {{firstName}},</p>
-<p>Ihre Bestellung <strong>{{orderNumber}}</strong> wurde storniert.</p>
+<!-- Cancel Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#fef2f2;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#dc2626;">&#10005;</span>
+    </div>
+  </td></tr>
+</table>
+
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:Georgia,'Times New Roman',serif;">Bestellung storniert</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;">Hallo <strong style="color:#1a1a2e;">{{firstName}}</strong>, deine Bestellung <strong>{{orderNumber}}</strong> wurde storniert.</p>
 
 {{#if reason}}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;background-color:#fff3cd;border-radius:6px;">
-  <tr>
-    <td style="padding:16px;">
-      <p style="margin:0;font-size:13px;color:#856404;"><strong>Grund:</strong> {{reason}}</p>
-    </td>
-  </tr>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fef2f2;border-radius:12px;border:1px solid #fecaca;">
+  <tr><td style="padding:16px 20px;">
+    <p style="margin:0 0 4px;font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Stornierungsgrund</p>
+    <p style="margin:0;font-size:14px;color:#991b1b;">{{reason}}</p>
+  </td></tr>
 </table>
 {{/if}}
 
-<p>Falls eine Zahlung getätigt wurde, wird der Betrag innerhalb von 5–10 Werktagen auf Ihr Zahlungsmittel zurückerstattet.</p>
-<p style="color:#868e96;font-size:13px;">Wenn Sie diese Stornierung nicht veranlasst haben, kontaktieren Sie bitte umgehend unseren Kundenservice.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:16px 20px;">
+    <p style="margin:0 0 4px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Erstattung</p>
+    <p style="margin:0;font-size:14px;color:#1a1a2e;line-height:1.6;">Falls eine Zahlung get&auml;tigt wurde, wird der Betrag innerhalb von <strong>5&ndash;10 Werktagen</strong> auf dein Zahlungsmittel zur&uuml;ckerstattet.</p>
+  </td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
+  <tr><td align="center">
+    <a href="{{appUrl}}/de/products" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">Weiter einkaufen</a>
+  </td></tr>
+</table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">Wenn du diese Stornierung nicht veranlasst hast, kontaktiere bitte unseren <a href="{{appUrl}}/de/contact" style="color:#d4a853;text-decoration:none;">Kundenservice</a>.</p>

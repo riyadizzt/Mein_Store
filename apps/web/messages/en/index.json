@@ -506,6 +506,8 @@
       "suppliers": "Suppliers",
       "receiving": "Receiving",
       "supplierPayments": "Payments",
+      "ai": "AI Assistant",
+      "maintenance": "Maintenance",
       "logout": "Logout"
     },
     "dashboard": {

@@ -157,7 +157,7 @@ export function StickyAddToCart({
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{name}</p>
-          <p className="text-sm font-bold">&euro;{price.toFixed(2)}</p>
+          <p className="text-sm font-bold tabular-nums">&euro;{price.toFixed(2)}</p>
         </div>
         <Button
           onClick={onAdd}

@@ -46,7 +46,7 @@ export function LanguageSwitcher({ locale }: { locale: string }) {
             <button
               key={lang.code}
               onClick={() => switchLocale(lang.code)}
-              className={`w-full px-4 py-2 text-sm text-left rtl:text-right hover:bg-muted transition-colors flex items-center gap-2 ${
+              className={`w-full px-4 py-2 text-sm text-start hover:bg-muted transition-colors flex items-center gap-2 ${
                 locale === lang.code ? 'font-semibold text-primary' : ''
               }`}
             >

@@ -10,6 +10,7 @@ import { formatDate, formatCurrency } from '@/lib/locale-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { ChannelIcon, CHANNEL_CONFIG } from '@/components/admin/channel-icon'
 
 function getOrderLocale(order: any): string {
   if (order.user?.preferredLang) return order.user.preferredLang
@@ -50,12 +51,13 @@ export default function AdminOrdersPage() {
   const t = useTranslations('admin')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [channelFilter, setChannelFilter] = useState('')
 
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['admin-orders', search, statusFilter],
+    queryKey: ['admin-orders', search, statusFilter, channelFilter],
     queryFn: async () => {
       const { data } = await api.get('/admin/orders', {
-        params: { search: search || undefined, status: statusFilter || undefined, limit: 50 },
+        params: { search: search || undefined, status: statusFilter || undefined, channel: channelFilter || undefined, limit: 50 },
       })
       return data
     },
@@ -91,12 +93,12 @@ export default function AdminOrdersPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={t('orders.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="ltr:pl-10 rtl:pr-10"
           />
         </div>
         <select
@@ -109,6 +111,16 @@ export default function AdminOrdersPage() {
             <option key={key} value={key}>{t(`status.${key}`)}</option>
           ))}
         </select>
+        <select
+          value={channelFilter}
+          onChange={(e) => setChannelFilter(e.target.value)}
+          className="h-10 px-3 rounded-lg border bg-background text-sm min-w-[160px]"
+        >
+          <option value="">{locale === 'ar' ? 'كل القنوات' : locale === 'en' ? 'All Channels' : 'Alle Kanäle'}</option>
+          {Object.entries(CHANNEL_CONFIG).map(([key, cfg]) => (
+            <option key={key} value={key}>{locale === 'ar' ? cfg.labelAr : cfg.label}</option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -116,17 +128,19 @@ export default function AdminOrdersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <colgroup>
+              <col style={{ width: '18%' }} />
               <col style={{ width: '20%' }} />
-              <col style={{ width: '22%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '13%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '14%' }} />
             </colgroup>
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="text-start px-4 py-3 font-medium">{t('orders.order')}</th>
                 <th className="text-start px-4 py-3 font-medium">{t('orders.customer')}</th>
+                <th className="text-center px-2 py-3 font-medium">{locale === 'ar' ? 'القناة' : locale === 'en' ? 'Channel' : 'Kanal'}</th>
                 <th className="text-start px-4 py-3 font-medium">{t('orders.date')}</th>
                 <th className="text-start px-4 py-3 font-medium">{t('orders.status')}</th>
                 <th className="text-end px-4 py-3 font-medium">{t('orders.amount')}</th>
@@ -137,13 +151,13 @@ export default function AdminOrdersPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b">
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>
                     ))}
                   </tr>
                 ))
               ) : (orders ?? []).length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">{t('orders.noOrders')}</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t('orders.noOrders')}</td></tr>
               ) : (
                 (orders ?? []).map((order: any) => {
                   const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
@@ -161,6 +175,9 @@ export default function AdminOrdersPage() {
                           {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg}`}>{badge.label}</span> : null })()}
                         </p>
                         <p className="text-xs text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        <div className="flex justify-center"><ChannelIcon channel={order.channel ?? 'website'} size={18} /></div>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDate(order.createdAt, locale)}

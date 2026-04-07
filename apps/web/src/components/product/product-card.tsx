@@ -147,9 +147,9 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
         </h3>
 
         <div className="flex items-baseline gap-2">
-          <span className="text-base font-bold">&euro;{Number(price).toFixed(2)}</span>
+          <span className="text-base font-bold tabular-nums">&euro;{Number(price).toFixed(2)}</span>
           {hasDiscount && (
-            <span className="text-sm text-muted-foreground line-through">
+            <span className="text-sm text-muted-foreground line-through tabular-nums">
               &euro;{Number(product.basePrice).toFixed(2)}
             </span>
           )}

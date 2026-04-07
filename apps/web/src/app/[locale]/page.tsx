@@ -3,6 +3,7 @@ import { HeroBanner } from '@/components/layout/hero-banner'
 import { TrustSignals } from '@/components/layout/trust-signals'
 import { CategoryGrid } from '@/components/layout/category-grid'
 import { ProductScroll } from '@/components/product/product-scroll'
+import { TrustCounter } from '@/components/overdrive/trust-counter'
 
 export const revalidate = 60 // ISR: regenerate every 60s
 
@@ -32,6 +33,8 @@ export default function HomePage({
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20">
         <ProductScroll title={t('newArrivals')} sort="newest" />
       </section>
+
+      <TrustCounter />
 
       {/* Recently Viewed - handled client-side */}
     </>

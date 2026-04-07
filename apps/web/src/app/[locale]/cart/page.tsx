@@ -1,9 +1,10 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Shield, Truck, RotateCcw } from 'lucide-react'
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Shield, Truck, RotateCcw, AlertTriangle } from 'lucide-react'
 import { useCartStore } from '@/store/cart-store'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,21 @@ export default function CartPage() {
   const t = useTranslations('cart')
   const locale = useLocale()
   const { items, updateQuantity, removeItem, subtotal } = useCartStore()
+
+  // Stock check — fetch real availability for all variants in cart
+  const [stockMap, setStockMap] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (items.length === 0) return
+    const variantIds = items.map((i) => i.variantId)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/products/stock-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variantIds }),
+    })
+      .then((r) => r.ok ? r.json() : {})
+      .then((data) => setStockMap(data))
+      .catch(() => {})
+  }, [items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (items.length === 0) {
     return (
@@ -64,7 +80,17 @@ export default function CartPage() {
                 <p className="text-xs text-muted-foreground font-mono">{item.sku}</p>
 
                 {/* Price */}
-                <p className="font-bold mt-2">&euro;{item.unitPrice.toFixed(2)}</p>
+                <p className="font-bold mt-2 tabular-nums">&euro;{item.unitPrice.toFixed(2)}</p>
+
+                {/* Stock warning */}
+                {stockMap[item.variantId] !== undefined && item.quantity > stockMap[item.variantId] && (
+                  <div className="flex items-center gap-1.5 mt-2 text-xs text-red-600 bg-red-50 dark:bg-red-500/10 px-3 py-1.5 rounded-lg">
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                    {stockMap[item.variantId] <= 0
+                      ? (locale === 'ar' ? 'هذا المنتج غير متوفر حالياً' : locale === 'en' ? 'This product is currently unavailable' : 'Dieses Produkt ist momentan nicht verfügbar')
+                      : (locale === 'ar' ? `متوفر فقط ${stockMap[item.variantId]} قطعة` : locale === 'en' ? `Only ${stockMap[item.variantId]} left in stock` : `Nur noch ${stockMap[item.variantId]} Stück verfügbar`)}
+                  </div>
+                )}
 
                 {/* Quantity + Remove */}
                 <div className="flex items-center gap-3 mt-3">
@@ -79,8 +105,14 @@ export default function CartPage() {
                       {item.quantity}
                     </span>
                     <button
-                      onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
-                      className="h-8 w-8 flex items-center justify-center hover:bg-muted transition-colors btn-press"
+                      onClick={() => {
+                        const stockLoaded = stockMap[item.variantId] !== undefined
+                        const maxStock = stockLoaded ? stockMap[item.variantId] : 10
+                        const maxAllowed = Math.min(10, Math.max(1, maxStock))
+                        if (item.quantity < maxAllowed) updateQuantity(item.variantId, item.quantity + 1)
+                      }}
+                      disabled={stockMap[item.variantId] !== undefined ? item.quantity >= Math.min(10, stockMap[item.variantId]) : false}
+                      className="h-8 w-8 flex items-center justify-center hover:bg-muted transition-colors btn-press disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
@@ -91,7 +123,7 @@ export default function CartPage() {
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
-                  <span className="ml-auto font-bold text-sm">&euro;{(item.unitPrice * item.quantity).toFixed(2)}</span>
+                  <span className="ml-auto font-bold text-sm tabular-nums">&euro;{(item.unitPrice * item.quantity).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -106,7 +138,7 @@ export default function CartPage() {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t('subtotal')} ({items.length} {t('items')})</span>
-                <span className="font-medium">&euro;{subtotal().toFixed(2)}</span>
+                <span className="font-medium tabular-nums">&euro;{subtotal().toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">{t('shipping')}</span>
@@ -121,7 +153,7 @@ export default function CartPage() {
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between text-lg font-bold">
                 <span>{t('total')}</span>
-                <span>&euro;{(subtotal() + (subtotal() >= 100 ? 0 : 4.99) - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2)}</span>
+                <span className="tabular-nums">&euro;{(subtotal() + (subtotal() >= 100 ? 0 : 4.99) - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2)}</span>
               </div>
             </div>
 

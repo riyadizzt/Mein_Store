@@ -47,6 +47,9 @@ export class EmailService {
     this.templatesDir = fs.existsSync(dirnamePath) ? dirnamePath : srcPath
     this.preloadLayouts()
     this.loadDbSettings().catch(() => {})
+
+    // Register Handlebars helpers
+    Handlebars.registerHelper('eq', (a: unknown, b: unknown) => a === b)
   }
 
   // ── Public API: enqueue email (non-blocking) ─────────────────

@@ -21,7 +21,7 @@ export function Footer({ locale }: { locale: string }) {
   }
 
   return (
-    <footer className="bg-[#0a0a0a] text-white/80">
+    <footer className="bg-slate-950 text-white/80">
       {/* Trust Signals Bar */}
       <div className="border-b border-white/10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -80,14 +80,14 @@ export function Footer({ locale }: { locale: string }) {
             <p className="mt-3 text-sm text-white/50 leading-relaxed">{t('tagline')}</p>
             {/* Social */}
             <div className="flex gap-3 mt-5">
-              <a href="#" className="h-9 w-9 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/15 transition-all duration-200 hover:scale-110">
+              <a href="#" aria-label="Instagram" className="h-11 w-11 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/15 transition-all duration-200 hover:scale-110">
                 <Instagram className="h-4 w-4" />
               </a>
-              <a href="#" className="h-9 w-9 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/15 transition-all duration-200 hover:scale-110">
+              <a href="#" aria-label="Facebook" className="h-11 w-11 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/15 transition-all duration-200 hover:scale-110">
                 <Facebook className="h-4 w-4" />
               </a>
-              <a href="#" className="h-9 w-9 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/15 transition-all duration-200 hover:scale-110">
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V9.39a8.16 8.16 0 004.76 1.52V7.46a4.85 4.85 0 01-1-.77z"/></svg>
+              <a href="#" aria-label="TikTok" className="h-11 w-11 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/15 transition-all duration-200 hover:scale-110">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V9.39a8.16 8.16 0 004.76 1.52V7.46a4.85 4.85 0 01-1-.77z"/></svg>
               </a>
             </div>
           </div>
@@ -119,6 +119,7 @@ export function Footer({ locale }: { locale: string }) {
               <li><Link href={`/${locale}/legal/impressum`} className="text-sm hover:text-white transition-colors duration-200">{t('imprint')}</Link></li>
               <li><Link href={`/${locale}/legal/datenschutz`} className="text-sm hover:text-white transition-colors duration-200">{t('privacy')}</Link></li>
               <li><Link href={`/${locale}/legal/agb`} className="text-sm hover:text-white transition-colors duration-200">{t('terms')}</Link></li>
+              <li><Link href={`/${locale}/legal/widerruf`} className="text-sm hover:text-white transition-colors duration-200">{t('withdrawal')}</Link></li>
             </ul>
           </div>
         </div>

@@ -17,6 +17,9 @@ import { getImageUrl } from '@/lib/imagekit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { ChannelBadge } from '@/components/admin/channel-icon'
+import { FulfillmentWarehouseSelect } from '@/components/admin/fulfillment-warehouse-select'
+import { RefundStatusBanner } from '@/components/admin/refund-status-banner'
 
 // ── Status Helpers ───────────────────────────────────────────
 const STATUS_FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] as const
@@ -193,7 +196,11 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold font-mono tracking-wide">{order.orderNumber}</h1>
-            <p className="text-sm text-white/60 mt-1">{formatDateTime(order.createdAt, locale)} &middot; {order.channel?.toUpperCase()}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-white/60">{formatDateTime(order.createdAt, locale)}</span>
+              <span className="text-white/30">&middot;</span>
+              <ChannelBadge channel={order.channel ?? 'website'} locale={locale} />
+            </div>
             <p className="text-sm text-white/80 mt-2">
               {order.user ? `${order.user.firstName} ${order.user.lastName}` : (order.guestEmail ?? t3('Gast', 'Guest', 'ضيف'))}
               {order.user?.email && <span className="text-white/50 ltr:ml-2 rtl:mr-2">{order.user.email}</span>}
@@ -239,6 +246,9 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
         <div className="flex-1 space-y-6">
 
           {/* Products */}
+          {/* Refund Status Banner */}
+          <RefundStatusBanner order={order} locale={locale} />
+
           <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 100ms both' }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -248,7 +258,11 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
             <div className="divide-y">
               {(order.items ?? []).map((item: any) => {
                 const isCancelledItem = item.quantity === 0
-                const imgUrl = item.variant?.product?.images?.[0]?.url
+                const images = item.variant?.product?.images ?? []
+                const colorMatch = item.variant?.color ? images.find((img: any) => img.colorName === item.variant.color) : null
+                const primaryImg = images.find((img: any) => img.isPrimary)
+                const imgUrl = colorMatch?.url ?? primaryImg?.url ?? images[0]?.url
+                const translatedName = item.variant?.product?.translations?.find((t: any) => t.language === locale)?.name ?? item.snapshotName
                 return (
                   <div key={item.id} className={`flex gap-4 py-4 ${isCancelledItem ? 'opacity-50' : ''}`}>
                     <div className="w-20 h-20 bg-muted rounded-xl overflow-hidden flex-shrink-0">
@@ -258,7 +272,7 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <Link href={`/${locale}/admin/products/${item.variant?.product?.slug ?? ''}`} className={`text-sm font-semibold hover:text-[#d4a853] transition-colors ${isCancelledItem ? 'line-through' : ''}`}>
-                            {item.snapshotName}
+                            {translatedName}
                           </Link>
                           <div className="flex items-center gap-2 mt-1">
                             {item.variant?.color && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><span className="h-3 w-3 rounded-full border" style={{ backgroundColor: item.variant.color.toLowerCase() }} />{item.variant.color}</span>}
@@ -318,8 +332,19 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                     <div className="flex-1 min-w-0 pb-1">
                       {entry.type === 'status' ? (
                         <>
-                          <p className="text-sm font-medium">{statusLabel(entry.from ?? '')} <ChevronRight className="h-3 w-3 inline-block mx-1 text-muted-foreground" /> {statusLabel(entry.to)}</p>
-                          {entry.notes && <p className="text-xs text-muted-foreground mt-0.5">{entry.notes}</p>}
+                          <p className="text-sm font-medium">{statusLabel(entry.from ?? '')} <ChevronRight className="h-3 w-3 inline-block mx-1 text-muted-foreground rtl:rotate-180" /> {statusLabel(entry.to)}</p>
+                          {entry.notes && <p className="text-xs text-muted-foreground mt-0.5">{(() => {
+                            const n = entry.notes as string
+                            const NOTE_MAP: Record<string, { de: string; ar: string }> = {
+                              'إلغاء من السيستم': { de: 'Automatisch storniert', ar: 'إلغاء تلقائي من النظام' },
+                              'Zahlungstimeout — automatisch storniert': { de: 'Zahlungstimeout — automatisch storniert', ar: 'انتهاء مهلة الدفع — تم الإلغاء تلقائياً' },
+                            }
+                            for (const [key, val] of Object.entries(NOTE_MAP)) {
+                              if (n.includes(key)) return locale === 'ar' ? val.ar : val.de
+                            }
+                            if (n.startsWith('Bestellung ') && n.includes(' erstellt')) return locale === 'ar' ? n.replace('Bestellung ', 'الطلب ').replace(' erstellt', ' تم إنشاؤه') : n
+                            return n
+                          })()}</p>}
                         </>
                       ) : (
                         <>
@@ -409,6 +434,15 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">{t3('Noch kein Versand', 'No shipment yet', 'لم يتم الشحن بعد')}</p>
+                {/* Fulfillment Warehouse — only for non-cancelled/refunded orders */}
+                {!['cancelled', 'refunded', 'delivered', 'shipped'].includes(order.status) && (
+                  <FulfillmentWarehouseSelect
+                    orderId={id}
+                    currentWarehouseId={order.fulfillmentWarehouseId ?? order.fulfillmentWarehouse?.id ?? null}
+                    currentWarehouseName={order.fulfillmentWarehouse?.name ?? null}
+                    locale={locale}
+                  />
+                )}
                 {!['cancelled', 'refunded', 'pending'].includes(order.status) && (
                   <div className="space-y-2">
                     <Button size="sm" className="w-full gap-2 rounded-xl bg-[#d4a853] hover:bg-[#c49843] text-white"
@@ -440,8 +474,8 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                   <span className="text-muted-foreground">{t3('Anbieter', 'Provider', 'المزود')}</span>
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${PROVIDER_COLORS[order.payment.provider?.toLowerCase()] ?? 'bg-gray-100 text-gray-800'}`}>{order.payment.provider}</span>
                 </div>
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Methode', 'Method', 'الطريقة')}</span><span className="font-medium">{order.payment.method}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Status</span><span className="font-medium">{order.payment.status}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Methode', 'Method', 'الطريقة')}</span><span className="font-medium">{({stripe_card: t3('Kreditkarte', 'Credit Card', 'بطاقة ائتمان'), apple_pay: 'Apple Pay', google_pay: 'Google Pay', klarna_pay_now: 'Klarna Sofort', klarna_pay_later: t3('Klarna Rechnung', 'Klarna Invoice', 'كلارنا فاتورة'), paypal: 'PayPal', sepa_direct_debit: 'SEPA'} as Record<string, string>)[order.payment.method] ?? order.payment.method}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Status', 'Status', 'الحالة')}</span><span className="font-medium">{({captured: t3('Bezahlt', 'Paid', 'مدفوع'), refunded: t3('Erstattet', 'Refunded', 'مسترد'), pending: t3('Ausstehend', 'Pending', 'معلق'), failed: t3('Fehlgeschlagen', 'Failed', 'فشل')} as Record<string, string>)[order.payment.status] ?? order.payment.status}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Betrag', 'Amount', 'المبلغ')}</span><span className="font-bold">{formatCurrency(Number(order.payment.amount), locale)}</span></div>
                 {order.payment.paidAt && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Bezahlt am', 'Paid at', 'تاريخ الدفع')}</span><span>{formatDateTime(order.payment.paidAt, locale)}</span></div>}
                 {order.payment.providerPaymentId && (

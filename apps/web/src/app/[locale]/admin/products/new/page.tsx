@@ -314,7 +314,7 @@ export default function NewProductPage() {
                     {assigningImageId === img.id && (
                       <div className="absolute inset-x-0 bottom-0 bg-white rounded-b-xl shadow-lg border-t z-10 p-2" onClick={(e) => e.stopPropagation()} style={{ animation: 'fadeSlideUp 150ms ease-out' }}>
                         <button onClick={() => assignImageToColor(img.id, null)}
-                          className={`w-full text-left rtl:text-right px-2 py-1.5 rounded-lg text-xs hover:bg-muted transition-colors ${!img.colorName ? 'bg-muted font-semibold' : ''}`}>
+                          className={`w-full text-start px-2 py-1.5 rounded-lg text-xs hover:bg-muted transition-colors ${!img.colorName ? 'bg-muted font-semibold' : ''}`}>
                           {locale === 'ar' ? 'بدون لون (عام)' : 'Kein Farbe (Allgemein)'}
                         </button>
                         {colors.map((c) => (

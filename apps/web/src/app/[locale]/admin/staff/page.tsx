@@ -122,6 +122,66 @@ const STATUS_BADGE: Record<string, { colors: string; de: string; en: string; ar:
   blocked:  { colors: 'bg-red-100 text-red-700 border-red-200', de: 'Gesperrt', en: 'Blocked', ar: 'محظور' },
 }
 
+const ACTION_TRANSLATIONS: Record<string, { de: string; ar: string }> = {
+  ADMIN_LOGIN: { de: 'Admin-Anmeldung', ar: 'تسجيل دخول' },
+  ADMIN_LOGIN_FAILED: { de: 'Anmeldung fehlgeschlagen', ar: 'فشل تسجيل الدخول' },
+  ORDER_CREATED: { de: 'Bestellung erstellt', ar: 'طلب جديد' },
+  ORDER_STATUS_CHANGED: { de: 'Bestellstatus geändert', ar: 'تغيير حالة الطلب' },
+  ORDER_CANCELLED: { de: 'Bestellung storniert', ar: 'إلغاء الطلب' },
+  ORDER_AUTO_CANCELLED: { de: 'Automatisch storniert', ar: 'إلغاء تلقائي' },
+  ORDER_FULFILLMENT_CHANGED: { de: 'Lager geändert', ar: 'تغيير المستودع' },
+  PRODUCT_CREATED: { de: 'Produkt erstellt', ar: 'منتج جديد' },
+  PRODUCT_UPDATED: { de: 'Produkt bearbeitet', ar: 'تعديل المنتج' },
+  PRODUCT_DELETED: { de: 'Produkt gelöscht', ar: 'حذف المنتج' },
+  PRODUCT_RESTORED: { de: 'Produkt wiederhergestellt', ar: 'استعادة المنتج' },
+  PRODUCT_DUPLICATED: { de: 'Produkt dupliziert', ar: 'نسخ المنتج' },
+  PRODUCT_PRICE_CHANGED: { de: 'Preis geändert', ar: 'تغيير السعر' },
+  PRODUCTS_ACTIVATED: { de: 'Produkte aktiviert', ar: 'تفعيل المنتجات' },
+  PRODUCTS_DEACTIVATED: { de: 'Produkte deaktiviert', ar: 'تعطيل المنتجات' },
+  PRODUCTS_DELETED: { de: 'Produkte gelöscht', ar: 'حذف المنتجات' },
+  INVENTORY_INTAKE: { de: 'Wareneingang', ar: 'استلام بضاعة' },
+  INVENTORY_OUTPUT: { de: 'Warenausgang', ar: 'صرف بضاعة' },
+  INVENTORY_ADJUSTED: { de: 'Bestand korrigiert', ar: 'تعديل المخزون' },
+  INVENTORY_TRANSFER: { de: 'Bestandstransfer', ar: 'نقل المخزون' },
+  INVENTORY_TRANSFERRED: { de: 'Bestand transferiert', ar: 'تم نقل المخزون' },
+  INVENTORY_BATCH_TRANSFER: { de: 'Sammel-Transfer', ar: 'نقل جماعي' },
+  SETTINGS_UPDATED: { de: 'Einstellungen geändert', ar: 'تحديث الإعدادات' },
+  RETURN_APPROVED: { de: 'Retoure genehmigt', ar: 'موافقة الإرجاع' },
+  RETURN_REJECTED: { de: 'Retoure abgelehnt', ar: 'رفض المرتجع' },
+  RETURN_SCANNED: { de: 'Retoure gescannt', ar: 'مسح المرتجع' },
+  RETURN_LABEL_UPDATED: { de: 'Label erstellt', ar: 'إنشاء ملصق' },
+  RETURN_STATUS_REJECTED: { de: 'Retoure abgelehnt', ar: 'رفض المرتجع' },
+  RETURN_STATUS_APPROVED: { de: 'Retoure genehmigt', ar: 'موافقة الإرجاع' },
+  RETURN_STATUS_LABEL_SENT: { de: 'Label gesendet', ar: 'إرسال الملصق' },
+  RETURN_STATUS_RECEIVED: { de: 'Retoure eingetroffen', ar: 'استلام المرتجع' },
+  RETURN_STATUS_INSPECTED: { de: 'Retoure geprüft', ar: 'فحص المرتجع' },
+  RETURN_STATUS_REFUNDED: { de: 'Erstattet', ar: 'تم الاسترداد' },
+  STAFF_INVITED: { de: 'Mitarbeiter eingeladen', ar: 'دعوة موظف' },
+  STAFF_ROLE_CHANGED: { de: 'Rolle geändert', ar: 'تغيير الدور' },
+  STAFF_CREATED: { de: 'Mitarbeiter erstellt', ar: 'إنشاء موظف' },
+  STAFF_ACTIVATED: { de: 'Mitarbeiter aktiviert', ar: 'تفعيل الموظف' },
+  STAFF_DEACTIVATED: { de: 'Mitarbeiter deaktiviert', ar: 'تعطيل الموظف' },
+  STAFF_DELETED: { de: 'Mitarbeiter gelöscht', ar: 'حذف الموظف' },
+  STAFF_PASSWORD_RESET: { de: 'Passwort zurückgesetzt', ar: 'إعادة تعيين كلمة المرور' },
+  VARIANT_COLOR_ADDED: { de: 'Farbe hinzugefügt', ar: 'إضافة لون' },
+  VARIANT_SIZE_ADDED: { de: 'Größe hinzugefügt', ar: 'إضافة مقاس' },
+  VARIANT_UPDATED: { de: 'Variante aktualisiert', ar: 'تحديث المتغير' },
+  VARIANT_DELETED: { de: 'Variante gelöscht', ar: 'حذف المتغير' },
+  COUPON_CREATED: { de: 'Gutschein erstellt', ar: 'إنشاء قسيمة' },
+  SUPPLIER_CREATED: { de: 'Lieferant erstellt', ar: 'إنشاء مورد' },
+  SUPPLIER_DELIVERY_RECEIVED: { de: 'Wareneingang', ar: 'استلام بضاعة' },
+  SUPPLIER_DELIVERY_CANCELLED: { de: 'Lieferung storniert', ar: 'إلغاء التوريد' },
+  REFUND_RETRY_SUCCEEDED: { de: 'Erstattung wiederholt', ar: 'إعادة الاسترداد بنجاح' },
+  REFUND_RETRY_FAILED: { de: 'Erstattung fehlgeschlagen', ar: 'فشل إعادة الاسترداد' },
+  REFUND_MARKED_MANUAL: { de: 'Manuell erstattet', ar: 'استرداد يدوي' },
+}
+
+function translateAction(action: string, locale: string): string {
+  const labels = ACTION_TRANSLATIONS[action]
+  if (!labels) return action
+  return locale === 'ar' ? labels.ar : labels.de
+}
+
 function getStaffStatus(s: StaffMember): 'active' | 'inactive' | 'pending' | 'blocked' {
   if (s.isBlocked) return 'blocked'
   if (!s.firstName) return 'pending'
@@ -1020,11 +1080,56 @@ function StaffDetailPanel({
                 </div>
                 {staff.staffRole === 'custom' && staff.permissions?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {staff.permissions.map((p) => (
-                      <span key={p} className="text-[10px] px-2 py-0.5 bg-white border border-gray-200 rounded-md text-gray-600 font-medium">
-                        {p}
-                      </span>
-                    ))}
+                    {staff.permissions.map((p) => {
+                      const PERM_LABELS: Record<string, { de: string; ar: string }> = {
+                        'dashboard.view': { de: 'Dashboard', ar: 'لوحة التحكم' },
+                        'orders.view': { de: 'Bestellungen ansehen', ar: 'عرض الطلبات' },
+                        'orders.edit': { de: 'Bestellungen bearbeiten', ar: 'تعديل الطلبات' },
+                        'orders.cancel': { de: 'Bestellungen stornieren', ar: 'إلغاء الطلبات' },
+                        'products.view': { de: 'Produkte ansehen', ar: 'عرض المنتجات' },
+                        'products.create': { de: 'Produkte erstellen', ar: 'إنشاء المنتجات' },
+                        'products.edit': { de: 'Produkte bearbeiten', ar: 'تعديل المنتجات' },
+                        'products.delete': { de: 'Produkte löschen', ar: 'حذف المنتجات' },
+                        'inventory.view': { de: 'Bestand ansehen', ar: 'عرض المخزون' },
+                        'inventory.intake': { de: 'Wareneingang', ar: 'استلام بضاعة' },
+                        'inventory.transfer': { de: 'Lager-Transfer', ar: 'نقل المخزون' },
+                        'inventory.stocktake': { de: 'Inventur', ar: 'جرد' },
+                        'scanner.view_prices': { de: 'Scanner: Preise', ar: 'الماسح: الأسعار' },
+                        'customers.view': { de: 'Kunden ansehen', ar: 'عرض العملاء' },
+                        'customers.edit': { de: 'Kunden bearbeiten', ar: 'تعديل العملاء' },
+                        'customers.delete': { de: 'Kunden löschen', ar: 'حذف العملاء' },
+                        'customers.gdpr': { de: 'DSGVO-Löschung', ar: 'حذف البيانات' },
+                        'finance.revenue': { de: 'Umsatz ansehen', ar: 'عرض الإيرادات' },
+                        'finance.margins': { de: 'Margen ansehen', ar: 'عرض الهوامش' },
+                        'finance.invoices': { de: 'Rechnungen', ar: 'الفواتير' },
+                        'finance.vat_report': { de: 'MwSt-Bericht', ar: 'تقرير الضريبة' },
+                        'finance.export': { de: 'Export', ar: 'تصدير' },
+                        'returns.view': { de: 'Retouren ansehen', ar: 'عرض المرتجعات' },
+                        'returns.edit': { de: 'Retouren bearbeiten', ar: 'تعديل المرتجعات' },
+                        'returns.approve': { de: 'Retouren genehmigen', ar: 'الموافقة على المرتجعات' },
+                        'shipping.view': { de: 'Versand ansehen', ar: 'عرض الشحن' },
+                        'shipping.labels': { de: 'Versandlabels', ar: 'بطاقات الشحن' },
+                        'shipping.status': { de: 'Versandstatus', ar: 'حالة الشحن' },
+                        'emails.view': { de: 'E-Mails ansehen', ar: 'عرض البريد' },
+                        'emails.edit': { de: 'E-Mails bearbeiten', ar: 'تعديل البريد' },
+                        'emails.test': { de: 'Test-E-Mails', ar: 'بريد تجريبي' },
+                        'settings.view': { de: 'Einstellungen ansehen', ar: 'عرض الإعدادات' },
+                        'settings.edit': { de: 'Einstellungen bearbeiten', ar: 'تعديل الإعدادات' },
+                        'staff.view': { de: 'Mitarbeiter ansehen', ar: 'عرض الموظفين' },
+                        'staff.invite': { de: 'Mitarbeiter einladen', ar: 'دعوة موظف' },
+                        'staff.roles': { de: 'Rollen verwalten', ar: 'إدارة الأدوار' },
+                        'staff.deactivate': { de: 'Mitarbeiter deaktivieren', ar: 'تعطيل الموظف' },
+                        'audit.view': { de: 'Audit-Log', ar: 'سجل المراجعة' },
+                        'categories.view': { de: 'Kategorien ansehen', ar: 'عرض الفئات' },
+                      }
+                      const label = PERM_LABELS[p]
+                      const displayLabel = label ? (locale === 'ar' ? label.ar : label.de) : p
+                      return (
+                        <span key={p} className="text-[10px] px-2 py-0.5 bg-white border border-gray-200 rounded-md text-gray-600 font-medium">
+                          {displayLabel}
+                        </span>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -1111,7 +1216,7 @@ function StaffDetailPanel({
                   >
                     <div className="h-2 w-2 rounded-full bg-[#d4a853] mt-1.5 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-700 text-xs">{a.action}</p>
+                      <p className="font-medium text-gray-700 text-xs">{translateAction(a.action, locale)}</p>
                       <p className="text-[10px] text-gray-400 mt-0.5">
                         {a.entityType} {a.entityId ? `· ${a.entityId.slice(0, 8)}...` : ''}
                       </p>

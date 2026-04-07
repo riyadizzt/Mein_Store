@@ -88,7 +88,7 @@ export function StepShipping() {
             <button
               key={opt.id}
               onClick={() => setShippingOption(opt)}
-              className={`w-full text-left p-4 rounded-lg border-2 transition-colors ${
+              className={`w-full text-start p-4 rounded-lg border-2 transition-colors ${
                 shippingOption?.id === opt.id
                   ? 'border-primary bg-primary/5'
                   : 'border-border hover:border-foreground/30'
@@ -111,7 +111,7 @@ export function StepShipping() {
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-end">
                   {Number(opt.price) === 0 ? (
                     <div className="flex items-center gap-1 text-green-600">
                       <Check className="h-4 w-4" />

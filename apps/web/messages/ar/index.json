@@ -506,6 +506,8 @@
       "suppliers": "الموردون",
       "receiving": "استلام بضاعة",
       "supplierPayments": "المدفوعات",
+      "ai": "مساعد الذكاء الاصطناعي",
+      "maintenance": "وضع الصيانة",
       "logout": "تسجيل الخروج"
     },
     "dashboard": {

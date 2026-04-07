@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { OrderStatus, SalesChannel } from '@prisma/client'
 
-// Only online channels — exclude POS and scanner
-const ONLINE_CHANNELS: SalesChannel[] = ['website', 'mobile']
+// All customer-facing channels — exclude POS (offline/Shopify)
+const ONLINE_CHANNELS: SalesChannel[] = ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp']
 
 // Only countable statuses — exclude pending, cancelled, refunded
 const COUNTABLE_STATUSES: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'delivered']
@@ -183,7 +183,7 @@ export class FinanceReportsService {
       LEFT JOIN product_variants pv ON pv.id = oi.variant_id
       LEFT JOIN product_translations pt ON pt.product_id = pv.product_id AND pt.language = 'de'
       WHERE o.created_at >= ${start} AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
         AND o.deleted_at IS NULL
       GROUP BY product_name, oi.snapshot_sku
@@ -217,6 +217,24 @@ export class FinanceReportsService {
     }))
   }
 
+  private async getChannelBreakdownForRange(start: Date, end: Date): Promise<Array<{ channel: string; gross: string; count: number; avgOrderValue: string }>> {
+    const rows = await this.prisma.order.groupBy({
+      by: ['channel'],
+      where: { ...ORDER_FILTER, createdAt: { gte: start, lte: end } },
+      _sum: { totalAmount: true },
+      _count: true,
+    })
+    return rows.map((r) => {
+      const gross = Number(r._sum?.totalAmount ?? 0)
+      return {
+        channel: r.channel,
+        gross: gross.toFixed(2),
+        count: r._count,
+        avgOrderValue: r._count > 0 ? (gross / r._count).toFixed(2) : '0.00',
+      }
+    })
+  }
+
   // ─────────────────────────────────────────────────────────────
   // 2. Monthly Report
   // ─────────────────────────────────────────────────────────────
@@ -235,13 +253,14 @@ export class FinanceReportsService {
       Date.UTC(year - 1, month, 0, 23, 59, 59, 999),
     )
 
-    const [currentMonth, previousMonth, sameMonthLastYear, refundsTotal, dailyBreakdown] =
+    const [currentMonth, previousMonth, sameMonthLastYear, refundsTotal, dailyBreakdown, byChannel] =
       await Promise.all([
         this.aggregateSalesForRange(currentStart, currentEnd),
         this.aggregateSalesForRange(prevStart, prevEnd),
         this.aggregateSalesForRange(lastYearStart, lastYearEnd),
         this.getRefundsTotalForRange(currentStart, currentEnd),
         this.getDailyBreakdownForMonth(year, month),
+        this.getChannelBreakdownForRange(currentStart, currentEnd),
       ])
 
     const grossNum = Number(currentMonth.gross)
@@ -269,6 +288,7 @@ export class FinanceReportsService {
       refundsTotal: refundsTotal.toFixed(2),
       netRevenue: netRevenue.toFixed(2),
       dailyBreakdown,
+      byChannel,
     }
   }
 
@@ -368,7 +388,7 @@ export class FinanceReportsService {
         ON pt.product_id = pv.product_id AND pt.language = 'de'
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
         AND o.deleted_at IS NULL
       GROUP BY pv.product_id, pt.name, oi.snapshot_name
@@ -436,7 +456,7 @@ export class FinanceReportsService {
       JOIN orders o ON o.id = oi.order_id
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
         AND o.deleted_at IS NULL
       GROUP BY oi.tax_rate
@@ -493,7 +513,7 @@ export class FinanceReportsService {
         ON pt.product_id = p.id AND pt.language = 'de'
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
         AND o.deleted_at IS NULL
       GROUP BY pt.name, oi.snapshot_name, pv.sku
@@ -546,7 +566,7 @@ export class FinanceReportsService {
       JOIN users u ON u.id = o.user_id
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
         AND o.deleted_at IS NULL
         AND o.user_id IS NOT NULL
@@ -585,7 +605,7 @@ export class FinanceReportsService {
           o.user_id,
           MIN(o.created_at) AS first_order_date
         FROM orders o
-        WHERE o.channel IN ('website', 'mobile')
+        WHERE o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
           AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
           AND o.deleted_at IS NULL
           AND o.user_id IS NOT NULL
@@ -596,7 +616,7 @@ export class FinanceReportsService {
         FROM orders o
         WHERE o.created_at >= ${start}
           AND o.created_at <= ${end}
-          AND o.channel IN ('website', 'mobile')
+          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
           AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
           AND o.deleted_at IS NULL
           AND o.user_id IS NOT NULL

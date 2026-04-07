@@ -1,6 +1,6 @@
 'use client'
 
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Monitor, Smartphone, LogOut, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 
 export default function SessionsPage() {
   const t = useTranslations('account.sessions')
+  const locale = useLocale()
   const queryClient = useQueryClient()
 
   const { data: sessions, isLoading } = useQuery({
@@ -40,6 +41,12 @@ export default function SessionsPage() {
       </div>
 
       <div className="space-y-3">
+        {(sessions ?? []).length === 0 && (
+          <div className="text-center py-16">
+            <Monitor className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+            <p className="text-muted-foreground">{locale === 'ar' ? 'لا توجد جلسات نشطة' : locale === 'en' ? 'No active sessions' : 'Keine aktiven Sitzungen'}</p>
+          </div>
+        )}
         {(sessions ?? []).map((session: any, i: number) => {
           const isMobile = session.userAgent?.toLowerCase().includes('mobile')
           const Icon = isMobile ? Smartphone : Monitor

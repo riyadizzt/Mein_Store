@@ -29,6 +29,7 @@ export class DashboardService {
       pendingReturns,
       revenueByPayment,
       topProducts,
+      todayByChannel,
     ] = await Promise.all([
       // Today's revenue
       this.prisma.order.aggregate({
@@ -68,17 +69,21 @@ export class DashboardService {
       this.prisma.$queryRaw<Array<{
         sku: string
         product_name: string
+        image_url: string | null
         warehouse_name: string
         quantity_on_hand: number
         quantity_reserved: number
         reorder_point: number
       }>>`
-        SELECT pv.sku, pt.name AS product_name, w.name AS warehouse_name,
+        SELECT pv.sku, pt.name AS product_name,
+               pi.url AS image_url,
+               w.name AS warehouse_name,
                i.quantity_on_hand, i.quantity_reserved, i.reorder_point
         FROM inventory i
         JOIN product_variants pv ON pv.id = i.variant_id
         JOIN products p ON p.id = pv.product_id
         LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.language = 'de'
+        LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
         JOIN warehouses w ON w.id = i.warehouse_id
         WHERE (i.quantity_on_hand - i.quantity_reserved) <= i.reorder_point
         ORDER BY (i.quantity_on_hand - i.quantity_reserved) ASC
@@ -91,6 +96,8 @@ export class DashboardService {
           id: true,
           orderNumber: true,
           status: true,
+          channel: true,
+          guestEmail: true,
           totalAmount: true,
           createdAt: true,
           user: { select: { firstName: true, lastName: true, email: true } },
@@ -147,6 +154,13 @@ export class DashboardService {
         ORDER BY total_revenue DESC
         LIMIT 10
       `,
+      // Today's revenue by channel
+      this.prisma.order.groupBy({
+        by: ['channel'],
+        _sum: { totalAmount: true },
+        _count: true,
+        where: { createdAt: { gte: todayStart }, status: { notIn: ['cancelled'] }, deletedAt: null },
+      }),
     ])
 
     // Calculate comparison percentages
@@ -205,11 +219,18 @@ export class DashboardService {
       lowStock: lowStock.map((inv: any) => ({
         sku: inv.sku,
         product: inv.product_name ?? inv.sku,
+        imageUrl: inv.image_url ?? null,
         warehouse: inv.warehouse_name,
         onHand: Number(inv.quantity_on_hand),
         reserved: Number(inv.quantity_reserved),
         available: Number(inv.quantity_on_hand) - Number(inv.quantity_reserved),
         reorderPoint: Number(inv.reorder_point),
+      })),
+      cancellationRate: await this.getCancellationRate(),
+      todayByChannel: (todayByChannel as any[]).map((r: any) => ({
+        channel: r.channel,
+        revenue: Number(r._sum?.totalAmount ?? 0).toFixed(2),
+        count: r._count,
       })),
       abandonedCarts: await this.getAbandonedCartsToday(todayStart),
     }
@@ -227,9 +248,20 @@ export class DashboardService {
         pendingReturns: { count: 0, items: [] },
         revenueByPaymentMethod: [],
         topProducts: [],
+        cancellationRate: { rate: '0.0', cancelled: 0, total: 0 },
+        todayByChannel: [],
         abandonedCarts: { count: 0, totalValue: '0.00' },
       }
     }
+  }
+
+  private async getCancellationRate() {
+    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const [total, cancelled] = await Promise.all([
+      this.prisma.order.count({ where: { createdAt: { gte: thirtyDaysAgo }, deletedAt: null } }),
+      this.prisma.order.count({ where: { createdAt: { gte: thirtyDaysAgo }, deletedAt: null, status: 'cancelled' } }),
+    ])
+    return { rate: total > 0 ? ((cancelled / total) * 100).toFixed(1) : '0.0', cancelled, total }
   }
 
   private async getAbandonedCartsToday(todayStart: Date) {

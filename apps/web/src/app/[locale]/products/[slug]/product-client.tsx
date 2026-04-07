@@ -8,6 +8,8 @@ import { ImageGallery } from '@/components/product/image-gallery'
 import { VariantSelector } from '@/components/product/variant-selector'
 import { AddToCart, StickyAddToCart } from '@/components/product/add-to-cart'
 import { trackMetaEvent, trackTikTokEvent } from '@/components/tracking-pixels'
+import { NotifyWhenAvailable } from '@/components/product/notify-when-available'
+import { RelatedProducts } from '@/components/product/related-products'
 import { getWhatsAppShareUrl } from '@/components/whatsapp-button'
 
 interface ProductClientProps {
@@ -131,6 +133,29 @@ export function ProductClient({ product, locale, translations: t, computed }: Pr
             </span>
           </div>
 
+          {/* No-Return Notice */}
+          {product.excludeFromReturns && (
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 text-sm">
+              <svg className="h-4 w-4 mt-0.5 flex-shrink-0 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div>
+                <p className="font-medium text-orange-700 dark:text-orange-400">
+                  {locale === 'ar' ? 'مستثنى من حق الإرجاع' : locale === 'en' ? 'Excluded from returns' : 'Vom Umtausch ausgeschlossen'}
+                </p>
+                {product.returnExclusionReason && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {product.returnExclusionReason === 'hygiene'
+                      ? (locale === 'ar' ? 'منتج صحي / نظافة' : locale === 'en' ? 'Hygiene product' : 'Hygieneartikel')
+                      : product.returnExclusionReason === 'custom_made'
+                        ? (locale === 'ar' ? 'مصنوع حسب الطلب' : locale === 'en' ? 'Custom made' : 'Maßanfertigung')
+                        : product.returnExclusionReason === 'sealed'
+                          ? (locale === 'ar' ? 'بضاعة مختومة' : locale === 'en' ? 'Sealed product' : 'Versiegelte Ware')
+                          : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Delivery */}
           {available > 0 && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -159,6 +184,11 @@ export function ProductClient({ product, locale, translations: t, computed }: Pr
             />
           )}
 
+          {/* Notify when back in stock */}
+          {available <= 0 && selectedVariant && (
+            <NotifyWhenAvailable productId={product.id} variantId={selectedVariant.id} locale={locale} />
+          )}
+
           {/* Share */}
           <div className="flex items-center gap-3 pt-2">
             <span className="text-sm text-muted-foreground">{t.share}:</span>
@@ -185,6 +215,9 @@ export function ProductClient({ product, locale, translations: t, computed }: Pr
           {description ? <p>{description}</p> : <p className="italic">{t.noDescription}</p>}
         </div>
       </div>
+
+      {/* Related Products */}
+      <RelatedProducts productId={product.id} categoryId={product.categoryId} locale={locale} />
 
       {/* Mobile Sticky Bar */}
       <StickyAddToCart name={name} price={price} onAdd={handleStickyAdd} isOutOfStock={available <= 0} />

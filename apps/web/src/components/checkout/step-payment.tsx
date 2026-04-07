@@ -8,6 +8,7 @@ import { ArrowLeft, Loader2, CreditCard, Lock, Shield } from 'lucide-react'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { useCartStore } from '@/store/cart-store'
 import { CouponInput } from '@/components/coupon-input'
+import { getChannelFromUtm } from '@/components/utm-capture'
 import { useShopSettings } from '@/hooks/use-shop-settings'
 import { getStripe } from '@/lib/stripe'
 import { api } from '@/lib/api'
@@ -85,6 +86,7 @@ function StepPaymentInner() {
       const { data: order } = await api.post('/orders', {
         items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
         countryCode: shippingAddress?.country ?? 'DE',
+        channel: getChannelFromUtm(),
         ...(guestEmail ? { guestEmail } : {}),
         ...(shippingAddress ? { guestFirstName: shippingAddress.firstName, guestLastName: shippingAddress.lastName } : {}),
         locale,
@@ -177,7 +179,7 @@ function StepPaymentInner() {
 
   return (
     <div className="max-w-2xl mx-auto py-6">
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-8">
         {/* Left: Payment */}
         <div className="lg:col-span-3 space-y-6">
           <h2 className="text-xl font-bold">{t('payment.title')}</h2>
@@ -190,8 +192,10 @@ function StepPaymentInner() {
 
           {/* Payment method tabs */}
           {klarnaEnabled && (
-            <div className="flex border rounded-xl overflow-hidden">
+            <div className="flex border rounded-xl overflow-hidden" role="tablist" aria-label={t('paymentMethods.card')}>
               <button
+                role="tab"
+                aria-selected={activeTab === 'card'}
                 onClick={() => setActiveTab('card')}
                 className={`flex-1 py-3.5 px-4 text-sm font-medium border-r transition-all duration-200 ${
                   activeTab === 'card' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
@@ -201,6 +205,8 @@ function StepPaymentInner() {
                 {t('paymentMethods.card')}
               </button>
               <button
+                role="tab"
+                aria-selected={activeTab === 'klarna'}
                 onClick={() => setActiveTab('klarna')}
                 className={`flex-1 py-3.5 px-4 text-sm font-medium transition-all duration-200 ${
                   activeTab === 'klarna' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
@@ -247,7 +253,15 @@ function StepPaymentInner() {
               onChange={(e) => setTermsAccepted(e.target.checked)}
               className="rounded mt-0.5"
             />
-            <span>{t('payment.termsRequired')}</span>
+            <span>
+              {locale === 'ar' ? (
+                <>قرأت وأوافق على <a href={`/${locale}/legal/agb`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">الشروط والأحكام</a> و<a href={`/${locale}/legal/widerruf`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">سياسة الإلغاء</a></>
+              ) : locale === 'en' ? (
+                <>I have read and accept the <a href={`/${locale}/legal/agb`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">Terms & Conditions</a> and <a href={`/${locale}/legal/widerruf`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">Withdrawal Policy</a></>
+              ) : (
+                <>Ich habe die <a href={`/${locale}/legal/agb`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">AGB</a> und <a href={`/${locale}/legal/widerruf`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">Widerrufsbelehrung</a> gelesen und akzeptiere sie.</>
+              )}
+            </span>
           </label>
 
           {/* Place Order */}
@@ -304,7 +318,7 @@ function StepPaymentInner() {
                 </div>
               )}
               <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{(totalAmount - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2)}</span></div>
-              <p className="text-[11px] text-muted-foreground text-right">{t('inclVat')}</p>
+              <p className="text-[11px] text-muted-foreground text-end">{t('inclVat')}</p>
               {/* Coupon Input */}
               <div className="pt-3 border-t">
                 <CouponInput subtotal={cartSubtotal} />

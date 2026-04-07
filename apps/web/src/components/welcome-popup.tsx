@@ -162,14 +162,6 @@ export function WelcomePopup() {
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(100%) } to { opacity: 1; transform: translateY(0) } }
-        @media (min-width: 768px) {
-          @keyframes slideUp { from { opacity: 0; transform: translate(-50%, -40%) scale(0.95) } to { opacity: 1; transform: translate(-50%, -50%) scale(1) } }
-        }
-      `}</style>
     </>
   )
 }

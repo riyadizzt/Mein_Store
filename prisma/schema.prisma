@@ -59,6 +59,8 @@ enum SalesChannel {
   facebook
   instagram
   tiktok
+  google
+  whatsapp
 }
 
 enum OrderStatus {
@@ -436,6 +438,7 @@ model Product {
   channelFacebook Boolean @default(true) @map("channel_facebook")
   channelTiktok   Boolean @default(true) @map("channel_tiktok")
   channelGoogle   Boolean @default(true) @map("channel_google")
+  channelWhatsapp Boolean @default(true) @map("channel_whatsapp")
   publishedAt DateTime? @map("published_at")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -684,6 +687,8 @@ model Order {
   fulfillmentWarehouseId String?  @map("fulfillment_warehouse_id")
   cancelledAt            DateTime?    @map("cancelled_at")
   cancelReason           String?      @map("cancel_reason")
+  refundStatus           String?      @map("refund_status")    // succeeded | failed | pending | not_needed
+  refundError            String?      @map("refund_error")
   deletedAt              DateTime?    @map("deleted_at")
   createdAt              DateTime     @default(now()) @map("created_at")
   updatedAt              DateTime     @updatedAt @map("updated_at")
@@ -1403,4 +1408,53 @@ model SkuSequence {
   lastNum Int    @default(0) @map("last_num")
 
   @@map("sku_sequences")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI MODULE
+// ─────────────────────────────────────────────────────────────
+
+model AiLog {
+  id         String   @id @default(uuid())
+  type       String   // customer_chat | admin_assistant | product_description | inventory_suggestions | marketing_text | social_reply
+  provider   String   // claude_haiku | claude_sonnet | gemini | cache
+  userIp     String?  @map("user_ip")
+  adminId    String?  @map("admin_id")
+  prompt     String   @db.Text
+  response   String   @db.Text
+  tokensIn   Int      @default(0) @map("tokens_in")
+  tokensOut  Int      @default(0) @map("tokens_out")
+  latencyMs  Int      @default(0) @map("latency_ms")
+  lang       String   @default("de")
+  error      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([type, createdAt])
+  @@index([adminId])
+  @@map("ai_logs")
+}
+
+model MaintenanceEmail {
+  id        String   @id @default(uuid())
+  email     String
+  locale    String   @default("de")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([email])
+  @@map("maintenance_emails")
+}
+
+model AiFaqEntry {
+  id         String   @id @default(uuid())
+  questionDe String   @map("question_de") @db.Text
+  questionAr String   @map("question_ar") @db.Text
+  answerDe   String   @map("answer_de") @db.Text
+  answerAr   String   @map("answer_ar") @db.Text
+  keywords   String   @default("") // comma-separated for matching
+  sortOrder  Int      @default(0) @map("sort_order")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_faq_entries")
 }

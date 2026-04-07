@@ -87,27 +87,41 @@ export class OrdersService {
     }
 
     try {
-      // 2. Auto-resolve warehouse: pick the warehouse that has available stock
+      // 2. Auto-resolve warehouse: pick the warehouse that has AVAILABLE stock
       const defaultWarehouse = await this.prisma.warehouse.findFirst({ where: { isDefault: true, isActive: true }, select: { id: true } })
       const defaultWarehouseId = defaultWarehouse?.id
       for (const item of dto.items) {
         if (!item.warehouseId) {
-          // Find a warehouse with available stock for this variant
-          const bestInventory = await this.prisma.inventory.findFirst({
+          // Find ALL active warehouses with inventory for this variant
+          const inventories = await this.prisma.inventory.findMany({
             where: {
               variantId: item.variantId,
               warehouse: { isActive: true },
             },
-            orderBy: [
-              { warehouse: { isDefault: 'desc' } }, // prefer default warehouse
-              { quantityOnHand: 'desc' },            // then highest stock
-            ],
-            select: { warehouseId: true, quantityOnHand: true, quantityReserved: true },
+            include: { warehouse: { select: { isDefault: true } } },
           })
-          if (bestInventory && (bestInventory.quantityOnHand - bestInventory.quantityReserved) >= item.quantity) {
-            item.warehouseId = bestInventory.warehouseId
+
+          // Calculate available stock per warehouse and pick the best one
+          let bestWarehouseId: string | null = null
+          let bestAvailable = 0
+          let bestIsDefault = false
+
+          for (const inv of inventories) {
+            const available = inv.quantityOnHand - inv.quantityReserved
+            if (available >= item.quantity) {
+              // Prefer: 1) has enough stock, 2) is default warehouse, 3) highest available
+              if (!bestWarehouseId || (inv.warehouse.isDefault && !bestIsDefault) || (!bestIsDefault && available > bestAvailable)) {
+                bestWarehouseId = inv.warehouseId
+                bestAvailable = available
+                bestIsDefault = inv.warehouse.isDefault
+              }
+            }
+          }
+
+          if (bestWarehouseId) {
+            item.warehouseId = bestWarehouseId
           } else {
-            // Fallback to default warehouse (reservation will fail with clear error)
+            // No warehouse has enough stock — use default (stock check in step 3 will reject the order)
             item.warehouseId = defaultWarehouseId ?? ''
           }
         }
@@ -304,22 +318,22 @@ export class OrdersService {
           },
         })
 
-        // ── Sofortige Bestandsreservierung INNERHALB der Transaktion ──
-        // Verhindert Überverkauf bei gleichzeitigen Bestellungen
+        // ── Bestandsprüfung INNERHALB der Transaktion ──
+        // Prüft ob genug Bestand im zugewiesenen Lager vorhanden ist.
+        // Die eigentliche Reservierung (quantityReserved increment + StockReservation Record)
+        // erfolgt über den Event Listener (inventory.listener.ts → reservationService.reserve())
+        // der nach dem Commit dieser Transaktion ausgelöst wird.
+        // WICHTIG: Hier NICHT reservieren — das würde eine doppelte Reservierung verursachen.
         for (const item of dto.items) {
           const inv = await tx.inventory.findFirst({
-            where: { variantId: item.variantId, warehouse: { isActive: true } },
-            orderBy: { quantityOnHand: 'desc' },
+            where: { variantId: item.variantId, warehouseId: item.warehouseId },
           })
-          if (inv) {
-            const avail = inv.quantityOnHand - inv.quantityReserved
-            if (avail < item.quantity) {
-              throw new ConflictException('Nicht genügend Bestand verfügbar')
-            }
-            await tx.inventory.update({
-              where: { id: inv.id },
-              data: { quantityReserved: { increment: item.quantity } },
-            })
+          if (!inv) {
+            throw new ConflictException('Kein Lagerbestand im zugewiesenen Lager gefunden')
+          }
+          const avail = inv.quantityOnHand - inv.quantityReserved
+          if (avail < item.quantity) {
+            throw new ConflictException('Nicht genügend Bestand verfügbar')
           }
         }
 

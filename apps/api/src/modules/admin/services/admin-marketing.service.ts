@@ -631,4 +631,55 @@ export class AdminMarketingService {
       discountAmount: p.discountAmount ? Number(p.discountAmount) : null,
     }))
   }
+
+  // ── Marketing Overview Stats ──────────────────────────────
+  async getMarketingOverview() {
+    const [totalCoupons, activeCoupons, usages, topCoupons] = await Promise.all([
+      this.prisma.coupon.count(),
+      this.prisma.coupon.count({ where: { isActive: true, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] } }),
+      this.prisma.couponUsage.count(),
+      this.prisma.couponUsage.groupBy({
+        by: ['couponId'],
+        _count: true,
+        orderBy: { _count: { couponId: 'desc' } },
+        take: 5,
+      }),
+    ])
+
+    // Get coupon details + revenue for top 5
+    const topCouponDetails = await Promise.all(
+      topCoupons.map(async (tc) => {
+        const coupon = await this.prisma.coupon.findUnique({
+          where: { id: tc.couponId },
+          select: { code: true, type: true, discountPercent: true, discountAmount: true },
+        })
+        const orders = await this.prisma.couponUsage.findMany({
+          where: { couponId: tc.couponId },
+          select: { order: { select: { totalAmount: true } } },
+        })
+        const totalRevenue = orders.reduce((s, u) => s + Number(u.order?.totalAmount ?? 0), 0)
+        return {
+          code: coupon?.code ?? '—',
+          type: coupon?.type ?? 'percentage',
+          discount: coupon?.type === 'percentage' ? `${Number(coupon.discountPercent)}%` : `€${Number(coupon?.discountAmount ?? 0).toFixed(2)}`,
+          uses: tc._count,
+          revenue: totalRevenue,
+        }
+      }),
+    )
+
+    // Total discount given (sum of discountAmount on orders that used a coupon)
+    const discountSum = await this.prisma.order.aggregate({
+      where: { couponCode: { not: null }, deletedAt: null, status: { notIn: ['cancelled'] } },
+      _sum: { discountAmount: true },
+    })
+
+    return {
+      totalCoupons,
+      activeCoupons,
+      totalRedemptions: usages,
+      totalDiscountGiven: Number(discountSum._sum?.discountAmount ?? 0).toFixed(2),
+      topCoupons: topCouponDetails,
+    }
+  }
 }

@@ -506,6 +506,8 @@
       "suppliers": "Lieferanten",
       "receiving": "Wareneingang",
       "supplierPayments": "Zahlungen",
+      "ai": "KI-Assistent",
+      "maintenance": "Wartungsmodus",
       "logout": "Abmelden"
     },
     "dashboard": {

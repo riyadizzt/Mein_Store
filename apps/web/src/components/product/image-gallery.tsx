@@ -63,7 +63,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
         {activeImage && (
           <Image
             src={activeImage.url}
-            alt={activeImage.altText ?? `${productName} — Bild ${activeIndex + 1}`}
+            alt={activeImage.altText ?? `${productName} ${activeIndex + 1}`}
             fill
             priority
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 600px"
@@ -84,8 +84,8 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
             <button
               key={i}
               onClick={() => setActiveIndex(i)}
-              aria-label={`${productName} Bild ${i + 1}`}
-              className={`relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 ${
+              aria-label={`${productName} ${i + 1}`}
+              className={`relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 i === activeIndex ? 'ring-2 ring-accent ring-offset-2' : 'opacity-70 hover:opacity-100'
               }`}
             >
@@ -112,7 +112,7 @@ export function ImageGallery({ images, productName }: ImageGalleryProps) {
               className={`h-2.5 rounded-full transition-all duration-200 ${
                 i === activeIndex ? 'w-7 bg-accent' : 'w-2.5 bg-muted-foreground/50'
               }`}
-              aria-label={`Bild ${i + 1} von ${images.length}`}
+              aria-label={`${i + 1} / ${images.length}`}
             />
           ))}
         </div>

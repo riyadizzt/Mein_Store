@@ -1,19 +1,38 @@
+<!-- Invoice Icon -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-  <tr><td align="center" style="padding:0 0 24px;"><div style="width:64px;height:64px;border-radius:50%;background-color:#fef3c7;display:inline-block;text-align:center;line-height:64px;"><span style="font-size:28px;color:#d4a853;">&#128196;</span></div></td></tr>
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#fef3c7;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#d4a853;">&#128196;</span>
+    </div>
+  </td></tr>
 </table>
-<h1 style="margin:0 0 8px;font-size:24px;color:#1a1a2e;text-align:center;font-weight:700;">فاتورتك</h1>
-<p style="text-align:center;color:#6b7280;margin:0 0 24px;">مرحباً {{firstName}}، مرفق فاتورتك للطلب رقم <strong>{{orderNumber}}</strong>.</p>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#f8f7f4;border-radius:12px;">
-  <tr><td style="padding:16px 20px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      <tr><td style="font-size:12px;color:#6b7280;text-align:right;">رقم الفاتورة</td><td style="text-align:left;font-weight:700;font-size:14px;color:#1a1a2e;font-family:monospace;">{{invoiceNumber}}</td></tr>
-      <tr><td style="font-size:12px;color:#6b7280;padding-top:6px;text-align:right;">تاريخ الفاتورة</td><td style="text-align:left;font-size:13px;color:#1a1a2e;padding-top:6px;">{{invoiceDate}}</td></tr>
-      <tr><td style="font-size:12px;color:#6b7280;padding-top:6px;text-align:right;">المبلغ الإجمالي</td><td style="text-align:left;font-weight:700;font-size:16px;color:#1a1a2e;padding-top:6px;">&euro;{{grossAmount}}</td></tr>
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:'Noto Sans Arabic',Georgia,serif;">&#1601;&#1575;&#1578;&#1608;&#1585;&#1578;&#1603;</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;line-height:1.9;">&#1605;&#1585;&#1581;&#1576;&#1575;&#1611; <strong style="color:#1a1a2e;">{{firstName}}</strong>&#1548; &#1605;&#1585;&#1601;&#1602; &#1601;&#1575;&#1578;&#1608;&#1585;&#1578;&#1603; &#1604;&#1604;&#1591;&#1604;&#1576; &#1585;&#1602;&#1605; <strong style="color:#d4a853;">{{orderNumber}}</strong>.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:20px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" dir="rtl">
+      <tr>
+        <td style="font-size:12px;color:#6b7280;padding:6px 0;text-align:right;">&#1585;&#1602;&#1605; &#1575;&#1604;&#1601;&#1575;&#1578;&#1608;&#1585;&#1577;</td>
+        <td style="text-align:left;font-weight:700;font-size:14px;color:#1a1a2e;font-family:'Courier New',monospace;padding:6px 0;">{{invoiceNumber}}</td>
+      </tr>
+      <tr>
+        <td style="font-size:12px;color:#6b7280;padding:6px 0;border-top:1px solid #f0eeea;text-align:right;">&#1578;&#1575;&#1585;&#1610;&#1582; &#1575;&#1604;&#1601;&#1575;&#1578;&#1608;&#1585;&#1577;</td>
+        <td style="text-align:left;font-size:14px;color:#1a1a2e;padding:6px 0;border-top:1px solid #f0eeea;">{{invoiceDate}}</td>
+      </tr>
+      <tr>
+        <td style="font-size:12px;color:#6b7280;padding:6px 0;border-top:1px solid #f0eeea;text-align:right;">&#1575;&#1604;&#1605;&#1576;&#1604;&#1594; &#1575;&#1604;&#1573;&#1580;&#1605;&#1575;&#1604;&#1610;</td>
+        <td style="text-align:left;font-weight:700;font-size:18px;color:#1a1a2e;padding:6px 0;border-top:1px solid #f0eeea;">&euro;{{grossAmount}}</td>
+      </tr>
     </table>
   </td></tr>
 </table>
 
-<p style="text-align:center;color:#6b7280;font-size:13px;margin:0 0 24px;">الفاتورة مرفقة بهذه الرسالة كملف PDF. يمكنك أيضاً تحميلها في أي وقت من حسابك ضمن &laquo;طلباتي&raquo;.</p>
+<p style="text-align:center;color:#6b7280;font-size:14px;line-height:1.9;margin:0 0 28px;">&#1575;&#1604;&#1601;&#1575;&#1578;&#1608;&#1585;&#1577; &#1605;&#1585;&#1601;&#1602;&#1577; &#1576;&#1607;&#1584;&#1607; &#1575;&#1604;&#1585;&#1587;&#1575;&#1604;&#1577; &#1603;&#1605;&#1604;&#1601; <strong style="color:#1a1a2e;">PDF</strong>. &#1610;&#1605;&#1603;&#1606;&#1603; &#1571;&#1610;&#1590;&#1575;&#1611; &#1578;&#1581;&#1605;&#1610;&#1604;&#1607;&#1575; &#1601;&#1610; &#1571;&#1610; &#1608;&#1602;&#1578; &#1605;&#1606; &#1581;&#1587;&#1575;&#1576;&#1603; &#1590;&#1605;&#1606; &laquo;&#1591;&#1604;&#1576;&#1575;&#1578;&#1610;&raquo;.</p>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 16px;"><a href="{{orderUrl}}" style="display:inline-block;padding:12px 32px;background-color:#1a1a2e;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;">عرض الطلب</a></td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
+  <tr><td align="center">
+    <a href="{{orderUrl}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">&#1593;&#1585;&#1590; &#1575;&#1604;&#1591;&#1604;&#1576;</a>
+  </td></tr>
+</table>

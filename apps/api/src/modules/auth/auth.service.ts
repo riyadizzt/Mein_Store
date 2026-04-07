@@ -283,6 +283,12 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
 
+    // Get user info before reset (for audit)
+    const user = await this.prisma.user.findUnique({
+      where: { id: reset.userId },
+      select: { id: true, email: true, role: true, firstName: true },
+    })
+
     await this.prisma.$transaction([
       // Token als verwendet markieren
       this.prisma.passwordReset.update({
@@ -300,6 +306,39 @@ export class AuthService {
         data: { isRevoked: true },
       }),
     ])
+
+    // Audit + Notification for admin password resets
+    if (user && ['admin', 'super_admin', 'warehouse_staff'].includes(user.role)) {
+      this.logger.warn(`ADMIN PASSWORD RESET: ${user.email} (${user.role})`)
+
+      await this.prisma.adminAuditLog.create({
+        data: {
+          adminId: user.id,
+          action: 'ADMIN_PASSWORD_RESET',
+          entityType: 'auth',
+          entityId: user.id,
+          changes: { email: user.email, role: user.role, method: 'email_link' },
+          ipAddress: '::reset',
+        },
+      }).catch(() => {})
+
+      // Notify super_admin(s) about this reset
+      const superAdmins = await this.prisma.user.findMany({
+        where: { role: 'super_admin', isActive: true, deletedAt: null, id: { not: user.id } },
+        select: { id: true },
+      })
+      for (const sa of superAdmins) {
+        await this.prisma.notification.create({
+          data: {
+            type: 'system',
+            title: `Admin-Passwort zurückgesetzt: ${user.email}`,
+            body: `${user.firstName ?? user.email} hat das Passwort per E-Mail-Link zurückgesetzt.`,
+            channel: 'admin',
+            userId: sa.id,
+          },
+        }).catch(() => {})
+      }
+    }
   }
 
   private async generateTokens(

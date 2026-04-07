@@ -1,15 +1,31 @@
-<h1 style="margin:0 0 16px;font-size:22px;color:#1a1a2e;text-align:center;">أنشئ حسابك في 30 ثانية</h1>
-<p style="text-align:right;">مرحبا {{firstName}}،</p>
-<p style="text-align:right;">شكرا لطلبك <strong>{{orderNumber}}</strong> من ملبوسات ملك!</p>
-
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;background-color:#FFF8E7;border-radius:12px;border:1px solid #F5E6A3;">
-  <tr><td style="padding:24px;text-align:center;">
-    <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#1a1a2e;">أنشئ حسابك واستمتع بـ:</p>
-    <p style="margin:4px 0;font-size:13px;color:#555;">&#10003; دفع أسرع في المرة القادمة</p>
-    <p style="margin:4px 0;font-size:13px;color:#555;">&#10003; سجل الطلبات وتتبع الشحنات</p>
-    <p style="margin:4px 0;font-size:13px;color:#555;">&#10003; قائمة الأمنيات والعناوين المحفوظة</p>
-    <p style="margin:4px 0;font-size:13px;color:#555;">&#10003; عروض حصرية للأعضاء</p>
-    <p style="margin:16px 0 0;"><a href="{{appUrl}}/ar/auth/create-account?token={{inviteToken}}&email={{email}}" style="display:inline-block;background-color:#1a1a2e;color:#ffffff;font-weight:600;font-size:14px;padding:14px 36px;border-radius:12px;text-decoration:none;">إنشاء حساب</a></p>
+<!-- Invite Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#f5eed9;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#d4a853;">&#9997;</span>
+    </div>
   </td></tr>
 </table>
-<p style="color:#9ca3af;font-size:13px;text-align:right;">الرابط صالح لمدة 7 أيام. تحتاج فقط لاختيار كلمة مرور.</p>
+
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:'Noto Sans Arabic',Georgia,serif;">&#1571;&#1606;&#1588;&#1574; &#1581;&#1587;&#1575;&#1576;&#1603;</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;line-height:1.9;">&#1605;&#1585;&#1581;&#1576;&#1575;&#1611; <strong style="color:#1a1a2e;">{{firstName}}</strong>&#1548; &#1588;&#1603;&#1585;&#1575;&#1611; &#1604;&#1591;&#1604;&#1576;&#1603; <strong style="color:#d4a853;">{{orderNumber}}</strong>!</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:20px;">
+    <p style="margin:0 0 14px;font-weight:700;font-size:14px;color:#1a1a2e;text-align:center;">&#1571;&#1606;&#1588;&#1574; &#1581;&#1587;&#1575;&#1576;&#1603; &#1608;&#1575;&#1587;&#1578;&#1605;&#1578;&#1593; &#1576;&#1600;:</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" dir="rtl">
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;text-align:right;"><span style="color:#d4a853;margin-left:8px;">&#10003;</span> &#1583;&#1601;&#1593; &#1571;&#1587;&#1585;&#1593; &#1601;&#1610; &#1575;&#1604;&#1605;&#1585;&#1577; &#1575;&#1604;&#1602;&#1575;&#1583;&#1605;&#1577;</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;text-align:right;"><span style="color:#d4a853;margin-left:8px;">&#10003;</span> &#1587;&#1580;&#1604; &#1575;&#1604;&#1591;&#1604;&#1576;&#1575;&#1578; &#1608;&#1578;&#1578;&#1576;&#1593; &#1575;&#1604;&#1588;&#1581;&#1606;&#1575;&#1578;</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;text-align:right;"><span style="color:#d4a853;margin-left:8px;">&#10003;</span> &#1602;&#1575;&#1574;&#1605;&#1577; &#1575;&#1604;&#1571;&#1605;&#1606;&#1610;&#1575;&#1578; &#1608;&#1575;&#1604;&#1593;&#1606;&#1575;&#1608;&#1610;&#1606; &#1575;&#1604;&#1605;&#1581;&#1601;&#1608;&#1592;&#1577;</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;text-align:right;"><span style="color:#d4a853;margin-left:8px;">&#10003;</span> &#1593;&#1585;&#1608;&#1590; &#1581;&#1589;&#1585;&#1610;&#1577; &#1604;&#1604;&#1571;&#1593;&#1590;&#1575;&#1569;</td></tr>
+    </table>
+  </td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+  <tr><td align="center">
+    <a href="{{appUrl}}/ar/auth/create-account?token={{inviteToken}}&email={{email}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">&#1573;&#1606;&#1588;&#1575;&#1569; &#1581;&#1587;&#1575;&#1576;</a>
+  </td></tr>
+</table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">&#1575;&#1604;&#1585;&#1575;&#1576;&#1591; &#1589;&#1575;&#1604;&#1581; &#1604;&#1605;&#1583;&#1577; 7 &#1571;&#1610;&#1575;&#1605;. &#1578;&#1581;&#1578;&#1575;&#1580; &#1601;&#1602;&#1591; &#1604;&#1575;&#1582;&#1578;&#1610;&#1575;&#1585; &#1603;&#1604;&#1605;&#1577; &#1605;&#1585;&#1608;&#1585;.</p>

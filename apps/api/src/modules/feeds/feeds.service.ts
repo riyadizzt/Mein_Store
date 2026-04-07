@@ -66,13 +66,14 @@ export class FeedsService {
 
   // ── Product Data ─────────────────────────────────────────────
 
-  private async getProducts(lang: string = 'de', channel?: 'facebook' | 'tiktok' | 'google'): Promise<{ products: FeedProduct[]; stats: FeedStats }> {
+  private async getProducts(lang: string = 'de', channel?: 'facebook' | 'tiktok' | 'google' | 'whatsapp'): Promise<{ products: FeedProduct[]; stats: FeedStats }> {
     const appUrl = process.env.APP_URL || 'http://localhost:3000'
 
     const where: any = { isActive: true, deletedAt: null }
     if (channel === 'facebook') where.channelFacebook = true
     else if (channel === 'tiktok') where.channelTiktok = true
     else if (channel === 'google') where.channelGoogle = true
+    else if (channel === 'whatsapp') where.channelWhatsapp = true
 
     const rawProducts = await this.prisma.product.findMany({
       where,
@@ -262,6 +263,45 @@ export class FeedsService {
     return { xml, stats }
   }
 
+  // ── WhatsApp Business Catalog Feed (JSON) ────────────────────
+
+  async getWhatsAppFeed(lang: string = 'de', force = false): Promise<{ json: string; stats: FeedStats }> {
+    const cacheKey = `whatsapp_${lang}`
+    const cached = this.cache.get(cacheKey)
+    if (cached && !force && Date.now() - cached.generatedAt.getTime() < this.CACHE_TTL) {
+      return { json: cached.data, stats: cached.stats }
+    }
+
+    const { products, stats } = await this.getProducts(lang, 'whatsapp')
+    const utmParams = 'utm_source=whatsapp&utm_medium=catalog&utm_campaign=business'
+
+    const catalog = products.map((p) => {
+      const priceNum = parseFloat(p.price) || 0
+      const salePriceNum = p.salePrice ? parseFloat(p.salePrice) : null
+      return {
+        id: p.sku,
+        title: p.title.slice(0, 200),
+        description: (p.description || p.title).slice(0, 5000),
+        availability: p.availability === 'in stock' ? 'in stock' : 'out of stock',
+        condition: 'new',
+        price: Math.round(priceNum * 100), // cents (WhatsApp API format)
+        sale_price: salePriceNum ? Math.round(salePriceNum * 100) : undefined,
+        currency: 'EUR',
+        link: `${p.link}?${utmParams}`,
+        image_link: p.imageUrl,
+        additional_image_link: p.additionalImages.slice(0, 9),
+        brand: p.brand,
+        category: p.category || undefined,
+        color: p.color || undefined,
+        size: p.size || undefined,
+      }
+    })
+
+    const json = JSON.stringify({ data: catalog, total: catalog.length, generated_at: new Date().toISOString() }, null, 2)
+    this.cache.set(cacheKey, { data: json, stats, generatedAt: new Date() })
+    return { json, stats }
+  }
+
   // ── Stats & Monitoring ───────────────────────────────────────
 
   async getFeedStats(): Promise<Record<string, { generatedAt: Date | null; productCount: number; stats: FeedStats | null }>> {
@@ -270,10 +310,11 @@ export class FeedsService {
       result[key] = { generatedAt: cached.generatedAt, productCount: cached.stats.exported, stats: cached.stats }
     }
     // If no cache, generate stats per channel in parallel
-    const missing: { key: string; channel: 'facebook' | 'tiktok' | 'google' }[] = []
+    const missing: { key: string; channel: 'facebook' | 'tiktok' | 'google' | 'whatsapp' }[] = []
     if (!result.facebook_de) missing.push({ key: 'facebook_de', channel: 'facebook' })
     if (!result.tiktok_de) missing.push({ key: 'tiktok_de', channel: 'tiktok' })
     if (!result.google_de) missing.push({ key: 'google_de', channel: 'google' })
+    if (!result.whatsapp_de) missing.push({ key: 'whatsapp_de', channel: 'whatsapp' })
     if (missing.length) {
       const results = await Promise.all(missing.map((m) => this.getProducts('de', m.channel)))
       for (let i = 0; i < missing.length; i++) {

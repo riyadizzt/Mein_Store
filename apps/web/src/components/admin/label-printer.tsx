@@ -190,10 +190,6 @@ ${labels.join('')}
           <Button className="flex-1 rounded-xl gap-2" onClick={handlePrint} disabled={hasZeroPrice}><Printer className="h-4 w-4" />{locale === 'ar' ? `طباعة (${totalLabels})` : locale === 'en' ? `Print (${totalLabels})` : `Drucken (${totalLabels})`}</Button>
         </div>
       </div>
-      <style>{`
-        @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      `}</style>
     </div>
   )
 }

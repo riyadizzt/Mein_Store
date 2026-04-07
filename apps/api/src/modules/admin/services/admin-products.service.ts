@@ -69,7 +69,7 @@ export class AdminProductsService {
     categoryId?: string
     parentCategoryId?: string
     stockStatus?: string  // in_stock | low | out_of_stock
-    channel?: string      // facebook | tiktok | google
+    channel?: string      // facebook | tiktok | google | whatsapp
     priceMin?: number
     priceMax?: number
     sortBy?: string       // name | price | stock | date
@@ -121,6 +121,7 @@ export class AdminProductsService {
     if (query.channel === 'facebook') where.channelFacebook = true
     else if (query.channel === 'tiktok') where.channelTiktok = true
     else if (query.channel === 'google') where.channelGoogle = true
+    else if (query.channel === 'whatsapp') where.channelWhatsapp = true
 
     // Sorting
     const dir = query.sortDir === 'asc' ? 'asc' : 'desc'
@@ -210,6 +211,7 @@ export class AdminProductsService {
         channelFacebook: (p as any).channelFacebook ?? false,
         channelTiktok: (p as any).channelTiktok ?? false,
         channelGoogle: (p as any).channelGoogle ?? false,
+        channelWhatsapp: (p as any).channelWhatsapp ?? false,
         deletedAt: p.deletedAt,
         createdAt: p.createdAt,
         translations: p.translations,
@@ -751,7 +753,7 @@ export class AdminProductsService {
   // ── CHANNEL MANAGEMENT ──────────────────────────────────
 
   async bulkUpdateChannels(productIds: string[], channel: string, enabled: boolean, adminId: string, ipAddress: string) {
-    const fieldMap: Record<string, string> = { facebook: 'channelFacebook', tiktok: 'channelTiktok', google: 'channelGoogle' }
+    const fieldMap: Record<string, string> = { facebook: 'channelFacebook', tiktok: 'channelTiktok', google: 'channelGoogle', whatsapp: 'channelWhatsapp' }
     const field = fieldMap[channel]
     if (!field) throw new BadRequestException(`Invalid channel: ${channel}`)
     const result = await this.prisma.product.updateMany({
@@ -767,17 +769,18 @@ export class AdminProductsService {
   }
 
   async getChannelStats() {
-    const [total, facebook, tiktok, google, ordersByChannel] = await Promise.all([
+    const [total, facebook, tiktok, google, whatsapp, ordersByChannel] = await Promise.all([
       this.prisma.product.count({ where: { isActive: true, deletedAt: null } }),
       this.prisma.product.count({ where: { isActive: true, deletedAt: null, channelFacebook: true } }),
       this.prisma.product.count({ where: { isActive: true, deletedAt: null, channelTiktok: true } }),
       this.prisma.product.count({ where: { isActive: true, deletedAt: null, channelGoogle: true } }),
+      this.prisma.product.count({ where: { isActive: true, deletedAt: null, channelWhatsapp: true } }),
       this.prisma.order.groupBy({ by: ['channel'], _count: true, where: { deletedAt: null } }),
     ])
     const orders: Record<string, number> = {}
     for (const g of ordersByChannel) orders[g.channel] = g._count
     return {
-      total, facebook, tiktok, google, website: total,
+      total, facebook, tiktok, google, whatsapp, website: total,
       orders: {
         website: orders['website'] ?? 0,
         facebook: orders['facebook'] ?? 0,

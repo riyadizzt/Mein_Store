@@ -2,23 +2,26 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { FileText, Check, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 
 const PAGES = [
-  { key: 'impressum', label: 'Impressum' },
-  { key: 'agb', label: 'AGB' },
-  { key: 'datenschutz', label: 'Datenschutz' },
-  { key: 'widerruf', label: 'Widerrufsbelehrung' },
+  { key: 'impressum', de: 'Impressum', ar: 'البيانات القانونية' },
+  { key: 'agb', de: 'AGB', ar: 'الشروط والأحكام' },
+  { key: 'datenschutz', de: 'Datenschutz', ar: 'سياسة الخصوصية' },
+  { key: 'widerruf', de: 'Widerrufsbelehrung', ar: 'حق الإرجاع' },
 ]
 
 const LANGS = ['de', 'en', 'ar'] as const
 
 export default function AdminPagesPage() {
-  useTranslations('admin') // loaded for breadcrumb
+  useTranslations('admin')
+  const locale = useLocale()
+  const t3 = (d: string, a: string) => locale === 'ar' ? a : d
+  const getPageLabel = (page: typeof PAGES[0]) => locale === 'ar' ? page.ar : page.de
   const queryClient = useQueryClient()
   const [activePage, setActivePage] = useState('impressum')
   const [activeLang, setActiveLang] = useState<'de' | 'en' | 'ar'>('de')
@@ -55,13 +58,13 @@ export default function AdminPagesPage() {
 
   return (
     <div>
-      <AdminBreadcrumb items={[{ label: 'Seiten' }]} />
+      <AdminBreadcrumb items={[{ label: t3('Seiten', 'الصفحات') }]} />
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" />Rechtliche Seiten</h1>
+        <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" />{t3('Rechtliche Seiten', 'الصفحات القانونية')}</h1>
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="gap-2">
           {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
-          {saved ? 'Gespeichert ✓' : 'Alle speichern'}
+          {saved ? t3('Gespeichert ✓', 'تم الحفظ ✓') : t3('Alle speichern', 'حفظ الكل')}
         </Button>
       </div>
 
@@ -72,11 +75,11 @@ export default function AdminPagesPage() {
             <button
               key={page.key}
               onClick={() => setActivePage(page.key)}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all ${
+              className={`w-full text-start px-3 py-2.5 rounded-xl text-sm transition-all ${
                 activePage === page.key ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-muted'
               }`}
             >
-              {page.label}
+              {getPageLabel(page)}
             </button>
           ))}
         </div>
@@ -84,7 +87,7 @@ export default function AdminPagesPage() {
         {/* Editor */}
         <div className="flex-1 bg-background border rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold">{PAGES.find((p) => p.key === activePage)?.label}</h2>
+            <h2 className="font-semibold">{(() => { const pg = PAGES.find((p) => p.key === activePage); return pg ? getPageLabel(pg) : activePage })()}</h2>
             <div className="flex gap-1">
               {LANGS.map((lang) => (
                 <button key={lang} onClick={() => setActiveLang(lang)}
@@ -100,11 +103,11 @@ export default function AdminPagesPage() {
             onChange={(e) => setContent((prev) => ({ ...prev, [currentKey]: e.target.value }))}
             className="w-full h-[500px] px-4 py-3 rounded-lg border bg-background text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
             dir={activeLang === 'ar' ? 'rtl' : 'ltr'}
-            placeholder={`${PAGES.find((p) => p.key === activePage)?.label} Inhalt (${activeLang.toUpperCase()})...`}
+            placeholder={`${(() => { const pg = PAGES.find((p) => p.key === activePage); return pg ? getPageLabel(pg) : '' })()} ${t3('Inhalt', 'المحتوى')} (${activeLang.toUpperCase()})...`}
           />
 
           <p className="text-xs text-muted-foreground mt-2">
-            HTML erlaubt. Änderungen werden sofort im Store sichtbar nach dem Speichern.
+            {t3('HTML erlaubt. Änderungen werden sofort im Store sichtbar nach dem Speichern.', 'يُسمح بـ HTML. التغييرات ستكون مرئية فوراً في المتجر بعد الحفظ.')}
           </p>
         </div>
       </div>

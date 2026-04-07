@@ -52,6 +52,13 @@ const CHANNELS: ChannelDef[] = [
     settingsKey: 'channel_google_enabled',
     feedUrl: (api, token) => `${api}/api/v1/feeds/google?token=${token}`,
   },
+  {
+    id: 'whatsapp', name: 'WhatsApp Business', nameAr: 'واتساب بزنس',
+    icon: <MessageCircle className="h-5 w-5 text-green-500" />,
+    iconBg: 'bg-green-500/10', color: 'green',
+    settingsKey: 'channel_whatsapp_enabled',
+    feedUrl: (api, token) => `${api}/api/v1/feeds/whatsapp?token=${token}`,
+  },
 ]
 
 export default function ChannelsPage() {
@@ -67,6 +74,7 @@ export default function ChannelsPage() {
     channel_facebook_enabled: 'false',
     channel_tiktok_enabled: 'false',
     channel_google_enabled: 'false',
+    channel_whatsapp_enabled: 'false',
   })
 
   // ── Data ──────────────────────────────────────────────────────
@@ -109,24 +117,28 @@ export default function ChannelsPage() {
       channel_facebook_enabled: rawSettings.channel_facebook_enabled ?? prev.channel_facebook_enabled,
       channel_tiktok_enabled: rawSettings.channel_tiktok_enabled ?? prev.channel_tiktok_enabled,
       channel_google_enabled: rawSettings.channel_google_enabled ?? prev.channel_google_enabled,
+      channel_whatsapp_enabled: rawSettings.channel_whatsapp_enabled ?? prev.channel_whatsapp_enabled,
     }))
   }, [rawSettings])
 
   // ── Mutations ─────────────────────────────────────────────────
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   const saveMut = useMutation({
     mutationFn: async (keysToSave: Record<string, string>) => {
       setSaveError(null)
+      setSaveSuccess(null)
       await api.patch('/admin/settings', keysToSave)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['channel-settings'] })
       qc.invalidateQueries({ queryKey: ['feed-stats'] })
+      setSaveSuccess(t3(locale, 'Gespeichert', 'تم الحفظ'))
+      setTimeout(() => setSaveSuccess(null), 3000)
     },
     onError: () => {
       setSaveError(t3(locale, 'Fehler beim Speichern — bitte erneut versuchen', 'خطأ في الحفظ — يرجى المحاولة مرة أخرى'))
-      // Rollback: reload settings from server
       qc.invalidateQueries({ queryKey: ['channel-settings'] })
     },
   })
@@ -139,7 +151,10 @@ export default function ChannelsPage() {
   const toggleChannel = (settingsKey: string) => {
     const newVal = settings[settingsKey] === 'true' ? 'false' : 'true'
     setSettings((p) => ({ ...p, [settingsKey]: newVal }))
-    saveMut.mutate({ [settingsKey]: newVal })
+    const keysToSave: Record<string, string> = { [settingsKey]: newVal }
+    // Sync storefront WhatsApp button with channel toggle
+    if (settingsKey === 'channel_whatsapp_enabled') keysToSave.whatsapp_enabled = newVal
+    saveMut.mutate(keysToSave)
   }
 
   // ── Computed ──────────────────────────────────────────────────
@@ -150,6 +165,7 @@ export default function ChannelsPage() {
     facebook: channelStats?.facebook ?? 0,
     tiktok: channelStats?.tiktok ?? 0,
     google: channelStats?.google ?? 0,
+    whatsapp: channelStats?.whatsapp ?? 0,
   }
   const channelOrders: Record<string, number> = {
     facebook: channelStats?.orders?.facebook ?? 0,
@@ -328,6 +344,31 @@ export default function ChannelsPage() {
                     </div>
                   )}
 
+                  {/* WhatsApp-specific settings */}
+                  {ch.id === 'whatsapp' && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t3(locale, 'Telefonnummer', 'رقم الهاتف')}</label>
+                        <input value={settings.whatsapp_number} onChange={(e) => setSettings((p) => ({ ...p, whatsapp_number: e.target.value }))} placeholder="+491234567890" className="w-full h-10 px-3 rounded-xl border bg-background text-sm font-mono" />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t3(locale, 'Begrüßung DE', 'رسالة الترحيب بالألمانية')}</label>
+                          <textarea value={settings.whatsapp_message_de} onChange={(e) => setSettings((p) => ({ ...p, whatsapp_message_de: e.target.value }))} className="w-full h-20 px-3 py-2 rounded-xl border bg-background text-sm resize-none" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t3(locale, 'Begrüßung AR', 'رسالة الترحيب بالعربية')}</label>
+                          <textarea value={settings.whatsapp_message_ar} onChange={(e) => setSettings((p) => ({ ...p, whatsapp_message_ar: e.target.value }))} className="w-full h-20 px-3 py-2 rounded-xl border bg-background text-sm resize-none" dir="rtl" />
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button size="sm" className="bg-[#d4a853] hover:bg-[#c49b4a] text-black rounded-xl h-9 px-5" onClick={() => saveMut.mutate({ whatsapp_number: settings.whatsapp_number, whatsapp_enabled: settings.channel_whatsapp_enabled, whatsapp_message_de: settings.whatsapp_message_de, whatsapp_message_ar: settings.whatsapp_message_ar })} disabled={saveMut.isPending}>
+                          {saveMut.isPending ? '...' : t3(locale, 'Speichern', 'حفظ')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Missing products warning */}
                   {productCount < totalProducts && isEnabled && (
                     <div className="flex items-start gap-2 px-4 py-2.5 rounded-xl bg-muted/30 text-xs text-muted-foreground">
@@ -347,74 +388,12 @@ export default function ChannelsPage() {
         })}
       </div>
 
-      {/* ═══════ WHATSAPP ═══════ */}
-      <div className={`bg-background border rounded-2xl overflow-hidden mb-6 transition-all duration-300 ${expandedChannel === 'whatsapp' ? 'ring-1 ring-[#d4a853]/30' : ''}`}>
-        <div
-          className="flex items-center gap-3 p-5 cursor-pointer hover:bg-muted/10 transition-colors"
-          onClick={() => setExpandedChannel(expandedChannel === 'whatsapp' ? null : 'whatsapp')}
-        >
-          <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center"><MessageCircle className="h-5 w-5 text-green-500" /></div>
-          <div className="flex-1">
-            <p className="font-semibold text-sm">WhatsApp Business</p>
-            <p className="text-xs text-muted-foreground">{settings.whatsapp_number || t3(locale, 'Nicht konfiguriert', 'غير معد')}</p>
-          </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); const newVal = settings.whatsapp_enabled === 'true' ? 'false' : 'true'; setSettings((p) => ({ ...p, whatsapp_enabled: newVal })); saveMut.mutate({ whatsapp_enabled: newVal }) }}
-            className={`w-11 h-6 rounded-full transition-colors flex-shrink-0 ${settings.whatsapp_enabled === 'true' ? 'bg-green-500' : 'bg-muted'}`}
-          >
-            <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${settings.whatsapp_enabled === 'true' ? 'ltr:translate-x-6 rtl:-translate-x-6' : 'ltr:translate-x-1 rtl:-translate-x-1'}`} />
-          </button>
-          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform flex-shrink-0 ${expandedChannel === 'whatsapp' ? 'rotate-180' : ''}`} />
+      {/* Success / Error Banner */}
+      {saveSuccess && (
+        <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 mb-4 text-xs text-green-600 dark:text-green-400 flex items-center gap-2" style={{ animation: 'fadeSlideDown 200ms ease-out' }}>
+          <Check className="h-4 w-4 flex-shrink-0" />{saveSuccess}
         </div>
-
-        {expandedChannel === 'whatsapp' && (
-          <div className="border-t px-5 pb-5 pt-4 space-y-4" style={{ animation: 'fadeSlideDown 200ms ease-out' }}>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t3(locale, 'Telefonnummer', 'رقم الهاتف')}</label>
-              <input
-                value={settings.whatsapp_number}
-                onChange={(e) => setSettings((p) => ({ ...p, whatsapp_number: e.target.value }))}
-                placeholder="+491234567890"
-                className="w-full h-10 px-3 rounded-xl border bg-background text-sm font-mono"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t3(locale, 'Begrüßung DE', 'رسالة الترحيب بالألمانية')}</label>
-                <textarea
-                  value={settings.whatsapp_message_de}
-                  onChange={(e) => setSettings((p) => ({ ...p, whatsapp_message_de: e.target.value }))}
-                  className="w-full h-20 px-3 py-2 rounded-xl border bg-background text-sm resize-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{t3(locale, 'Begrüßung AR', 'رسالة الترحيب بالعربية')}</label>
-                <textarea
-                  value={settings.whatsapp_message_ar}
-                  onChange={(e) => setSettings((p) => ({ ...p, whatsapp_message_ar: e.target.value }))}
-                  className="w-full h-20 px-3 py-2 rounded-xl border bg-background text-sm resize-none" dir="rtl"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                className="bg-[#d4a853] hover:bg-[#c49b4a] text-black rounded-xl h-9 px-5"
-                onClick={() => saveMut.mutate({
-                  whatsapp_number: settings.whatsapp_number,
-                  whatsapp_message_de: settings.whatsapp_message_de,
-                  whatsapp_message_ar: settings.whatsapp_message_ar,
-                })}
-                disabled={saveMut.isPending}
-              >
-                {saveMut.isPending ? '...' : t3(locale, 'Speichern', 'حفظ')}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Error Banner */}
+      )}
       {saveError && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-4 text-xs text-red-600 dark:text-red-400 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 flex-shrink-0" />{saveError}

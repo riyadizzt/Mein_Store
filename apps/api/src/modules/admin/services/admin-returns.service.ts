@@ -657,16 +657,29 @@ export class AdminReturnsService {
     // - Stripe/Klarna/PayPal refund
     // - Gutschrift (GS-XXXX credit note) via InvoiceService
     // - Updates payment status (refunded / partially_refunded)
-    await this.paymentsService.createRefund(
-      {
-        paymentId: payment.id,
-        amount: amountCents,
-        reason: `Return ${returnNumber}`,
-        idempotencyKey: ret.id,
-      },
-      adminId,
-      `return-refund-${ret.id}`,
-    )
+    try {
+      await this.paymentsService.createRefund(
+        {
+          paymentId: payment.id,
+          amount: amountCents,
+          reason: `Return ${returnNumber}`,
+          idempotencyKey: ret.id,
+        },
+        adminId,
+        `return-refund-${ret.id}`,
+      )
+    } catch (e: any) {
+      this.logger.error(`Return refund failed for ${returnNumber}: ${e.message}`)
+      try {
+        await this.notificationService.create({
+          type: 'payment_failed',
+          title: `⚠ Retoure-Erstattung fehlgeschlagen: ${returnNumber}`,
+          body: `Retoure genehmigt, aber Erstattung von €${(amountCents / 100).toFixed(2)} konnte nicht durchgeführt werden. Bitte manuell erstatten. Fehler: ${e.message?.slice(0, 100)}`,
+          entityType: 'return', entityId: id, channel: 'admin',
+        })
+      } catch {}
+      // Don't block the return status update — the return is approved, refund can be retried manually
+    }
 
     // Update return status
     const updated = await this.prisma.return.update({

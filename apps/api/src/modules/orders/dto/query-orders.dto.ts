@@ -29,9 +29,9 @@ export class QueryOrdersDto {
   @IsEnum(ORDER_STATUSES)
   status?: (typeof ORDER_STATUSES)[number]
 
-  @ApiProperty({ required: false, enum: ['website', 'mobile', 'pos', 'facebook', 'instagram', 'tiktok'] })
+  @ApiProperty({ required: false, enum: ['website', 'mobile', 'pos', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp'] })
   @IsOptional()
-  @IsEnum(['website', 'mobile', 'pos', 'facebook', 'instagram', 'tiktok'])
+  @IsEnum(['website', 'mobile', 'pos', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp'])
   channel?: string
 
   @ApiProperty({ required: false, example: '2026-01-01' })

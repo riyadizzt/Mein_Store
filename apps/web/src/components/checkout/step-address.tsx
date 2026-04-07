@@ -108,7 +108,7 @@ export function StepAddress() {
             <button
               key={addr.id}
               onClick={() => selectSavedAddress(addr)}
-              className="w-full text-left p-4 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 group"
+              className="w-full text-start p-4 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 group"
             >
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0 group-hover:bg-primary/10 transition-colors">
@@ -124,7 +124,7 @@ export function StepAddress() {
           ))}
           <button
             onClick={() => setShowForm(true)}
-            className="w-full text-left p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-all duration-200 flex items-center gap-3"
+            className="w-full text-start p-4 rounded-xl border-2 border-dashed border-border hover:border-primary/50 transition-all duration-200 flex items-center gap-3"
           >
             <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
               <Plus className="h-4 w-4 text-muted-foreground" />
@@ -143,7 +143,7 @@ export function StepAddress() {
             </button>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label={tAuth('firstName')} value={form.firstName} error={errors.firstName}
               onChange={(v) => updateField('firstName', v)} />
             <Field label={tAuth('lastName')} value={form.lastName} error={errors.lastName}
@@ -153,8 +153,8 @@ export function StepAddress() {
           <Field label={t('address.company')} value={form.company ?? ''} required={false}
             onChange={(v) => updateField('company', v)} />
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
               <Field label={t('address.street')} value={form.street} error={errors.street}
                 onChange={(v) => updateField('street', v)} />
             </div>
@@ -165,10 +165,10 @@ export function StepAddress() {
           <Field label={t('address.addressLine2')} value={form.addressLine2 ?? ''} required={false}
             onChange={(v) => updateField('addressLine2', v)} />
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label={t('address.postalCode')} value={form.postalCode} error={errors.postalCode}
               onChange={(v) => updateField('postalCode', v)} />
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <Field label={t('address.city')} value={form.city} error={errors.city}
                 onChange={(v) => updateField('city', v)} />
             </div>

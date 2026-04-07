@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
@@ -23,6 +23,7 @@ export class AdminOrdersService {
 
   async findAll(query: {
     status?: string
+    channel?: string
     dateFrom?: string
     dateTo?: string
     search?: string
@@ -33,6 +34,7 @@ export class AdminOrdersService {
     const where: any = { deletedAt: null }
 
     if (query.status) where.status = query.status
+    if (query.channel) where.channel = query.channel
     if (query.dateFrom) where.createdAt = { ...where.createdAt, gte: new Date(query.dateFrom) }
     if (query.dateTo) where.createdAt = { ...where.createdAt, lte: new Date(query.dateTo) }
     if (query.search) {
@@ -67,7 +69,7 @@ export class AdminOrdersService {
         items: {
           include: {
             variant: {
-              select: { sku: true, color: true, size: true, product: { select: { translations: true } } },
+              select: { sku: true, color: true, colorHex: true, size: true, product: { select: { slug: true, translations: true, images: { select: { url: true, colorName: true, isPrimary: true }, orderBy: { sortOrder: 'asc' }, take: 5 } } } },
             },
           },
         },
@@ -91,50 +93,120 @@ export class AdminOrdersService {
     return { ...order, adminNotes: notes }
   }
 
-  async changeFulfillmentWarehouse(orderId: string, newWarehouseId: string, adminId: string, ipAddress: string) {
+  async changeFulfillmentWarehouse(orderId: string, newWarehouseId: string, adminId: string, ipAddress: string, force = false) {
+    // 1. Validate order exists and is in a changeable status
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, deletedAt: null },
-      include: { items: true },
+      include: { items: { select: { id: true, variantId: true, quantity: true } } },
     })
     if (!order) throw new NotFoundException('Order not found')
-
-    const oldWarehouseId = order.fulfillmentWarehouseId
-
-    // If same warehouse, nothing to do
-    if (oldWarehouseId === newWarehouseId) return { changed: false }
-
-    // Move stock: reverse from old warehouse, deduct from new warehouse
-    if (oldWarehouseId) {
-      for (const item of order.items) {
-        // Add back to old warehouse
-        await this.prisma.inventory.updateMany({
-          where: { variantId: item.variantId, warehouseId: oldWarehouseId },
-          data: { quantityOnHand: { increment: item.quantity } },
-        })
-        // Deduct from new warehouse
-        await this.prisma.inventory.updateMany({
-          where: { variantId: item.variantId, warehouseId: newWarehouseId },
-          data: { quantityOnHand: { decrement: item.quantity } },
-        })
-      }
+    if (['cancelled', 'refunded', 'shipped', 'delivered'].includes(order.status)) {
+      throw new BadRequestException('Cannot change warehouse for orders that are cancelled, shipped, or delivered')
     }
 
-    // Update order
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: { fulfillmentWarehouseId: newWarehouseId },
+    const oldWarehouseId = order.fulfillmentWarehouseId
+    if (oldWarehouseId === newWarehouseId) return { changed: false }
+
+    // 2. Validate the new warehouse exists and is active
+    const newWarehouse = await this.prisma.warehouse.findFirst({ where: { id: newWarehouseId, isActive: true } })
+    if (!newWarehouse) throw new NotFoundException('Warehouse not found or inactive')
+
+    // 3. Check stock availability in the new warehouse for each item
+    const stockWarnings: string[] = []
+    for (const item of order.items) {
+      if (!item.variantId) continue
+      const inv = await this.prisma.inventory.findFirst({ where: { variantId: item.variantId, warehouseId: newWarehouseId } })
+      const available = inv ? inv.quantityOnHand - inv.quantityReserved : 0
+      if (available < item.quantity) {
+        stockWarnings.push(`Variante ${item.variantId}: verfügbar ${available}, benötigt ${item.quantity}`)
+      }
+    }
+    if (stockWarnings.length > 0 && !force) {
+      return { changed: false, needsConfirmation: true, warnings: stockWarnings, warehouseName: newWarehouse.name }
+    }
+
+    // 4. Move ALL reservations for this order to the new warehouse — regardless of which warehouse they are currently in
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of order.items) {
+        if (!item.variantId) continue
+
+        // Find ALL active reservations for this order+variant (any warehouse)
+        const reservations = await tx.stockReservation.findMany({
+          where: { variantId: item.variantId, orderId, status: 'RESERVED' },
+        })
+
+        for (const res of reservations) {
+          // Skip if already in the new warehouse
+          if (res.warehouseId === newWarehouseId) continue
+
+          const sourceWarehouseId = res.warehouseId
+
+          // Ensure inventory row exists in the new warehouse (upsert)
+          const existingInv = await tx.inventory.findFirst({
+            where: { variantId: item.variantId, warehouseId: newWarehouseId },
+          })
+          if (!existingInv) {
+            await tx.inventory.create({
+              data: { variantId: item.variantId, warehouseId: newWarehouseId, quantityOnHand: 0, quantityReserved: 0 },
+            })
+          }
+
+          // Move the reservation record to the new warehouse
+          await tx.stockReservation.update({
+            where: { id: res.id },
+            data: { warehouseId: newWarehouseId },
+          })
+
+          // Release reserved count from the SOURCE warehouse
+          const sourceInv = await tx.inventory.findFirst({ where: { variantId: item.variantId, warehouseId: sourceWarehouseId } })
+          if (sourceInv && sourceInv.quantityReserved >= res.quantity) {
+            await tx.inventory.updateMany({
+              where: { variantId: item.variantId, warehouseId: sourceWarehouseId },
+              data: { quantityReserved: { decrement: res.quantity } },
+            })
+          }
+
+          // Add reserved count to the NEW warehouse
+          await tx.inventory.updateMany({
+            where: { variantId: item.variantId, warehouseId: newWarehouseId },
+            data: { quantityReserved: { increment: res.quantity } },
+          })
+
+          // Document the movement
+          await tx.inventoryMovement.create({
+            data: {
+              variantId: item.variantId, warehouseId: sourceWarehouseId,
+              type: 'released', quantity: res.quantity,
+              quantityBefore: sourceInv?.quantityReserved ?? 0, quantityAfter: Math.max(0, (sourceInv?.quantityReserved ?? 0) - res.quantity),
+              notes: `Reservierung verschoben → ${newWarehouse.name}: ${order.orderNumber}`, createdBy: adminId,
+            },
+          })
+          await tx.inventoryMovement.create({
+            data: {
+              variantId: item.variantId, warehouseId: newWarehouseId,
+              type: 'reserved', quantity: res.quantity,
+              quantityBefore: existingInv?.quantityReserved ?? 0, quantityAfter: (existingInv?.quantityReserved ?? 0) + res.quantity,
+              notes: `Reservierung übernommen ← Lager-Wechsel: ${order.orderNumber}`, createdBy: adminId,
+            },
+          })
+        }
+      }
+
+      // Update order fulfillment warehouse
+      await tx.order.update({
+        where: { id: orderId },
+        data: { fulfillmentWarehouseId: newWarehouseId },
+      })
     })
 
-    // Get warehouse name for audit
-    const wh = await this.prisma.warehouse.findUnique({ where: { id: newWarehouseId }, select: { name: true } })
-
+    // 5. Audit log (outside transaction — non-critical)
     await this.audit.log({
       adminId, action: 'ORDER_FULFILLMENT_CHANGED', entityType: 'order', entityId: orderId,
-      changes: { before: { warehouseId: oldWarehouseId }, after: { warehouseId: newWarehouseId, name: wh?.name } },
+      changes: { before: { warehouseId: oldWarehouseId }, after: { warehouseId: newWarehouseId, name: newWarehouse.name } },
       ipAddress,
     })
 
-    return { changed: true, warehouseName: wh?.name }
+    return { changed: true, warehouseName: newWarehouse.name }
   }
 
   async updateStatus(
@@ -202,6 +274,9 @@ export class AdminOrdersService {
       },
     })
     if (!order) throw new NotFoundException('Order not found')
+    if (order.status === 'cancelled' || order.status === 'refunded') {
+      throw new BadRequestException('Order is already cancelled or refunded')
+    }
 
     // 1. Cancel order status + audit log
     await this.updateStatus(orderId, 'cancelled', reason, adminId, ipAddress)
@@ -209,6 +284,7 @@ export class AdminOrdersService {
     // 2. Refund if payment was captured → auto-creates Gutschrift (GS-XXXX)
     let refunded = false
     if (order.payment && order.payment.status === 'captured') {
+      await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'pending' } })
       try {
         const amountCents = Math.round(Number(order.payment.amount) * 100)
         await this.paymentsService.createRefund(
@@ -217,8 +293,24 @@ export class AdminOrdersService {
           `admin-cancel-${orderId.slice(-8)}`,
         )
         refunded = true
+        await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'succeeded', refundError: null } })
         this.logger.log(`Refund processed for cancelled order ${order.orderNumber}`)
-      } catch (e: any) { this.logger.error(`Refund failed for ${order.orderNumber}: ${e.message}`) }
+      } catch (e: any) {
+        const errorMsg = e.message?.slice(0, 300) ?? 'Unknown error'
+        await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'failed', refundError: errorMsg } })
+        this.logger.error(`Refund failed for ${order.orderNumber}: ${errorMsg}`)
+        try {
+          await this.notificationService.create({
+            type: 'payment_failed',
+            title: `⚠ Erstattung fehlgeschlagen: ${order.orderNumber}`,
+            body: `Erstattung von €${Number(order.payment!.amount).toFixed(2)} fehlgeschlagen. Fehler: ${errorMsg.slice(0, 100)}`,
+            entityType: 'order', entityId: orderId, channel: 'admin',
+          })
+        } catch {}
+      }
+    } else {
+      // No payment or not captured — no refund needed
+      await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'not_needed' } })
     }
 
     // 3. Restock inventory — release reservations + return items to stock
@@ -272,17 +364,48 @@ export class AdminOrdersService {
       }
     } catch (e: any) { this.logger.error(`Customer notification failed: ${e.message}`) }
 
-    // 7. Admin notification
-    try {
-      await this.notificationService.createForAllAdmins({
-        type: 'order_cancelled', title: `Bestellung ${order.orderNumber} storniert`,
-        body: `${refunded ? 'Erstattung ausgelöst' : 'Ohne Erstattung'} — Grund: ${reason}`,
-        entityType: 'order', entityId: orderId,
-        data: { orderNumber: order.orderNumber, reason, refunded, adminId },
-      })
-    } catch (e: any) { this.logger.error(`Admin notification failed: ${e.message}`) }
+    // 7. Admin notification — handled by event listener (order.status_changed → notification.listener.ts)
+    //    No duplicate notification needed here.
 
     return { cancelled: true, refunded }
+  }
+
+  async retryRefund(orderId: string, adminId: string, ipAddress: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, deletedAt: null, status: 'cancelled' },
+      include: { payment: true },
+    })
+    if (!order) throw new NotFoundException('Cancelled order not found')
+    if (!order.payment || order.payment.status !== 'captured') throw new BadRequestException('No captured payment to refund')
+    if (order.refundStatus === 'succeeded') throw new BadRequestException('Refund already processed')
+    if (order.refundStatus === 'pending') throw new BadRequestException('Refund is already being processed')
+
+    await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'pending', refundError: null } })
+
+    try {
+      const amountCents = Math.round(Number(order.payment.amount) * 100)
+      await this.paymentsService.createRefund(
+        { paymentId: order.payment.id, amount: amountCents, reason: 'Retry: ' + (order.cancelReason ?? 'Admin cancellation') },
+        adminId,
+        `retry-refund-${orderId}`,  // Fixed idempotency key — Stripe deduplicates same refund
+      )
+      await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'succeeded', refundError: null } })
+      await this.audit.log({ adminId, action: 'REFUND_RETRY_SUCCEEDED', entityType: 'order', entityId: orderId, changes: { after: { amount: Number(order.payment.amount) } }, ipAddress })
+      return { success: true, amount: Number(order.payment.amount) }
+    } catch (e: any) {
+      const errorMsg = e.message?.slice(0, 300) ?? 'Unknown error'
+      await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'failed', refundError: errorMsg } })
+      await this.audit.log({ adminId, action: 'REFUND_RETRY_FAILED', entityType: 'order', entityId: orderId, changes: { after: { error: errorMsg } }, ipAddress })
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  async markRefundManual(orderId: string, adminId: string, ipAddress: string) {
+    const order = await this.prisma.order.findFirst({ where: { id: orderId, deletedAt: null, status: 'cancelled' } })
+    if (!order) throw new NotFoundException('Cancelled order not found')
+    await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'succeeded', refundError: null } })
+    await this.audit.log({ adminId, action: 'REFUND_MARKED_MANUAL', entityType: 'order', entityId: orderId, changes: { after: { manualRefund: true } }, ipAddress })
+    return { success: true }
   }
 
   // ── Partial Cancel — storniere einzelne Artikel ────────────
@@ -343,7 +466,17 @@ export class AdminOrdersService {
           `partial-cancel-${orderId.slice(-8)}-${Date.now()}`,
         )
         refunded = true
-      } catch (e: any) { this.logger.error(`Partial refund failed: ${e.message}`) }
+      } catch (e: any) {
+        this.logger.error(`Partial refund failed: ${e.message}`)
+        try {
+          await this.notificationService.create({
+            type: 'payment_failed',
+            title: `⚠ Teilerstattung fehlgeschlagen: ${order.orderNumber}`,
+            body: `Teilstornierung durchgeführt, aber Erstattung von €${(refundAmountCents / 100).toFixed(2)} konnte nicht durchgeführt werden. Bitte manuell erstatten. Fehler: ${e.message?.slice(0, 100)}`,
+            entityType: 'order', entityId: orderId, channel: 'admin',
+          })
+        } catch {}
+      }
     }
 
     // 4. Restock cancelled items

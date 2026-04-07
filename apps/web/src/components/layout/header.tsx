@@ -70,6 +70,8 @@ export function Header({ locale }: { locale: string }) {
                   className="relative"
                   onMouseEnter={() => setHoveredDept(dept.id)}
                   onMouseLeave={() => setHoveredDept(null)}
+                  onFocus={() => setHoveredDept(dept.id)}
+                  onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHoveredDept(null) }}
                 >
                   <Link
                     href={`/${locale}/products?department=${dept.slug}`}
@@ -112,7 +114,7 @@ export function Header({ locale }: { locale: string }) {
             {/* Right Actions */}
             <div className="flex items-center gap-2">
               <button
-                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+                className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setSearchOpen(!searchOpen)}
                 aria-label={t('search')}
               >
@@ -121,7 +123,7 @@ export function Header({ locale }: { locale: string }) {
               <LanguageSwitcher locale={locale} />
               {mounted && isAuthenticated ? (
                 <div className="relative group">
-                  <button className="p-2 text-foreground" aria-label={t('account')}>
+                  <button className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-foreground" aria-label={t('account')}>
                     <User className="h-5 w-5" />
                   </button>
                   <div className="absolute right-0 rtl:right-auto rtl:left-0 mt-1 w-44 rounded-xl border bg-background shadow-lg py-1 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
@@ -129,18 +131,18 @@ export function Header({ locale }: { locale: string }) {
                     <Link href={`/${locale}/account`} className="block px-4 py-2 text-sm hover:bg-muted">{t('account')}</Link>
                     <button
                       onClick={() => { useAuthStore.getState().logout(); window.location.href = `/${locale}` }}
-                      className="w-full text-left rtl:text-right px-4 py-2 text-sm text-destructive hover:bg-destructive/10"
+                      className="w-full text-start px-4 py-2 text-sm text-destructive hover:bg-destructive/10"
                     >
                       {t('logout')}
                     </button>
                   </div>
                 </div>
               ) : (
-                <Link href={`/${locale}/auth/login`} className="p-2 text-muted-foreground hover:text-foreground transition-colors" aria-label={t('login')}>
+                <Link href={`/${locale}/auth/login`} className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" aria-label={t('login')}>
                   <User className="h-5 w-5" />
                 </Link>
               )}
-              <button className="relative p-2 text-muted-foreground hover:text-foreground transition-colors" onClick={openDrawer} aria-label={t('cart')}>
+              <button className="relative p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors" onClick={openDrawer} aria-label={t('cart')}>
                 <ShoppingBag className="h-5 w-5" />
                 {mounted && itemCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 h-5 w-5 rounded-full bg-accent text-accent-foreground text-[11px] font-medium flex items-center justify-center animate-bounce-in">

@@ -383,7 +383,7 @@ function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, has
       ) : depth === 0 ? <span className="w-7" /> : null}
 
       {/* Name */}
-      <button onClick={onSelect} className={`flex-1 text-left px-2 py-2 text-sm truncate ${isSelected ? 'font-bold text-primary' : depth > 0 ? 'text-muted-foreground' : 'font-medium'}`}>
+      <button onClick={onSelect} className={`flex-1 text-start px-2 py-2 text-sm truncate ${isSelected ? 'font-bold text-primary' : depth > 0 ? 'text-muted-foreground' : 'font-medium'}`}>
         {getName(cat)}
       </button>
 

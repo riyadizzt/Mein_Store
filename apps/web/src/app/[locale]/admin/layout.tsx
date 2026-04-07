@@ -12,11 +12,11 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone,
-  HandCoins, PackageOpen,
+  HandCoins, PackageOpen, Bot, Camera, Construction,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
-import { Camera } from 'lucide-react'
+import { MaintenanceBanner } from '@/components/admin/maintenance-banner'
 
 const CameraBarcodeScannerOverlay = lazy(() => import('@/components/admin/camera-barcode-scanner').then((m) => ({ default: m.CameraBarcodeScannerOverlay })))
 
@@ -83,6 +83,8 @@ const NAV_GROUPS = [
       { key: 'staff', labelKey: 'staff', href: '/admin/staff', icon: Users2, permission: 'staff.view' },
       { key: 'emails', labelKey: 'emails', href: '/admin/emails', icon: Mail, permission: 'emails.view' },
       { key: 'audit-log', labelKey: 'auditLog', href: '/admin/audit-log', icon: ScrollText, permission: 'audit.view' },
+      { key: 'ai', labelKey: 'ai', href: '/admin/ai', icon: Bot, permission: 'settings.view' },
+      { key: 'maintenance', labelKey: 'maintenance', href: '/admin/maintenance', icon: Construction, permission: 'settings.edit' },
     ],
   },
 ]
@@ -313,6 +315,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               {user?.firstName} <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted uppercase">{user?.role}</span>
             </span>
           </div>
+          <MaintenanceBanner />
           <div className="p-4 sm:p-6 lg:p-8">
             {children}
           </div>

@@ -162,7 +162,7 @@ export function StepPreview() {
         <div className="flex gap-3">
           <button
             onClick={() => setSaveAs('active')}
-            className={`flex-1 p-4 rounded-lg border-2 text-left transition-colors ${
+            className={`flex-1 p-4 rounded-lg border-2 text-start transition-colors ${
               saveAs === 'active' ? 'border-primary bg-primary/5' : 'border-border'
             }`}
           >
@@ -171,7 +171,7 @@ export function StepPreview() {
           </button>
           <button
             onClick={() => setSaveAs('draft')}
-            className={`flex-1 p-4 rounded-lg border-2 text-left transition-colors ${
+            className={`flex-1 p-4 rounded-lg border-2 text-start transition-colors ${
               saveAs === 'draft' ? 'border-primary bg-primary/5' : 'border-border'
             }`}
           >

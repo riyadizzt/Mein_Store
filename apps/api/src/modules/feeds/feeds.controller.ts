@@ -15,7 +15,7 @@ export class FeedsController {
 
   @Get('settings/public')
   async getPublicSettings() {
-    const keys = ['meta_pixel_id', 'tiktok_pixel_id', 'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar', 'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled']
+    const keys = ['meta_pixel_id', 'tiktok_pixel_id', 'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar', 'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled', 'ai_global_enabled', 'ai_customer_chat_enabled']
     const settings = await this.prisma.shopSetting.findMany({ where: { key: { in: keys } } })
     const result: Record<string, string> = {}
     for (const s of settings) result[s.key] = s.value
@@ -75,6 +75,21 @@ export class FeedsController {
     return res.send(xml)
   }
 
+  @Get('feeds/whatsapp')
+  @Throttle({ default: { limit: 60, ttl: 3600000 } })
+  async whatsappFeed(@Query('token') token: string, @Query('lang') lang: string, @Query('force') force: string, @Req() req: Request, @Res() res: Response) {
+    if (!token || !(await this.feeds.validateToken(token))) throw new ForbiddenException('Invalid feed token')
+    if (!(await this.isChannelEnabled('whatsapp'))) {
+      res.set('Content-Type', 'application/json; charset=utf-8')
+      return res.send(JSON.stringify({ data: [], total: 0, paused: true }))
+    }
+    this.feeds.logAccess(req.ip ?? '::1', 'whatsapp')
+    const { json } = await this.feeds.getWhatsAppFeed(lang || 'de', force === 'true')
+    res.set('Content-Type', 'application/json; charset=utf-8')
+    res.set('Cache-Control', 'public, max-age=1800')
+    return res.send(json)
+  }
+
   // ── Admin Channel Settings ────────────────────────────────────
 
   @Get('admin/channels/settings')
@@ -84,7 +99,7 @@ export class FeedsController {
     const keys = [
       'meta_pixel_id', 'tiktok_pixel_id',
       'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar',
-      'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled',
+      'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled',
     ]
     const rows = await this.prisma.shopSetting.findMany({ where: { key: { in: keys } } })
     const result: Record<string, string> = {}

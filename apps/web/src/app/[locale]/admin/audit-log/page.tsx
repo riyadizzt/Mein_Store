@@ -75,6 +75,14 @@ const ACTION_COLORS: Record<string, string> = {
   SUPPLIER_PAYMENT_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   SUPPLIER_DELIVERY_CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   INVENTORY_BATCH_TRANSFER: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-300',
+  ADMIN_PASSWORD_RESET: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300',
+  MAINTENANCE_AUTO_DISABLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
+  EMERGENCY_RECOVERY: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
+  ORDER_AUTO_CANCELLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
+  PRODUCTS_CHANNEL_ENABLED: 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300',
+  PRODUCTS_CHANNEL_DISABLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
+  DELIVERY_CREATED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
+  PAYMENT_CREATED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
 }
 
 const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
@@ -83,6 +91,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   ORDER_CREATED: { de: 'Bestellung erstellt', en: 'Order created', ar: 'طلب جديد' },
   ORDER_STATUS_CHANGED: { de: 'Bestellstatus geändert', en: 'Order status changed', ar: 'تغيير حالة الطلب' },
   ORDER_CANCELLED: { de: 'Bestellung storniert', en: 'Order cancelled', ar: 'إلغاء الطلب' },
+  ORDER_AUTO_CANCELLED: { de: 'Automatisch storniert (Zahlungstimeout)', en: 'Auto-cancelled (payment timeout)', ar: 'إلغاء تلقائي (انتهاء مهلة الدفع)' },
   PRODUCT_CREATED: { de: 'Produkt erstellt', en: 'Product created', ar: 'منتج جديد' },
   PRODUCT_UPDATED: { de: 'Produkt bearbeitet', en: 'Product updated', ar: 'تعديل المنتج' },
   PRODUCT_DELETED: { de: 'Produkt gelöscht', en: 'Product deleted', ar: 'حذف المنتج' },
@@ -144,6 +153,13 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   SUPPLIER_PAYMENT_DELETED: { de: 'Zahlung gelöscht', en: 'Payment deleted', ar: 'حذف الدفعة' },
   SUPPLIER_DELIVERY_CANCELLED: { de: 'Lieferung storniert', en: 'Delivery cancelled', ar: 'إلغاء التوريد' },
   INVENTORY_BATCH_TRANSFER: { de: 'Sammel-Transfer', en: 'Batch transfer', ar: 'نقل جماعي بين المستودعات' },
+  PRODUCTS_CHANNEL_ENABLED: { de: 'Kanal aktiviert', en: 'Channel enabled', ar: 'تفعيل القناة' },
+  PRODUCTS_CHANNEL_DISABLED: { de: 'Kanal deaktiviert', en: 'Channel disabled', ar: 'إلغاء تفعيل القناة' },
+  DELIVERY_CREATED: { de: 'Lieferung erstellt', en: 'Delivery created', ar: 'إنشاء توصيل' },
+  PAYMENT_CREATED: { de: 'Zahlung erstellt', en: 'Payment created', ar: 'إنشاء دفعة' },
+  ADMIN_PASSWORD_RESET: { de: 'Admin-Passwort zurückgesetzt', en: 'Admin password reset', ar: 'إعادة تعيين كلمة مرور المشرف' },
+  MAINTENANCE_AUTO_DISABLED: { de: 'Wartungsmodus automatisch beendet', en: 'Maintenance auto-disabled', ar: 'إيقاف وضع الصيانة تلقائياً' },
+  EMERGENCY_RECOVERY: { de: 'Notfall-Wiederherstellung', en: 'Emergency recovery', ar: 'استعادة طوارئ' },
 }
 
 function getActionLabel(action: string, locale: string): string {

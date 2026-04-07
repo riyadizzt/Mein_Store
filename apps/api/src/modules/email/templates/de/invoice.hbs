@@ -1,19 +1,38 @@
+<!-- Invoice Icon -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-  <tr><td align="center" style="padding:0 0 24px;"><div style="width:64px;height:64px;border-radius:50%;background-color:#fef3c7;display:inline-block;text-align:center;line-height:64px;"><span style="font-size:28px;color:#d4a853;">&#128196;</span></div></td></tr>
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#fef3c7;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#d4a853;">&#128196;</span>
+    </div>
+  </td></tr>
 </table>
-<h1 style="margin:0 0 8px;font-size:24px;color:#1a1a2e;text-align:center;font-weight:700;">Ihre Rechnung</h1>
-<p style="text-align:center;color:#6b7280;margin:0 0 24px;">Hallo {{firstName}}, anbei finden Sie Ihre Rechnung zu Bestellung <strong>{{orderNumber}}</strong>.</p>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#f8f7f4;border-radius:12px;">
-  <tr><td style="padding:16px 20px;">
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:Georgia,'Times New Roman',serif;">Ihre Rechnung</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;">Hallo <strong style="color:#1a1a2e;">{{firstName}}</strong>, anbei Ihre Rechnung zu Bestellung <strong style="color:#d4a853;">{{orderNumber}}</strong>.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:20px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      <tr><td style="font-size:12px;color:#6b7280;">Rechnungsnummer</td><td style="text-align:right;font-weight:700;font-size:14px;color:#1a1a2e;font-family:monospace;">{{invoiceNumber}}</td></tr>
-      <tr><td style="font-size:12px;color:#6b7280;padding-top:6px;">Rechnungsdatum</td><td style="text-align:right;font-size:13px;color:#1a1a2e;padding-top:6px;">{{invoiceDate}}</td></tr>
-      <tr><td style="font-size:12px;color:#6b7280;padding-top:6px;">Gesamtbetrag</td><td style="text-align:right;font-weight:700;font-size:16px;color:#1a1a2e;padding-top:6px;">&euro;{{grossAmount}}</td></tr>
+      <tr>
+        <td style="font-size:12px;color:#6b7280;padding:6px 0;">Rechnungsnummer</td>
+        <td style="text-align:right;font-weight:700;font-size:14px;color:#1a1a2e;font-family:'Courier New',monospace;padding:6px 0;">{{invoiceNumber}}</td>
+      </tr>
+      <tr>
+        <td style="font-size:12px;color:#6b7280;padding:6px 0;border-top:1px solid #f0eeea;">Rechnungsdatum</td>
+        <td style="text-align:right;font-size:14px;color:#1a1a2e;padding:6px 0;border-top:1px solid #f0eeea;">{{invoiceDate}}</td>
+      </tr>
+      <tr>
+        <td style="font-size:12px;color:#6b7280;padding:6px 0;border-top:1px solid #f0eeea;">Gesamtbetrag</td>
+        <td style="text-align:right;font-weight:700;font-size:18px;color:#1a1a2e;padding:6px 0;border-top:1px solid #f0eeea;">&euro;{{grossAmount}}</td>
+      </tr>
     </table>
   </td></tr>
 </table>
 
-<p style="text-align:center;color:#6b7280;font-size:13px;margin:0 0 24px;">Die Rechnung ist als PDF an diese E-Mail angehängt. Sie können sie auch jederzeit in Ihrem Kundenkonto unter &bdquo;Meine Bestellungen&ldquo; herunterladen.</p>
+<p style="text-align:center;color:#6b7280;font-size:14px;line-height:1.6;margin:0 0 28px;">Die Rechnung ist als <strong style="color:#1a1a2e;">PDF</strong> an diese E-Mail angeh&auml;ngt. Sie k&ouml;nnen sie auch jederzeit in Ihrem Kundenkonto herunterladen.</p>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 16px;"><a href="{{orderUrl}}" style="display:inline-block;padding:12px 32px;background-color:#1a1a2e;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;">Bestellung ansehen</a></td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
+  <tr><td align="center">
+    <a href="{{orderUrl}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">Bestellung ansehen</a>
+  </td></tr>
+</table>

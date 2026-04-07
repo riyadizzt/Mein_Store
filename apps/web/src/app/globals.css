@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Custom scrollbar — thin, brand-colored */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c8a97e40; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #c8a97e80; }
+html { scrollbar-width: thin; scrollbar-color: #c8a97e40 transparent; }
+
 /* Fix cursor: only show text cursor on actual input elements */
 * { cursor: default; }
 a, button, [role="button"], summary, select, label[for] { cursor: pointer; }
@@ -141,6 +152,20 @@ input:focus, textarea:focus, select:focus, button:focus-visible {
 .delay-200 { animation-delay: 200ms; }
 .delay-300 { animation-delay: 300ms; }
 .delay-400 { animation-delay: 400ms; }
+
+/* Reduced motion: respect user preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Shared modal/component animations (consolidated from inline <style> tags) */
+@keyframes fadeSlideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeSlide { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
 /* Premium button interaction */
 .btn-press { @apply transition-all duration-150 active:scale-[0.97] active:shadow-inner; }

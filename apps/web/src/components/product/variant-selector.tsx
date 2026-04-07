@@ -96,7 +96,7 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
                   }}
                   disabled={!available}
                   title={`${translateColor(color, locale)}${!available ? ` (${t('outOfStock')})` : ''}`}
-                  className={`relative h-9 w-9 rounded-full border-2 transition-all ${
+                  className={`relative h-11 w-11 rounded-full border-2 transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     isSelected
                       ? 'border-primary ring-2 ring-primary/20'
                       : 'border-border hover:border-foreground/50'
@@ -138,7 +138,7 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
                     if (v) onSelect(v.id)
                   }}
                   disabled={!available}
-                  className={`h-10 min-w-[2.5rem] px-3 rounded-lg border text-sm font-medium transition-all ${
+                  className={`h-11 min-w-[2.75rem] px-3 rounded-lg border text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     isSelected
                       ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-border hover:border-foreground/50'

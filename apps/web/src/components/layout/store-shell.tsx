@@ -3,6 +3,8 @@
 import { usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Header } from './header'
+import { AnnouncementBar } from '@/components/overdrive/announcement-bar'
+import { ScrollProgress } from '@/components/overdrive/scroll-progress'
 
 // Lazy load below-fold / non-critical shell components
 const Footer = dynamic(() => import('./footer').then((m) => ({ default: m.Footer })))
@@ -26,6 +28,8 @@ export function StoreShell({ locale, children }: { locale: string; children: Rea
 
   return (
     <>
+      <ScrollProgress />
+      <AnnouncementBar />
       <Header locale={locale} />
       <main className="min-h-screen pb-16 lg:pb-0">{children}</main>
       <Footer locale={locale} />

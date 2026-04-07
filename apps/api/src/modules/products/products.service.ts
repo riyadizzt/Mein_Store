@@ -178,6 +178,23 @@ export class ProductsService {
     }
   }
 
+  async checkStock(variantIds: string[]): Promise<Record<string, number>> {
+    const inventories = await this.prisma.inventory.findMany({
+      where: {
+        variantId: { in: variantIds },
+        variant: { isActive: true, product: { isActive: true, deletedAt: null } },
+        warehouse: { isActive: true },
+      },
+      select: { variantId: true, quantityOnHand: true, quantityReserved: true },
+    })
+    const result: Record<string, number> = {}
+    for (const id of variantIds) result[id] = 0
+    for (const inv of inventories) {
+      result[inv.variantId] = (result[inv.variantId] ?? 0) + Math.max(0, inv.quantityOnHand - inv.quantityReserved)
+    }
+    return result
+  }
+
   async findOne(slug: string, lang: Language = 'de') {
     const product = await this.prisma.product.findFirst({
       where: { slug, isActive: true, deletedAt: null },

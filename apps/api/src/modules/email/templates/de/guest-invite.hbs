@@ -1,19 +1,31 @@
+<!-- Invite Icon -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td align="center" style="padding:0 0 16px;"><div style="width:60px;height:60px;border-radius:50%;background-color:#d4a85315;display:inline-block;text-align:center;line-height:60px;"><span style="font-size:26px;color:#d4a853;">&#9997;</span></div></td></tr>
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#f5eed9;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#d4a853;">&#9997;</span>
+    </div>
+  </td></tr>
 </table>
 
-<h1 style="margin:0 0 6px;font-size:22px;color:#1a1a2e;text-align:center;font-weight:700;">Erstelle dein Konto</h1>
-<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:14px;">Hallo {{firstName}}, danke fur deine Bestellung <strong style="color:#1a1a2e;">{{orderNumber}}</strong>!</p>
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:Georgia,'Times New Roman',serif;">Erstelle dein Konto</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;">Hallo <strong style="color:#1a1a2e;">{{firstName}}</strong>, danke f&uuml;r deine Bestellung <strong style="color:#d4a853;">{{orderNumber}}</strong>!</p>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf8f5;border-radius:12px;border:1px solid #f0ede8;"><tr><td style="padding:20px;text-align:center;">
-<div style="font-weight:600;font-size:14px;color:#1a1a2e;margin-bottom:12px;">Erstelle ein Konto und profitiere von:</div>
-<div style="font-size:13px;color:#555;margin:4px 0;">&#10003; Schnellerer Checkout</div>
-<div style="font-size:13px;color:#555;margin:4px 0;">&#10003; Bestellhistorie und Tracking</div>
-<div style="font-size:13px;color:#555;margin:4px 0;">&#10003; Wunschliste</div>
-<div style="font-size:13px;color:#555;margin:4px 0;">&#10003; Exklusive Angebote</div>
-<div style="margin-top:16px;">
-<a href="{{appUrl}}/de/auth/create-account?token={{inviteToken}}&email={{email}}" style="display:inline-block;background-color:#d4a853;color:#ffffff;font-weight:600;font-size:13px;padding:12px 36px;border-radius:50px;text-decoration:none;text-transform:uppercase;letter-spacing:1px;">Konto Erstellen</a>
-</div>
-</td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:20px;">
+    <p style="margin:0 0 14px;font-weight:700;font-size:14px;color:#1a1a2e;text-align:center;">Erstelle ein Konto und profitiere von:</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;"><span style="color:#d4a853;margin-right:8px;">&#10003;</span> Schnellerer Checkout</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;"><span style="color:#d4a853;margin-right:8px;">&#10003;</span> Bestellhistorie und Tracking</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;"><span style="color:#d4a853;margin-right:8px;">&#10003;</span> Wunschliste</td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#2d2d2d;"><span style="color:#d4a853;margin-right:8px;">&#10003;</span> Exklusive Angebote</td></tr>
+    </table>
+  </td></tr>
+</table>
 
-<p style="color:#9ca3af;font-size:11px;text-align:center;">Link 7 Tage gultig. Du musst nur ein Passwort wahlen.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+  <tr><td align="center">
+    <a href="{{appUrl}}/de/auth/create-account?token={{inviteToken}}&email={{email}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">Konto erstellen</a>
+  </td></tr>
+</table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">Link 7 Tage g&uuml;ltig. Du musst nur ein Passwort w&auml;hlen.</p>

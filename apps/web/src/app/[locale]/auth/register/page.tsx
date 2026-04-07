@@ -116,7 +116,7 @@ export default function RegisterPage() {
 
           <label className="flex items-start gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={gdprConsent} onChange={(e) => setGdprConsent(e.target.checked)} className="rounded mt-0.5" />
-            <span>{t('gdprConsent')} <a href={`/${locale}/privacy`} target="_blank" className="text-primary underline">Datenschutzerklärung</a></span>
+            <span>{t('gdprConsent')} <a href={`/${locale}/legal/datenschutz`} target="_blank" rel="noopener noreferrer" className="text-primary underline">{locale === 'ar' ? 'سياسة الخصوصية' : locale === 'en' ? 'Privacy Policy' : 'Datenschutzerklärung'}</a></span>
           </label>
           {errors.gdpr && <p className="text-xs text-destructive -mt-2">{errors.gdpr}</p>}
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { Palette, Image as ImageIcon, Type, Check, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ const LANGS = ['de', 'en', 'ar'] as const
 
 export default function AppearancePage() {
   const t = useTranslations('admin')
+  const locale = useLocale()
+  const t3 = (d: string, a: string) => locale === 'ar' ? a : d
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
@@ -68,27 +70,27 @@ export default function AppearancePage() {
 
   return (
     <div>
-      <AdminBreadcrumb items={[{ label: t('settings.title'), href: `/${activeLang}/admin/settings` }, { label: 'Erscheinung' }]} />
+      <AdminBreadcrumb items={[{ label: t('settings.title'), href: `/${locale}/admin/settings` }, { label: t3('Erscheinung', 'المظهر') }]} />
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2"><Palette className="h-6 w-6" />Shop-Erscheinung</h1>
+        <h1 className="text-2xl font-bold flex items-center gap-2"><Palette className="h-6 w-6" />{t3('Shop-Erscheinung', 'مظهر المتجر')}</h1>
         <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="gap-2">
           {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
-          {saved ? 'Gespeichert ✓' : 'Speichern'}
+          {saved ? t3('Gespeichert ✓', 'تم الحفظ ✓') : t3('Speichern', 'حفظ')}
         </Button>
       </div>
 
       <div className="space-y-6">
         {/* Brand */}
         <div className="bg-background border rounded-xl p-6">
-          <h2 className="text-lg font-semibold flex items-center gap-2 mb-4"><Type className="h-5 w-5" />Marke</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2 mb-4"><Type className="h-5 w-5" />{t3('Marke', 'العلامة التجارية')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Markenname (Header)</label>
+              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('Markenname (Header)', 'اسم العلامة التجارية')}</label>
               <Input value={form.brandName ?? ''} onChange={(e) => u('brandName', e.target.value)} />
             </div>
             <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Logo URL</label>
+              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('Logo URL', 'رابط الشعار')}</label>
               <Input value={form.logoUrl ?? ''} onChange={(e) => u('logoUrl', e.target.value)} placeholder="https://..." />
             </div>
           </div>
@@ -96,10 +98,10 @@ export default function AppearancePage() {
 
         {/* Hero Banner */}
         <div className="bg-background border rounded-xl p-6">
-          <h2 className="text-lg font-semibold flex items-center gap-2 mb-4"><ImageIcon className="h-5 w-5" />Hero-Banner</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2 mb-4"><ImageIcon className="h-5 w-5" />{t3('Hero-Banner', 'البانر الرئيسي')}</h2>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Bild-URL</label>
+              <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('Bild-URL', 'رابط الصورة')}</label>
               <Input value={form.heroBannerImage ?? ''} onChange={(e) => u('heroBannerImage', e.target.value)} placeholder="https://images.unsplash.com/..." />
               {form.heroBannerImage && (
                 <div className="mt-2 h-32 rounded-lg overflow-hidden bg-muted">
@@ -120,22 +122,22 @@ export default function AppearancePage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Überschrift ({activeLang.toUpperCase()})</label>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('Überschrift', 'العنوان')} ({activeLang.toUpperCase()})</label>
                 <Input value={form[`heroBannerTitle_${activeLang}`] ?? ''} onChange={(e) => u(`heroBannerTitle_${activeLang}`, e.target.value)}
                   dir={activeLang === 'ar' ? 'rtl' : 'ltr'} />
               </div>
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Untertitel ({activeLang.toUpperCase()})</label>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('Untertitel', 'العنوان الفرعي')} ({activeLang.toUpperCase()})</label>
                 <Input value={form[`heroBannerSubtitle_${activeLang}`] ?? ''} onChange={(e) => u(`heroBannerSubtitle_${activeLang}`, e.target.value)}
                   dir={activeLang === 'ar' ? 'rtl' : 'ltr'} />
               </div>
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">CTA-Button ({activeLang.toUpperCase()})</label>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('CTA-Button', 'زر الإجراء')} ({activeLang.toUpperCase()})</label>
                 <Input value={form[`heroBannerCta_${activeLang}`] ?? ''} onChange={(e) => u(`heroBannerCta_${activeLang}`, e.target.value)}
                   dir={activeLang === 'ar' ? 'rtl' : 'ltr'} />
               </div>
               <div>
-                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">CTA-Link</label>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('CTA-Link', 'رابط الزر')}</label>
                 <Input value={form.heroBannerCtaLink ?? ''} onChange={(e) => u('heroBannerCtaLink', e.target.value)} placeholder="/products" />
               </div>
             </div>
@@ -144,7 +146,7 @@ export default function AppearancePage() {
 
         {/* Social Media */}
         <div className="bg-background border rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Social Media</h2>
+          <h2 className="text-lg font-semibold mb-4">{t3('Social Media', 'وسائل التواصل الاجتماعي')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Instagram</label>

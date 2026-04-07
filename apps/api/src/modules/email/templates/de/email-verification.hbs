@@ -1,11 +1,21 @@
-<h1 style="margin:0 0 16px;font-size:22px;color:#1a1a2e;">E-Mail-Adresse bestätigen</h1>
-<p>Hallo {{firstName}},</p>
-<p>bitte bestätigen Sie Ihre E-Mail-Adresse, indem Sie auf den folgenden Button klicken:</p>
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
-  <tr>
-    <td style="background-color:#1a1a2e;border-radius:6px;padding:12px 28px;">
-      <a href="{{verificationUrl}}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">E-Mail bestätigen</a>
-    </td>
-  </tr>
+<!-- Mail Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#eff6ff;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#2563eb;">&#9993;</span>
+    </div>
+  </td></tr>
 </table>
-<p style="color:#868e96;font-size:13px;">Dieser Link ist {{expiresIn}} gültig. Wenn Sie sich nicht bei Malak registriert haben, können Sie diese E-Mail ignorieren.</p>
+
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:Georgia,'Times New Roman',serif;">E-Mail best&auml;tigen</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;">Hallo <strong style="color:#1a1a2e;">{{firstName}}</strong>, bitte best&auml;tige deine E-Mail-Adresse.</p>
+
+<p style="font-size:15px;color:#2d2d2d;line-height:1.7;margin:0 0 24px;">Klicke auf den Button um deine E-Mail-Adresse zu best&auml;tigen. Der Link ist <strong>{{expiresIn}}</strong> g&uuml;ltig.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+  <tr><td align="center">
+    <a href="{{verificationUrl}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">E-Mail best&auml;tigen</a>
+  </td></tr>
+</table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">Wenn du dich nicht bei Malak registriert hast, kannst du diese E-Mail ignorieren.</p>

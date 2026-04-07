@@ -47,6 +47,15 @@ const config: Config = {
           DEFAULT: 'hsl(var(--warning))',
           foreground: 'hsl(var(--warning-foreground))',
         },
+        brand: {
+          gold: '#c8a97e',
+          'gold-light': '#e8d5b8',
+          'gold-dark': '#a07850',
+        },
+        ink: '#0a0a0a',
+        paper: '#faf9f7',
+        warm: '#f3ede6',
+        cream: '#fffbf5',
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -57,7 +66,8 @@ const config: Config = {
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
-        arabic: ['Cairo', 'sans-serif'],
+        display: ['var(--font-display)', 'Georgia', 'serif'],
+        arabic: ['var(--font-arabic)', 'Cairo', 'sans-serif'],
       },
       boxShadow: {
         'soft': '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',

@@ -58,7 +58,8 @@ export class StripeProvider implements IPaymentProvider {
       {
         payment_intent: input.providerPaymentId,
         amount: input.amount,
-        reason: input.reason as Stripe.RefundCreateParams.Reason ?? 'requested_by_customer',
+        reason: 'requested_by_customer',
+        metadata: input.reason ? { internal_reason: input.reason.slice(0, 200) } : undefined,
       },
       { idempotencyKey: input.idempotencyKey },
     )

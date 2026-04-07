@@ -21,6 +21,7 @@ import { NotificationService } from './services/notification.service'
 import { NotificationListener } from './listeners/notification.listener'
 import { NotificationSseController } from './sse/notification-sse.controller'
 import { DailySummaryCron } from './cron/daily-summary.cron'
+import { PaymentTimeoutCron } from './cron/payment-timeout.cron'
 import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
 import { AdminSuppliersService } from './services/admin-suppliers.service'
 import { TranslationService } from '../../common/services/translation.service'
@@ -44,6 +45,7 @@ import { TranslationService } from '../../common/services/translation.service'
     NotificationListener,
     DailySummaryCron,
     ExpiryReminderCron,
+    PaymentTimeoutCron,
     AdminSuppliersService,
     TranslationService,
     PermissionGuard,

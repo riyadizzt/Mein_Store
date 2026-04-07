@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -11,6 +12,17 @@ export function CartDrawer({ locale }: { locale: string }) {
   const t = useTranslations('cart')
   const { items, isDrawerOpen, closeDrawer, removeItem, updateQuantity } = useCartStore()
   const subtotal = useCartStore((s) => s.subtotal())
+
+  // Stock check
+  const [stockMap, setStockMap] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (!isDrawerOpen || items.length === 0) return
+    const variantIds = items.map((i) => i.variantId)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/products/stock-check`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variantIds }),
+    }).then((r) => r.ok ? r.json() : {}).then(setStockMap).catch(() => {})
+  }, [isDrawerOpen, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isDrawerOpen) return null
 
@@ -73,15 +85,20 @@ export function CartDrawer({ locale }: { locale: string }) {
                     {/* Quantity */}
                     <div className="flex items-center gap-2 mt-2">
                       <button
-                        onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
-                        className="h-7 w-7 rounded border flex items-center justify-center hover:bg-muted transition-colors"
+                        onClick={() => updateQuantity(item.variantId, Math.max(1, item.quantity - 1))}
+                        disabled={item.quantity <= 1}
+                        className="h-7 w-7 rounded border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-30"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
                       <span className="text-sm font-medium w-6 text-center">{item.quantity}</span>
                       <button
-                        onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
-                        className="h-7 w-7 rounded border flex items-center justify-center hover:bg-muted transition-colors"
+                        onClick={() => {
+                          const max = Math.min(10, stockMap[item.variantId] ?? 10)
+                          if (item.quantity < max) updateQuantity(item.variantId, item.quantity + 1)
+                        }}
+                        disabled={stockMap[item.variantId] !== undefined ? item.quantity >= Math.min(10, stockMap[item.variantId]) : false}
+                        className="h-7 w-7 rounded border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-30"
                       >
                         <Plus className="h-3 w-3" />
                       </button>

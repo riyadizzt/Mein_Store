@@ -49,6 +49,17 @@ export class PublicSettingsController {
       paypalEnabled: s.paypalEnabled === 'true',
       welcomePopupEnabled: s.welcomePopupEnabled !== 'false', // default: true
       welcomeDiscountPercent: Number(s.welcomeDiscountPercent || '10'),
+      // Pixels & Channels
+      meta_pixel_id: s.meta_pixel_id || '',
+      tiktok_pixel_id: s.tiktok_pixel_id || '',
+      whatsapp_number: s.whatsapp_number || '',
+      whatsapp_enabled: s.whatsapp_enabled || 'false',
+      whatsapp_message_de: s.whatsapp_message_de || '',
+      whatsapp_message_ar: s.whatsapp_message_ar || '',
+      // AI
+      ai_global_enabled: s.ai_global_enabled || 'false',
+      ai_customer_chat_enabled: s.ai_customer_chat_enabled || 'false',
+      maintenance_enabled: s.maintenance_enabled || 'false',
     }
   }
 }

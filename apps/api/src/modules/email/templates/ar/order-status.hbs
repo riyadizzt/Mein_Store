@@ -1,56 +1,70 @@
+<!-- Status Icon -->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td align="center" style="padding:0 0 16px;"><div style="width:60px;height:60px;border-radius:50%;background-color:#d4a85315;display:inline-block;text-align:center;line-height:60px;"><span style="font-size:26px;color:#d4a853;">{{#if isShipped}}&#9992;{{else if isDelivered}}&#10003;{{else}}&#9998;{{/if}}</span></div></td></tr>
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:{{#if isDelivered}}#ecfdf5{{else if isShipped}}#eff6ff{{else}}#f5eed9{{/if}};display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:{{#if isDelivered}}#16a34a{{else if isShipped}}#2563eb{{else}}#d4a853{{/if}};">{{#if isShipped}}&#9992;{{else if isDelivered}}&#10003;{{else}}&#128230;{{/if}}</span>
+    </div>
+  </td></tr>
 </table>
 
-<h1 style="margin:0 0 6px;font-size:22px;color:#1a1a2e;text-align:center;font-weight:700;">تحديث حالة الطلب</h1>
-<p style="text-align:center;color:#6b7280;margin:0 0 24px;font-size:14px;">مرحبا {{firstName}}، تم تحديث حالة طلبك <strong style="color:#1a1a2e;">{{orderNumber}}</strong>.</p>
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:'Noto Sans Arabic',Georgia,serif;">&#1578;&#1581;&#1583;&#1610;&#1579; &#1581;&#1575;&#1604;&#1577; &#1575;&#1604;&#1591;&#1604;&#1576;</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 16px;font-size:15px;line-height:1.9;">&#1605;&#1585;&#1581;&#1576;&#1575;&#1611; <strong style="color:#1a1a2e;">{{firstName}}</strong>&#1548; &#1578;&#1605; &#1578;&#1581;&#1583;&#1610;&#1579; &#1581;&#1575;&#1604;&#1577; &#1591;&#1604;&#1576;&#1603;.</p>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td align="center">
-<span style="display:inline-block;padding:10px 28px;background-color:#d4a85315;border:2px solid #d4a853;border-radius:50px;font-size:16px;font-weight:700;color:#1a1a2e;">{{statusLabel}}</span>
-</td></tr></table>
-
-<!-- Progress (LTR) -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;" dir="ltr"><tr><td align="center">
-<table role="presentation" cellpadding="0" cellspacing="0" style="width:80%;">
-<tr>
-<td style="text-align:center;width:33%;"><div style="width:26px;height:26px;border-radius:50%;background:#16a34a;color:#fff;font-size:11px;line-height:26px;display:inline-block;">&#10003;</div><br><span style="font-size:9px;color:#16a34a;font-weight:600;">طلب</span></td>
-<td style="width:17%;"><div style="height:3px;background:{{#if isShipped}}#16a34a{{else if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};border-radius:2px;"></div></td>
-<td style="text-align:center;width:33%;"><div style="width:26px;height:26px;border-radius:50%;background:{{#if isShipped}}#d4a853{{else if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};color:{{#if isShipped}}#fff{{else if isDelivered}}#fff{{else}}#999{{/if}};font-size:11px;line-height:26px;display:inline-block;">{{#if isShipped}}&#9992;{{else if isDelivered}}&#10003;{{else}}2{{/if}}</div><br><span style="font-size:9px;color:{{#if isShipped}}#d4a853{{else if isDelivered}}#16a34a{{else}}#999{{/if}};font-weight:600;">شحن</span></td>
-<td style="width:17%;"><div style="height:3px;background:{{#if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};border-radius:2px;"></div></td>
-<td style="text-align:center;width:33%;"><div style="width:26px;height:26px;border-radius:50%;background:{{#if isDelivered}}#d4a853{{else}}#e5e7eb{{/if}};color:{{#if isDelivered}}#fff{{else}}#999{{/if}};font-size:11px;line-height:26px;display:inline-block;">{{#if isDelivered}}&#10003;{{else}}3{{/if}}</div><br><span style="font-size:9px;color:{{#if isDelivered}}#d4a853{{else}}#999{{/if}};font-weight:600;">توصيل</span></td>
-</tr>
+<!-- Order Number + Status Badge -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+  <tr><td align="center">
+    <div style="display:inline-block;padding:12px 28px;background:#f5eed9;border:1px solid #dcc68a;border-radius:12px;margin-bottom:12px;">
+      <span style="font-family:'Courier New',monospace;font-size:16px;font-weight:700;color:#1a1a2e;">{{orderNumber}}</span>
+    </div><br>
+    <span style="display:inline-block;padding:8px 24px;background:{{#if isDelivered}}#ecfdf5{{else if isShipped}}#eff6ff{{else}}#fef3c7{{/if}};border:1px solid {{#if isDelivered}}#86efac{{else if isShipped}}#93c5fd{{else}}#fcd34d{{/if}};border-radius:50px;font-size:14px;font-weight:700;color:{{#if isDelivered}}#16a34a{{else if isShipped}}#2563eb{{else}}#b45309{{/if}};">{{statusLabel}}</span>
+  </td></tr>
 </table>
-</td></tr></table>
+
+<!-- Progress Bar (RTL: right to left) -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 32px;" dir="rtl">
+  <tr><td>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td width="25%" align="center"><div style="width:32px;height:32px;border-radius:50%;background:#16a34a;display:inline-block;text-align:center;line-height:32px;"><span style="color:#fff;font-size:14px;">&#10003;</span></div><div style="font-size:10px;color:#16a34a;font-weight:600;margin-top:6px;">&#1578;&#1605; &#1575;&#1604;&#1591;&#1604;&#1576;</div></td>
+        <td width="25%" align="center"><div style="width:32px;height:32px;border-radius:50%;background:{{#if isShipped}}#d4a853{{else if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};display:inline-block;text-align:center;line-height:32px;"><span style="color:{{#if isShipped}}#fff{{else if isDelivered}}#fff{{else}}#9ca3af{{/if}};font-size:12px;">{{#if isShipped}}&#9992;{{else if isDelivered}}&#10003;{{else}}2{{/if}}</span></div><div style="font-size:10px;color:{{#if isShipped}}#d4a853{{else if isDelivered}}#16a34a{{else}}#9ca3af{{/if}};font-weight:600;margin-top:6px;">&#1602;&#1610;&#1583; &#1575;&#1604;&#1578;&#1580;&#1607;&#1610;&#1586;</div></td>
+        <td width="25%" align="center"><div style="width:32px;height:32px;border-radius:50%;background:{{#if isShipped}}#16a34a{{else if isDelivered}}#16a34a{{else}}#e5e7eb{{/if}};display:inline-block;text-align:center;line-height:32px;"><span style="color:{{#if isShipped}}#fff{{else if isDelivered}}#fff{{else}}#9ca3af{{/if}};font-size:12px;">{{#if isShipped}}&#10003;{{else if isDelivered}}&#10003;{{else}}3{{/if}}</span></div><div style="font-size:10px;color:{{#if isShipped}}#16a34a{{else if isDelivered}}#16a34a{{else}}#9ca3af{{/if}};font-weight:600;margin-top:6px;">&#1578;&#1605; &#1575;&#1604;&#1588;&#1581;&#1606;</div></td>
+        <td width="25%" align="center"><div style="width:32px;height:32px;border-radius:50%;background:{{#if isDelivered}}#d4a853{{else}}#e5e7eb{{/if}};display:inline-block;text-align:center;line-height:32px;"><span style="color:{{#if isDelivered}}#fff{{else}}#9ca3af{{/if}};font-size:12px;">{{#if isDelivered}}&#10003;{{else}}4{{/if}}</span></div><div style="font-size:10px;color:{{#if isDelivered}}#d4a853{{else}}#9ca3af{{/if}};font-weight:600;margin-top:6px;">&#1578;&#1605; &#1575;&#1604;&#1578;&#1587;&#1604;&#1610;&#1605;</div></td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
 
 {{#if trackingNumber}}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf8f5;border-radius:12px;border:1px solid #f0ede8;"><tr><td style="padding:18px;text-align:center;">
-<div style="font-size:11px;color:#6b7280;font-weight:600;margin-bottom:4px;">رقم التتبع</div>
-<div style="font-size:18px;font-weight:700;font-family:monospace;color:#1a1a2e;letter-spacing:1px;margin-bottom:12px;">{{trackingNumber}}</div>
-{{#if trackingUrl}}<a href="{{trackingUrl}}" style="display:inline-block;background-color:#d4a853;color:#ffffff;font-weight:600;font-size:12px;padding:10px 28px;border-radius:50px;text-decoration:none;">تتبع الشحنة</a>{{/if}}
-</td></tr></table>
+<!-- Tracking Box -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:20px;text-align:center;">
+    <div style="font-size:11px;color:#6b7280;font-weight:700;letter-spacing:1px;margin-bottom:8px;">&#1585;&#1602;&#1605; &#1575;&#1604;&#1578;&#1578;&#1576;&#1593;</div>
+    <div style="font-size:20px;font-weight:700;font-family:'Courier New',monospace;color:#1a1a2e;letter-spacing:1px;margin-bottom:16px;">{{trackingNumber}}</div>
+    {{#if trackingUrl}}<a href="{{trackingUrl}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:14px;padding:12px 36px;border-radius:8px;text-decoration:none;">&#1578;&#1578;&#1576;&#1593; &#1575;&#1604;&#1588;&#1581;&#1606;&#1577;</a>{{/if}}
+  </td></tr>
+</table>
 {{/if}}
 
 {{#if items}}
-<div style="font-weight:600;font-size:13px;margin:0 0 10px;color:#1a1a2e;text-align:right;">المنتجات:</div>
+<p style="font-weight:700;font-size:13px;margin:0 0 12px;color:#1a1a2e;text-align:right;letter-spacing:1px;">&#1575;&#1604;&#1605;&#1606;&#1578;&#1580;&#1575;&#1578;</p>
 {{#each items}}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 6px;background:#faf8f5;border-radius:10px;"><tr><td style="padding:10px 14px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="vertical-align:middle;text-align:right;"><div style="font-weight:600;font-size:13px;color:#1a1a2e;">{{name}}</div><div style="font-size:11px;color:#6b7280;">{{#if color}}{{color}}{{/if}}{{#if size}} · {{size}}{{/if}} · {{quantity}}x</div></td>
-<td style="text-align:left;vertical-align:middle;"><span style="font-weight:700;font-size:14px;color:#1a1a2e;">&euro;{{totalPrice}}</span></td>
-</tr></table>
-</td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;" dir="rtl">
+  <tr>
+    <td style="padding:12px 16px;vertical-align:middle;"><p style="margin:0 0 2px;font-weight:600;font-size:14px;color:#1a1a2e;">{{name}}</p><p style="margin:0;font-size:12px;color:#6b7280;">{{#if color}}{{color}}{{/if}}{{#if size}} &middot; {{size}}{{/if}} &middot; {{quantity}}&times;</p></td>
+    <td style="padding:12px 16px;text-align:left;vertical-align:middle;white-space:nowrap;"><span style="font-weight:700;font-size:15px;color:#1a1a2e;">&euro;{{totalPrice}}</span></td>
+  </tr>
+</table>
 {{/each}}
 {{/if}}
 
 {{#if shippingAddress}}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;background:#faf8f5;border-radius:10px;"><tr><td style="padding:12px 14px;text-align:right;">
-<div style="font-size:10px;color:#6b7280;font-weight:600;margin-bottom:4px;">عنوان التوصيل</div>
-<div style="font-size:13px;color:#1a1a2e;">{{shippingAddress.firstName}} {{shippingAddress.lastName}}، {{shippingAddress.street}} {{shippingAddress.houseNumber}}، {{shippingAddress.postalCode}} {{shippingAddress.city}}</div>
-</td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:14px 18px;text-align:right;"><p style="margin:0 0 6px;font-size:11px;color:#6b7280;font-weight:700;letter-spacing:1px;">&#1593;&#1606;&#1608;&#1575;&#1606; &#1575;&#1604;&#1578;&#1608;&#1589;&#1610;&#1604;</p><p style="margin:0;font-size:14px;color:#1a1a2e;line-height:1.9;">{{shippingAddress.firstName}} {{shippingAddress.lastName}}<br>{{shippingAddress.street}} {{shippingAddress.houseNumber}}<br>{{shippingAddress.postalCode}} {{shippingAddress.city}}</p></td></tr>
+</table>
 {{/if}}
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;"><tr><td align="center">
-<a href="{{appUrl}}/ar/tracking?mode=order&orderNumber={{orderNumber}}" style="display:inline-block;background-color:#1a1a2e;color:#ffffff;font-weight:600;font-size:12px;padding:12px 36px;border-radius:50px;text-decoration:none;">تتبع الطلب</a>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 16px;"><tr><td align="center">
+  <a href="{{appUrl}}/ar/tracking?mode=order&orderNumber={{orderNumber}}" style="display:inline-block;background:#1a1a2e;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">&#1578;&#1578;&#1576;&#1593; &#1575;&#1604;&#1591;&#1604;&#1576;</a>
 </td></tr></table>
 
-<p style="color:#9ca3af;font-size:11px;text-align:center;">للاستفسارات <a href="{{appUrl}}/ar/contact" style="color:#d4a853;">تواصل معنا</a></p>
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">&#1604;&#1604;&#1575;&#1587;&#1578;&#1601;&#1587;&#1575;&#1585;&#1575;&#1578; <a href="{{appUrl}}/ar/contact" style="color:#d4a853;text-decoration:none;">&#1578;&#1608;&#1575;&#1589;&#1604; &#1605;&#1593;&#1606;&#1575;</a></p>

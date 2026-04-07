@@ -77,6 +77,17 @@ export class ProductsController {
     )
   }
 
+  @Post('stock-check')
+  @ApiOperation({ summary: 'Stock availability for variant IDs' })
+  @HttpCode(HttpStatus.OK)
+  async stockCheck(@Body('variantIds') variantIds: string[]) {
+    if (!variantIds?.length || !Array.isArray(variantIds)) return {}
+    // Sanitize: only strings, max 50, max 36 chars each (UUID length)
+    const clean = variantIds.filter((id) => typeof id === 'string' && id.length <= 36).slice(0, 50)
+    if (clean.length === 0) return {}
+    return this.productsService.checkStock(clean)
+  }
+
   @Get(':slug')
   @ApiOperation({ summary: 'Einzelnes Produkt nach Slug' })
   @ApiParam({ name: 'slug', example: 'klassische-lederjacke' })

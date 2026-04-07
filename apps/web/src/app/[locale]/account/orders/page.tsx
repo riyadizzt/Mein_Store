@@ -24,7 +24,7 @@ export default function OrdersPage() {
   const locale = useLocale()
   const t = useTranslations('account')
 
-  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
+  const { data, isLoading, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['my-orders'],
     queryFn: async ({ pageParam }) => {
       const { data } = await api.get('/users/me/orders', {
@@ -42,6 +42,19 @@ export default function OrdersPage() {
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse bg-muted rounded-lg" />)}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="text-center py-16">
+        <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+          <Package className="h-6 w-6 text-destructive" />
+        </div>
+        <h2 className="text-lg font-medium mb-2">{locale === 'ar' ? 'حدث خطأ في تحميل الطلبات' : locale === 'en' ? 'Failed to load orders' : 'Fehler beim Laden der Bestellungen'}</h2>
+        <p className="text-sm text-muted-foreground mb-4">{locale === 'ar' ? 'يرجى المحاولة مرة أخرى' : locale === 'en' ? 'Please try again' : 'Bitte versuche es erneut'}</p>
+        <Button variant="outline" onClick={() => refetch()}>{locale === 'ar' ? 'إعادة المحاولة' : locale === 'en' ? 'Retry' : 'Erneut versuchen'}</Button>
       </div>
     )
   }

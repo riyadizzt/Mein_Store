@@ -125,12 +125,13 @@ export class AdminController {
   @RequirePermission(PERMISSIONS.ORDERS_VIEW)
   getOrders(
     @Query('status') status?: string,
+    @Query('channel') channel?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('search') search?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.orders.findAll({ status, dateFrom, dateTo, search, limit: limit ? +limit : 20 })
+    return this.orders.findAll({ status, channel, dateFrom, dateTo, search, limit: limit ? +limit : 20 })
   }
 
   @Get('orders/export/csv')
@@ -188,6 +189,20 @@ export class AdminController {
     return this.orders.cancelItems(id, itemIds, reason, req.user.id, ip)
   }
 
+  @Post('orders/:id/retry-refund')
+  @RequirePermission(PERMISSIONS.ORDERS_CANCEL)
+  @HttpCode(HttpStatus.OK)
+  retryRefund(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.orders.retryRefund(id, req.user.id, ip)
+  }
+
+  @Post('orders/:id/mark-refund-manual')
+  @RequirePermission(PERMISSIONS.ORDERS_CANCEL)
+  @HttpCode(HttpStatus.OK)
+  markRefundManual(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.orders.markRefundManual(id, req.user.id, ip)
+  }
+
   @Post('orders/:id/notes')
   @RequirePermission(PERMISSIONS.ORDERS_EDIT)
   @HttpCode(HttpStatus.CREATED)
@@ -204,10 +219,11 @@ export class AdminController {
   changeFulfillment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('warehouseId') warehouseId: string,
+    @Body('force') force: boolean,
     @Req() req: any,
     @Ip() ip: string,
   ) {
-    return this.orders.changeFulfillmentWarehouse(id, warehouseId, req.user.id, ip)
+    return this.orders.changeFulfillmentWarehouse(id, warehouseId, req.user.id, ip, !!force)
   }
 
   // ── Customers / Users ──────────────────────────────────────
@@ -496,7 +512,8 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: {
       basePrice?: number; salePrice?: number | null;
-      channelFacebook?: boolean; channelTiktok?: boolean; channelGoogle?: boolean;
+      channelFacebook?: boolean; channelTiktok?: boolean; channelGoogle?: boolean; channelWhatsapp?: boolean;
+      excludeFromReturns?: boolean; returnExclusionReason?: string | null;
       translations?: { language: string; name: string; description?: string; metaTitle?: string; metaDesc?: string }[]
     },
   ) {
@@ -509,6 +526,9 @@ export class AdminController {
     if (body.channelFacebook !== undefined) data.channelFacebook = body.channelFacebook
     if (body.channelTiktok !== undefined) data.channelTiktok = body.channelTiktok
     if (body.channelGoogle !== undefined) data.channelGoogle = body.channelGoogle
+    if (body.channelWhatsapp !== undefined) data.channelWhatsapp = body.channelWhatsapp
+    if (body.excludeFromReturns !== undefined) data.excludeFromReturns = body.excludeFromReturns
+    if (body.returnExclusionReason !== undefined) data.returnExclusionReason = body.returnExclusionReason
 
     await this.prisma.product.update({ where: { id }, data })
 
@@ -1227,6 +1247,19 @@ export class AdminController {
       dhlConfigured: !!process.env.DHL_API_KEY,
       emailFrom: process.env.EMAIL_FROM_NOREPLY ?? '',
       freeShippingThreshold: db.freeShippingThreshold ?? '100',
+      // Maintenance
+      maintenance_enabled: db.maintenance_enabled ?? 'false',
+      maintenance_title_de: db.maintenance_title_de ?? '',
+      maintenance_title_ar: db.maintenance_title_ar ?? '',
+      maintenance_desc_de: db.maintenance_desc_de ?? '',
+      maintenance_desc_ar: db.maintenance_desc_ar ?? '',
+      maintenance_countdown_enabled: db.maintenance_countdown_enabled ?? 'false',
+      maintenance_countdown_end: db.maintenance_countdown_end ?? '',
+      maintenance_email_collection: db.maintenance_email_collection ?? 'true',
+      maintenance_social_links: db.maintenance_social_links ?? 'true',
+      maintenance_bg_image: db.maintenance_bg_image ?? '',
+      maintenance_activated_at: db.maintenance_activated_at ?? '',
+      maintenance_views: db.maintenance_views ?? '0',
     }
   }
 
@@ -1272,7 +1305,17 @@ export class AdminController {
       // Channels / Feeds / Pixels
       'meta_pixel_id', 'tiktok_pixel_id',
       'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar',
-      'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled',
+      'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled',
+      // AI
+      // Maintenance
+      'maintenance_enabled', 'maintenance_title_de', 'maintenance_title_ar',
+      'maintenance_desc_de', 'maintenance_desc_ar', 'maintenance_countdown_enabled',
+      'maintenance_countdown_end', 'maintenance_email_collection', 'maintenance_social_links',
+      'maintenance_bg_image', 'maintenance_activated_at', 'maintenance_views',
+      // AI
+      'ai_global_enabled', 'ai_customer_chat_enabled', 'ai_admin_assistant_enabled',
+      'ai_product_description_enabled', 'ai_inventory_suggestions_enabled',
+      'ai_marketing_text_enabled', 'ai_social_reply_enabled',
     ]
     const entries = Object.entries(body).filter(([k]) => allowed.includes(k))
 
@@ -1428,6 +1471,8 @@ export class AdminController {
       { key: 'order-status', name: { de: 'Status-Update', en: 'Status Update', ar: 'تحديث الحالة' }, languages: ['de', 'en'] },
       { key: 'order-cancellation', name: { de: 'Stornierung', en: 'Cancellation', ar: 'إلغاء' }, languages: ['de', 'en'] },
       { key: 'return-confirmation', name: { de: 'Rücksendung', en: 'Return Confirmation', ar: 'تأكيد الإرجاع' }, languages: ['de', 'en'] },
+      { key: 'guest-invite', name: { de: 'Gast-Einladung', en: 'Guest Invite', ar: 'دعوة ضيف' }, languages: ['de', 'en'] },
+      { key: 'invoice', name: { de: 'Rechnung', en: 'Invoice', ar: 'فاتورة' }, languages: ['de', 'en'] },
     ]
     // Check which languages actually have templates
     for (const t of templates) {
@@ -1746,6 +1791,12 @@ export class AdminController {
     // Delete usages first, then coupon
     await this.prisma.couponUsage.deleteMany({ where: { couponId: id } })
     await this.prisma.coupon.delete({ where: { id } })
+  }
+
+  @Get('marketing/overview')
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
+  getMarketingOverview() {
+    return this.marketing.getMarketingOverview()
   }
 
   @Get('marketing/coupons/:id/stats')

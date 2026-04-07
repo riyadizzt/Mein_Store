@@ -136,7 +136,10 @@ export default function AddressesPage() {
       {(addresses ?? []).length === 0 ? (
         <div className="text-center py-16">
           <MapPin className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
-          <p className="text-muted-foreground">{t('empty')}</p>
+          <p className="text-muted-foreground mb-4">{t('empty')}</p>
+          <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-muted transition-colors text-sm font-medium">
+            {locale === 'ar' ? 'إضافة عنوان' : locale === 'en' ? 'Add address' : 'Adresse hinzufügen'}
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

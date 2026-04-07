@@ -24,7 +24,7 @@ export function generateProductOGTags(product: ProductOGProps['product'], locale
       title: product.name,
       description: product.description ?? product.name,
       url,
-      type: 'product',
+      type: 'website',
       images: product.image ? [{ url: product.image, width: 800, height: 800, alt: product.name }] : [],
       siteName: 'Malak Bekleidung',
       locale: locale === 'ar' ? 'ar_EG' : locale === 'en' ? 'en_US' : 'de_DE',

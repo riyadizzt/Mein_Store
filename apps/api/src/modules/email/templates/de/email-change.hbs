@@ -1,11 +1,25 @@
-<h1 style="margin:0 0 16px;font-size:22px;color:#1a1a2e;">Neue E-Mail-Adresse bestätigen</h1>
-<p>Hallo {{firstName}},</p>
-<p>Sie haben eine Änderung Ihrer E-Mail-Adresse angefordert. Bitte bestätigen Sie die neue Adresse:</p>
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
-  <tr>
-    <td style="background-color:#1a1a2e;border-radius:6px;padding:12px 28px;">
-      <a href="{{confirmUrl}}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;">Neue E-Mail bestätigen</a>
-    </td>
-  </tr>
+<!-- Email Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#faf5ff;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#7c3aed;">&#128231;</span>
+    </div>
+  </td></tr>
 </table>
-<p style="color:#868e96;font-size:13px;">Dieser Link ist {{expiresIn}} gültig. Wenn Sie diese Änderung nicht angefordert haben, kontaktieren Sie bitte sofort unseren Kundenservice.</p>
+
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:Georgia,'Times New Roman',serif;">Neue E-Mail best&auml;tigen</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;">Hallo <strong style="color:#1a1a2e;">{{firstName}}</strong>, du hast eine &Auml;nderung deiner E-Mail-Adresse angefordert.</p>
+
+<p style="font-size:15px;color:#2d2d2d;line-height:1.7;margin:0 0 24px;">Bitte best&auml;tige deine neue E-Mail-Adresse. Der Link ist <strong>{{expiresIn}}</strong> g&uuml;ltig.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+  <tr><td align="center">
+    <a href="{{confirmUrl}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">Neue E-Mail best&auml;tigen</a>
+  </td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;background:#fef3c7;border-radius:12px;border:1px solid #fcd34d;">
+  <tr><td style="padding:14px 18px;">
+    <p style="margin:0;font-size:13px;color:#92400e;line-height:1.5;">&#9888; Wenn du diese &Auml;nderung nicht angefordert hast, kontaktiere bitte sofort unseren Kundenservice.</p>
+  </td></tr>
+</table>

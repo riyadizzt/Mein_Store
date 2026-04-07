@@ -179,12 +179,12 @@ export function StepVariants() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-left px-3 py-2 font-medium">{t('wizard.colors')}</th>
-                    <th className="text-left px-3 py-2 font-medium">{t('wizard.variants')}</th>
-                    <th className="text-left px-3 py-2 font-medium">SKU</th>
-                    <th className="text-right px-3 py-2 font-medium">{t('wizard.basePrice')}</th>
-                    <th className="text-right px-3 py-2 font-medium">{t('wizard.weight')}</th>
-                    <th className="text-right px-3 py-2 font-medium">{t('wizard.stockCount')}</th>
+                    <th className="text-start px-3 py-2 font-medium">{t('wizard.colors')}</th>
+                    <th className="text-start px-3 py-2 font-medium">{t('wizard.variants')}</th>
+                    <th className="text-start px-3 py-2 font-medium">SKU</th>
+                    <th className="text-end px-3 py-2 font-medium">{t('wizard.basePrice')}</th>
+                    <th className="text-end px-3 py-2 font-medium">{t('wizard.weight')}</th>
+                    <th className="text-end px-3 py-2 font-medium">{t('wizard.stockCount')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -209,7 +209,7 @@ export function StepVariants() {
                           type="number"
                           value={v.price || ''}
                           onChange={(e) => updateVariant(v.colorId, v.size, { price: Number(e.target.value) })}
-                          className="h-7 text-xs w-24 text-right"
+                          className="h-7 text-xs w-24 text-end"
                           step={0.01}
                         />
                       </td>
@@ -218,7 +218,7 @@ export function StepVariants() {
                           type="number"
                           value={v.weight || ''}
                           onChange={(e) => updateVariant(v.colorId, v.size, { weight: Number(e.target.value) })}
-                          className="h-7 text-xs w-20 text-right"
+                          className="h-7 text-xs w-20 text-end"
                         />
                       </td>
                       <td className="px-3 py-2">
@@ -226,7 +226,7 @@ export function StepVariants() {
                           type="number"
                           value={v.stock.default ?? ''}
                           onChange={(e) => updateVariant(v.colorId, v.size, { stock: { ...v.stock, default: Number(e.target.value) } })}
-                          className="h-7 text-xs w-20 text-right"
+                          className="h-7 text-xs w-20 text-end"
                           min={0}
                         />
                       </td>

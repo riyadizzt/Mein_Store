@@ -1,5 +1,35 @@
-<h1 style="margin:0 0 16px;font-size:22px;color:#1a1a2e;text-align:center;">تم إلغاء الطلب</h1>
-<p style="text-align:right;">مرحبا {{firstName}}،</p>
-<p style="text-align:right;">تم إلغاء طلبك <strong>{{orderNumber}}</strong>.</p>
-{{#if reason}}<p style="text-align:right;color:#6b7280;">السبب: {{reason}}</p>{{/if}}
-<p style="text-align:right;color:#9ca3af;font-size:13px;">إذا كان الإلغاء خطأ، تواصل مع خدمة العملاء.</p>
+<!-- Cancel Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#fef2f2;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#dc2626;">&#10005;</span>
+    </div>
+  </td></tr>
+</table>
+
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:'Noto Sans Arabic',Georgia,serif;">&#1578;&#1605; &#1573;&#1604;&#1594;&#1575;&#1569; &#1575;&#1604;&#1591;&#1604;&#1576;</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;line-height:1.9;">&#1605;&#1585;&#1581;&#1576;&#1575;&#1611; <strong style="color:#1a1a2e;">{{firstName}}</strong>&#1548; &#1578;&#1605; &#1573;&#1604;&#1594;&#1575;&#1569; &#1591;&#1604;&#1576;&#1603; <strong>{{orderNumber}}</strong>.</p>
+
+{{#if reason}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fef2f2;border-radius:12px;border:1px solid #fecaca;">
+  <tr><td style="padding:16px 20px;text-align:right;">
+    <p style="margin:0 0 4px;font-size:11px;color:#991b1b;font-weight:700;letter-spacing:1px;">&#1587;&#1576;&#1576; &#1575;&#1604;&#1573;&#1604;&#1594;&#1575;&#1569;</p>
+    <p style="margin:0;font-size:14px;color:#991b1b;line-height:1.9;">{{reason}}</p>
+  </td></tr>
+</table>
+{{/if}}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:16px 20px;text-align:right;">
+    <p style="margin:0 0 4px;font-size:11px;color:#6b7280;font-weight:700;letter-spacing:1px;">&#1575;&#1604;&#1575;&#1587;&#1578;&#1585;&#1583;&#1575;&#1583;</p>
+    <p style="margin:0;font-size:14px;color:#1a1a2e;line-height:1.9;">&#1573;&#1584;&#1575; &#1578;&#1605; &#1575;&#1604;&#1583;&#1601;&#1593;&#1548; &#1587;&#1610;&#1578;&#1605; &#1575;&#1587;&#1578;&#1585;&#1583;&#1575;&#1583; &#1575;&#1604;&#1605;&#1576;&#1604;&#1594; &#1582;&#1604;&#1575;&#1604; <strong>5&ndash;10 &#1571;&#1610;&#1575;&#1605; &#1593;&#1605;&#1604;</strong> &#1573;&#1604;&#1609; &#1608;&#1587;&#1610;&#1604;&#1577; &#1575;&#1604;&#1583;&#1601;&#1593; &#1575;&#1604;&#1571;&#1589;&#1604;&#1610;&#1577;.</p>
+  </td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
+  <tr><td align="center">
+    <a href="{{appUrl}}/ar/products" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;">&#1605;&#1578;&#1575;&#1576;&#1593;&#1577; &#1575;&#1604;&#1578;&#1587;&#1608;&#1602;</a>
+  </td></tr>
+</table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">&#1573;&#1584;&#1575; &#1604;&#1605; &#1578;&#1591;&#1604;&#1576; &#1607;&#1584;&#1575; &#1575;&#1604;&#1573;&#1604;&#1594;&#1575;&#1569;&#1548; &#1578;&#1608;&#1575;&#1589;&#1604; &#1605;&#1593; <a href="{{appUrl}}/ar/contact" style="color:#d4a853;text-decoration:none;">&#1582;&#1583;&#1605;&#1577; &#1575;&#1604;&#1593;&#1605;&#1604;&#1575;&#1569;</a>.</p>

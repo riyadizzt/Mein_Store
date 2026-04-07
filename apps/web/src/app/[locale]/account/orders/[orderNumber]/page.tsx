@@ -4,28 +4,24 @@ import { useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Truck, Check, Download, RotateCcw, ShoppingBag, ExternalLink, Loader2 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Truck, Check, Download, RotateCcw, ShoppingBag, ExternalLink } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useCartStore } from '@/store/cart-store'
 import { useAuthStore } from '@/store/auth-store'
 import { Button } from '@/components/ui/button'
+import { ReturnRequestModal } from '@/components/account/return-request-modal'
 
 const TIMELINE_STEPS = ['pending', 'confirmed', 'processing', 'shipped', 'delivered']
 
 export default function OrderDetailPage({ params: { orderNumber } }: { params: { orderNumber: string; locale: string } }) {
   const t = useTranslations('account.orders')
-  const tReturn = useTranslations('return')
-  const tReasons = useTranslations('account.returnReasons')
   const tCart = useTranslations('cart')
   const tErrors = useTranslations('errors')
   const locale = useLocale()
   const router = useRouter()
-  const queryClient = useQueryClient()
   const addCartItem = useCartStore((s) => s.addItem)
   const [returnModalOpen, setReturnModalOpen] = useState(false)
-  const [returnReason, setReturnReason] = useState('wrong_size')
-  const [returnNotes, setReturnNotes] = useState('')
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
 
@@ -45,19 +41,6 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
     enabled: isAuthenticated,
     retry: 2,
     staleTime: 30000,
-  })
-
-  const returnMutation = useMutation({
-    mutationFn: async () => {
-      await api.post(`/orders/${order.id}/return-request`, {
-        reason: returnReason,
-        notes: returnNotes || undefined,
-      })
-    },
-    onSuccess: () => {
-      setReturnModalOpen(false)
-      queryClient.invalidateQueries({ queryKey: ['order', orderNumber] })
-    },
   })
 
   // Check if returns are enabled globally — MUST be before any early returns
@@ -218,45 +201,26 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
       </div>
 
       {/* Return Modal */}
-      {returnModalOpen && (
-        <>
-          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setReturnModalOpen(false)} />
-          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-md mx-auto bg-background rounded-xl p-6 shadow-xl">
-            <h3 className="text-lg font-bold mb-4">{tReturn('title')}</h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              {t('returnDeadline', { date: deliveredAt ? new Date(deliveredAt.getTime() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('de-DE') : '—' })}
-            </p>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">{tReturn('reason')}</label>
-                <select value={returnReason} onChange={(e) => setReturnReason(e.target.value)} className="w-full h-10 px-3 rounded-lg border bg-background text-sm">
-                  <option value="wrong_size">{tReasons('wrong_size')}</option>
-                  <option value="wrong_product">{tReasons('wrong_product')}</option>
-                  <option value="quality_issue">{tReasons('quality_issue')}</option>
-                  <option value="damaged">{tReasons('damaged')}</option>
-                  <option value="changed_mind">{tReasons('changed_mind')}</option>
-                  <option value="other">{tReasons('other')}</option>
-                </select>
-              </div>
-              {returnReason === 'other' && (
-                <textarea
-                  value={returnNotes}
-                  onChange={(e) => setReturnNotes(e.target.value)}
-                  placeholder={tReturn('notes')}
-                  className="w-full h-20 px-3 py-2 rounded-lg border bg-background text-sm resize-none"
-                />
-              )}
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" onClick={() => setReturnModalOpen(false)} className="flex-1">{tReturn('cancel')}</Button>
-                <Button onClick={() => returnMutation.mutate()} disabled={returnMutation.isPending} className="flex-1">
-                  {returnMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  {tReturn('submit')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+      <ReturnRequestModal
+        open={returnModalOpen}
+        onClose={() => setReturnModalOpen(false)}
+        orderId={order.id}
+        orderNumber={orderNumber}
+        daysLeft={daysLeft}
+        deliveryDeadline={deliveredAt ? new Date(deliveredAt.getTime() + 14 * 86400000).toLocaleDateString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'en' ? 'en-GB' : 'de-DE') : '—'}
+        items={(order.items ?? []).map((item: any) => ({
+          id: item.id,
+          variantId: item.variantId,
+          name: item.snapshotName,
+          color: item.variant?.color,
+          size: item.variant?.size,
+          quantity: item.quantity,
+          imageUrl: item.variant?.product?.images?.[0]?.url,
+          unitPrice: Number(item.unitPrice),
+          excludeFromReturns: item.variant?.product?.excludeFromReturns ?? false,
+          returnExclusionReason: item.variant?.product?.returnExclusionReason,
+        }))}
+      />
     </div>
   )
 }
