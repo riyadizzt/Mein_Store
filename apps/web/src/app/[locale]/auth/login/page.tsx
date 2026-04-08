@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Eye, EyeOff, AlertCircle, Lock, WifiOff } from 'lucide-react'
 import { useLogin } from '@/hooks/use-auth'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { GoogleSignIn } from '@/components/auth/google-sign-in'
 
@@ -15,7 +14,6 @@ function getErrorInfo(error: any, locale: string): { msg: string; icon: 'auth' |
 
   const status = error?.response?.status
 
-  // Account locked (403)
   if (status === 403) {
     return {
       icon: 'lock',
@@ -26,7 +24,6 @@ function getErrorInfo(error: any, locale: string): { msg: string; icon: 'auth' |
     }
   }
 
-  // Wrong credentials (401)
   if (status === 401) {
     return {
       icon: 'auth',
@@ -36,7 +33,6 @@ function getErrorInfo(error: any, locale: string): { msg: string; icon: 'auth' |
     }
   }
 
-  // Network / server error
   if (error?.code === 'ERR_NETWORK' || !error?.response) {
     return {
       icon: 'network',
@@ -78,13 +74,21 @@ export default function LoginPage() {
   const ErrorIcon = errorInfo?.icon === 'lock' ? Lock : errorInfo?.icon === 'network' ? WifiOff : AlertCircle
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center py-12">
-      <div className="w-full max-w-sm px-4">
-        <h1 className="text-2xl font-bold text-center mb-8">{t('loginTitle')}</h1>
+    <div className="min-h-[70vh] flex items-center justify-center py-16 bg-[#fafafa]">
+      <div className="w-full max-w-[420px] px-4">
 
+        {/* Logo */}
+        <div className="text-center mb-10">
+          <Link href={`/${locale}`} className="inline-block">
+            <span className="text-2xl font-display font-bold text-[#0f1419] tracking-[0.3em]">MALAK</span>
+          </Link>
+          <p className="text-sm text-[#0f1419]/40 mt-2 tracking-wide">BEKLEIDUNG</p>
+        </div>
+
+        {/* Error */}
         {errorInfo && (
           <div
-            className={`mb-4 p-3.5 rounded-xl text-sm ${
+            className={`mb-6 p-4 rounded-xl text-sm ${
               errorInfo.icon === 'lock' ? 'bg-orange-50 text-orange-800 border border-orange-200'
               : errorInfo.icon === 'network' ? 'bg-blue-50 text-blue-800 border border-blue-200'
               : 'bg-red-50 text-red-700 border border-red-200'
@@ -99,7 +103,7 @@ export default function LoginPage() {
             {errorInfo.showReset && (
               <Link
                 href={`/${locale}/auth/reset-password`}
-                className="mt-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-orange-100 text-orange-900 text-xs font-semibold hover:bg-orange-200 transition-colors"
+                className="mt-3 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-orange-100 text-orange-900 text-xs font-semibold hover:bg-orange-200 transition-colors"
               >
                 {locale === 'ar' ? 'إعادة تعيين كلمة المرور لإلغاء القفل' : locale === 'en' ? 'Reset password to unlock' : 'Passwort zurücksetzen zum Entsperren'}
               </Link>
@@ -107,25 +111,39 @@ export default function LoginPage() {
           </div>
         )}
 
-        <div className="space-y-4 border rounded-2xl p-8 shadow-card">
-          {/* Google Sign-In */}
+        {/* Form Card */}
+        <div className="bg-white rounded-2xl shadow-lg border border-[#e5e5e5]/50 p-8 sm:p-10 space-y-6">
+
+          <h1 className="text-xl font-semibold text-center text-[#0f1419]">{t('loginTitle')}</h1>
+
+          {/* Social Login */}
           <GoogleSignIn label={`Google ${t('loginButton')}`} />
 
+          {/* Divider */}
           <div className="relative">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-4 text-muted-foreground">{t('loginButton')}</span></div>
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-[#e5e5e5]" /></div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-4 text-[#0f1419]/30">
+                {locale === 'ar' ? 'أو' : locale === 'en' ? 'or' : 'oder'}
+              </span>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Email Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="text-sm font-medium mb-1.5 block">{t('email')}</label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+              <label htmlFor="email" className="text-sm font-medium text-[#0f1419]/70 mb-2 block">{t('email')}</label>
+              <Input
+                id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                required autoComplete="email"
+                className="h-12 rounded-xl border-[#e0e0e0] focus:border-[#d4a853] focus:ring-[#d4a853]/20 text-base"
+              />
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="text-sm font-medium">{t('password')}</label>
-                <Link href={`/${locale}/auth/reset-password`} className="text-xs text-primary hover:underline">
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="password" className="text-sm font-medium text-[#0f1419]/70">{t('password')}</label>
+                <Link href={`/${locale}/auth/reset-password`} className="text-xs text-[#d4a853] hover:text-[#c49b45] transition-colors">
                   {t('forgotPassword')}
                 </Link>
               </div>
@@ -137,12 +155,12 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="ltr:pr-10 rtl:pl-10"
+                  className="h-12 rounded-xl border-[#e0e0e0] focus:border-[#d4a853] focus:ring-[#d4a853]/20 text-base ltr:pr-12 rtl:pl-12"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute top-1/2 -translate-y-1/2 ltr:right-3 rtl:left-3 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute top-1/2 -translate-y-1/2 ltr:right-4 rtl:left-4 text-[#0f1419]/30 hover:text-[#0f1419]/60 transition-colors"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -150,16 +168,21 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" disabled={login.isPending} className="w-full bg-accent text-accent-foreground rounded-xl h-12 hover:bg-accent/90" size="lg">
-              {login.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            <button
+              type="submit"
+              disabled={login.isPending}
+              className="w-full h-13 rounded-xl bg-[#d4a853] text-white text-base font-semibold hover:bg-[#c49b45] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {login.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {t('loginButton')}
-            </Button>
+            </button>
           </form>
         </div>
 
-        <p className="mt-6 text-center text-sm text-muted-foreground">
+        {/* Register link */}
+        <p className="mt-8 text-center text-sm text-[#0f1419]/50">
           {t('noAccount')}{' '}
-          <Link href={`/${locale}/auth/register`} className="text-primary font-medium hover:underline">
+          <Link href={`/${locale}/auth/register`} className="text-[#d4a853] font-medium hover:text-[#c49b45] transition-colors">
             {t('registerButton')}
           </Link>
         </p>
