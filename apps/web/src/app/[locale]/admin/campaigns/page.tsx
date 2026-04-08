@@ -252,8 +252,9 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
         <div>
           <label className="text-sm font-medium text-white/70 mb-1.5 block">{t3(locale, 'Zeitraum', 'الفترة')}</label>
           <div className="flex gap-2">
-            <input type="date" value={fmtDate(form.startAt)} onChange={(e) => updateForm('startAt', e.target.value)} className="flex-1 h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white text-sm" />
-            <input type="date" value={fmtDate(form.endAt)} onChange={(e) => updateForm('endAt', e.target.value)} className="flex-1 h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white text-sm" />
+            <input type="date" value={fmtDate(form.startAt)} onChange={(e) => updateForm('startAt', e.target.value)} className="flex-1 h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white text-sm [color-scheme:dark]" />
+            <span className="text-white/30 text-sm">→</span>
+            <input type="date" value={fmtDate(form.endAt)} onChange={(e) => updateForm('endAt', e.target.value)} className="flex-1 h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white text-sm [color-scheme:dark]" />
           </div>
         </div>
       </div>
@@ -279,9 +280,39 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
         </div>
       </div>
 
-      {/* Hero Banner Texts */}
-      <div className="bg-white/[0.02] rounded-xl p-4 space-y-3">
+      {/* Hero Banner */}
+      <div className="bg-white/[0.02] rounded-xl p-4 space-y-4">
         <h4 className="text-sm font-semibold text-white/80">{t3(locale, 'Hero Banner', 'البانر الرئيسي')}</h4>
+
+        {/* Image Upload */}
+        <div>
+          <label className="text-xs text-white/40 mb-1.5 block">{t3(locale, 'Banner-Bild (optional)', 'صورة البانر (اختياري)')}</label>
+          {form.heroImageUrl ? (
+            <div className="relative rounded-xl overflow-hidden border border-white/[0.06] group">
+              <img src={form.heroImageUrl} alt="" className="w-full h-40 object-cover" />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                <button onClick={() => updateForm('heroImageUrl', '')} className="px-4 py-2 rounded-lg bg-red-500/80 text-white text-xs font-medium hover:bg-red-500">{t3(locale, 'Entfernen', 'حذف')}</button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Input
+                value={form.heroImageUrl ?? ''}
+                onChange={(e) => updateForm('heroImageUrl', e.target.value)}
+                placeholder="https://..."
+                className="bg-white/[0.05] border-white/[0.08] text-white text-sm"
+              />
+              <p className="text-[10px] text-white/25">
+                {t3(locale,
+                  '📐 Empfohlene Größe: 1920×800px (Querformat). JPG oder WebP, max. 500KB. Ohne Bild wird der Farbverlauf der Vorlage verwendet.',
+                  '📐 الحجم الموصى: 1920×800 بكسل (أفقي). JPG أو WebP، حد أقصى 500 كيلوبايت. بدون صورة سيتم استخدام التدرج اللوني للقالب.'
+                )}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Texts */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input value={form.heroTitleDe} onChange={(e) => updateForm('heroTitleDe', e.target.value)} placeholder="Titel DE" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" />
           <Input value={form.heroTitleEn} onChange={(e) => updateForm('heroTitleEn', e.target.value)} placeholder="Title EN" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" />
@@ -336,7 +367,7 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
           {isNew ? t3(locale, 'Kampagne erstellen', 'إنشاء الحملة') : t3(locale, 'Speichern', 'حفظ')}
         </Button>
         {onCancel && (
-          <Button variant="outline" onClick={onCancel} className="border-white/[0.08] text-white/60">
+          <Button variant="outline" onClick={onCancel} className="border-white/15 text-white/70 hover:bg-white/5">
             {t3(locale, 'Abbrechen', 'إلغاء')}
           </Button>
         )}

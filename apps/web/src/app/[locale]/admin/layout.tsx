@@ -56,6 +56,7 @@ const NAV_GROUPS = [
   {
     label: { de: 'Marketing', en: 'Marketing', ar: 'التسويق' },
     items: [
+      { key: 'campaigns', labelKey: 'campaigns', href: '/admin/campaigns', icon: Flame, permission: 'settings.view' },
       { key: 'coupons', labelKey: 'coupons', href: '/admin/marketing/coupons', icon: Ticket, permission: 'settings.view' },
       { key: 'promotions', labelKey: 'promotions', href: '/admin/marketing/promotions', icon: Megaphone, permission: 'settings.view' },
     ],
@@ -84,7 +85,6 @@ const NAV_GROUPS = [
       { key: 'emails', labelKey: 'emails', href: '/admin/emails', icon: Mail, permission: 'emails.view' },
       { key: 'audit-log', labelKey: 'auditLog', href: '/admin/audit-log', icon: ScrollText, permission: 'audit.view' },
       { key: 'ai', labelKey: 'ai', href: '/admin/ai', icon: Bot, permission: 'settings.view' },
-      { key: 'campaigns', labelKey: 'campaigns', href: '/admin/campaigns', icon: Flame, permission: 'settings.view' },
       { key: 'analytics', labelKey: 'analytics', href: '/admin/analytics', icon: BarChart3, permission: 'settings.view' },
       { key: 'maintenance', labelKey: 'maintenance', href: '/admin/maintenance', icon: Construction, permission: 'settings.edit' },
     ],
