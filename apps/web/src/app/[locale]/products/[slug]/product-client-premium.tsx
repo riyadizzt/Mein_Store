@@ -484,7 +484,11 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 >
                   <Minus className="h-3.5 w-3.5" strokeWidth={1.5} />
                 </button>
-                <span className="w-12 h-10 grid place-items-center font-sans text-[14px] leading-none tabular-nums text-[#0f1419] border-x border-[#e5e5e5] select-none" dir="ltr">
+                <span
+                  className="font-sans text-[14px] tabular-nums text-[#0f1419] border-x border-[#e5e5e5] select-none"
+                  style={{ width: 48, height: 40, lineHeight: '40px', textAlign: 'center', display: 'block' }}
+                  dir="ltr"
+                >
                   {qty}
                 </span>
                 <button
