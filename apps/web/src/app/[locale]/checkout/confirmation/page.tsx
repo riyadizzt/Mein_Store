@@ -7,7 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import {
   CheckCircle2, Package, ArrowRight, Copy, Mail, Truck, ShoppingBag,
-  Shield, RotateCcw, MapPin, CreditCard, Clock, Home, Share2, Printer,
+  Shield, Headphones, MapPin, CreditCard, Clock, Home, Share2, Printer,
   UserPlus, Zap, Heart, Star, Lock, Eye, EyeOff,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -358,7 +358,7 @@ function ConfirmationContent() {
           {/* Trust */}
           <div className="flex items-center justify-center gap-6 pt-4 text-xs text-muted-foreground">
             {[
-              { Icon: RotateCcw, text: t('trustReturn') },
+              { Icon: Headphones, text: t('trustReturn') },
               { Icon: Shield, text: t('trustSecure') },
               { Icon: Truck, text: t('trustShipping') },
             ].map(({ Icon, text }, i) => (

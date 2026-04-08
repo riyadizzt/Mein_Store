@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useLocale } from 'next-intl'
-import { Users, Star, RotateCcw, ShieldCheck } from 'lucide-react'
+import { Users, Star, Award, ShieldCheck } from 'lucide-react'
 
 function useCountUp(target: number, duration = 1500) {
   const [value, setValue] = useState(0)
@@ -43,19 +43,19 @@ const STATS = {
   de: [
     { icon: Users, value: 2000, suffix: '+', label: 'Zufriedene Kunden' },
     { icon: Star, value: 4.9, suffix: '', label: 'Kundenbewertung', decimals: 1 },
-    { icon: RotateCcw, value: 14, suffix: ' Tage', label: 'R\u00FCckgaberecht' },
+    { icon: Award, value: 100, suffix: '%', label: 'Premium Qualit\u00E4t' },
     { icon: ShieldCheck, value: 100, suffix: '%', label: 'Sichere Bezahlung' },
   ],
   en: [
     { icon: Users, value: 2000, suffix: '+', label: 'Happy Customers' },
     { icon: Star, value: 4.9, suffix: '', label: 'Customer Rating', decimals: 1 },
-    { icon: RotateCcw, value: 14, suffix: ' days', label: 'Return Policy' },
+    { icon: Award, value: 100, suffix: '%', label: 'Premium Quality' },
     { icon: ShieldCheck, value: 100, suffix: '%', label: 'Secure Payment' },
   ],
   ar: [
     { icon: Users, value: 2000, suffix: '+', label: '\u0639\u0645\u0644\u0627\u0621 \u0633\u0639\u062F\u0627\u0621' },
     { icon: Star, value: 4.9, suffix: '', label: '\u062A\u0642\u064A\u064A\u0645 \u0627\u0644\u0639\u0645\u0644\u0627\u0621', decimals: 1 },
-    { icon: RotateCcw, value: 14, suffix: ' \u064A\u0648\u0645', label: '\u0644\u0644\u0625\u0631\u062C\u0627\u0639' },
+    { icon: Award, value: 100, suffix: '%', label: '\u062C\u0648\u062F\u0629 \u0645\u0645\u064A\u0632\u0629' },
     { icon: ShieldCheck, value: 100, suffix: '%', label: '\u062F\u0641\u0639 \u0622\u0645\u0646' },
   ],
 }

@@ -148,7 +148,7 @@
     "items": "منتج",
     "free": "مجاني",
     "trustShipping": "شحن مجاني من €100",
-    "trustReturns": "سياسة إرجاع 14 يوم",
+    "trustReturns": "خدمة عملاء شخصية",
     "trustSecure": "دفع آمن (SSL)",
     "removedFromCart": "تمت الإزالة من السلة",
     "addedToCart": "تمت الإضافة إلى السلة"
@@ -236,7 +236,7 @@
       "createAccount": "إنشاء حساب",
       "continueShopping": "مواصلة التسوق",
       "print": "طباعة",
-      "trustReturn": "سياسة إرجاع ١٤ يوم",
+      "trustReturn": "خدمة عملاء شخصية",
       "trustSecure": "دفع آمن",
       "trustShipping": "شحن مجاني من €١٠٠",
       "cardPayment": "بطاقة ائتمان",
@@ -400,7 +400,7 @@
   },
   "trust": {
     "freeShipping": "شحن مجاني فوق €100",
-    "returns": "إرجاع خلال 14 يوماً",
+    "returns": "خدمة عملاء شخصية",
     "securePayment": "دفع آمن",
     "gdpr": "متوافق مع حماية البيانات"
   },

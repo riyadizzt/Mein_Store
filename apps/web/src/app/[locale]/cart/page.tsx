@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Shield, Truck, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Shield, Truck, Headphones, AlertTriangle } from 'lucide-react'
 import { useCartStore } from '@/store/cart-store'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { Button } from '@/components/ui/button'
@@ -178,7 +178,7 @@ export default function CartPage() {
             <div className="mt-6 pt-5 border-t space-y-3">
               {[
                 { Icon: Truck, text: t('trustShipping') },
-                { Icon: RotateCcw, text: t('trustReturns') },
+                { Icon: Headphones, text: t('trustReturns') },
                 { Icon: Shield, text: t('trustSecure') },
               ].map(({ Icon, text }, i) => (
                 <div key={i} className="flex items-center gap-2.5 text-xs text-muted-foreground">

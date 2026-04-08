@@ -1,6 +1,6 @@
 'use client'
 
-import { Truck, RotateCcw, Shield, CreditCard } from 'lucide-react'
+import { Truck, Headphones, Shield, CreditCard } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { motion } from 'motion/react'
 
@@ -9,7 +9,7 @@ export function TrustSignals() {
 
   const signals = [
     { icon: Truck, label: t('freeShipping') },
-    { icon: RotateCcw, label: t('returns') },
+    { icon: Headphones, label: t('returns') },
     { icon: CreditCard, label: t('securePayment') },
     { icon: Shield, label: t('gdpr') },
   ]

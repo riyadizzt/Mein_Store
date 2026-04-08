@@ -1,4 +1,4 @@
-import { Truck, RotateCcw, ShieldCheck, Lock } from 'lucide-react'
+import { Truck, Headphones, ShieldCheck, Lock } from 'lucide-react'
 
 interface PremiumTrustBarProps {
   locale: string
@@ -9,7 +9,7 @@ export function PremiumTrustBar({ locale }: PremiumTrustBarProps) {
 
   const items = [
     { icon: Truck, text: t3('Kostenloser Versand ab €100', 'Free shipping over €100', 'شحن مجاني فوق 100€') },
-    { icon: RotateCcw, text: t3('14 Tage Rückgaberecht', '14-day returns', '14 يوم للإرجاع') },
+    { icon: Headphones, text: t3('Persönlicher Kundenservice', 'Personal customer service', 'خدمة عملاء شخصية') },
     { icon: ShieldCheck, text: t3('Sichere Zahlung', 'Secure payment', 'دفع آمن') },
     { icon: Lock, text: t3('DSGVO-konform', 'GDPR compliant', 'متوافق مع حماية البيانات') },
   ]

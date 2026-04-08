@@ -148,7 +148,7 @@
     "items": "items",
     "free": "Free",
     "trustShipping": "Free shipping from €100",
-    "trustReturns": "14-day return policy",
+    "trustReturns": "Personal customer service",
     "trustSecure": "Secure payment (SSL)",
     "removedFromCart": "Removed from cart",
     "addedToCart": "Added to cart"
@@ -236,7 +236,7 @@
       "createAccount": "Create Account",
       "continueShopping": "Continue Shopping",
       "print": "Print",
-      "trustReturn": "14-day return policy",
+      "trustReturn": "Personal customer service",
       "trustSecure": "Secure payment",
       "trustShipping": "Free shipping from €100",
       "cardPayment": "Credit Card",
@@ -400,7 +400,7 @@
   },
   "trust": {
     "freeShipping": "Free shipping from €100",
-    "returns": "14-day return policy",
+    "returns": "Personal customer service",
     "securePayment": "Secure payment",
     "gdpr": "GDPR compliant"
   },

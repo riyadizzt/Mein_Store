@@ -52,7 +52,7 @@ export function EditorialBanner({ locale }: { locale: string }) {
           {[
             { value: '2.000+', label: locale === 'ar' ? 'عملاء سعداء' : locale === 'en' ? 'Happy Customers' : 'Zufriedene Kunden' },
             { value: '4.9', label: locale === 'ar' ? 'تقييم العملاء' : locale === 'en' ? 'Customer Rating' : 'Kundenbewertung' },
-            { value: '14', label: locale === 'ar' ? 'يوم للإرجاع' : locale === 'en' ? 'Day Return Policy' : 'Tage Rückgaberecht' },
+            { value: '100%', label: locale === 'ar' ? 'جودة ممتازة' : locale === 'en' ? 'Premium Quality' : 'Premium Qualität' },
           ].map((stat, i) => (
             <div key={i} className="text-center">
               <p className="text-2xl sm:text-3xl font-bold text-ink tabular-nums">{stat.value}</p>

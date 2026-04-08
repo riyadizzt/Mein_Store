@@ -148,7 +148,7 @@
     "items": "Artikel",
     "free": "Kostenlos",
     "trustShipping": "Kostenloser Versand ab €100",
-    "trustReturns": "14 Tage Rückgaberecht",
+    "trustReturns": "Persönlicher Kundenservice",
     "trustSecure": "Sichere Bezahlung (SSL)",
     "removedFromCart": "Aus dem Warenkorb entfernt",
     "addedToCart": "Zum Warenkorb hinzugefügt"
@@ -236,7 +236,7 @@
       "createAccount": "Konto erstellen",
       "continueShopping": "Weiter einkaufen",
       "print": "Drucken",
-      "trustReturn": "14 Tage Rückgaberecht",
+      "trustReturn": "Persönlicher Kundenservice",
       "trustSecure": "Sichere Zahlung",
       "trustShipping": "Kostenloser Versand ab €100",
       "cardPayment": "Kreditkarte",
@@ -400,7 +400,7 @@
   },
   "trust": {
     "freeShipping": "Kostenloser Versand ab €100",
-    "returns": "14-Tage Rückgaberecht",
+    "returns": "Persönlicher Kundenservice",
     "securePayment": "Sichere Zahlung",
     "gdpr": "DSGVO-konform"
   },
