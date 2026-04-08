@@ -67,7 +67,9 @@ export function PremiumRecentlyViewed({ currentProductId, locale }: Props) {
                   loading="lazy"
                 />
               ) : (
-                <span className="text-3xl font-light text-[#d5d5d5] select-none">{(p.name ?? '?').charAt(0).toUpperCase()}</span>
+                <div className="h-12 w-12 rounded-full bg-[#e8e8e8] flex items-center justify-center">
+                  <span className="text-lg font-light text-[#b0b0b0] select-none">{(p.name ?? '?').charAt(0).toUpperCase()}</span>
+                </div>
               )}
             </div>
             <p className="text-[13px] font-light text-[#0f1419] truncate leading-snug">{p.name}</p>

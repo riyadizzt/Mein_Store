@@ -590,7 +590,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">
             {similarProducts.map((sp: any) => {
               const spName = sp.name ?? sp.translations?.[0]?.name ?? sp.slug
-              const spImage = sp.images?.find((i: any) => i.isPrimary)?.url ?? sp.images?.[0]?.url ?? sp.imageUrl
+              const spImage = sp.imageUrl ?? sp.images?.find((i: any) => i.isPrimary)?.url ?? sp.images?.[0]?.url
               const spPrice = sp.salePrice ?? sp.basePrice
               return (
                 <Link key={sp.id} href={`/${locale}/products/${sp.slug}`} className="flex-shrink-0 w-[180px] sm:w-[210px] group">
@@ -602,7 +602,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                         loading="lazy"
                       />
                     ) : (
-                      <span className="text-3xl font-display font-light text-[#d5d5d5] select-none">{(spName ?? '?').charAt(0).toUpperCase()}</span>
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="h-14 w-14 rounded-full bg-[#e8e8e8] flex items-center justify-center">
+                          <span className="text-xl font-display font-light text-[#b0b0b0] select-none">{(spName ?? '?').charAt(0).toUpperCase()}</span>
+                        </div>
+                        <span className="text-[10px] text-[#c0c0c0] tracking-wide">{t3('Kein Bild', 'No image', 'بدون صورة')}</span>
+                      </div>
                     )}
                   </div>
                   <p className="text-[13px] font-light text-[#0f1419] truncate leading-snug">{spName}</p>
