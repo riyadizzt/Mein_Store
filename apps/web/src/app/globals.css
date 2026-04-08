@@ -278,6 +278,17 @@ input[type="checkbox"]:checked {
   animation: scale-in 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+/* ── Admin Dark Date Picker ─── */
+input[type="date"][class*="color-scheme"] {
+  color-scheme: dark;
+}
+::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
+::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
 /* ── Confirmation page animations (moved from inline <style>) ─── */
 @keyframes shimmer-gold { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 @keyframes float-gentle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }

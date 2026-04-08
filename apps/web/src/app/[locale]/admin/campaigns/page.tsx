@@ -12,6 +12,7 @@ import {
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AdminDatePicker } from '@/components/admin/date-picker'
 
 const t3 = (locale: string, de: string, ar: string) => locale === 'ar' ? ar : de
 
@@ -233,12 +234,10 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
     }
   }
 
-  const fmtDate = (d: any) => d ? new Date(d).toISOString().split('T')[0] : ''
-
   return (
     <div className="space-y-6">
-      {/* Row 1: Name + Type + Template */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Row 1: Name + Type + Dates */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-medium text-white/70 mb-1.5 block">{t3(locale, 'Name', 'الاسم')}</label>
           <Input value={form.name} onChange={(e) => updateForm('name', e.target.value)} placeholder="z.B. Black Friday 2026" className="bg-white/[0.05] border-white/[0.08] text-white" />
@@ -249,12 +248,21 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
             {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v[locale] ?? v.de}</option>)}
           </select>
         </div>
-        <div>
-          <label className="text-sm font-medium text-white/70 mb-1.5 block">{t3(locale, 'Zeitraum', 'الفترة')}</label>
-          <div className="flex gap-2">
-            <input type="date" value={fmtDate(form.startAt)} onChange={(e) => updateForm('startAt', e.target.value)} className="flex-1 h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white text-sm [color-scheme:dark]" />
-            <span className="text-white/30 text-sm">→</span>
-            <input type="date" value={fmtDate(form.endAt)} onChange={(e) => updateForm('endAt', e.target.value)} className="flex-1 h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white text-sm [color-scheme:dark]" />
+        <div className="sm:col-span-2">
+          <label className="text-sm font-medium text-white/70 mb-1.5 block">{t3(locale, 'Zeitraum', 'الفترة الزمنية')}</label>
+          <div className="grid grid-cols-2 gap-3">
+            <AdminDatePicker
+              value={form.startAt}
+              onChange={(v) => updateForm('startAt', v)}
+              placeholder={locale === 'ar' ? 'تاريخ البدء' : 'Startdatum'}
+              withTime
+            />
+            <AdminDatePicker
+              value={form.endAt}
+              onChange={(v) => updateForm('endAt', v)}
+              placeholder={locale === 'ar' ? 'تاريخ الانتهاء' : 'Enddatum'}
+              withTime
+            />
           </div>
         </div>
       </div>
