@@ -290,22 +290,38 @@ export class ProductsService {
   async search(query: string, lang: Language = 'de', page = 1, limit = 20) {
     const skip = (page - 1) * limit
 
-    // PostgreSQL full-text search on translations
+    // PostgreSQL full-text search on translations + ILIKE fallback for partial matches
+    // For multi-word queries, search each word separately with ILIKE
+    const words = query.split(/\s+/).filter((w) => w.length >= 2)
+    const likePattern = `%${query}%`
+    const firstWord = words[0] ? `%${words[0]}%` : likePattern
     const results = await this.prisma.$queryRaw<{ id: string; rank: number }[]>`
-      SELECT p.id, ts_rank(
-        to_tsvector('simple', COALESCE(pt.name, '') || ' ' || COALESCE(pt.description, '')),
-        plainto_tsquery('simple', ${query})
+      SELECT p.id, GREATEST(
+        ts_rank(
+          to_tsvector('simple', COALESCE(pt.name, '') || ' ' || COALESCE(pt.description, '')),
+          plainto_tsquery('simple', ${query})
+        ),
+        CASE WHEN pt.name ILIKE ${likePattern} THEN 0.5 ELSE 0 END
       ) AS rank
       FROM products p
-      JOIN product_translations pt ON pt.product_id = p.id AND pt.language = ${lang}
+      JOIN product_translations pt ON pt.product_id = p.id AND pt.language = ${lang}::"Language"
       WHERE p.is_active = true AND p.deleted_at IS NULL
-        AND to_tsvector('simple', COALESCE(pt.name, '') || ' ' || COALESCE(pt.description, ''))
+        AND (
+          to_tsvector('simple', COALESCE(pt.name, '') || ' ' || COALESCE(pt.description, ''))
             @@ plainto_tsquery('simple', ${query})
+          OR pt.name ILIKE ${likePattern}
+          OR pt.description ILIKE ${likePattern}
+          OR pt.name ILIKE ${firstWord}
+        )
       ORDER BY rank DESC
       LIMIT ${limit} OFFSET ${skip}
     `
 
     if (results.length === 0) {
+      // Log zero-result search for analytics
+      this.prisma.searchLog.create({
+        data: { query, language: lang, resultCount: 0 },
+      }).catch(() => {})
       return { data: [], meta: { total: 0, page, limit, totalPages: 0 } }
     }
 
@@ -332,12 +348,22 @@ export class ProductsService {
     const countResult = await this.prisma.$queryRaw<{ count: bigint }[]>`
       SELECT COUNT(*) as count
       FROM products p
-      JOIN product_translations pt ON pt.product_id = p.id AND pt.language = ${lang}
+      JOIN product_translations pt ON pt.product_id = p.id AND pt.language = ${lang}::"Language"
       WHERE p.is_active = true AND p.deleted_at IS NULL
-        AND to_tsvector('simple', COALESCE(pt.name, '') || ' ' || COALESCE(pt.description, ''))
+        AND (
+          to_tsvector('simple', COALESCE(pt.name, '') || ' ' || COALESCE(pt.description, ''))
             @@ plainto_tsquery('simple', ${query})
+          OR pt.name ILIKE ${likePattern}
+          OR pt.description ILIKE ${likePattern}
+          OR pt.name ILIKE ${firstWord}
+        )
     `
     const total = Number(countResult[0]?.count ?? 0)
+
+    // Log search for analytics (fire-and-forget, don't block response)
+    this.prisma.searchLog.create({
+      data: { query, language: lang, resultCount: total },
+    }).catch(() => {})
 
     return {
       data: ordered.map((p) => this.formatProduct(p)),

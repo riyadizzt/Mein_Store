@@ -528,7 +528,8 @@
       "supplierPayments": "المدفوعات",
       "ai": "مساعد الذكاء الاصطناعي",
       "maintenance": "وضع الصيانة",
-      "logout": "تسجيل الخروج"
+      "logout": "تسجيل الخروج",
+      "analytics": "التحليلات"
     },
     "dashboard": {
       "title": "لوحة التحكم",

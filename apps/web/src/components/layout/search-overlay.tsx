@@ -123,7 +123,7 @@ export function SearchOverlay({ open, onClose }: SearchOverlayProps) {
                 {products.slice(0, 6).map((product: any) => {
                   const name = getName(product)
                   const price = product.salePrice ?? product.basePrice
-                  const image = product.images?.[0]?.url
+                  const image = product.imageUrl ?? product.images?.[0]?.url
                   return (
                     <Link
                       key={product.id}

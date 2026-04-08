@@ -60,6 +60,14 @@ export class PublicSettingsController {
       ai_global_enabled: s.ai_global_enabled || 'false',
       ai_customer_chat_enabled: s.ai_customer_chat_enabled || 'false',
       maintenance_enabled: s.maintenance_enabled || 'false',
+      // PostHog Analytics
+      posthog_enabled: s.posthog_enabled || 'false',
+      posthog_key: s.posthog_key || '',
+      posthog_host: s.posthog_host || 'https://eu.i.posthog.com',
+      // Cookie Consent
+      cookie_banner_enabled: s.cookie_banner_enabled !== 'false' ? 'true' : 'false',
+      // Returns
+      returnsEnabled: s.returnsEnabled !== 'false' ? 'true' : 'false',
     }
   }
 }

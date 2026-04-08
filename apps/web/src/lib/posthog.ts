@@ -5,19 +5,34 @@ let initialized = false
 
 /**
  * Initialize PostHog — only when analytics consent is given.
+ * Reads API key from Admin Settings (via API) or .env fallback.
  * Uses EU servers (eu.posthog.com) for DSGVO compliance.
  */
-export function initPostHog() {
+export async function initPostHog() {
   if (initialized) return
   if (typeof window === 'undefined') return
 
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com'
-
-  if (!key) return
-
   const consent = useConsentStore.getState()
   if (!consent.analytics) return
+
+  // Try to get key from Admin Settings (API), fallback to .env
+  let key = process.env.NEXT_PUBLIC_POSTHOG_KEY || ''
+  let host = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://eu.i.posthog.com'
+
+  if (!key) {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/settings/public`)
+      if (res.ok) {
+        const data = await res.json()
+        key = data?.posthog_key ?? ''
+        host = data?.posthog_host ?? host
+        const enabled = data?.posthog_enabled
+        if (enabled === 'false' || enabled === false) return
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (!key) return
 
   posthog.init(key, {
     api_host: host,
@@ -32,6 +47,8 @@ export function initPostHog() {
     persistence: 'localStorage+cookie',
     loaded: () => { initialized = true },
   })
+
+  initialized = true
 }
 
 /**

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations, useLocale } from 'next-intl'
-import { Settings, CreditCard, Truck, Mail, Building2, Check, Loader2, Gift, Bell } from 'lucide-react'
+import { Settings, CreditCard, Truck, Mail, Building2, Check, Loader2, Gift, Bell, Shield } from 'lucide-react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,6 +84,20 @@ export default function AdminSettingsPage() {
       {saveMutation.isError && (
         <div className="mb-4 p-3 rounded-xl bg-destructive/10 text-sm text-destructive">Fehler beim Speichern</div>
       )}
+
+      {/* Quick Link to Tracking & Privacy Settings */}
+      <Link
+        href={`/${locale}/admin/settings/tracking`}
+        className="flex items-center gap-3 p-4 bg-[#1a1a2e] border border-white/5 rounded-xl hover:border-[#d4a853]/30 transition-colors group mb-6"
+      >
+        <div className="h-10 w-10 rounded-xl bg-[#d4a853]/10 flex items-center justify-center group-hover:bg-[#d4a853]/20 transition-colors">
+          <Shield className="h-5 w-5 text-[#d4a853]" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">{locale === 'ar' ? 'التتبع والخصوصية' : 'Tracking & Datenschutz'}</p>
+          <p className="text-xs text-white/40">{locale === 'ar' ? 'PostHog Analytics، بانر الكوكيز، بكسل التسويق' : 'PostHog Analytics, Cookie-Banner, Marketing-Pixel'}</p>
+        </div>
+      </Link>
 
       <div className="space-y-6">
         {/* Company Info */}

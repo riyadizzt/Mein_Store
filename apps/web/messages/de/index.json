@@ -528,7 +528,8 @@
       "supplierPayments": "Zahlungen",
       "ai": "KI-Assistent",
       "maintenance": "Wartungsmodus",
-      "logout": "Abmelden"
+      "logout": "Abmelden",
+      "analytics": "Analytics"
     },
     "dashboard": {
       "title": "Dashboard",

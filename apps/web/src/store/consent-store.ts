@@ -79,6 +79,15 @@ export const useConsentStore = create<ConsentStore>((set) => ({
   closeSettings: () => set({ settingsOpen: false }),
 }))
 
+/** Hydrate from localStorage on client — call once on mount */
+export function hydrateConsent() {
+  if (typeof window === 'undefined') return
+  const stored = loadFromStorage()
+  if (stored.decided) {
+    useConsentStore.setState(stored)
+  }
+}
+
 /** Check if a specific consent category is granted */
 export function hasConsent(category: 'analytics' | 'marketing'): boolean {
   return useConsentStore.getState()[category]

@@ -15,7 +15,7 @@ export class FeedsController {
 
   @Get('settings/public')
   async getPublicSettings() {
-    const keys = ['meta_pixel_id', 'tiktok_pixel_id', 'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar', 'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled', 'ai_global_enabled', 'ai_customer_chat_enabled']
+    const keys = ['meta_pixel_id', 'tiktok_pixel_id', 'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar', 'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled', 'ai_global_enabled', 'ai_customer_chat_enabled', 'posthog_enabled', 'posthog_key', 'posthog_host', 'cookie_banner_enabled', 'returnsEnabled', 'welcomePopupEnabled']
     const settings = await this.prisma.shopSetting.findMany({ where: { key: { in: keys } } })
     const result: Record<string, string> = {}
     for (const s of settings) result[s.key] = s.value

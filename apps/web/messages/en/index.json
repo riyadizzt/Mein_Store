@@ -528,7 +528,8 @@
       "supplierPayments": "Payments",
       "ai": "AI Assistant",
       "maintenance": "Maintenance",
-      "logout": "Logout"
+      "logout": "Logout",
+      "analytics": "Analytics"
     },
     "dashboard": {
       "title": "Dashboard",

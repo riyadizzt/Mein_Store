@@ -45,18 +45,16 @@ function ProductsContent() {
   const allProducts = data?.pages.flatMap((page) => page.items ?? page ?? []) ?? []
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-start gap-8">
-        {/* Filter Sidebar */}
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:gap-8">
+        {/* Filter Sidebar (mobile: button+drawer, desktop: sidebar) */}
         <FilterSidebar />
 
-        {/* Product Grid */}
-        <div className="flex-1 min-w-0">
-          {/* Mobile filter button + result count */}
-          <div className="flex items-center justify-between mb-6 lg:mb-0 lg:hidden">
-            <p className="text-sm text-muted-foreground">
-              {t('filter.products', { count: allProducts.length })}
-            </p>
+        {/* Product Grid — takes full width on mobile */}
+        <div className="flex-1 min-w-0 w-full mt-4 lg:mt-0">
+          {/* Result count on desktop */}
+          <div className="hidden lg:flex items-center justify-between mb-4">
+            <p className="text-sm text-muted-foreground">{t('filter.products', { count: allProducts.length })}</p>
           </div>
 
           {/* Loading / Error */}

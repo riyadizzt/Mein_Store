@@ -1459,3 +1459,18 @@ model AiFaqEntry {
 
   @@map("ai_faq_entries")
 }
+
+// ── Search Analytics ──────────────────────────────────
+model SearchLog {
+  id           String   @id @default(uuid())
+  query        String
+  language     String   @default("de")
+  resultCount  Int      @default(0) @map("result_count")
+  userId       String?  @map("user_id")
+  sessionId    String?  @map("session_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([query])
+  @@index([createdAt])
+  @@map("search_logs")
+}

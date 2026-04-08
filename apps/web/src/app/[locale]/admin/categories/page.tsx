@@ -228,7 +228,7 @@ export default function AdminCategoriesPage() {
                 <StatCard value={(categories ?? []).length} label={t('categories.title')} />
                 <StatCard value={totalSubs} label={t('categories.subcategories')} />
                 <StatCard value={totalProds} label={t('categories.products')} />
-                <StatCard value={0} label={`${t('categories.products')} (∅)`} color="green" />
+                <StatCard value={allFlat.filter((c) => (c._count?.products ?? 0) === 0).length} label={locale === 'ar' ? 'أقسام بدون منتجات' : 'Ohne Produkte'} color="orange" />
               </div>
             </div>
           ) : (
@@ -307,20 +307,59 @@ export default function AdminCategoriesPage() {
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('categories.sortOrder')}</label>
                   <Input type="number" value={sortOrder} onChange={(e) => setSortOrder(+e.target.value)} min={0} />
                 </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('categories.imageUrl')}</label>
-                  <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://..." />
-                </div>
               </div>
 
-              {/* Image Preview */}
-              {imageUrl && (
-                <div className="mb-6 flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                  <ImageIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <img src={imageUrl} alt="" className="h-16 w-16 rounded object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                  <span className="text-xs text-muted-foreground truncate flex-1">{imageUrl}</span>
-                </div>
-              )}
+              {/* Category Image — Upload or URL */}
+              <div className="mb-6">
+                <label className="text-xs font-medium text-muted-foreground mb-2 block">{t('categories.imageUrl')}</label>
+                {imageUrl ? (
+                  <div className="relative group rounded-xl overflow-hidden border border-white/[0.06] bg-[#1a1a2e]">
+                    <img src={imageUrl} alt="" className="w-full h-48 object-cover" onError={(e) => { (e.target as HTMLImageElement).src = '' }} />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                      <label className="px-4 py-2 rounded-lg bg-white/20 text-white text-sm font-medium cursor-pointer hover:bg-white/30 transition-colors">
+                        {locale === 'ar' ? 'تغيير' : 'Ändern'}
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          const formData = new FormData()
+                          formData.append('file', file)
+                          formData.append('folder', 'categories')
+                          try {
+                            const { data } = await api.post('/uploads/image', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+                            setImageUrl(data.url ?? data.path ?? '')
+                          } catch { /* fallback: keep URL input */ }
+                        }} />
+                      </label>
+                      <button onClick={() => setImageUrl('')} className="px-4 py-2 rounded-lg bg-red-500/80 text-white text-sm font-medium hover:bg-red-500 transition-colors">
+                        {locale === 'ar' ? 'حذف' : 'Entfernen'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center h-40 rounded-xl border-2 border-dashed border-white/10 hover:border-[#d4a853]/30 bg-[#1a1a2e] cursor-pointer transition-colors group">
+                    <ImageIcon className="h-8 w-8 text-white/20 group-hover:text-[#d4a853]/50 transition-colors mb-2" />
+                    <span className="text-xs text-white/30 group-hover:text-white/50">{locale === 'ar' ? 'اسحب صورة أو انقر للتحميل' : 'Bild hierher ziehen oder klicken'}</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      formData.append('folder', 'categories')
+                      try {
+                        const { data } = await api.post('/uploads/image', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+                        setImageUrl(data.url ?? data.path ?? '')
+                      } catch { /* fallback below */ }
+                    }} />
+                    <span className="text-[10px] text-white/20 mt-2">{locale === 'ar' ? 'أو أدخل رابط URL' : 'Oder URL eingeben'}</span>
+                  </label>
+                )}
+                <Input
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="mt-2 bg-white/[0.05] border-white/[0.08] text-sm"
+                />
+              </div>
 
               {/* Delete error toast */}
               {deleteError && (
@@ -403,10 +442,11 @@ function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, has
 }
 
 function StatCard({ value, label, color }: { value: number; label: string; color?: string }) {
+  const colorClass = color === 'orange' ? 'text-orange-400' : color === 'green' ? 'text-green-400' : 'text-white'
   return (
-    <div className="bg-muted/30 rounded-xl p-5 text-center">
-      <p className={`text-3xl font-bold ${color === 'green' ? 'text-green-600' : ''}`}>{value}</p>
-      <p className="text-sm text-muted-foreground mt-1">{label}</p>
+    <div className="bg-[#1a1a2e] rounded-xl p-5 border border-white/[0.06]">
+      <p className={`text-3xl font-bold tabular-nums ${colorClass}`}>{value}</p>
+      <p className="text-xs text-white/40 mt-1.5 uppercase tracking-wider">{label}</p>
     </div>
   )
 }

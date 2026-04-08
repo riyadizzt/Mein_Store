@@ -78,6 +78,20 @@ export class AdminController {
     return this.dashboard.getOverview()
   }
 
+  @Get('analytics/search')
+  @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
+  getSearchAnalytics() {
+    return this.dashboard.getSearchAnalytics()
+  }
+
+  @Delete('analytics/search')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  async clearSearchLogs() {
+    const { count } = await this.prisma.searchLog.deleteMany({})
+    return { cleared: count }
+  }
+
   // ── Notifications (DB-based) ──────────────────────────────
   @Get('notifications')
   @RequirePermission(PERMISSIONS.DASHBOARD_VIEW)
@@ -1260,12 +1274,18 @@ export class AdminController {
       maintenance_bg_image: db.maintenance_bg_image ?? '',
       maintenance_activated_at: db.maintenance_activated_at ?? '',
       maintenance_views: db.maintenance_views ?? '0',
+      // PostHog Analytics
+      posthog_enabled: db.posthog_enabled ?? 'false',
+      posthog_key: db.posthog_key ?? '',
+      posthog_host: db.posthog_host ?? 'https://eu.i.posthog.com',
+      // Cookie Consent
+      cookie_banner_enabled: db.cookie_banner_enabled ?? 'true',
     }
   }
 
   @Patch('settings')
   @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
-  @Roles('super_admin')
+  @Roles('admin', 'super_admin')
   async updateSettings(@Body() body: Record<string, string>, @Req() req: any, @Ip() ip: string) {
     const allowed = [
       // Company
@@ -1316,6 +1336,10 @@ export class AdminController {
       'ai_global_enabled', 'ai_customer_chat_enabled', 'ai_admin_assistant_enabled',
       'ai_product_description_enabled', 'ai_inventory_suggestions_enabled',
       'ai_marketing_text_enabled', 'ai_social_reply_enabled',
+      // PostHog Analytics
+      'posthog_enabled', 'posthog_key', 'posthog_host',
+      // Cookie Consent
+      'cookie_banner_enabled',
     ]
     const entries = Object.entries(body).filter(([k]) => allowed.includes(k))
 

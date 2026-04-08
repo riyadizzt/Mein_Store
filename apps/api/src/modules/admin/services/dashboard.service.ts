@@ -274,4 +274,50 @@ export class DashboardService {
       totalValue: carts.reduce((s, c) => s + Number(c.totalAmount), 0).toFixed(2),
     }
   }
+
+  // ── Search Analytics ──────────────────────────────────
+  async getSearchAnalytics() {
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const weekStart = new Date(todayStart)
+    weekStart.setDate(weekStart.getDate() - 7)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    // Total searches
+    const [totalToday, totalWeek, totalMonth] = await Promise.all([
+      this.prisma.searchLog.count({ where: { createdAt: { gte: todayStart } } }),
+      this.prisma.searchLog.count({ where: { createdAt: { gte: weekStart } } }),
+      this.prisma.searchLog.count({ where: { createdAt: { gte: monthStart } } }),
+    ])
+
+    // Top search terms (last 30 days)
+    const topTerms = await this.prisma.$queryRaw<{ query: string; count: bigint; avg_results: number }[]>`
+      SELECT query, COUNT(*) as count, AVG(result_count)::int as avg_results
+      FROM search_logs
+      WHERE created_at >= ${monthStart}
+      GROUP BY query
+      ORDER BY count DESC
+      LIMIT 20
+    `
+
+    // Zero-result searches (last 30 days)
+    const zeroResults = await this.prisma.$queryRaw<{ query: string; count: bigint }[]>`
+      SELECT query, COUNT(*) as count
+      FROM search_logs
+      WHERE created_at >= ${monthStart} AND result_count = 0
+      GROUP BY query
+      ORDER BY count DESC
+      LIMIT 20
+    `
+
+    return {
+      totals: {
+        today: totalToday,
+        week: totalWeek,
+        month: totalMonth,
+      },
+      topTerms: topTerms.map((t) => ({ query: t.query, count: Number(t.count), avgResults: t.avg_results })),
+      zeroResults: zeroResults.map((t) => ({ query: t.query, count: Number(t.count) })),
+    }
+  }
 }

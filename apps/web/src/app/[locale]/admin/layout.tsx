@@ -12,7 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone,
-  HandCoins, PackageOpen, Bot, Camera, Construction,
+  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -84,6 +84,7 @@ const NAV_GROUPS = [
       { key: 'emails', labelKey: 'emails', href: '/admin/emails', icon: Mail, permission: 'emails.view' },
       { key: 'audit-log', labelKey: 'auditLog', href: '/admin/audit-log', icon: ScrollText, permission: 'audit.view' },
       { key: 'ai', labelKey: 'ai', href: '/admin/ai', icon: Bot, permission: 'settings.view' },
+      { key: 'analytics', labelKey: 'analytics', href: '/admin/analytics', icon: BarChart3, permission: 'settings.view' },
       { key: 'maintenance', labelKey: 'maintenance', href: '/admin/maintenance', icon: Construction, permission: 'settings.edit' },
     ],
   },
