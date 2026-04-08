@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl'
-import { HeroSection } from '@/components/home/hero-section'
+import { HeroWithCampaign } from '@/components/home/hero-with-campaign'
 import { TrustSignals } from '@/components/layout/trust-signals'
 import { CategoryShowcase } from '@/components/home/category-showcase'
 import { FeaturedProducts } from '@/components/home/featured-products'
@@ -18,7 +18,7 @@ export default function HomePage({
   return (
     <>
       {/* 1. Hero — full viewport, immersive */}
-      <HeroSection locale={locale} />
+      <HeroWithCampaign locale={locale} />
 
       {/* 2. Trust signals bar */}
       <TrustSignals />

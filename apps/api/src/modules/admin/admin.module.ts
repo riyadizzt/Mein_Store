@@ -25,6 +25,7 @@ import { PaymentTimeoutCron } from './cron/payment-timeout.cron'
 import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
 import { AdminSuppliersService } from './services/admin-suppliers.service'
 import { TranslationService } from '../../common/services/translation.service'
+import { CampaignService } from './services/campaign.service'
 
 @Module({
   imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule],
@@ -48,6 +49,7 @@ import { TranslationService } from '../../common/services/translation.service'
     PaymentTimeoutCron,
     AdminSuppliersService,
     TranslationService,
+    CampaignService,
     PermissionGuard,
   ],
   exports: [AuditService, AdminMarketingService, NotificationService],

@@ -529,7 +529,8 @@
       "ai": "AI Assistant",
       "maintenance": "Maintenance",
       "logout": "Logout",
-      "analytics": "Analytics"
+      "analytics": "Analytics",
+      "campaigns": "Campaigns"
     },
     "dashboard": {
       "title": "Dashboard",

@@ -72,6 +72,33 @@ export class PublicSettingsController {
   }
 }
 
+// Public active campaign — no auth needed
+@ApiTags('Campaigns')
+@Controller('campaigns')
+export class PublicCampaignController {
+  constructor(private readonly prisma: PrismaService) {}
+
+  @Get('active')
+  @ApiOperation({ summary: 'Get currently active campaign (public)' })
+  async getActiveCampaign() {
+    const now = new Date()
+    // Auto-update statuses
+    await this.prisma.campaign.updateMany({
+      where: { status: 'scheduled', startAt: { lte: now } },
+      data: { status: 'active' },
+    })
+    await this.prisma.campaign.updateMany({
+      where: { status: 'active', endAt: { lt: now } },
+      data: { status: 'ended' },
+    })
+
+    return this.prisma.campaign.findFirst({
+      where: { status: 'active', startAt: { lte: now }, endAt: { gte: now } },
+      orderBy: { startAt: 'desc' },
+    })
+  }
+}
+
 // Guest order lookup — no auth, requires orderNumber + email
 @ApiTags('Orders')
 @Controller('orders')

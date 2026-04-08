@@ -529,7 +529,8 @@
       "ai": "KI-Assistent",
       "maintenance": "Wartungsmodus",
       "logout": "Abmelden",
-      "analytics": "Analytics"
+      "analytics": "Analytics",
+      "campaigns": "Kampagnen"
     },
     "dashboard": {
       "title": "Dashboard",

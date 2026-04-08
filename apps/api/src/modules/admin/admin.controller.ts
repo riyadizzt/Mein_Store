@@ -42,6 +42,7 @@ import { AdminMarketingService } from './services/admin-marketing.service'
 import { NotificationService } from './services/notification.service'
 import { AdminSuppliersService } from './services/admin-suppliers.service'
 import { TranslationService } from '../../common/services/translation.service'
+import { CampaignService } from './services/campaign.service'
 import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
 import { Response } from 'express'
@@ -68,6 +69,7 @@ export class AdminController {
     private readonly notificationService: NotificationService,
     private readonly suppliers: AdminSuppliersService,
     private readonly translation: TranslationService,
+    private readonly campaigns: CampaignService,
   ) {}
 
   // ── Dashboard ─────────────────────────────────────────────
@@ -90,6 +92,55 @@ export class AdminController {
   async clearSearchLogs() {
     const { count } = await this.prisma.searchLog.deleteMany({})
     return { cleared: count }
+  }
+
+  // ── Campaigns ─────────────────────────────────────────
+  @Get('campaigns')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
+  getCampaigns(@Query('status') status?: string) {
+    return this.campaigns.findAll(status)
+  }
+
+  @Get('campaigns/active')
+  getActiveCampaign() {
+    return this.campaigns.getActiveCampaign()
+  }
+
+  @Get('campaigns/:id')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
+  getCampaign(@Param('id') id: string) {
+    return this.campaigns.findOne(id)
+  }
+
+  @Post('campaigns')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  createCampaign(@Body() body: any, @Req() req: any) {
+    return this.campaigns.create(body, req.user?.id)
+  }
+
+  @Patch('campaigns/:id')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  updateCampaign(@Param('id') id: string, @Body() body: any) {
+    return this.campaigns.update(id, body)
+  }
+
+  @Delete('campaigns/:id')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteCampaign(@Param('id') id: string) {
+    return this.campaigns.remove(id)
+  }
+
+  @Get('campaigns/:id/stats')
+  @RequirePermission(PERMISSIONS.SETTINGS_VIEW)
+  getCampaignStats(@Param('id') id: string) {
+    return this.campaigns.getStats(id)
+  }
+
+  @Post('campaigns/:id/duplicate')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  duplicateCampaign(@Param('id') id: string) {
+    return this.campaigns.duplicate(id)
   }
 
   // ── Notifications (DB-based) ──────────────────────────────

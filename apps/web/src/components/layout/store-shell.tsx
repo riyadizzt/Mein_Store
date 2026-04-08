@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Header } from './header'
-import { AnnouncementBar } from '@/components/overdrive/announcement-bar'
+import { AnnouncementWithCampaign } from '@/components/overdrive/announcement-with-campaign'
 import { ScrollProgress } from '@/components/overdrive/scroll-progress'
 
 // Lazy load below-fold / non-critical shell components
@@ -16,6 +16,7 @@ const WelcomePopup = dynamic(() => import('../welcome-popup').then((m) => ({ def
 const ScrollToTop = dynamic(() => import('@/components/overdrive/scroll-to-top').then((m) => ({ default: m.ScrollToTop })), { ssr: false })
 const ConsoleEasterEgg = dynamic(() => import('@/components/overdrive/console-egg').then((m) => ({ default: m.ConsoleEasterEgg })), { ssr: false })
 const Toaster = dynamic(() => import('@/components/ui/toaster').then((m) => ({ default: m.Toaster })), { ssr: false })
+const CampaignPopup = dynamic(() => import('@/components/overdrive/campaign-popup').then((m) => ({ default: m.CampaignPopup })), { ssr: false })
 
 /**
  * StoreShell — renders store chrome (header, footer, mobile nav, cart, cookies)
@@ -32,7 +33,7 @@ export function StoreShell({ locale, children }: { locale: string; children: Rea
   return (
     <>
       <ScrollProgress />
-      <AnnouncementBar />
+      <AnnouncementWithCampaign />
       <Header locale={locale} />
       <main className="min-h-screen pb-16 lg:pb-0">{children}</main>
       <Footer locale={locale} />
@@ -44,6 +45,7 @@ export function StoreShell({ locale, children }: { locale: string; children: Rea
       <ScrollToTop />
       <ConsoleEasterEgg />
       <Toaster />
+      <CampaignPopup />
     </>
   )
 }

@@ -1474,3 +1474,69 @@ model SearchLog {
   @@index([createdAt])
   @@map("search_logs")
 }
+
+// ── Campaigns / Kampagnen ─────────────────────────────
+model Campaign {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  type        String   @default("sale") // sale, holiday, new_collection, seasonal, flash_sale
+  status      String   @default("draft") // draft, scheduled, active, ended
+  template    String?  // black_friday, eid, ramadan, summer, christmas, newyear, custom
+
+  // Schedule — auto-activate/deactivate
+  startAt     DateTime  @map("start_at")
+  endAt       DateTime  @map("end_at")
+
+  // Hero Banner
+  heroBannerEnabled   Boolean @default(true) @map("hero_banner_enabled")
+  heroImageUrl        String? @map("hero_image_url")
+  heroBgColor         String? @map("hero_bg_color") // gradient or solid color
+  heroTitleDe         String? @map("hero_title_de")
+  heroTitleEn         String? @map("hero_title_en")
+  heroTitleAr         String? @map("hero_title_ar")
+  heroSubtitleDe      String? @map("hero_subtitle_de")
+  heroSubtitleEn      String? @map("hero_subtitle_en")
+  heroSubtitleAr      String? @map("hero_subtitle_ar")
+  heroCtaDe           String? @map("hero_cta_de")
+  heroCtaEn           String? @map("hero_cta_en")
+  heroCtaAr           String? @map("hero_cta_ar")
+  heroCtaLink         String? @map("hero_cta_link")
+  heroCountdown       Boolean @default(false) @map("hero_countdown")
+  heroAnimation       String? @map("hero_animation") // confetti, snow, glitter, stars, fireworks, none
+
+  // Announcement Bar
+  announcementEnabled Boolean @default(false) @map("announcement_enabled")
+  announcementTextDe  String? @map("announcement_text_de")
+  announcementTextEn  String? @map("announcement_text_en")
+  announcementTextAr  String? @map("announcement_text_ar")
+  announcementBgColor String? @map("announcement_bg_color")
+  announcementTextColor String? @map("announcement_text_color")
+  announcementLink    String? @map("announcement_link")
+
+  // Popup
+  popupEnabled        Boolean @default(false) @map("popup_enabled")
+  popupImageUrl       String? @map("popup_image_url")
+  popupTextDe         String? @map("popup_text_de")
+  popupTextEn         String? @map("popup_text_en")
+  popupTextAr         String? @map("popup_text_ar")
+  popupCouponCode     String? @map("popup_coupon_code")
+  popupTrigger        String  @default("delay_5s") @map("popup_trigger") // immediate, delay_5s, delay_10s, exit_intent
+  popupOncePerVisitor Boolean @default(true) @map("popup_once_per_visitor")
+
+  // Sale Badge
+  saleBadgeEnabled    Boolean @default(true) @map("sale_badge_enabled")
+  saleBadgeColor      String  @default("red") @map("sale_badge_color") // red, gold, black
+  saleBadgeTextDe     String? @map("sale_badge_text_de")
+  saleBadgeTextEn     String? @map("sale_badge_text_en")
+  saleBadgeTextAr     String? @map("sale_badge_text_ar")
+
+  // Metadata
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([startAt, endAt])
+  @@map("campaigns")
+}
