@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/auth-store'
 import { useShopSettings } from '@/hooks/use-shop-settings'
 import { useCategories } from '@/hooks/use-categories'
 import { LanguageSwitcher } from './language-switcher'
+import { SearchOverlay } from './search-overlay'
 
 export function Header({ locale }: { locale: string }) {
   const t = useTranslations('nav')
@@ -234,8 +235,8 @@ export function Header({ locale }: { locale: string }) {
             </div>
           </div>
 
-          {/* Search Bar */}
-          {searchOpen && (
+          {/* Search Overlay (replaces inline search bar) */}
+          {false && searchOpen && (
             <div className="pb-4 animate-fade-in">
               <form action={`/${locale}/products`} className="relative">
                 <Search className="absolute left-3 rtl:left-auto rtl:right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -331,6 +332,7 @@ export function Header({ locale }: { locale: string }) {
           </div>
         )}
       </header>
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   )
 }

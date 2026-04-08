@@ -21,17 +21,65 @@ export default function DatenschutzPage() {
       <h2>2. Verantwortliche Stelle</h2>
       <p>{company}<br />E-Mail: {email}</p>
 
-      <h2>3. Datenerfassung auf dieser Website</h2>
-      <h3>Cookies</h3>
+      <h2>3. Cookies und Einwilligung</h2>
+      <h3>Ihr Wahlrecht (Opt-In)</h3>
       <p>
-        Unsere Internetseiten verwenden so genannte „Cookies". Cookies sind kleine Datenpakete und richten
-        auf Ihrem Endgerät keinen Schaden an. Sie werden entweder vorübergehend für die Dauer einer Sitzung
-        (Session-Cookies) oder dauerhaft (permanente Cookies) auf Ihrem Endgerät gespeichert.
+        Beim ersten Besuch unseres Shops erscheint ein Cookie-Banner. Sie können wählen, ob Sie
+        nur notwendige Cookies oder zusätzlich Analyse- und Marketing-Cookies akzeptieren möchten.
+        Tracking-Technologien werden <strong>erst nach Ihrer ausdrücklichen Einwilligung</strong> aktiviert
+        (Art. 6 Abs. 1 lit. a DSGVO). Sie können Ihre Einwilligung jederzeit widerrufen über den
+        Link „Cookie-Einstellungen" im Footer unserer Website.
       </p>
+
+      <h3>Kategorie 1: Notwendige Cookies (immer aktiv)</h3>
       <p>
-        Sie können Ihren Browser so einstellen, dass Sie über das Setzen von Cookies informiert werden und
-        Cookies nur im Einzelfall erlauben, die Annahme von Cookies für bestimmte Fälle oder generell
-        ausschließen sowie das automatische Löschen der Cookies beim Schließen des Browsers aktivieren.
+        Diese Cookies sind für den Betrieb des Shops unerlässlich. Sie ermöglichen grundlegende
+        Funktionen wie den Warenkorb, die Sprachauswahl und die Anmeldung. <strong>Sie können nicht
+        deaktiviert werden.</strong>
+      </p>
+      <ul>
+        <li><strong>Warenkorb</strong> — Speichert Ihren Warenkorb (localStorage)</li>
+        <li><strong>Spracheinstellung</strong> — Speichert Ihre gewählte Sprache</li>
+        <li><strong>Authentifizierung</strong> — JWT-Token für die Anmeldung</li>
+        <li><strong>Cookie-Consent</strong> — Speichert Ihre Cookie-Präferenzen</li>
+      </ul>
+
+      <h3>Kategorie 2: Analyse-Cookies (optional)</h3>
+      <p>
+        Diese Cookies helfen uns zu verstehen, wie Besucher unseren Shop nutzen.
+        Die Daten werden <strong>ausschließlich auf EU-Servern</strong> (Frankfurt) verarbeitet.
+      </p>
+      <ul>
+        <li>
+          <strong>PostHog Analytics</strong> — Erfasst Seitenaufrufe, Klickverhalten und
+          anonymisierte Nutzungsdaten. Anbieter: PostHog Inc., Datenverarbeitung über
+          eu.posthog.com (EU-Rechenzentrum). PostHog kann Sitzungsaufnahmen erstellen,
+          bei denen Eingabefelder automatisch maskiert werden.
+        </li>
+      </ul>
+
+      <h3>Kategorie 3: Marketing-Cookies (optional)</h3>
+      <p>
+        Diese Cookies ermöglichen personalisierte Werbung und Retargeting-Kampagnen über
+        Drittanbieter-Plattformen.
+      </p>
+      <ul>
+        <li>
+          <strong>Meta Pixel (Facebook/Instagram)</strong> — Erfasst Seitenaufrufe, Produktansichten
+          und Kaufabschlüsse zur Ausspielung personalisierter Werbung auf Facebook und Instagram.
+          Anbieter: Meta Platforms Ireland Ltd.
+        </li>
+        <li>
+          <strong>TikTok Pixel</strong> — Erfasst Seitenaufrufe und Kaufereignisse zur Ausspielung
+          personalisierter Werbung auf TikTok. Anbieter: TikTok Technology Ltd. (Irland).
+        </li>
+      </ul>
+
+      <h3>Einwilligung widerrufen</h3>
+      <p>
+        Sie können Ihre Cookie-Einwilligung jederzeit ändern oder widerrufen.
+        Klicken Sie dazu auf „Cookie-Einstellungen" im Footer unserer Website oder löschen Sie
+        die Cookies in Ihren Browsereinstellungen.
       </p>
 
       <h3>Server-Log-Dateien</h3>
@@ -53,7 +101,15 @@ export default function DatenschutzPage() {
         direkt an den jeweiligen Dienstleister übermittelt und nicht auf unseren Servern gespeichert.
       </p>
 
-      <h2>6. Ihre Rechte</h2>
+      <h2>6. Datenspeicherung</h2>
+      <p>
+        Alle Kundendaten werden auf EU-Servern gespeichert (Supabase, Frankfurt am Main).
+        Analyse-Daten werden über PostHog auf EU-Servern verarbeitet (eu.posthog.com).
+        Es findet <strong>keine Übertragung an Server außerhalb der EU</strong> statt, sofern
+        Sie keine Marketing-Cookies akzeptieren.
+      </p>
+
+      <h2>7. Ihre Rechte</h2>
       <p>Sie haben jederzeit das Recht auf:</p>
       <ul>
         <li>Auskunft über Ihre gespeicherten Daten (Art. 15 DSGVO)</li>
@@ -62,16 +118,17 @@ export default function DatenschutzPage() {
         <li>Einschränkung der Verarbeitung (Art. 18 DSGVO)</li>
         <li>Datenübertragbarkeit (Art. 20 DSGVO)</li>
         <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO)</li>
+        <li><strong>Widerruf Ihrer Einwilligung</strong> zu Cookies jederzeit über die Cookie-Einstellungen im Footer</li>
       </ul>
       <p>Kontaktieren Sie uns unter: {email}</p>
 
-      <h2>7. Datenexport</h2>
+      <h2>8. Datenexport</h2>
       <p>
         Sie können jederzeit in Ihrem Kundenkonto unter „Account löschen" einen Export aller Ihrer
         personenbezogenen Daten anfordern (Art. 20 DSGVO).
       </p>
 
-      <p><em>Stand: März 2026 — Diese Datenschutzerklärung wird regelmäßig aktualisiert.</em></p>
+      <p><em>Stand: April 2026 — Diese Datenschutzerklärung wird regelmäßig aktualisiert.</em></p>
     </>
   )
 }

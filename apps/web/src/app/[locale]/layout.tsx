@@ -13,6 +13,7 @@ import { WhatsAppButton } from '@/components/whatsapp-button'
 import { Suspense } from 'react'
 import { UtmCapture } from '@/components/utm-capture'
 import { AiChatWidget } from '@/components/ai/chat-widget'
+import { PostHogProvider } from '@/providers/posthog-provider'
 import { MaintenanceCheck } from '@/components/maintenance-check'
 import '../globals.css'
 
@@ -69,6 +70,7 @@ export default async function LocaleLayout({
                   {children}
                 </StoreShell>
                 <Suspense><UtmCapture /></Suspense>
+                <Suspense><PostHogProvider><></></PostHogProvider></Suspense>
                 <MaintenanceCheck />
                 <TrackingPixels />
                 <WhatsAppButton />

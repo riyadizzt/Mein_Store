@@ -29,10 +29,12 @@ export class ProductsController {
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })
   @ApiQuery({ name: 'isFeatured', required: false, type: Boolean })
+  @ApiQuery({ name: 'q', required: false, description: 'Search query (searches name, description, SKU)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   findAll(
     @Query('lang') lang: Language = 'de',
+    @Query('q') q?: string,
     @Query('categoryId') categoryId?: string,
     @Query('gender') gender?: string,
     @Query('brand') brand?: string,
@@ -43,6 +45,16 @@ export class ProductsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    // If search query is provided, delegate to full-text search
+    if (q && q.trim().length >= 2) {
+      return this.productsService.search(
+        q.trim(),
+        lang,
+        page ? Number(page) : 1,
+        limit ? Math.min(Number(limit), 100) : 20,
+      )
+    }
+
     return this.productsService.findAll({
       lang,
       categoryId,

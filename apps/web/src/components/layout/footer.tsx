@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { Check, ArrowRight, Instagram, Facebook, Truck, RotateCcw, ShieldCheck, Lock } from 'lucide-react'
+import { Check, ArrowRight, Instagram, Facebook, Truck, RotateCcw, ShieldCheck, Lock, Cookie } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
+import { useConsentStore } from '@/store/consent-store'
 
 /* ── TikTok SVG ── */
 const TikTokIcon = () => (
@@ -203,6 +204,16 @@ export function Footer({ locale }: { locale: string }) {
                 <FooterLink href={`/${locale}/legal/datenschutz`}>{t('privacy')}</FooterLink>
                 <FooterLink href={`/${locale}/legal/agb`}>{t('terms')}</FooterLink>
                 <FooterLink href={`/${locale}/legal/widerruf`}>{t('withdrawal')}</FooterLink>
+                <li>
+                  <button
+                    onClick={() => useConsentStore.getState().openSettings()}
+                    className="relative inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
+                  >
+                    <Cookie className="h-3.5 w-3.5" />
+                    {locale === 'ar' ? 'إعدادات الكوكيز' : locale === 'en' ? 'Cookie Settings' : 'Cookie-Einstellungen'}
+                    <span className="absolute bottom-0 left-0 rtl:left-auto rtl:right-0 w-0 h-px bg-brand-gold transition-all duration-300 group-hover:w-full" />
+                  </button>
+                </li>
               </ul>
             </div>
           </div>
