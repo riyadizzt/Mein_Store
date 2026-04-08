@@ -516,7 +516,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                   </td>
                   {sizes.map(size => {
                     const v = getVariant(color as string, size)
-                    const sizeTotal = (v?.inventory ?? []).reduce((s: number, inv: any) => s + Math.max(0, inv.quantityOnHand - (inv.quantityReserved ?? 0)), 0)
+                    const sizeTotal = (v?.inventory ?? []).reduce((s: number, inv: any) => s + (inv.quantityOnHand ?? 0), 0)
                     return (
                       <td key={size} className="py-3 text-center">
                         <span className={`inline-flex items-center justify-center h-7 min-w-[1.75rem] px-2 rounded-lg text-xs font-bold ${
