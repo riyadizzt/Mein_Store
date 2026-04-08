@@ -6,7 +6,7 @@ const BASE = `${API_URL}/api/v1`
 let isRefreshing = false
 
 function isAdminPath(path: string): boolean {
-  return path.includes('/admin/')
+  return path.includes('/admin/') || (typeof window !== 'undefined' && window.location.pathname.includes('/admin'))
 }
 
 function getHeaders(path: string): Record<string, string> {

@@ -12,7 +12,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import {
   Plus, Loader2, ChevronDown, ChevronRight,
-  FolderPlus, Trash2, FolderTree, Package, GripVertical, Save, Image as ImageIcon,
+  FolderPlus, Trash2, FolderTree, Package, GripVertical, Save, Image as ImageIcon, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -143,14 +143,28 @@ export default function AdminCategoriesPage() {
     const overItem = allFlat.find((c) => c.id === over.id)
     if (!activeItem || !overItem) return
 
-    // Same parent: reorder
+    // Find siblings (same parent) and calculate new sortOrder based on position
+    const siblings = allFlat.filter((c) => c.parentId === overItem.parentId)
+    const overIndex = siblings.findIndex((c) => c.id === over.id)
+    const newSortOrder = overIndex >= 0 ? overIndex : overItem.sortOrder
+
     if (activeItem.parentId === overItem.parentId) {
-      reorderMutation.mutate({ id: activeItem.id, sortOrder: overItem.sortOrder })
+      // Same parent: just reorder
+      reorderMutation.mutate({ id: activeItem.id, sortOrder: newSortOrder })
     } else {
       // Move to new parent
       const newParentId = overItem.parentId === null ? overItem.id : overItem.parentId
-      reorderMutation.mutate({ id: activeItem.id, sortOrder: overItem.sortOrder, parentId: newParentId })
+      reorderMutation.mutate({ id: activeItem.id, sortOrder: newSortOrder, parentId: newParentId })
     }
+
+    // Also update all siblings to have sequential sortOrders (fix all-zero problem)
+    const updatedSiblings = siblings.filter((c) => c.id !== active.id)
+    updatedSiblings.splice(overIndex, 0, activeItem)
+    updatedSiblings.forEach((sib, idx) => {
+      if (sib.id !== active.id && sib.sortOrder !== idx) {
+        reorderMutation.mutate({ id: sib.id, sortOrder: idx })
+      }
+    })
   }
 
   const dragItem = dragId ? allFlat.find((c) => c.id === dragId) : null
@@ -159,80 +173,136 @@ export default function AdminCategoriesPage() {
   const totalSubs = (categories ?? []).reduce((s, c) => s + (c.children?.length ?? 0), 0)
   const totalProds = allFlat.reduce((s, c) => s + (c._count?.products ?? 0), 0)
 
+  const emptyCount = allFlat.filter((c) => (c._count?.products ?? 0) === 0).length
+
+  // Move category up/down by swapping sortOrder with sibling
+  const moveCategory = (catId: string, direction: 'up' | 'down') => {
+    const cat = allFlat.find((c) => c.id === catId)
+    if (!cat) return
+    const siblings = allFlat
+      .filter((c) => c.parentId === cat.parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const idx = siblings.findIndex((c) => c.id === catId)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= siblings.length) return
+    const other = siblings[swapIdx]
+    // Swap sortOrders
+    reorderMutation.mutate({ id: cat.id, sortOrder: other.sortOrder })
+    reorderMutation.mutate({ id: other.id, sortOrder: cat.sortOrder })
+  }
+  const [treeSearch, setTreeSearch] = useState('')
+  const filteredCategories = treeSearch.trim()
+    ? (categories ?? []).filter((c) => {
+        const match = (cat: Category) => getName(cat).toLowerCase().includes(treeSearch.toLowerCase())
+        return match(c) || (c.children ?? []).some(match)
+      })
+    : (categories ?? [])
+
   return (
     <div>
       <AdminBreadcrumb items={[{ label: t('categories.title') }]} />
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">{t('categories.title')}</h1>
-        <Button size="sm" className="gap-1.5" onClick={startNewRoot}>
-          <Plus className="h-3.5 w-3.5" />{t('categories.newMainCategory')}
-        </Button>
-      </div>
 
-      <div className="flex gap-6 items-start">
-        {/* ─── LEFT: DnD Tree ─── */}
-        <div className="w-80 flex-shrink-0 bg-background border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 bg-muted/30 border-b flex items-center gap-2">
-            <FolderTree className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">{t('categories.title')}</span>
-            <span className="text-xs text-muted-foreground ml-auto">{(categories ?? []).length} + {totalSubs}</span>
+      <div className="flex items-start gap-5" style={{ minHeight: 'calc(100vh - 140px)' }}>
+        {/* ═══ LEFT: Tree (30%) ═══ */}
+        <div className="w-[280px] flex-shrink-0 flex flex-col bg-[#1a1a2e] border border-white/[0.06] rounded-2xl overflow-hidden">
+          {/* Tree Header */}
+          <div className="px-4 py-3 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <FolderTree className="h-4 w-4 text-[#d4a853]" />
+                <span className="text-sm font-semibold text-white">{t('categories.title')}</span>
+              </div>
+              <span className="text-[10px] text-white/25 tabular-nums">{(categories ?? []).length + totalSubs}</span>
+            </div>
+            {/* Search */}
+            <input
+              type="text"
+              value={treeSearch}
+              onChange={(e) => setTreeSearch(e.target.value)}
+              placeholder={locale === 'ar' ? 'بحث في الأقسام...' : 'Kategorie suchen...'}
+              className="w-full h-8 px-3 rounded-lg bg-white/[0.05] border border-white/[0.06] text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-[#d4a853]/30 transition-colors"
+            />
           </div>
 
-          {isLoading ? (
-            <div className="p-4 space-y-2">{[1, 2, 3, 4].map((i) => <div key={i} className="h-8 bg-muted rounded animate-pulse" />)}</div>
-          ) : (categories ?? []).length === 0 ? (
-            <div className="p-6 text-sm text-muted-foreground text-center">{t('categories.noCategories')}</div>
-          ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-              <div className="py-1 max-h-[72vh] overflow-y-auto">
-                <SortableContext items={allFlat.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                  {(categories ?? []).map((dept) => (
-                    <div key={dept.id}>
-                      <TreeItem cat={dept} depth={0} isSelected={selectedId === dept.id && !isNew}
-                        onSelect={() => { setSelectedId(dept.id); setIsNew(false) }}
-                        onToggle={() => toggle(dept.id)}
-                        isCollapsed={collapsed.has(dept.id)}
-                        hasChildren={(dept.children?.length ?? 0) > 0}
-                        getName={getName}
-                        onAddChild={() => startNewChild(dept.id)}
-                      />
-                      {!collapsed.has(dept.id) && (dept.children ?? []).map((child) => (
-                        <TreeItem key={child.id} cat={child} depth={1}
-                          isSelected={selectedId === child.id && !isNew}
-                          onSelect={() => { setSelectedId(child.id); setIsNew(false) }}
+          {/* Tree Body */}
+          <div className="flex-1 overflow-y-auto max-h-[calc(100vh-280px)]">
+            {isLoading ? (
+              <div className="p-3 space-y-1.5">{[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-8 bg-white/[0.03] rounded animate-pulse" />)}</div>
+            ) : filteredCategories.length === 0 ? (
+              <div className="p-6 text-xs text-white/25 text-center">{t('categories.noCategories')}</div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+                <div className="py-1">
+                  <SortableContext items={allFlat.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                    {filteredCategories.map((dept) => (
+                      <div key={dept.id}>
+                        <TreeItem cat={dept} depth={0} isSelected={selectedId === dept.id && !isNew}
+                          onSelect={() => { setSelectedId(dept.id); setIsNew(false) }}
+                          onToggle={() => toggle(dept.id)}
+                          isCollapsed={collapsed.has(dept.id)}
+                          hasChildren={(dept.children?.length ?? 0) > 0}
                           getName={getName}
+                          onAddChild={() => startNewChild(dept.id)}
+                          onMoveUp={() => moveCategory(dept.id, 'up')}
+                          onMoveDown={() => moveCategory(dept.id, 'down')}
                         />
-                      ))}
+                        {!collapsed.has(dept.id) && (dept.children ?? []).map((child) => {
+                          if (treeSearch.trim() && !getName(child).toLowerCase().includes(treeSearch.toLowerCase()) && !getName(dept).toLowerCase().includes(treeSearch.toLowerCase())) return null
+                          return (
+                            <TreeItem key={child.id} cat={child} depth={1}
+                              isSelected={selectedId === child.id && !isNew}
+                              onSelect={() => { setSelectedId(child.id); setIsNew(false) }}
+                              getName={getName}
+                              onMoveUp={() => moveCategory(child.id, 'up')}
+                              onMoveDown={() => moveCategory(child.id, 'down')}
+                            />
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </SortableContext>
+                </div>
+                <DragOverlay>
+                  {dragItem && (
+                    <div className="bg-[#d4a853]/20 border border-[#d4a853]/40 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-xl">
+                      {getName(dragItem)}
                     </div>
-                  ))}
-                </SortableContext>
-              </div>
-              <DragOverlay>
-                {dragItem && (
-                  <div className="bg-primary/10 border border-primary rounded-lg px-3 py-2 text-sm font-medium shadow-lg">
-                    {getName(dragItem)}
-                  </div>
-                )}
-              </DragOverlay>
-            </DndContext>
-          )}
+                  )}
+                </DragOverlay>
+              </DndContext>
+            )}
+          </div>
+
+          {/* Tree Footer — New Category */}
+          <div className="p-3 border-t border-white/[0.06]">
+            <button onClick={startNewRoot} className="w-full flex items-center justify-center gap-2 h-9 rounded-lg bg-white/[0.04] hover:bg-[#d4a853]/10 text-white/50 hover:text-[#d4a853] text-xs font-medium transition-colors">
+              <Plus className="h-3.5 w-3.5" />
+              {t('categories.newMainCategory')}
+            </button>
+          </div>
         </div>
 
-        {/* ─── RIGHT: Detail ─── */}
-        <div className="flex-1 bg-background border rounded-xl min-h-[400px]">
+        {/* ═══ RIGHT: Detail (70%) ═══ */}
+        <div className="flex-1 min-w-0">
           {!selected && !isNew ? (
-            /* Stats overview */
-            <div className="p-6">
-              <h2 className="text-lg font-bold mb-6">{t('categories.noCategorySelected')}</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <StatCard value={(categories ?? []).length} label={t('categories.title')} />
-                <StatCard value={totalSubs} label={t('categories.subcategories')} />
-                <StatCard value={totalProds} label={t('categories.products')} />
-                <StatCard value={allFlat.filter((c) => (c._count?.products ?? 0) === 0).length} label={locale === 'ar' ? 'أقسام بدون منتجات' : 'Ohne Produkte'} color="orange" />
+            /* ── Welcome State ── */
+            <div className="bg-[#1a1a2e] border border-white/[0.06] rounded-2xl p-8">
+              <div className="text-center mb-8">
+                <FolderTree className="h-10 w-10 text-[#d4a853]/30 mx-auto mb-3" />
+                <h2 className="text-lg font-semibold text-white">{t('categories.noCategorySelected')}</h2>
+                <p className="text-xs text-white/30 mt-1">
+                  {locale === 'ar' ? 'اختر قسماً من القائمة أو أنشئ قسماً جديداً' : 'Wähle eine Kategorie oder erstelle eine neue'}
+                </p>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                <StatCard value={(categories ?? []).length} label={locale === 'ar' ? 'أقسام' : 'Kategorien'} />
+                <StatCard value={totalSubs} label={locale === 'ar' ? 'فرعي' : 'Unter-Kat.'} />
+                <StatCard value={totalProds} label={locale === 'ar' ? 'منتجات' : 'Produkte'} />
+                <StatCard value={emptyCount} label={locale === 'ar' ? 'فارغة' : 'Leer'} color={emptyCount > 0 ? 'orange' : undefined} />
               </div>
             </div>
           ) : (
-            <div className="p-6">
+            <div className="bg-[#1a1a2e] border border-white/[0.06] rounded-2xl p-6">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -272,13 +342,13 @@ export default function AdminCategoriesPage() {
               {/* Name + Description */}
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('categories.name')}</label>
+                  <label className="text-sm font-medium text-white/70 mb-1.5 block">{t('categories.name')}</label>
                   {langTab === 'de' && <Input value={nameDe} onChange={(e) => setNameDe(e.target.value)} placeholder="z.B. Herren" onBlur={() => { if (isNew && !slug) autoSlug() }} />}
                   {langTab === 'en' && <Input value={nameEn} onChange={(e) => setNameEn(e.target.value)} placeholder="e.g. Men" />}
                   {langTab === 'ar' && <Input value={nameAr} onChange={(e) => setNameAr(e.target.value)} placeholder="مثال: رجال" dir="rtl" />}
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('categories.description')}</label>
+                  <label className="text-sm font-medium text-white/70 mb-1.5 block">{t('categories.description')}</label>
                   {langTab === 'de' && <textarea value={descDe} onChange={(e) => setDescDe(e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg border bg-background text-sm resize-none" />}
                   {langTab === 'en' && <textarea value={descEn} onChange={(e) => setDescEn(e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg border bg-background text-sm resize-none" />}
                   {langTab === 'ar' && <textarea value={descAr} onChange={(e) => setDescAr(e.target.value)} rows={2} dir="rtl" className="w-full px-3 py-2 rounded-lg border bg-background text-sm resize-none" />}
@@ -288,14 +358,14 @@ export default function AdminCategoriesPage() {
               {/* Slug + Parent + Sort + Image */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('categories.slug')}</label>
+                  <label className="text-sm font-medium text-white/70 mb-1.5 block">{t('categories.slug')}</label>
                   <div className="flex gap-2">
                     <Input value={slug} onChange={(e) => setSlug(e.target.value)} className="flex-1 font-mono text-xs" />
                     <Button type="button" size="sm" variant="outline" onClick={autoSlug}>Auto</Button>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('categories.parent')}</label>
+                  <label className="text-sm font-medium text-white/70 mb-1.5 block">{t('categories.parent')}</label>
                   <select value={parentId} onChange={(e) => setParentId(e.target.value)} className="w-full h-9 px-3 rounded-lg border bg-background text-sm">
                     <option value="">{t('categories.noParent')}</option>
                     {allFlat.filter((c) => c.id !== selectedId).map((c) => (
@@ -304,14 +374,14 @@ export default function AdminCategoriesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t('categories.sortOrder')}</label>
+                  <label className="text-sm font-medium text-white/70 mb-1.5 block">{t('categories.sortOrder')}</label>
                   <Input type="number" value={sortOrder} onChange={(e) => setSortOrder(+e.target.value)} min={0} />
                 </div>
               </div>
 
               {/* Category Image — Upload or URL */}
               <div className="mb-6">
-                <label className="text-xs font-medium text-muted-foreground mb-2 block">{t('categories.imageUrl')}</label>
+                <label className="text-sm font-medium text-white/70 mb-2 block">{t('categories.imageUrl')}</label>
                 {imageUrl ? (
                   <div className="relative group rounded-xl overflow-hidden border border-white/[0.06] bg-[#1a1a2e]">
                     <img src={imageUrl} alt="" className="w-full h-48 object-cover" onError={(e) => { (e.target as HTMLImageElement).src = '' }} />
@@ -392,49 +462,89 @@ export default function AdminCategoriesPage() {
 }
 
 /* ─── Sortable Tree Item ─── */
-function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, hasChildren, getName, onAddChild }: {
+function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, hasChildren, getName, onAddChild, onMoveUp, onMoveDown }: {
   cat: Category; depth: number; isSelected: boolean
   onSelect: () => void; onToggle?: () => void; isCollapsed?: boolean
   hasChildren?: boolean; getName: (c: Category) => string; onAddChild?: () => void
+  onMoveUp?: () => void; onMoveDown?: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
+  const productCount = cat._count?.products ?? 0
+  const isParent = depth === 0
 
   return (
-    <div ref={setNodeRef} style={style} className={`flex items-center group ${isSelected ? 'bg-primary/10 border-l-2 border-primary' : 'hover:bg-muted/50'}`}>
-      {/* Drag handle */}
-      <button {...attributes} {...listeners} className="p-1 ml-1 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground">
-        <GripVertical className="h-3.5 w-3.5" />
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center group transition-colors ${
+        isSelected
+          ? 'bg-[#d4a853]/10 border-r-2 rtl:border-r-0 rtl:border-l-2 border-[#d4a853]'
+          : 'hover:bg-white/[0.03]'
+      } ${isParent ? 'py-1' : ''}`}
+    >
+      {/* Move up/down + Drag handle */}
+      <div className="flex items-center ltr:ml-0.5 rtl:mr-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onMoveUp && (
+          <button onClick={(e) => { e.stopPropagation(); onMoveUp() }} className="p-0.5 text-white/20 hover:text-[#d4a853] transition-colors" title="Move up">
+            <ArrowUp className="h-3 w-3" />
+          </button>
+        )}
+        {onMoveDown && (
+          <button onClick={(e) => { e.stopPropagation(); onMoveDown() }} className="p-0.5 text-white/20 hover:text-[#d4a853] transition-colors" title="Move down">
+            <ArrowDown className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <button {...attributes} {...listeners} className="p-1 cursor-grab active:cursor-grabbing text-white/10 hover:text-white/30 transition-colors">
+        <GripVertical className="h-3 w-3" />
       </button>
 
-      {/* Indent */}
+      {/* Indent for children */}
       {depth > 0 && (
-        <div className="flex items-center ml-2">
-          <div className="w-3 h-px bg-border" />
+        <div className="flex items-center ltr:ml-3 rtl:mr-3">
+          <div className="w-4 h-px bg-white/[0.08]" />
         </div>
       )}
 
       {/* Toggle arrow (parents only) */}
       {onToggle && hasChildren ? (
-        <button onClick={onToggle} className="p-1 flex-shrink-0">
-          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        <button onClick={onToggle} className="p-1 flex-shrink-0 text-white/30 hover:text-white/60 transition-colors">
+          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
-      ) : depth === 0 ? <span className="w-7" /> : null}
+      ) : isParent ? <span className="w-7" /> : null}
 
       {/* Name */}
-      <button onClick={onSelect} className={`flex-1 text-start px-2 py-2 text-sm truncate ${isSelected ? 'font-bold text-primary' : depth > 0 ? 'text-muted-foreground' : 'font-medium'}`}>
+      <button
+        onClick={onSelect}
+        className={`flex-1 text-start px-2 py-2 truncate transition-colors ${
+          isSelected
+            ? 'text-[#d4a853] font-semibold'
+            : isParent
+              ? 'text-white/90 font-semibold text-sm'
+              : 'text-white/50 text-[13px] hover:text-white/70'
+        }`}
+      >
         {getName(cat)}
       </button>
 
       {/* Product count badge */}
-      {(cat._count?.products ?? 0) > 0 && (
-        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full mr-1">{cat._count!.products}</span>
-      )}
+      <span className={`text-[10px] tabular-nums px-2 py-0.5 rounded-full ltr:mr-1 rtl:ml-1 ${
+        productCount > 0
+          ? 'bg-[#d4a853]/15 text-[#d4a853]'
+          : 'bg-white/[0.04] text-white/20'
+      }`}>
+        {productCount}
+      </span>
 
       {/* Add child button (parents only, on hover) */}
       {onAddChild && (
-        <button onClick={(e) => { e.stopPropagation(); onAddChild() }} className="p-1 mr-1 opacity-0 group-hover:opacity-100 hover:bg-muted rounded text-primary transition-opacity">
-          <FolderPlus className="h-3 w-3" />
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddChild() }}
+          className="p-1 ltr:mr-1 rtl:ml-1 opacity-0 group-hover:opacity-100 hover:bg-[#d4a853]/10 rounded text-[#d4a853] transition-all"
+          title="Unterkategorie hinzufügen"
+        >
+          <FolderPlus className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -444,9 +554,9 @@ function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, has
 function StatCard({ value, label, color }: { value: number; label: string; color?: string }) {
   const colorClass = color === 'orange' ? 'text-orange-400' : color === 'green' ? 'text-green-400' : 'text-white'
   return (
-    <div className="bg-[#1a1a2e] rounded-xl p-5 border border-white/[0.06]">
-      <p className={`text-3xl font-bold tabular-nums ${colorClass}`}>{value}</p>
-      <p className="text-xs text-white/40 mt-1.5 uppercase tracking-wider">{label}</p>
+    <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.04] text-center">
+      <p className={`text-2xl font-bold tabular-nums ${colorClass}`}>{value}</p>
+      <p className="text-[10px] text-white/30 mt-1 uppercase tracking-wider">{label}</p>
     </div>
   )
 }

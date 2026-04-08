@@ -226,8 +226,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               if (visibleItems.length === 0) return null
               return (
                 <div key={group.label.en}>
-                  <div className="px-3 mb-1.5">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/25">
+                  <div className="px-3 pt-4 pb-2">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#d4a853]/60">
                       {(group.label as any)[locale] || group.label.de}
                     </span>
                   </div>
@@ -240,10 +240,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           key={item.key}
                           href={`/${locale}${item.href}`}
                           onClick={() => setSidebarOpen(false)}
-                          className={`flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] transition-all group relative ${
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all group relative ${
                             active
                               ? 'bg-[#d4a853]/15 text-[#d4a853] font-semibold'
-                              : 'text-white/50 hover:text-white hover:bg-white/5'
+                              : 'text-white/70 hover:text-white hover:bg-white/5'
                           }`}
                         >
                           {active && <div className="absolute ltr:left-0 rtl:right-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-[#d4a853]" />}
