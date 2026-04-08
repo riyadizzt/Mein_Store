@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/store/auth-store'
 import { useCartStore } from '@/store/cart-store'
 import { trackMetaEvent, trackTikTokEvent } from '@/components/tracking-pixels'
+import { AnimatedCheckmark } from '@/components/overdrive/animated-checkmark'
 
 /* ── Confetti Canvas ──────────────────────────────────── */
 function ConfettiCanvas() {
@@ -162,8 +163,8 @@ function ConfirmationContent() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-center px-4">
         <div>
-          <div className="h-20 w-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="h-10 w-10 text-green-600" />
+          <div className="mx-auto mb-6">
+            <AnimatedCheckmark size={80} />
           </div>
           <h1 className="text-2xl font-semibold mb-4">{t('title')}</h1>
           <Link href={`/${locale}/products`}><Button size="lg">{t('continueShopping')}</Button></Link>
@@ -176,37 +177,13 @@ function ConfirmationContent() {
     <>
       <ConfettiCanvas />
 
-      <style>{`
-        @keyframes shimmer-gold { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-        @keyframes float-gentle { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-        @keyframes line-draw { from{width:0} to{width:100%} }
-        @keyframes pulse-ring { 0%{box-shadow:0 0 0 0 rgba(212,175,55,0.4)} 70%{box-shadow:0 0 0 10px rgba(212,175,55,0)} 100%{box-shadow:0 0 0 0 rgba(212,175,55,0)} }
-        @keyframes icon-spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
-        @keyframes shimmer-btn { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-        @keyframes arrow-nudge { 0%,100%{transform:translateX(0)} 50%{transform:translateX(4px)} }
-        @keyframes bg-shift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-        @keyframes particle-rise { 0%{transform:translateY(0) scale(1);opacity:0.6} 100%{transform:translateY(-80px) scale(0);opacity:0} }
-        .shimmer-gold{background:linear-gradient(90deg,#D4AF37 0%,#F5E6A3 50%,#D4AF37 100%);background-size:200% 100%;animation:shimmer-gold 2s ease-in-out 1;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-        .float-gentle{animation:float-gentle 3s ease-in-out infinite}
-        .pulse-ring{animation:pulse-ring 2s ease-out infinite}
-        .icon-spin-once{animation:icon-spin 0.6s ease-out}
-        .btn-shimmer{background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.15) 50%,transparent 100%),var(--tw-gradient-stops);background-size:200% 100%;animation:shimmer-btn 3s infinite}
-        .arrow-nudge{animation:arrow-nudge 1.5s ease-in-out infinite}
-        .bg-celebration{background:linear-gradient(135deg,hsl(var(--background)),hsl(40 30% 97%),hsl(var(--background)));background-size:300% 300%;animation:bg-shift 8s ease infinite}
-        @media(prefers-reduced-motion:reduce){.shimmer-gold,.float-gentle,.pulse-ring,.icon-spin-once,.btn-shimmer,.arrow-nudge,.bg-celebration{animation:none!important}}
-      `}</style>
+      {/* Confirmation animations moved to globals.css */}
 
       <div className="mx-auto max-w-3xl px-4 py-12 sm:py-16 min-h-screen">
         {/* Phase 1: Checkmark */}
         <div className={`text-center mb-10 transition-all duration-700 ${phase >= 1 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
           <div className="flex justify-center mb-6">
-            <div className={`h-28 w-28 rounded-full bg-green-100 flex items-center justify-center transition-all duration-500 ${phase >= 1 ? 'scale-100' : 'scale-0'}`}>
-              <svg viewBox="0 0 52 52" className="h-14 w-14">
-                <circle cx="26" cy="26" r="24" fill="none" stroke="#16a34a" strokeWidth="2" opacity="0.3" />
-                <path d="M14 27l8 8 16-16" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ strokeDasharray: 100, strokeDashoffset: phase >= 1 ? 0 : 100, transition: 'stroke-dashoffset 0.8s ease-out 0.3s' }} />
-              </svg>
-            </div>
+            {phase >= 1 && <AnimatedCheckmark size={112} delay={0.1} />}
           </div>
 
           <h1 className={`text-3xl sm:text-4xl font-semibold mb-3 transition-all duration-700 delay-300 ${phase >= 1 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
@@ -269,11 +246,20 @@ function ConfirmationContent() {
               <div className="border-t mt-4 pt-3 space-y-1.5 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">{t('subtotal')}</span><span className="font-mono">&euro;{Number(order.subtotal).toFixed(2)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">{t('shipping')}</span><span className="font-mono">&euro;{Number(order.shippingCost).toFixed(2)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">{t('tax')}</span><span className="font-mono">&euro;{Number(order.taxAmount).toFixed(2)}</span></div>
+                {Number(order.discountAmount) > 0 && (
+                  <div className="flex justify-between text-green-600"><span>{locale === 'ar' ? 'خصم' : locale === 'en' ? 'Discount' : 'Rabatt'}</span><span className="font-mono">-&euro;{Number(order.discountAmount).toFixed(2)}</span></div>
+                )}
                 <div className="flex justify-between font-semibold text-lg pt-2 border-t">
                   <span>{t('total')}</span>
                   <span className="font-mono">&euro;<AnimatedPrice value={Number(order.totalAmount)} delay={800} /></span>
                 </div>
+                <p className="text-xs text-muted-foreground text-end">
+                  {locale === 'ar'
+                    ? `شامل ${Number(order.taxAmount).toFixed(2)}€ ضريبة القيمة المضافة`
+                    : locale === 'en'
+                      ? `Incl. €${Number(order.taxAmount).toFixed(2)} VAT`
+                      : `Inkl. ${Number(order.taxAmount).toFixed(2)} € MwSt.`}
+                </p>
               </div>
             </div>
           )}

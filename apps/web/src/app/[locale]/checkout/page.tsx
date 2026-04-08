@@ -10,6 +10,7 @@ import { GuestOrLogin } from '@/components/checkout/guest-or-login'
 import { StepAddress } from '@/components/checkout/step-address'
 import { StepShipping } from '@/components/checkout/step-shipping'
 import { StepPayment } from '@/components/checkout/step-payment'
+import { AnimatePresence, motion } from 'motion/react'
 
 export default function CheckoutPage() {
   const locale = useLocale()
@@ -31,10 +32,20 @@ export default function CheckoutPage() {
     <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
       {step !== 'guest' && step !== 'confirmation' && <CheckoutProgressBar />}
 
-      {step === 'guest' && <GuestOrLogin locale={locale} />}
-      {step === 'address' && <StepAddress />}
-      {step === 'shipping' && <StepShipping />}
-      {step === 'payment' && <StepPayment />}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+        >
+          {step === 'guest' && <GuestOrLogin locale={locale} />}
+          {step === 'address' && <StepAddress />}
+          {step === 'shipping' && <StepShipping />}
+          {step === 'payment' && <StepPayment />}
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }

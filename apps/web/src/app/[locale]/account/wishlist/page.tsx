@@ -28,11 +28,14 @@ export default function WishlistPage() {
 
   if (!items || items.length === 0) {
     return (
-      <div className="text-center py-16">
-        <Heart className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
-        <h2 className="text-lg font-medium mb-2">{t('empty')}</h2>
+      <div className="text-center py-20">
+        <div className="h-20 w-20 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5">
+          <Heart className="h-9 w-9 text-red-300" />
+        </div>
+        <h2 className="text-lg font-semibold mb-2">{t('empty')}</h2>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-6">{t('emptyHint')}</p>
         <Link href={`/${locale}/products`}>
-          <Button variant="outline">{t('discover')}</Button>
+          <Button className="gap-2 btn-press">{t('discover')}</Button>
         </Link>
       </div>
     )

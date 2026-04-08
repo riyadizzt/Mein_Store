@@ -13,6 +13,9 @@ const CartDrawer = dynamic(() => import('./cart-drawer').then((m) => ({ default:
 const CookieBanner = dynamic(() => import('./cookie-banner').then((m) => ({ default: m.CookieBanner })), { ssr: false })
 const OfflineToast = dynamic(() => import('./offline-toast').then((m) => ({ default: m.OfflineToast })), { ssr: false })
 const WelcomePopup = dynamic(() => import('../welcome-popup').then((m) => ({ default: m.WelcomePopup })), { ssr: false })
+const ScrollToTop = dynamic(() => import('@/components/overdrive/scroll-to-top').then((m) => ({ default: m.ScrollToTop })), { ssr: false })
+const ConsoleEasterEgg = dynamic(() => import('@/components/overdrive/console-egg').then((m) => ({ default: m.ConsoleEasterEgg })), { ssr: false })
+const Toaster = dynamic(() => import('@/components/ui/toaster').then((m) => ({ default: m.Toaster })), { ssr: false })
 
 /**
  * StoreShell — renders store chrome (header, footer, mobile nav, cart, cookies)
@@ -38,6 +41,9 @@ export function StoreShell({ locale, children }: { locale: string; children: Rea
       <CookieBanner />
       <OfflineToast />
       <WelcomePopup />
+      <ScrollToTop />
+      <ConsoleEasterEgg />
+      <Toaster />
     </>
   )
 }

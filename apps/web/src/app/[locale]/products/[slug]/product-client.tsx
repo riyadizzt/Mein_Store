@@ -102,10 +102,12 @@ export function ProductClient({ product, locale, translations: t, computed }: Pr
       {/* Main Grid: Gallery left, Info right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
         {/* Left: Image Gallery — ONE place, no duplicates */}
-        <ImageGallery images={images} productName={name} />
+        <div className="lg:self-start">
+          <ImageGallery images={images} productName={name} />
+        </div>
 
-        {/* Right: Product Info */}
-        <div className="space-y-6">
+        {/* Right: Product Info — sticky on desktop */}
+        <div className="space-y-6 lg:sticky lg:top-24 lg:self-start">
           {categoryName && <p className="text-sm text-muted-foreground">{categoryName}</p>}
           <h1 className="text-2xl sm:text-3xl font-bold">{name}</h1>
 
@@ -133,25 +135,27 @@ export function ProductClient({ product, locale, translations: t, computed }: Pr
             </span>
           </div>
 
-          {/* No-Return Notice */}
+          {/* No-Return Notice — clear explanation of what this means */}
           {product.excludeFromReturns && (
             <div className="flex items-start gap-2.5 p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 text-sm">
               <svg className="h-4 w-4 mt-0.5 flex-shrink-0 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <div>
                 <p className="font-medium text-orange-700 dark:text-orange-400">
-                  {locale === 'ar' ? 'مستثنى من حق الإرجاع' : locale === 'en' ? 'Excluded from returns' : 'Vom Umtausch ausgeschlossen'}
+                  {locale === 'ar'
+                    ? 'لا يمكن إرجاع هذا المنتج'
+                    : locale === 'en'
+                      ? 'This item cannot be returned'
+                      : 'Dieser Artikel kann nicht zurückgegeben werden'}
                 </p>
-                {product.returnExclusionReason && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {product.returnExclusionReason === 'hygiene'
-                      ? (locale === 'ar' ? 'منتج صحي / نظافة' : locale === 'en' ? 'Hygiene product' : 'Hygieneartikel')
-                      : product.returnExclusionReason === 'custom_made'
-                        ? (locale === 'ar' ? 'مصنوع حسب الطلب' : locale === 'en' ? 'Custom made' : 'Maßanfertigung')
-                        : product.returnExclusionReason === 'sealed'
-                          ? (locale === 'ar' ? 'بضاعة مختومة' : locale === 'en' ? 'Sealed product' : 'Versiegelte Ware')
-                          : ''}
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {product.returnExclusionReason === 'hygiene'
+                    ? (locale === 'ar' ? 'لأسباب صحية، لا يمكن إرجاع هذا المنتج بعد فتحه' : locale === 'en' ? 'For hygiene reasons, this product cannot be returned once opened' : 'Aus Hygienegründen kann dieser Artikel nach dem Öffnen nicht zurückgegeben werden')
+                    : product.returnExclusionReason === 'custom_made'
+                      ? (locale === 'ar' ? 'المنتجات المصنوعة حسب الطلب غير قابلة للإرجاع' : locale === 'en' ? 'Custom-made items are non-returnable' : 'Maßanfertigungen sind vom Umtausch ausgeschlossen')
+                      : product.returnExclusionReason === 'sealed'
+                        ? (locale === 'ar' ? 'المنتجات المختومة غير قابلة للإرجاع بعد فتحها' : locale === 'en' ? 'Sealed items cannot be returned once opened' : 'Versiegelte Ware kann nach dem Öffnen nicht zurückgegeben werden')
+                        : (locale === 'ar' ? 'يرجى التأكد قبل الشراء' : locale === 'en' ? 'Please be sure before purchasing' : 'Bitte vor dem Kauf sicherstellen')}
+                </p>
               </div>
             </div>
           )}

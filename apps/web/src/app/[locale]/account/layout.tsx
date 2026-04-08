@@ -3,10 +3,10 @@
 import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Package, MapPin, User, Heart, Monitor, Trash2, LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
-import { useState } from 'react'
+import { motion } from 'motion/react'
 
 const NAV_ITEMS = [
   { key: 'orders', icon: Package, href: '/account/orders' },
@@ -25,7 +25,6 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const [authChecked, setAuthChecked] = useState(false)
 
   useEffect(() => {
-    // Wait a tick for AuthProvider to finish setting the auth state
     const timer = setTimeout(() => {
       setAuthChecked(true)
       if (!useAuthStore.getState().isAuthenticated) {
@@ -38,6 +37,10 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const t = useTranslations('account')
 
   if (!authChecked || !isAuthenticated) return null
+
+  // Time-of-day greeting from i18n
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? t('greetingMorning') : hour < 18 ? t('greetingAfternoon') : t('greetingEvening')
 
   const labels: Record<string, string> = {
     orders: t('orders.title'),
@@ -54,32 +57,42 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
         {/* Desktop Sidebar */}
         <aside className="hidden lg:block w-64 flex-shrink-0">
           <div className="sticky top-20 border rounded-2xl p-4 shadow-card">
-            {/* User Info */}
+            {/* User Info + Time Greeting */}
             <div className="flex items-center gap-3 pb-4 mb-3 border-b">
               <div className="h-10 w-10 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold text-sm">
                 {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
               </div>
               <div className="min-w-0">
+                <p className="text-xs text-brand-gold font-medium">{greeting}</p>
                 <p className="font-semibold text-sm truncate">{user?.firstName} {user?.lastName}</p>
-                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </div>
             </div>
 
-            <nav className="space-y-0.5">
+            <nav className="space-y-0.5 relative">
               {NAV_ITEMS.map((item) => {
                 const isActive = pathname.includes(item.href)
                 return (
                   <Link
                     key={item.key}
                     href={`/${locale}${item.href}`}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+                    className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors duration-200 ${
                       isActive
-                        ? 'bg-accent text-accent-foreground font-medium shadow-sm'
+                        ? 'text-accent-foreground font-medium'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                     } ${item.key === 'delete' ? 'text-destructive hover:text-destructive' : ''}`}
                   >
-                    <item.icon className="h-4.5 w-4.5" />
-                    {labels[item.key]}
+                    {/* Animated active background */}
+                    {isActive && (
+                      <motion.div
+                        layoutId="account-nav-active"
+                        className="absolute inset-0 bg-accent rounded-xl shadow-sm"
+                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-3">
+                      <item.icon className="h-4.5 w-4.5" />
+                      {labels[item.key]}
+                    </span>
                   </Link>
                 )
               })}
@@ -105,7 +118,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
                 <Link
                   key={item.key}
                   href={`/${locale}${item.href}`}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-all duration-200 ${
                     isActive
                       ? 'bg-accent text-accent-foreground shadow-sm'
                       : 'bg-muted text-muted-foreground'

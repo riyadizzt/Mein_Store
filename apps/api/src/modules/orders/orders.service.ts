@@ -179,6 +179,9 @@ export class OrdersService {
       }, 0)
 
       // 4. Subtotal + Steuern berechnen
+      // WICHTIG: Alle Preise sind BRUTTO (inkl. MwSt) — deutsches Recht.
+      // MwSt wird aus dem Bruttopreis HERAUSGERECHNET, nicht draufaddiert.
+      // Formel: MwSt = Brutto - (Brutto / (1 + Steuersatz/100))
       let subtotal = 0
       let taxAmount = 0
 
@@ -187,7 +190,9 @@ export class OrdersService {
         const unitPrice = Number(v.product.salePrice ?? v.product.basePrice) + Number(v.priceModifier)
         const taxRate = Number(v.product.taxRate)
         const itemTotal = unitPrice * item.quantity
-        const itemTax = itemTotal * (taxRate / 100)
+        // MwSt aus Brutto RAUSRECHNEN (nicht draufaddieren!)
+        const itemNet = itemTotal / (1 + taxRate / 100)
+        const itemTax = itemTotal - itemNet
 
         subtotal += itemTotal
         taxAmount += itemTax
@@ -244,7 +249,22 @@ export class OrdersService {
         }
       }
 
-      const totalAmount = subtotal + shipping.cost + taxAmount - discountAmount
+      // Versandkosten-MwSt ebenfalls rausrechnen (Versand ist auch brutto in DE)
+      const shippingTax = shipping.cost - (shipping.cost / 1.19)
+      taxAmount += shippingTax
+
+      // Rabatt reduziert auch die enthaltene MwSt (Rabatt ist brutto)
+      if (discountAmount > 0) {
+        const discountTax = discountAmount - (discountAmount / 1.19)
+        taxAmount -= discountTax
+      }
+
+      // Gesamtbetrag = Brutto-Subtotal + Brutto-Versand - Rabatt
+      // MwSt ist BEREITS enthalten, wird NICHT extra addiert!
+      const totalAmount = subtotal + shipping.cost - discountAmount
+
+      // Auf 2 Dezimalstellen runden (Cent-genau)
+      taxAmount = Math.round(taxAmount * 100) / 100
 
       // 7. Bestellnummer generieren (atomic counter)
       const orderNumber = await this.generateOrderNumber()
@@ -273,7 +293,47 @@ export class OrdersService {
         }
       }
 
-      // 9. Bestellung + Items anlegen
+      // 9. Shipping-Adresse verarbeiten (3 Fälle)
+      let resolvedShippingAddressId = dto.shippingAddressId ?? null
+      let shippingAddressSnapshot: any = null
+
+      if (!resolvedShippingAddressId && dto.shippingAddress) {
+        const a = dto.shippingAddress
+        if (resolvedUserId) {
+          // Fall B: Eingeloggter User mit neuer Adresse → in DB speichern + verknüpfen
+          const newAddr = await this.prisma.address.create({
+            data: {
+              userId: resolvedUserId,
+              firstName: a.firstName,
+              lastName: a.lastName,
+              street: a.street,
+              houseNumber: a.houseNumber,
+              addressLine2: a.addressLine2 ?? null,
+              postalCode: a.postalCode,
+              city: a.city,
+              country: a.country,
+              company: a.company ?? null,
+            },
+          })
+          resolvedShippingAddressId = newAddr.id
+          this.logger.log(`[${correlationId}] Neue Adresse ${newAddr.id} für User ${resolvedUserId} angelegt`)
+        } else {
+          // Fall C: Gast → Adresse als JSON-Snapshot in der Order
+          shippingAddressSnapshot = {
+            firstName: a.firstName,
+            lastName: a.lastName,
+            street: a.street,
+            houseNumber: a.houseNumber,
+            addressLine2: a.addressLine2 ?? null,
+            postalCode: a.postalCode,
+            city: a.city,
+            country: a.country,
+            company: a.company ?? null,
+          }
+        }
+      }
+
+      // 10. Bestellung + Items anlegen
       const reservationSessionId = randomUUID()
 
       const order = await this.prisma.$transaction(async (tx) => {
@@ -282,7 +342,8 @@ export class OrdersService {
             orderNumber,
             userId: resolvedUserId,
             guestEmail: !resolvedUserId ? dto.guestEmail : undefined,
-            shippingAddressId: dto.shippingAddressId,
+            shippingAddressId: resolvedShippingAddressId,
+            shippingAddressSnapshot,
             status: 'pending',
             channel: (dto.channel ?? 'website') as any,
             subtotal,

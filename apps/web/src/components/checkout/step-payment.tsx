@@ -53,6 +53,7 @@ function StepPaymentInner() {
   const { data: shopSettings } = useShopSettings()
   const {
     shippingAddress, shippingOption, termsAccepted, guestEmail,
+    savedAddressId,
     isProcessing, error,
     setTermsAccepted, setStep, setProcessing, setError,
     setOrder, generateIdempotencyKey, setPaymentMethod,
@@ -82,15 +83,39 @@ function StepPaymentInner() {
       const method = activeTab === 'card' ? 'stripe_card' : 'klarna_pay_now'
       setPaymentMethod(method as any)
 
-      // 1. Create order
-      const { data: order } = await api.post('/orders', {
+      // 1. Create order — mit vollständiger Adresse
+      const orderPayload: Record<string, any> = {
         items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
         countryCode: shippingAddress?.country ?? 'DE',
         channel: getChannelFromUtm(),
-        ...(guestEmail ? { guestEmail } : {}),
-        ...(shippingAddress ? { guestFirstName: shippingAddress.firstName, guestLastName: shippingAddress.lastName } : {}),
         locale,
-      }, {
+      }
+
+      // Adresse: gespeicherte ID oder inline Objekt
+      if (savedAddressId) {
+        orderPayload.shippingAddressId = savedAddressId
+      } else if (shippingAddress) {
+        orderPayload.shippingAddress = {
+          firstName: shippingAddress.firstName,
+          lastName: shippingAddress.lastName,
+          street: shippingAddress.street,
+          houseNumber: shippingAddress.houseNumber,
+          addressLine2: shippingAddress.addressLine2,
+          postalCode: shippingAddress.postalCode,
+          city: shippingAddress.city,
+          country: shippingAddress.country,
+          company: shippingAddress.company,
+        }
+      }
+
+      // Gast-Daten
+      if (guestEmail) {
+        orderPayload.guestEmail = guestEmail
+        orderPayload.guestFirstName = shippingAddress?.firstName
+        orderPayload.guestLastName = shippingAddress?.lastName
+      }
+
+      const { data: order } = await api.post('/orders', orderPayload, {
         headers: { 'X-Idempotency-Key': idempotencyKey },
       })
 
@@ -314,11 +339,17 @@ function StepPaymentInner() {
               {useCheckoutStore.getState().discountAmount > 0 && (
                 <div className="flex justify-between text-green-600 text-xs font-medium">
                   <span>{locale === 'ar' ? 'خصم' : locale === 'en' ? 'Discount' : 'Rabatt'} ({useCheckoutStore.getState().couponCode})</span>
-                  <span>-€{useCheckoutStore.getState().discountAmount.toFixed(2)}</span>
+                  <span>-&euro;{useCheckoutStore.getState().discountAmount.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{(totalAmount - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2)}</span></div>
-              <p className="text-[11px] text-muted-foreground text-end">{t('inclVat')}</p>
+              <p className="text-[11px] text-muted-foreground text-end">
+                {locale === 'ar'
+                  ? `شامل ${((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) - ((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) / 1.19)).toFixed(2)}€ ضريبة القيمة المضافة`
+                  : locale === 'en'
+                    ? `Incl. €${((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) - ((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) / 1.19)).toFixed(2)} VAT`
+                    : `Inkl. ${((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) - ((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) / 1.19)).toFixed(2)} € MwSt.`}
+              </p>
               {/* Coupon Input */}
               <div className="pt-3 border-t">
                 <CouponInput subtotal={cartSubtotal} />

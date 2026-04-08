@@ -66,9 +66,15 @@ export function ReturnRequestModal({ open, onClose, orderId, orderNumber, items,
           notes: notes[item.id] || undefined,
         }))
 
+      // Lesbaren Grund-Text senden statt Enum-Wert
+      const reasonLabel = (reasonValue: string) => {
+        const r = REASONS.find((r) => r.value === reasonValue)
+        return r ? r[locale as 'de' | 'en' | 'ar'] ?? r.de : reasonValue
+      }
+
       await api.post(`/orders/${orderId}/return-request`, {
         reason: returnItems[0]?.reason || 'wrong_size',
-        notes: returnItems.map((i) => `${i.reason}${i.notes ? ': ' + i.notes : ''}`).join(' | '),
+        notes: returnItems.map((i) => `${reasonLabel(i.reason)}${i.notes ? ': ' + i.notes : ''}`).join(' | '),
         items: returnItems,
       })
     },

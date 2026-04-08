@@ -4,7 +4,7 @@ type T3 = (de: string, en: string, ar: string) => string
 
 function fmt(v: number | string | undefined | null): string {
   const n = Number(v ?? 0)
-  return `\u20AC${n.toFixed(2)}`
+  return `€${n.toFixed(2)}`
 }
 
 function pct(current: number, prev: number): { up: boolean; label: string } | null {

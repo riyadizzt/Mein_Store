@@ -27,7 +27,8 @@
     "men": "Men",
     "women": "Women",
     "girls": "Girls",
-    "boys": "Boys"
+    "boys": "Boys",
+    "searchPlaceholder": "Search clothing, shoes..."
   },
   "auth": {
     "loginTitle": "Sign In",
@@ -120,7 +121,13 @@
       "showResults": "Show results",
       "removeAll": "Remove all",
       "products": "{count} products"
-    }
+    },
+    "noReturnTitle": "This item cannot be returned",
+    "noReturnHygiene": "For hygiene reasons, this product cannot be returned once opened",
+    "noReturnCustom": "Custom-made items are non-returnable",
+    "noReturnSealed": "Sealed items cannot be returned once opened",
+    "noReturnDefault": "Please be sure before purchasing",
+    "addedToCart": "Added to cart"
   },
   "cart": {
     "title": "Shopping Cart",
@@ -141,7 +148,9 @@
     "free": "Free",
     "trustShipping": "Free shipping from €100",
     "trustReturns": "14-day return policy",
-    "trustSecure": "Secure payment (SSL)"
+    "trustSecure": "Secure payment (SSL)",
+    "removedFromCart": "Removed from cart",
+    "addedToCart": "Added to cart"
   },
   "checkout": {
     "step1": "Address",
@@ -197,8 +206,7 @@
       "termsRequired": "I have read and accept the Terms & Conditions and Withdrawal Policy.",
       "backToShipping": "Back to Shipping",
       "securePayment": "Secure Payment",
-      "orPayWithCard": "or pay with card",
-      "payNow": "Pay Now"
+      "orPayWithCard": "or pay with card"
     },
     "paymentMethods": {
       "card": "Credit Card",
@@ -282,7 +290,6 @@
       "tracking": "Track",
       "returnRequest": "Request Return",
       "returnDeadline": "Return available until: {date}",
-      "loadMore": "Load more",
       "shippingAddress": "Shipping Address",
       "status_pending": "Pending",
       "status_confirmed": "Conf.",
@@ -293,7 +300,7 @@
     "addresses": {
       "title": "My Addresses",
       "empty": "No addresses saved.",
-      "addNew": "Add New Address",
+      "addNew": "Add address",
       "edit": "Edit",
       "delete": "Delete",
       "defaultShipping": "Shipping Address",
@@ -309,7 +316,8 @@
       "save": "Save",
       "error": "Could not save address.",
       "postalCodeTooShort": "Postal code must be at least 3 characters.",
-      "countryInvalid": "We do not deliver to this country."
+      "countryInvalid": "We do not deliver to this country.",
+      "emptyHint": "Add your delivery address to speed up checkout next time"
     },
     "profile": {
       "title": "My Profile",
@@ -325,7 +333,8 @@
     "wishlist": {
       "title": "Wishlist",
       "empty": "Your wishlist is empty",
-      "discover": "Discover Products"
+      "discover": "Discover Products",
+      "emptyHint": "Save your favourite pieces here by tapping the heart icon on any product"
     },
     "sessions": {
       "title": "My Sessions",
@@ -368,7 +377,17 @@
       "damaged": "Damaged",
       "changed_mind": "Changed my mind",
       "other": "Other reason"
-    }
+    },
+    "greetingMorning": "Good morning",
+    "greetingAfternoon": "Good afternoon",
+    "greetingEvening": "Good evening",
+    "ordersErrorTitle": "Couldn’t load your orders",
+    "ordersErrorHint": "This might be a temporary connection issue. Please try again.",
+    "ordersRetry": "Try again",
+    "ordersEmptyHint": "Your orders will appear here once you’ve placed your first order",
+    "wishlistEmptyHint": "Save your favourite pieces here by tapping the heart icon on any product",
+    "addressesEmptyHint": "Add your delivery address to speed up checkout next time",
+    "addAddress": "Add address"
   },
   "return": {
     "title": "Request Return",

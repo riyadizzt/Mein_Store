@@ -27,7 +27,8 @@
     "men": "رجال",
     "women": "نساء",
     "girls": "بنات",
-    "boys": "أولاد"
+    "boys": "أولاد",
+    "searchPlaceholder": "ابحث عن ملابس، أحذية..."
   },
   "auth": {
     "loginTitle": "تسجيل الدخول",
@@ -120,7 +121,13 @@
       "showResults": "عرض النتائج",
       "removeAll": "إزالة الكل",
       "products": "{count} منتج"
-    }
+    },
+    "noReturnTitle": "لا يمكن إرجاع هذا المنتج",
+    "noReturnHygiene": "لأسباب صحية، لا يمكن إرجاع هذا المنتج بعد فتحه",
+    "noReturnCustom": "المنتجات المصنوعة حسب الطلب غير قابلة للإرجاع",
+    "noReturnSealed": "المنتجات المختومة غير قابلة للإرجاع بعد فتحها",
+    "noReturnDefault": "يرجى التأكد قبل الشراء",
+    "addedToCart": "تمت الإضافة إلى السلة"
   },
   "cart": {
     "title": "سلة التسوق",
@@ -141,7 +148,9 @@
     "free": "مجاني",
     "trustShipping": "شحن مجاني من €100",
     "trustReturns": "سياسة إرجاع 14 يوم",
-    "trustSecure": "دفع آمن (SSL)"
+    "trustSecure": "دفع آمن (SSL)",
+    "removedFromCart": "تمت الإزالة من السلة",
+    "addedToCart": "تمت الإضافة إلى السلة"
   },
   "checkout": {
     "step1": "العنوان",
@@ -197,8 +206,7 @@
       "termsRequired": "لقد قرأت ووافقت على الشروط والأحكام وسياسة الإرجاع.",
       "backToShipping": "العودة لاختيار الشحن",
       "securePayment": "دفع آمن",
-      "orPayWithCard": "أو ادفع بالبطاقة",
-      "payNow": "ادفع الآن"
+      "orPayWithCard": "أو ادفع بالبطاقة"
     },
     "paymentMethods": {
       "card": "بطاقة ائتمان",
@@ -282,7 +290,6 @@
       "tracking": "تتبع",
       "returnRequest": "طلب إرجاع",
       "returnDeadline": "الإرجاع متاح حتى: {date}",
-      "loadMore": "تحميل المزيد",
       "shippingAddress": "عنوان التوصيل",
       "status_pending": "معلّق",
       "status_confirmed": "مؤكد",
@@ -293,7 +300,7 @@
     "addresses": {
       "title": "عناويني",
       "empty": "لا توجد عناوين محفوظة.",
-      "addNew": "إضافة عنوان جديد",
+      "addNew": "إضافة عنوان",
       "edit": "تعديل",
       "delete": "حذف",
       "defaultShipping": "عنوان التوصيل",
@@ -309,7 +316,8 @@
       "save": "حفظ",
       "error": "تعذر حفظ العنوان.",
       "postalCodeTooShort": "الرمز البريدي يجب أن يكون 3 أحرف على الأقل.",
-      "countryInvalid": "لا نقوم بالتوصيل إلى هذا البلد."
+      "countryInvalid": "لا نقوم بالتوصيل إلى هذا البلد.",
+      "emptyHint": "أضف عنوان التوصيل الخاص بك لتسريع عملية الشراء في المرة القادمة"
     },
     "profile": {
       "title": "ملفي الشخصي",
@@ -325,7 +333,8 @@
     "wishlist": {
       "title": "قائمة الأمنيات",
       "empty": "قائمة الأمنيات فارغة",
-      "discover": "اكتشف المنتجات"
+      "discover": "اكتشف المنتجات",
+      "emptyHint": "احفظ قطعك المفضلة هنا بنقرة على أيقونة القلب"
     },
     "sessions": {
       "title": "جلساتي",
@@ -368,7 +377,17 @@
       "damaged": "تالف",
       "changed_mind": "غيّرت رأيي",
       "other": "سبب آخر"
-    }
+    },
+    "greetingMorning": "صباح الخير",
+    "greetingAfternoon": "مساء الخير",
+    "greetingEvening": "مساء الخير",
+    "ordersErrorTitle": "تعذّر تحميل الطلبات",
+    "ordersErrorHint": "قد تكون هناك مشكلة مؤقتة في الاتصال. يرجى المحاولة مرة أخرى.",
+    "ordersRetry": "إعادة المحاولة",
+    "ordersEmptyHint": "ستظهر طلباتك هنا بمجرد إتمام عملية الشراء الأولى",
+    "wishlistEmptyHint": "احفظ قطعك المفضلة هنا بنقرة على أيقونة القلب",
+    "addressesEmptyHint": "أضف عنوان التوصيل الخاص بك لتسريع عملية الشراء في المرة القادمة",
+    "addAddress": "إضافة عنوان"
   },
   "return": {
     "title": "طلب إرجاع",

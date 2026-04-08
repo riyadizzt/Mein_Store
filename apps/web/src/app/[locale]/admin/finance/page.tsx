@@ -17,7 +17,7 @@ type Tab = 'overview' | 'daily' | 'monthly' | 'profit' | 'vat' | 'bestsellers' |
 
 function fmt(v: number | string | undefined | null): string {
   const n = Number(v ?? 0)
-  return `\u20AC${n.toFixed(2)}`
+  return `€${n.toFixed(2)}`
 }
 
 const PAYMENT_LABELS: Record<string, { label: string; icon: string; color: string }> = {

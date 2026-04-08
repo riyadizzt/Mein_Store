@@ -49,23 +49,26 @@ export default function OrdersPage() {
   if (isError) {
     return (
       <div className="text-center py-16">
-        <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-          <Package className="h-6 w-6 text-destructive" />
+        <div className="h-16 w-16 rounded-full bg-orange-50 flex items-center justify-center mx-auto mb-5">
+          <Package className="h-7 w-7 text-orange-400" />
         </div>
-        <h2 className="text-lg font-medium mb-2">{locale === 'ar' ? 'حدث خطأ في تحميل الطلبات' : locale === 'en' ? 'Failed to load orders' : 'Fehler beim Laden der Bestellungen'}</h2>
-        <p className="text-sm text-muted-foreground mb-4">{locale === 'ar' ? 'يرجى المحاولة مرة أخرى' : locale === 'en' ? 'Please try again' : 'Bitte versuche es erneut'}</p>
-        <Button variant="outline" onClick={() => refetch()}>{locale === 'ar' ? 'إعادة المحاولة' : locale === 'en' ? 'Retry' : 'Erneut versuchen'}</Button>
+        <h2 className="text-lg font-semibold mb-2">{t('ordersErrorTitle')}</h2>
+        <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">{t('ordersErrorHint')}</p>
+        <Button variant="outline" onClick={() => refetch()} className="btn-press">{t('ordersRetry')}</Button>
       </div>
     )
   }
 
   if (orders.length === 0) {
     return (
-      <div className="text-center py-16">
-        <Package className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
-        <h2 className="text-lg font-medium mb-2">{t('orders.empty')}</h2>
+      <div className="text-center py-20">
+        <div className="h-20 w-20 rounded-full bg-brand-gold/10 flex items-center justify-center mx-auto mb-5">
+          <Package className="h-9 w-9 text-brand-gold/40" />
+        </div>
+        <h2 className="text-lg font-semibold mb-2">{t('orders.empty')}</h2>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-6">{t('ordersEmptyHint')}</p>
         <Link href={`/${locale}/products`}>
-          <Button variant="outline">{t('orders.shopNow')}</Button>
+          <Button className="gap-2 btn-press">{t('orders.shopNow')}</Button>
         </Link>
       </div>
     )

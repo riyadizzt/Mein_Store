@@ -7,18 +7,18 @@ import { useCheckoutStore, type CheckoutAddress } from '@/store/checkout-store'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ArrowRight, MapPin, Plus } from 'lucide-react'
+import { FloatInput, FloatSelect } from './float-input'
 
 const COUNTRIES = [
-  { code: 'DE', name: 'Deutschland' },
-  { code: 'AT', name: 'Österreich' },
-  { code: 'CH', name: 'Schweiz' },
-  { code: 'NL', name: 'Niederlande' },
-  { code: 'BE', name: 'Belgien' },
-  { code: 'LU', name: 'Luxemburg' },
-  { code: 'FR', name: 'Frankreich' },
-  { code: 'PL', name: 'Polen' },
+  { value: 'DE', label: 'Deutschland' },
+  { value: 'AT', label: 'Österreich' },
+  { value: 'CH', label: 'Schweiz' },
+  { value: 'NL', label: 'Niederlande' },
+  { value: 'BE', label: 'Belgien' },
+  { value: 'LU', label: 'Luxemburg' },
+  { value: 'FR', label: 'Frankreich' },
+  { value: 'PL', label: 'Polen' },
 ]
 
 export function StepAddress() {
@@ -28,7 +28,7 @@ export function StepAddress() {
   const { isAuthenticated } = useAuthStore()
   const {
     shippingAddress, billingSameAsShipping,
-    setShippingAddress, setBillingAddress, setBillingSameAsShipping, setStep,
+    setShippingAddress, setBillingAddress, setBillingSameAsShipping, setSavedAddressId, setStep,
   } = useCheckoutStore()
 
   const [showForm, setShowForm] = useState(!isAuthenticated)
@@ -40,7 +40,6 @@ export function StepAddress() {
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Fetch saved addresses for logged-in users
   const { data: savedAddresses } = useQuery({
     queryKey: ['my-addresses'],
     queryFn: async () => {
@@ -66,6 +65,7 @@ export function StepAddress() {
     }
     setForm(mapped)
     setShippingAddress(mapped)
+    setSavedAddressId(addr.id)  // Gespeicherte Adress-ID merken
     if (billingSameAsShipping) setBillingAddress(null)
     setStep('shipping')
   }
@@ -87,6 +87,7 @@ export function StepAddress() {
   const handleContinue = () => {
     if (!validate()) return
     setShippingAddress(form)
+    setSavedAddressId(null)  // Neue Adresse → keine gespeicherte ID
     if (billingSameAsShipping) setBillingAddress(null)
     setStep('shipping')
   }
@@ -134,7 +135,7 @@ export function StepAddress() {
         </div>
       )}
 
-      {/* Address Form */}
+      {/* Address Form — Float Labels */}
       {(showForm || !hasSavedAddresses) && (
         <div className="space-y-4">
           {hasSavedAddresses && (
@@ -144,74 +145,102 @@ export function StepAddress() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label={tAuth('firstName')} value={form.firstName} error={errors.firstName}
-              onChange={(v) => updateField('firstName', v)} />
-            <Field label={tAuth('lastName')} value={form.lastName} error={errors.lastName}
-              onChange={(v) => updateField('lastName', v)} />
+            <FloatInput
+              label={tAuth('firstName')}
+              value={form.firstName}
+              error={errors.firstName}
+              onChange={(v) => updateField('firstName', v)}
+              autoComplete="given-name"
+            />
+            <FloatInput
+              label={tAuth('lastName')}
+              value={form.lastName}
+              error={errors.lastName}
+              onChange={(v) => updateField('lastName', v)}
+              autoComplete="family-name"
+            />
           </div>
 
-          <Field label={t('address.company')} value={form.company ?? ''} required={false}
-            onChange={(v) => updateField('company', v)} />
+          <FloatInput
+            label={t('address.company')}
+            value={form.company ?? ''}
+            required={false}
+            onChange={(v) => updateField('company', v)}
+            autoComplete="organization"
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
-              <Field label={t('address.street')} value={form.street} error={errors.street}
-                onChange={(v) => updateField('street', v)} />
+              <FloatInput
+                label={t('address.street')}
+                value={form.street}
+                error={errors.street}
+                onChange={(v) => updateField('street', v)}
+                autoComplete="address-line1"
+              />
             </div>
-            <Field label={t('address.houseNumber')} value={form.houseNumber} error={errors.houseNumber}
-              onChange={(v) => updateField('houseNumber', v)} />
+            <FloatInput
+              label={t('address.houseNumber')}
+              value={form.houseNumber}
+              error={errors.houseNumber}
+              onChange={(v) => updateField('houseNumber', v)}
+            />
           </div>
 
-          <Field label={t('address.addressLine2')} value={form.addressLine2 ?? ''} required={false}
-            onChange={(v) => updateField('addressLine2', v)} />
+          <FloatInput
+            label={t('address.addressLine2')}
+            value={form.addressLine2 ?? ''}
+            required={false}
+            onChange={(v) => updateField('addressLine2', v)}
+            autoComplete="address-line2"
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label={t('address.postalCode')} value={form.postalCode} error={errors.postalCode}
-              onChange={(v) => updateField('postalCode', v)} />
+            <FloatInput
+              label={t('address.postalCode')}
+              value={form.postalCode}
+              error={errors.postalCode}
+              onChange={(v) => updateField('postalCode', v)}
+              autoComplete="postal-code"
+            />
             <div className="sm:col-span-2">
-              <Field label={t('address.city')} value={form.city} error={errors.city}
-                onChange={(v) => updateField('city', v)} />
+              <FloatInput
+                label={t('address.city')}
+                value={form.city}
+                error={errors.city}
+                onChange={(v) => updateField('city', v)}
+                autoComplete="address-level2"
+              />
             </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">{t('address.country')}</label>
-            <select
-              value={form.country}
-              onChange={(e) => updateField('country', e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border bg-background text-sm"
-            >
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+          <FloatSelect
+            label={t('address.country')}
+            value={form.country}
+            onChange={(v) => updateField('country', v)}
+            options={COUNTRIES}
+          />
 
           <label className="flex items-center gap-2 text-sm cursor-pointer pt-2">
-            <input type="checkbox" checked={billingSameAsShipping} onChange={(e) => setBillingSameAsShipping(e.target.checked)} className="rounded" />
+            <input
+              type="checkbox"
+              checked={billingSameAsShipping}
+              onChange={(e) => setBillingSameAsShipping(e.target.checked)}
+              className="rounded"
+            />
             {t('address.billingSameAsShipping')}
           </label>
 
-          <Button onClick={handleContinue} className="w-full gap-2 mt-4 bg-accent text-accent-foreground h-12 rounded-xl hover:bg-accent/90" size="lg">
+          <Button
+            onClick={handleContinue}
+            className="w-full gap-2 mt-4 bg-accent text-accent-foreground h-12 rounded-xl hover:bg-accent/90 btn-press"
+            size="lg"
+          >
             {t('address.continueToShipping')}
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       )}
-    </div>
-  )
-}
-
-function Field({
-  label, value, error, onChange, required = true,
-}: {
-  label: string; value: string; error?: string; onChange: (v: string) => void; required?: boolean
-}) {
-  return (
-    <div>
-      <label className="text-sm font-medium mb-1.5 block">{label}</label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} className={error ? 'border-destructive' : ''} required={required} aria-label={label} />
-      {error && <p className="text-xs text-destructive mt-1" role="alert">{error}</p>}
     </div>
   )
 }

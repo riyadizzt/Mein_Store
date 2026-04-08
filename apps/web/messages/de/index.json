@@ -27,7 +27,8 @@
     "men": "Herren",
     "women": "Damen",
     "girls": "Mädchen",
-    "boys": "Jungen"
+    "boys": "Jungen",
+    "searchPlaceholder": "Kleidung, Schuhe suchen..."
   },
   "auth": {
     "loginTitle": "Anmelden",
@@ -120,7 +121,13 @@
       "showResults": "Ergebnisse anzeigen",
       "removeAll": "Alle entfernen",
       "products": "{count} Produkte"
-    }
+    },
+    "noReturnTitle": "Dieser Artikel kann nicht zurückgegeben werden",
+    "noReturnHygiene": "Aus Hygienegründen kann dieser Artikel nach dem Öffnen nicht zurückgegeben werden",
+    "noReturnCustom": "Maßanfertigungen sind vom Umtausch ausgeschlossen",
+    "noReturnSealed": "Versiegelte Ware kann nach dem Öffnen nicht zurückgegeben werden",
+    "noReturnDefault": "Bitte vor dem Kauf sicherstellen",
+    "addedToCart": "Zum Warenkorb hinzugefügt"
   },
   "cart": {
     "title": "Warenkorb",
@@ -141,7 +148,9 @@
     "free": "Kostenlos",
     "trustShipping": "Kostenloser Versand ab €100",
     "trustReturns": "14 Tage Rückgaberecht",
-    "trustSecure": "Sichere Bezahlung (SSL)"
+    "trustSecure": "Sichere Bezahlung (SSL)",
+    "removedFromCart": "Aus dem Warenkorb entfernt",
+    "addedToCart": "Zum Warenkorb hinzugefügt"
   },
   "checkout": {
     "step1": "Adresse",
@@ -197,8 +206,7 @@
       "termsRequired": "Ich habe die AGB und Widerrufsbelehrung gelesen und akzeptiere sie.",
       "backToShipping": "Zurück zur Versandart",
       "securePayment": "Sichere Zahlung",
-      "orPayWithCard": "oder mit Karte bezahlen",
-      "payNow": "Jetzt bezahlen"
+      "orPayWithCard": "oder mit Karte bezahlen"
     },
     "paymentMethods": {
       "card": "Kreditkarte",
@@ -282,7 +290,6 @@
       "tracking": "Verfolgen",
       "returnRequest": "Widerruf beantragen",
       "returnDeadline": "Widerruf möglich bis: {date}",
-      "loadMore": "Mehr laden",
       "shippingAddress": "Lieferadresse",
       "status_pending": "Offen",
       "status_confirmed": "Best.",
@@ -293,7 +300,7 @@
     "addresses": {
       "title": "Meine Adressen",
       "empty": "Keine Adressen gespeichert.",
-      "addNew": "Neue Adresse",
+      "addNew": "Adresse hinzufügen",
       "edit": "Bearbeiten",
       "delete": "Löschen",
       "defaultShipping": "Lieferadresse",
@@ -309,7 +316,8 @@
       "save": "Speichern",
       "error": "Adresse konnte nicht gespeichert werden.",
       "postalCodeTooShort": "PLZ muss mindestens 3 Zeichen haben.",
-      "countryInvalid": "Dieses Land wird nicht beliefert."
+      "countryInvalid": "Dieses Land wird nicht beliefert.",
+      "emptyHint": "Füge deine Lieferadresse hinzu, um beim nächsten Einkauf schneller zu bestellen"
     },
     "profile": {
       "title": "Mein Profil",
@@ -325,7 +333,8 @@
     "wishlist": {
       "title": "Wunschliste",
       "empty": "Ihre Wunschliste ist leer",
-      "discover": "Produkte entdecken"
+      "discover": "Produkte entdecken",
+      "emptyHint": "Speichere deine Lieblingsstücke hier, indem du auf das Herz-Symbol tippst"
     },
     "sessions": {
       "title": "Meine Sessions",
@@ -368,7 +377,17 @@
       "damaged": "Beschädigt",
       "changed_mind": "Gefällt mir nicht",
       "other": "Anderer Grund"
-    }
+    },
+    "greetingMorning": "Guten Morgen",
+    "greetingAfternoon": "Guten Tag",
+    "greetingEvening": "Guten Abend",
+    "ordersErrorTitle": "Bestellungen konnten nicht geladen werden",
+    "ordersErrorHint": "Möglicherweise liegt ein vorübergehendes Verbindungsproblem vor. Bitte versuche es erneut.",
+    "ordersRetry": "Erneut versuchen",
+    "ordersEmptyHint": "Deine Bestellungen erscheinen hier, sobald du deine erste Bestellung aufgibst",
+    "wishlistEmptyHint": "Speichere deine Lieblingsstücke hier, indem du auf das Herz-Symbol tippst",
+    "addressesEmptyHint": "Füge deine Lieferadresse hinzu, um beim nächsten Einkauf schneller zu bestellen",
+    "addAddress": "Adresse hinzufügen"
   },
   "return": {
     "title": "Widerruf beantragen",

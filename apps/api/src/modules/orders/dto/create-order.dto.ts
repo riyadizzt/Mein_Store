@@ -1,9 +1,21 @@
 import {
   IsArray, IsEnum, IsOptional, IsString, IsUUID,
-  IsEmail, ValidateNested, ArrayMinSize, IsInt, Min,
+  IsEmail, ValidateNested, ArrayMinSize, IsInt, Min, IsObject,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import { ApiProperty } from '@nestjs/swagger'
+
+export class InlineShippingAddressDto {
+  @IsString() firstName!: string
+  @IsString() lastName!: string
+  @IsString() street!: string
+  @IsString() houseNumber!: string
+  @IsOptional() @IsString() addressLine2?: string
+  @IsString() postalCode!: string
+  @IsString() city!: string
+  @IsString() country!: string
+  @IsOptional() @IsString() company?: string
+}
 
 export class OrderItemInputDto {
   @ApiProperty({ example: 'uuid-of-variant' })
@@ -33,6 +45,13 @@ export class CreateOrderDto {
   @IsOptional()
   @IsUUID()
   shippingAddressId?: string
+
+  @ApiProperty({ required: false, description: 'Inline-Adresse (wenn keine gespeicherte Adresse)' })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => InlineShippingAddressDto)
+  shippingAddress?: InlineShippingAddressDto
 
   @ApiProperty({
     required: false,

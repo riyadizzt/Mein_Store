@@ -71,19 +71,29 @@ function ProductsContent() {
               ))}
             </div>
           ) : allProducts.length === 0 ? (
-            /* Empty State */
+            /* Empty State — warm onboarding guidance */
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <PackageSearch className="h-16 w-16 text-muted-foreground/30 mb-4" />
-              <h3 className="text-lg font-medium mb-2">{t('noProducts')}</h3>
-              <p className="text-sm text-muted-foreground mb-6">
+              <div className="h-20 w-20 rounded-full bg-brand-gold/10 flex items-center justify-center mb-5">
+                <PackageSearch className="h-9 w-9 text-brand-gold/50" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">{t('noProducts')}</h3>
+              <p className="text-sm text-muted-foreground mb-2 max-w-sm">
                 {t('tryOtherFilters')}
               </p>
-              <Button
-                variant="outline"
-                onClick={() => window.history.pushState(null, '', window.location.pathname)}
-              >
-                {t('resetFilters')}
-              </Button>
+              {params.search && (
+                <p className="text-xs text-muted-foreground mb-4">
+                  &ldquo;{params.search}&rdquo;
+                </p>
+              )}
+              <div className="flex gap-3 mt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => window.history.pushState(null, '', window.location.pathname)}
+                  className="btn-press"
+                >
+                  {t('resetFilters')}
+                </Button>
+              </div>
             </div>
           ) : (
             <>

@@ -1,11 +1,13 @@
 import { useTranslations } from 'next-intl'
-import { HeroBanner } from '@/components/layout/hero-banner'
+import { HeroSection } from '@/components/home/hero-section'
 import { TrustSignals } from '@/components/layout/trust-signals'
-import { CategoryGrid } from '@/components/layout/category-grid'
-import { ProductScroll } from '@/components/product/product-scroll'
+import { CategoryShowcase } from '@/components/home/category-showcase'
+import { FeaturedProducts } from '@/components/home/featured-products'
+import { EditorialBanner } from '@/components/home/editorial-banner'
+import { NewsletterSection } from '@/components/home/newsletter-section'
 import { TrustCounter } from '@/components/overdrive/trust-counter'
 
-export const revalidate = 60 // ISR: regenerate every 60s
+export const revalidate = 60
 
 export default function HomePage({
   params: { locale },
@@ -16,27 +18,40 @@ export default function HomePage({
 
   return (
     <>
-      <HeroBanner locale={locale} />
+      {/* 1. Hero — full viewport, immersive */}
+      <HeroSection locale={locale} />
+
+      {/* 2. Trust signals bar */}
       <TrustSignals />
 
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold">{t('categories')}</h2>
-        </div>
-        <CategoryGrid />
-      </section>
+      {/* 3. Categories — asymmetric showcase */}
+      <CategoryShowcase />
 
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16">
-        <ProductScroll title={t('bestsellers')} sort="bestseller" />
-      </section>
+      {/* 4. Bestsellers */}
+      <FeaturedProducts
+        title={t('bestsellers')}
+        eyebrow={locale === 'ar' ? 'الأكثر مبيعاً' : locale === 'en' ? 'Most Popular' : 'Am beliebtesten'}
+        sort="bestseller"
+        locale={locale}
+      />
 
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20">
-        <ProductScroll title={t('newArrivals')} sort="newest" />
-      </section>
+      {/* 5. Editorial brand statement */}
+      <EditorialBanner locale={locale} />
 
+      {/* 6. New Arrivals — subtle bg change for rhythm */}
+      <FeaturedProducts
+        title={t('newArrivals')}
+        eyebrow={locale === 'ar' ? 'وصل حديثاً' : locale === 'en' ? 'Just Arrived' : 'Neu eingetroffen'}
+        sort="newest"
+        locale={locale}
+        bgClass="bg-paper"
+      />
+
+      {/* 7. Trust counter — social proof */}
       <TrustCounter />
 
-      {/* Recently Viewed - handled client-side */}
+      {/* 8. Newsletter — dark section for contrast */}
+      <NewsletterSection />
     </>
   )
 }

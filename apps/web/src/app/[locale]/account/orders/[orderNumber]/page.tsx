@@ -59,7 +59,12 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
   }
 
   const currentStepIndex = TIMELINE_STEPS.indexOf(order.status)
-  const deliveredAt = order.shipment?.deliveredAt ? new Date(order.shipment.deliveredAt) : null
+  // deliveredAt: Shipment-Datum oder Fallback auf updatedAt wenn Status=delivered
+  const deliveredAt = order.shipment?.deliveredAt
+    ? new Date(order.shipment.deliveredAt)
+    : order.status === 'delivered' && order.updatedAt
+      ? new Date(order.updatedAt)
+      : null
   const returnsEnabled = shopSettings?.returnsEnabled !== false && shopSettings?.returnsEnabled !== 'false'
   const daysLeft = deliveredAt ? Math.max(0, 14 - Math.floor((Date.now() - deliveredAt.getTime()) / 86400000)) : 0
   const canReturn = returnsEnabled && order.status === 'delivered' && deliveredAt && daysLeft > 0

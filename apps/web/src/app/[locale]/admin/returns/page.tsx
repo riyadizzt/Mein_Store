@@ -170,7 +170,7 @@ export default function AdminReturnsPage() {
   }
 
   const handleRefund = async () => {
-    const amount = detail?.refundAmount ? `\u20AC${Number(detail.refundAmount).toFixed(2)}` : ''
+    const amount = detail?.refundAmount ? formatCurrency(Number(detail.refundAmount), locale) : ''
     const ok = await confirmDialog({
       title: t3('Erstattung ausl\u00f6sen', 'Issue Refund', '\u0625\u0635\u062f\u0627\u0631 \u0627\u0633\u062a\u0631\u062f\u0627\u062f'),
       description: t3(
@@ -259,7 +259,7 @@ export default function AdminReturnsPage() {
             <Euro className="h-4 w-4" />
             {t3('Erstattungen diesen Monat', 'Refunds this month', '\u0627\u0633\u062a\u0631\u062f\u0627\u062f\u0627\u062a \u0647\u0630\u0627 \u0627\u0644\u0634\u0647\u0631')}
           </div>
-          <p className="text-3xl font-bold">{stats?.totalRefundsThisMonth != null ? `\u20AC${Number(stats.totalRefundsThisMonth).toFixed(2)}` : '—'}</p>
+          <p className="text-3xl font-bold">{stats?.totalRefundsThisMonth != null ? formatCurrency(Number(stats.totalRefundsThisMonth), locale) : '—'}</p>
         </div>
         <div className="bg-[#1a1a2e] rounded-2xl p-5 text-white">
           <div className="flex items-center gap-2 mb-2 text-sm text-white/60">
@@ -298,24 +298,15 @@ export default function AdminReturnsPage() {
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <colgroup>
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '14%' }} />
-              </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 font-medium">{t3('RET-Nr', 'RET No', '\u0631\u0642\u0645 \u0627\u0644\u0645\u0631\u062a\u062c\u0639')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Bestell-Nr', 'Order No', '\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Kunde', 'Customer', '\u0627\u0644\u0639\u0645\u064a\u0644')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Grund', 'Reason', '\u0627\u0644\u0633\u0628\u0628')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Status', 'Status', '\u0627\u0644\u062d\u0627\u0644\u0629')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Betrag', 'Amount', '\u0627\u0644\u0645\u0628\u0644\u063a')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Datum', 'Date', '\u0627\u0644\u062a\u0627\u0631\u064a\u062e')}</th>
+                  <th className="text-start px-4 py-3 font-medium whitespace-nowrap">{t3('RET-Nr', 'RET No', '\u0631\u0642\u0645 \u0627\u0644\u0645\u0631\u062a\u062c\u0639')}</th>
+                  <th className="text-start px-4 py-3 font-medium whitespace-nowrap">{t3('Bestell-Nr', 'Order No', '\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628')}</th>
+                  <th className="text-start px-4 py-3 font-medium whitespace-nowrap">{t3('Kunde', 'Customer', '\u0627\u0644\u0639\u0645\u064a\u0644')}</th>
+                  <th className="text-start px-4 py-3 font-medium whitespace-nowrap">{t3('Grund', 'Reason', '\u0627\u0644\u0633\u0628\u0628')}</th>
+                  <th className="text-start px-4 py-3 font-medium whitespace-nowrap">{t3('Status', 'Status', '\u0627\u0644\u062d\u0627\u0644\u0629')}</th>
+                  <th className="text-end px-4 py-3 font-medium whitespace-nowrap">{t3('Betrag', 'Amount', '\u0627\u0644\u0645\u0628\u0644\u063a')}</th>
+                  <th className="text-start px-4 py-3 font-medium whitespace-nowrap">{t3('Datum', 'Date', '\u0627\u0644\u062a\u0627\u0631\u064a\u062e')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -332,11 +323,11 @@ export default function AdminReturnsPage() {
                       className={`border-b cursor-pointer transition-colors ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                       onClick={() => openDetail(ret)}
                     >
-                      <td className="text-start px-4 py-3 font-mono font-medium text-[#d4a853]">{ret.returnNumber}</td>
-                      <td className="text-start px-4 py-3 font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</td>
+                      <td className="text-start px-4 py-3 font-mono font-medium text-[#d4a853] whitespace-nowrap">{ret.returnNumber}</td>
+                      <td className="text-start px-4 py-3 font-mono text-xs text-primary whitespace-nowrap">{ret.order?.orderNumber ?? '—'}</td>
                       <td className="text-start px-4 py-3">
-                        <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
-                        <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
+                        <p className="font-medium truncate max-w-[160px]">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[160px]">{ret.order?.user?.email}</p>
                       </td>
                       <td className="text-start px-4 py-3">
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
@@ -543,7 +534,7 @@ export default function AdminReturnsPage() {
                     >
                       <Euro className="h-5 w-5" />
                       {t3('Erstattung ausl\u00f6sen', 'Issue Refund', '\u0625\u0635\u062f\u0627\u0631 \u0627\u0633\u062a\u0631\u062f\u0627\u062f')}
-                      {detail.refundAmount && <span className="text-sm font-normal opacity-80">(\u20AC{Number(detail.refundAmount).toFixed(2)})</span>}
+                      {detail.refundAmount && <span className="text-sm font-normal opacity-80">({formatCurrency(Number(detail.refundAmount), locale)})</span>}
                     </Button>
                   )}
 
@@ -553,7 +544,7 @@ export default function AdminReturnsPage() {
                       <Check className="h-5 w-5 flex-shrink-0" />
                       <div>
                         <p className="font-medium">{t3('Erstattet am', 'Refunded on', '\u062a\u0645 \u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f \u0641\u064a')} {formatDate(detail.refundedAt, locale)}</p>
-                        <p className="text-green-700 font-bold">\u20AC{Number(detail.refundAmount ?? 0).toFixed(2)}</p>
+                        <p className="text-green-700 font-bold">{formatCurrency(Number(detail.refundAmount ?? 0), locale)}</p>
                       </div>
                     </div>
                   )}
@@ -570,11 +561,14 @@ export default function AdminReturnsPage() {
                   )}
                 </div>
 
-                {/* Admin notes */}
+                {/* Admin notes — übersetze Enum-Werte in lesbaren Text */}
                 {detail.notes && (
                   <div className="text-xs text-muted-foreground border-t pt-3">
                     <p className="font-medium mb-1">{t3('Kundennotiz', 'Customer Note', '\u0645\u0644\u0627\u062d\u0638\u0629 \u0627\u0644\u0639\u0645\u064a\u0644')}</p>
-                    <p>{detail.notes}</p>
+                    <p>{detail.notes.split(' | ').map((part: string) => {
+                      const enumMatch = REASON_LABELS[part.trim() as ReturnReason]
+                      return enumMatch ? enumMatch[locale as 'de' | 'en' | 'ar'] : part
+                    }).join(' | ')}</p>
                   </div>
                 )}
               </div>
