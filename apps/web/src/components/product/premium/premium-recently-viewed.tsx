@@ -1,0 +1,78 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+
+export interface RecentProduct {
+  id: string
+  slug: string
+  name: string
+  imageUrl: string
+  price: number
+}
+
+const STORAGE_KEY = 'malak-recently-viewed'
+const MAX_ITEMS = 8
+
+export function saveRecentlyViewed(product: RecentProduct) {
+  if (typeof window === 'undefined') return
+  try {
+    const existing: RecentProduct[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    const filtered = existing.filter(p => p.id !== product.id)
+    filtered.unshift(product)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered.slice(0, MAX_ITEMS)))
+  } catch { /* ignore */ }
+}
+
+function getRecentlyViewed(): RecentProduct[] {
+  if (typeof window === 'undefined') return []
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+  } catch { return [] }
+}
+
+interface Props {
+  currentProductId: string
+  locale: string
+}
+
+export function PremiumRecentlyViewed({ currentProductId, locale }: Props) {
+  const [products, setProducts] = useState<RecentProduct[]>([])
+  const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
+
+  useEffect(() => {
+    setProducts(getRecentlyViewed().filter(p => p.id !== currentProductId).slice(0, 6))
+  }, [currentProductId])
+
+  if (products.length === 0) return null
+
+  return (
+    <section className="py-16 border-t border-[#e5e5e5]">
+      <h2 className="text-sm tracking-[0.12em] uppercase text-[#0f1419]/30 mb-10">
+        {t3('Zuletzt angesehen', 'Recently Viewed', 'شوهدت مؤخراً')}
+      </h2>
+      <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">
+        {products.map(p => (
+          <Link
+            key={p.id}
+            href={`/${locale}/products/${p.slug}`}
+            className="flex-shrink-0 w-[160px] sm:w-[190px] group"
+          >
+            <div className="aspect-[3/4] bg-[#f5f5f5] overflow-hidden mb-3">
+              {p.imageUrl && (
+                <img
+                  src={p.imageUrl}
+                  alt={p.name}
+                  className="w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] group-hover:scale-[1.03]"
+                  loading="lazy"
+                />
+              )}
+            </div>
+            <p className="text-[13px] font-light text-[#0f1419] truncate leading-snug">{p.name}</p>
+            <p className="text-[13px] text-[#0f1419]/40 mt-1 tabular-nums">&euro;{p.price.toFixed(2)}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}

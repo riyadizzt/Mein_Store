@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { ChevronRight } from 'lucide-react'
+// Old PDP backup: product-client.tsx (untouched)
 import Link from 'next/link'
-import { ProductClient } from './product-client'
+import { ProductClientPremium } from './product-client-premium'
 import { generateProductOGTags } from '@/components/product-og-tags'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -15,8 +14,10 @@ async function getProduct(slug: string, lang: string) {
   return res.json()
 }
 
-async function getSimilarProducts(lang: string) {
-  const res = await fetch(`${API_URL}/api/v1/products?lang=${lang}&limit=8&sort=newest`, {
+async function getSimilarProducts(lang: string, categoryId?: string) {
+  const params = new URLSearchParams({ lang, limit: '8', sort: 'newest' })
+  if (categoryId) params.set('categoryId', categoryId)
+  const res = await fetch(`${API_URL}/api/v1/products?${params}`, {
     next: { revalidate: 300 },
   })
   if (!res.ok) return []
@@ -41,14 +42,13 @@ export default async function ProductDetailPage({
 }: {
   params: { slug: string; locale: string }
 }) {
-  const [product, similar, t, tHome] = await Promise.all([
+  const [product] = await Promise.all([
     getProduct(slug, locale),
-    getSimilarProducts(locale),
-    getTranslations('product'),
-    getTranslations('home'),
   ])
 
   if (!product) notFound()
+
+  const similar = await getSimilarProducts(locale, product.categoryId)
 
   const p = product as any
   const name = p.name ?? product.translations?.[0]?.name ?? product.slug
@@ -78,58 +78,35 @@ export default async function ProductDetailPage({
         },
       }) }} />
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumbs */}
-        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-6 overflow-x-auto bg-muted/30 py-2 rounded-lg px-3" aria-label="Breadcrumb">
-          <Link href={`/${locale}`} className="hover:text-foreground whitespace-nowrap">Home</Link>
-          <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 rtl-flip" />
-          {categoryName && (<><span className="whitespace-nowrap">{categoryName}</span><ChevronRight className="h-3.5 w-3.5 flex-shrink-0 rtl-flip" /></>)}
-          <span className="text-foreground font-medium truncate">{name}</span>
+      {/* Premium PDP Layout */}
+      <div className="mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-12 pt-4 pb-8">
+
+        {/* Minimal Breadcrumbs */}
+        <nav className="flex items-center gap-2 text-[11px] tracking-[0.08em] text-[#0f1419]/25 mb-8 lg:mb-12" aria-label="Breadcrumb">
+          <Link href={`/${locale}`} className="hover:text-[#0f1419]/50 transition-colors">
+            {locale === 'ar' ? 'الرئيسية' : 'Home'}
+          </Link>
+          <span className="text-[#0f1419]/15">/</span>
+          {categoryName && (
+            <>
+              <span className="hover:text-[#0f1419]/50 transition-colors">{categoryName}</span>
+              <span className="text-[#0f1419]/15">/</span>
+            </>
+          )}
+          <span className="text-[#0f1419]/50 truncate max-w-[200px]">{name}</span>
         </nav>
 
-        {/* Product — Client Component handles gallery + interactions */}
-        <ProductClient
+        {/* Product */}
+        <ProductClientPremium
           product={product}
           locale={locale}
-          translations={{
-            color: t('color'), size: t('size'),
-            inStock: t('inStock'), outOfStock: t('outOfStock'),
-            addToCart: t('addToCart'), added: t('added'),
-            addToWishlist: t('addToWishlist'),
-            share: t('share'), copyLink: t('copyLink'),
-            priceIncludesVat: t('priceIncludesVat', { rate: Number(product.taxRate).toFixed(0) }),
-            deliveryEstimate: t('deliveryEstimate'),
-            description: t('description'), noDescription: t('noDescription'),
-          }}
           computed={{
             name, description, categoryName, price: Number(price),
             hasDiscount: !!hasDiscount, discountPercent, deliveryDate,
             basePrice: Number(product.basePrice),
           }}
+          similarProducts={filteredSimilar}
         />
-
-        {/* Similar Products — server rendered */}
-        {filteredSimilar.length > 0 && (
-          <section className="mt-12">
-            <h2 className="text-xl font-bold mb-4">{tHome('alsoLike')}</h2>
-            <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide -mx-4 px-4">
-              {filteredSimilar.map((sp: any) => {
-                const spName = sp.name ?? sp.translations?.[0]?.name ?? sp.slug
-                const spImage = sp.images?.find((i: any) => i.isPrimary)?.url ?? sp.images?.[0]?.url ?? sp.imageUrl
-                const spPrice = sp.salePrice ?? sp.basePrice
-                return (
-                  <Link key={sp.id} href={`/${locale}/products/${sp.slug}`} className="flex-shrink-0 w-[200px] sm:w-[240px] snap-start group" aria-label={spName}>
-                    <div className="aspect-square rounded-lg bg-muted overflow-hidden relative">
-                      {spImage && <img src={spImage} alt={spName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />}
-                    </div>
-                    <p className="mt-2 text-sm font-medium truncate group-hover:text-primary">{spName}</p>
-                    <p className="text-sm font-bold">&euro;{Number(spPrice).toFixed(2)}</p>
-                  </Link>
-                )
-              })}
-            </div>
-          </section>
-        )}
       </div>
     </>
   )
