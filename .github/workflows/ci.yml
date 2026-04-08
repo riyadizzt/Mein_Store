@@ -64,4 +64,4 @@ jobs:
         run: npx prisma generate
 
       - name: Run unit tests
-        run: pnpm --filter api exec jest --passWithNoTests --no-cache
+        run: cd apps/api && npx jest --passWithNoTests --no-cache --config package.json
