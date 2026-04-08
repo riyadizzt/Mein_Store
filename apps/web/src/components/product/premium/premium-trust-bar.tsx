@@ -19,7 +19,7 @@ export function PremiumTrustBar({ locale }: PremiumTrustBarProps) {
       {items.map((item, i) => (
         <div key={i} className="flex items-center gap-3">
           <item.icon className="h-[18px] w-[18px] text-[#d4a853] flex-shrink-0" strokeWidth={1.5} />
-          <span className="text-[11px] tracking-[0.04em] text-[#0f1419]/40 leading-snug">{item.text}</span>
+          <span className={`text-[#0f1419]/40 leading-snug ${locale === 'ar' ? 'text-[13px]' : 'text-[12px] tracking-[0.04em]'}`}>{item.text}</span>
         </div>
       ))}
     </div>

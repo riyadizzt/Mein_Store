@@ -48,7 +48,7 @@ export function PremiumRecentlyViewed({ currentProductId, locale }: Props) {
 
   return (
     <section className="py-16 border-t border-[#e5e5e5]">
-      <h2 className="text-sm tracking-[0.12em] uppercase text-[#0f1419]/30 mb-10">
+      <h2 className={`text-[#0f1419]/30 mb-10 ${locale === 'ar' ? 'text-base font-medium' : 'text-sm tracking-[0.12em] uppercase'}`}>
         {t3('Zuletzt angesehen', 'Recently Viewed', 'شوهدت مؤخراً')}
       </h2>
       <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">

@@ -13,9 +13,10 @@ interface Tab {
 interface PremiumTabsProps {
   tabs: Tab[]
   defaultTab?: string
+  isRTL?: boolean
 }
 
-export function PremiumTabs({ tabs, defaultTab }: PremiumTabsProps) {
+export function PremiumTabs({ tabs, defaultTab, isRTL }: PremiumTabsProps) {
   const [activeTab, setActiveTab] = useState(defaultTab ?? tabs[0]?.id ?? '')
 
   return (
@@ -27,9 +28,11 @@ export function PremiumTabs({ tabs, defaultTab }: PremiumTabsProps) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative px-0 py-4 text-[13px] tracking-[0.08em] uppercase transition-colors ${
+              className={`relative px-0 py-4 transition-colors ${
                 tabs.indexOf(tab) > 0 ? 'ltr:ml-10 rtl:mr-10' : ''
-              } ${activeTab === tab.id ? 'text-[#0f1419]' : 'text-[#0f1419]/30 hover:text-[#0f1419]/50'}`}
+              } ${isRTL ? 'text-sm font-medium' : 'text-[13px] tracking-[0.08em] uppercase'} ${
+                activeTab === tab.id ? 'text-[#0f1419]' : 'text-[#0f1419]/30 hover:text-[#0f1419]/50'
+              }`}
             >
               {tab.label}
               {activeTab === tab.id && (
@@ -80,7 +83,7 @@ function AccordionItem({ label, isOpen, onToggle, children }: {
     <div>
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between py-5 text-[13px] tracking-[0.08em] uppercase text-[#0f1419]"
+        className="w-full flex items-center justify-between py-5 text-sm text-[#0f1419]"
       >
         {label}
         <ChevronDown

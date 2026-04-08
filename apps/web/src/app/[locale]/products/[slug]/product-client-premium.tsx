@@ -311,35 +311,39 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Category */}
           {categoryName && (
-            <p className="text-[11px] tracking-[0.15em] uppercase text-[#0f1419]/30 mb-4">{categoryName}</p>
+            <p className={`uppercase text-[#0f1419]/30 mb-4 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.15em]'}`}>{categoryName}</p>
           )}
 
-          {/* Product Name */}
-          <h1 className="font-display font-light text-[26px] sm:text-[32px] leading-[1.2] text-[#0f1419] mb-5">
+          {/* Product Name — Cairo for Arabic, Playfair for Latin */}
+          <h1 className={`leading-[1.25] text-[#0f1419] mb-6 ${
+            isRTL
+              ? 'font-arabic text-[28px] sm:text-[34px] font-semibold'
+              : 'font-display font-light text-[26px] sm:text-[32px]'
+          }`}>
             {name}
           </h1>
 
           {/* Price */}
-          <div className="flex items-baseline gap-3 mb-1.5">
-            <span className={`text-lg tabular-nums ${hasDiscount ? 'text-[#0f1419]' : 'text-[#0f1419]'}`}>
+          <div className="flex items-baseline gap-3 mb-2">
+            <span className="text-xl font-medium tabular-nums text-[#0f1419]">
               &euro;{price.toFixed(2)}
             </span>
             {hasDiscount && (
               <>
-                <span className="text-sm text-[#0f1419]/25 line-through tabular-nums">&euro;{basePrice.toFixed(2)}</span>
-                <span className="text-[11px] tracking-wide text-[#b45309]">-{discountPercent}%</span>
+                <span className="text-sm text-[#0f1419]/30 line-through tabular-nums">&euro;{basePrice.toFixed(2)}</span>
+                <span className={`tracking-wide text-[#b45309] font-medium ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>-{discountPercent}%</span>
               </>
             )}
           </div>
-          <p className="text-[11px] text-[#0f1419]/25 mb-6">
+          <p className={`text-[#0f1419]/30 mb-7 ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
             {t('priceIncludesVat', { rate: Number(product.taxRate).toFixed(0) })}
           </p>
 
           {/* Stock Progress Bar (urgency) */}
           {showLowStock && (
-            <div className="mb-6">
+            <div className="mb-7">
               <div className="flex items-center justify-between mb-2">
-                <span className={`text-[11px] tracking-wide ${available <= 2 ? 'text-[#dc2626]' : 'text-[#b45309]'}`}>
+                <span className={`font-medium ${available <= 2 ? 'text-[#dc2626]' : 'text-[#b45309]'} ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
                   {t('lowStock', { count: available })}
                 </span>
               </div>
@@ -356,7 +360,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Campaign Countdown (urgency - alternative) */}
           {showCampaign && countdown && (
-            <div className="flex items-center gap-2 mb-6 text-[11px] tracking-[0.1em] text-[#0f1419]/40">
+            <div className={`flex items-center gap-2 mb-7 text-[#0f1419]/40 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em]'}`}>
               <span>{t3('Angebot endet in', 'Offer ends in', 'ينتهي العرض في')}</span>
               <span className="font-mono tabular-nums text-[#b45309]">{countdown}</span>
             </div>
@@ -364,15 +368,15 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Delivery */}
           {available > 0 && (
-            <div className="flex items-center gap-2.5 mb-8 text-[13px] text-[#0f1419]/40">
+            <div className={`flex items-center gap-2.5 mb-8 text-[#0f1419]/45 ${isRTL ? 'text-sm' : 'text-[13px]'}`}>
               <Truck className="h-4 w-4 flex-shrink-0" strokeWidth={1.5} />
-              <span>{t('deliveryEstimate')} <span className="text-[#0f1419]/70">{deliveryDate}</span></span>
+              <span>{t('deliveryEstimate')} <span className="text-[#0f1419]/70 font-medium">{deliveryDate}</span></span>
             </div>
           )}
 
           {/* No-Return Notice */}
           {product.excludeFromReturns && (
-            <div className="flex items-start gap-2.5 py-3 px-4 mb-6 border border-[#d97706]/20 text-[12px] text-[#b45309]/80 leading-relaxed">
+            <div className={`flex items-start gap-2.5 py-3 px-4 mb-6 border border-[#d97706]/20 text-[#b45309]/80 leading-relaxed ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
               <span className="mt-0.5 flex-shrink-0">&#9888;</span>
               <span>{t3('Dieser Artikel ist vom Umtausch ausgeschlossen', 'This item cannot be returned', 'لا يمكن إرجاع هذا المنتج')}</span>
             </div>
@@ -385,7 +389,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               {/* Color Selector */}
               {colors.length > 0 && (
                 <div>
-                  <label className="text-[12px] tracking-[0.08em] text-[#0f1419]/40 mb-3 block">
+                  <label className={`text-[#0f1419]/40 mb-3 block ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                     {t('color')}{selectedColor ? ` — ${translateColor(selectedColor, locale)}` : ''}
                   </label>
                   <div className="flex flex-wrap gap-2.5">
@@ -418,10 +422,10 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               {sizes.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <label className="text-[12px] tracking-[0.08em] text-[#0f1419]/40">
+                    <label className={`text-[#0f1419]/40 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                       {t('size')}{selectedSize ? ` — ${selectedSize}` : ''}
                     </label>
-                    <button className="text-[11px] underline underline-offset-4 decoration-[#0f1419]/15 text-[#0f1419]/40 hover:text-[#0f1419]/60 transition-colors">
+                    <button className={`underline underline-offset-4 decoration-[#0f1419]/15 text-[#0f1419]/40 hover:text-[#0f1419]/60 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
                       {t('sizeGuide')}
                     </button>
                   </div>
@@ -458,7 +462,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
             {/* Quantity */}
             <div className="flex items-center gap-3">
-              <span className="text-[12px] tracking-[0.08em] text-[#0f1419]/40">
+              <span className={`text-[#0f1419]/40 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                 {t3('Menge', 'Qty', 'الكمية')}
               </span>
               <div className="flex items-center border border-[#e5e5e5]">
@@ -490,7 +494,9 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 whileTap={!cartDisabled && available > 0 ? { scale: 0.98 } : undefined}
                 onClick={handleAddToCart}
                 disabled={available <= 0 || cartDisabled}
-                className={`flex-1 h-[52px] flex items-center justify-center gap-2.5 text-[13px] tracking-[0.1em] uppercase font-medium transition-all duration-300 ${
+                className={`flex-1 h-[52px] flex items-center justify-center gap-2.5 font-medium transition-all duration-300 ${
+                  isRTL ? 'text-[15px]' : 'text-[13px] tracking-[0.1em] uppercase'
+                } ${
                   added
                     ? 'bg-[#1a7a3a] text-white'
                     : available <= 0
@@ -536,7 +542,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* ═══ SHARE ═══ */}
           <div className="flex items-center gap-3 pt-6">
-            <span className="text-[11px] tracking-[0.08em] text-[#0f1419]/20 uppercase">{t('share')}</span>
+            <span className={`text-[#0f1419]/25 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.08em] uppercase'}`}>{t('share')}</span>
             <a
               href={currentUrl ? getWhatsAppShareUrl(name, `€${price.toFixed(2)}`, currentUrl, locale) : '#'}
               target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"
@@ -557,7 +563,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
       {/* ═══════════════ TABS ═══════════════ */}
       <div className="mt-20 lg:mt-28 pt-0">
-        <PremiumTabs tabs={tabs} defaultTab="description" />
+        <PremiumTabs tabs={tabs} defaultTab="description" isRTL={isRTL} />
       </div>
 
       {/* ═══════════════ TRUST BAR ═══════════════ */}
@@ -568,7 +574,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       {/* ═══════════════ RELATED PRODUCTS ═══════════════ */}
       {similarProducts.length > 0 && (
         <section className="py-16 border-t border-[#e5e5e5]">
-          <h2 className="text-sm tracking-[0.12em] uppercase text-[#0f1419]/30 mb-10">
+          <h2 className={`text-[#0f1419]/30 mb-10 ${isRTL ? 'text-base font-medium' : 'text-sm tracking-[0.12em] uppercase'}`}>
             {t3('Das könnte dir auch gefallen', 'You may also like', 'قد يعجبك أيضاً')}
           </h2>
           <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">
@@ -601,7 +607,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
       {/* ═══════════════ REVIEWS PLACEHOLDER ═══════════════ */}
       <section className="py-16 border-t border-[#e5e5e5]">
-        <h2 className="text-sm tracking-[0.12em] uppercase text-[#0f1419]/30 mb-8">
+        <h2 className={`text-[#0f1419]/30 mb-8 ${isRTL ? 'text-base font-medium' : 'text-sm tracking-[0.12em] uppercase'}`}>
           {t('reviews')}
         </h2>
         <div className="flex items-center gap-1 mb-4">
@@ -618,13 +624,13 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#e5e5e5] px-4 py-3 lg:hidden safe-bottom">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-light text-[#0f1419] truncate">{name}</p>
+            <p className={`text-[#0f1419] truncate ${isRTL ? 'text-sm' : 'text-[13px] font-light'}`}>{name}</p>
             <p className="text-[13px] tabular-nums text-[#0f1419]/60">&euro;{price.toFixed(2)}</p>
           </div>
           <button
             onClick={handleStickyAdd}
             disabled={available <= 0}
-            className="flex-shrink-0 h-11 px-6 bg-[#d4a853] text-white text-[12px] tracking-[0.1em] uppercase font-medium hover:bg-[#c49b45] transition-colors disabled:bg-[#f5f5f5] disabled:text-[#0f1419]/25 flex items-center gap-2"
+            className={`flex-shrink-0 h-11 px-6 bg-[#d4a853] text-white font-medium hover:bg-[#c49b45] transition-colors disabled:bg-[#f5f5f5] disabled:text-[#0f1419]/25 flex items-center gap-2 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em] uppercase'}`}
           >
             <ShoppingBag className="h-3.5 w-3.5" strokeWidth={1.5} />
             {available <= 0 ? t('outOfStock') : t('addToCart')}
