@@ -411,17 +411,26 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                         <button
                           key={color}
                           onClick={() => {
+                            if (!avail) return
                             const v = findVariant(color, selectedSize) ?? findVariant(color)
                             if (v) handleVariantSelect(v.id)
                           }}
                           disabled={!avail}
-                          title={translateColor(color, locale)}
+                          title={avail ? translateColor(color, locale) : `${translateColor(color, locale)} — ${t('outOfStock')}`}
                           className={`relative h-10 w-10 rounded-full transition-all duration-200 ${
-                            sel ? 'ring-[1.5px] ring-[#0f1419] ring-offset-[3px]' : 'ring-1 ring-[#e5e5e5] hover:ring-[#0f1419]/30'
-                          } ${!avail ? 'opacity-25 cursor-not-allowed' : ''}`}
+                            sel
+                              ? 'ring-2 ring-[#d4a853] ring-offset-[3px]'
+                              : avail
+                                ? 'ring-1 ring-[#d0d0d0] hover:ring-[#0f1419]/40'
+                                : 'opacity-40 cursor-not-allowed ring-1 ring-[#e0e0e0]'
+                          }`}
                         >
                           <span className="absolute inset-[3px] rounded-full" style={{ backgroundColor: hex ?? color?.toLowerCase() ?? '#ccc' }} />
-                          {!avail && <span className="absolute inset-0 flex items-center justify-center"><span className="w-full h-px bg-[#0f1419]/40 rotate-45 absolute" /></span>}
+                          {!avail && (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <span className="w-[130%] h-[1.5px] bg-[#0f1419]/50 rotate-45 absolute rounded-full" />
+                            </span>
+                          )}
                         </button>
                       )
                     })}
@@ -448,15 +457,19 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                         <button
                           key={size}
                           onClick={() => {
+                            if (!avail) return
                             const v = findVariant(selectedColor, size) ?? findVariant(undefined, size)
                             if (v) handleVariantSelect(v.id)
                           }}
                           disabled={!avail}
+                          title={avail ? `${t('size')} ${size}` : `${t('size')} ${size} — ${t('outOfStock')}`}
                           className={`h-11 min-w-[2.75rem] px-4 text-[13px] tracking-wide transition-all duration-200 border ${
                             sel
-                              ? 'border-[#0f1419] bg-[#0f1419] text-white'
-                              : 'border-[#e5e5e5] text-[#0f1419]/60 hover:border-[#0f1419]/30'
-                          } ${!avail ? 'opacity-20 cursor-not-allowed line-through' : ''}`}
+                              ? 'border-[#d4a853] bg-[#d4a853]/10 text-[#d4a853] font-semibold ring-1 ring-[#d4a853]'
+                              : avail
+                                ? 'border-[#e0e0e0] text-[#0f1419]/70 hover:border-[#0f1419]/40'
+                                : 'border-[#f0f0f0] bg-[#f8f8f8] text-[#0f1419]/25 line-through cursor-not-allowed'
+                          }`}
                         >
                           {size}
                         </button>
