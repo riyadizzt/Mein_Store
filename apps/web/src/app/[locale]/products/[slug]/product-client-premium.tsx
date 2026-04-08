@@ -311,7 +311,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Category */}
           {categoryName && (
-            <p className={`uppercase text-[#0f1419]/30 mb-5 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.15em]'}`}>{categoryName}</p>
+            <p className={`uppercase text-[#0f1419]/50 mb-5 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.15em]'}`}>{categoryName}</p>
           )}
 
           {/* Product Name */}
@@ -330,12 +330,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
             </span>
             {hasDiscount && (
               <>
-                <span className="text-sm text-[#0f1419]/30 line-through tabular-nums">&euro;{basePrice.toFixed(2)}</span>
+                <span className="text-sm text-[#0f1419]/45 line-through tabular-nums">&euro;{basePrice.toFixed(2)}</span>
                 <span className={`tracking-wide text-[#b45309] font-medium ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>-{discountPercent}%</span>
               </>
             )}
           </div>
-          <p className={`text-[#0f1419]/30 ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+          <p className={`text-[#0f1419]/50 ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
             {t('priceIncludesVat', { rate: Number(product.taxRate).toFixed(0) })}
           </p>
 
@@ -370,7 +370,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Campaign Countdown (urgency - alternative) */}
           {showCampaign && countdown && (
-            <div className={`flex items-center gap-2 mb-10 text-[#0f1419]/40 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em]'}`}>
+            <div className={`flex items-center gap-2 mb-10 text-[#0f1419]/60 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em]'}`}>
               <span>{t3('Angebot endet in', 'Offer ends in', 'ينتهي العرض في')}</span>
               <span className="font-mono tabular-nums text-[#b45309]">{countdown}</span>
             </div>
@@ -378,7 +378,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Delivery */}
           {available > 0 && (
-            <div className={`flex items-center gap-2.5 mb-10 text-[#0f1419]/45 ${isRTL ? 'text-sm' : 'text-[13px]'}`}>
+            <div className={`flex items-center gap-2.5 mb-10 text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px]'}`}>
               <Truck className="h-4 w-4 flex-shrink-0" strokeWidth={1.5} />
               <span>{t('deliveryEstimate')} <span className="text-[#0f1419]/70 font-medium">{deliveryDate}</span></span>
             </div>
@@ -399,7 +399,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               {/* Color Selector */}
               {colors.length > 0 && (
                 <div>
-                  <label className={`text-[#0f1419]/40 mb-4 block ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+                  <label className={`text-[#0f1419]/60 mb-4 block ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                     {t('color')}{selectedColor ? ` — ${translateColor(selectedColor, locale)}` : ''}
                   </label>
                   <div className="flex flex-wrap gap-3">
@@ -432,10 +432,10 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               {sizes.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <label className={`text-[#0f1419]/40 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+                    <label className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                       {t('size')}{selectedSize ? ` — ${selectedSize}` : ''}
                     </label>
-                    <button className={`underline underline-offset-4 decoration-[#0f1419]/15 text-[#0f1419]/40 hover:text-[#0f1419]/60 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+                    <button className={`underline underline-offset-4 decoration-[#0f1419]/20 text-[#0f1419]/50 hover:text-[#0f1419]/70 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
                       {t('sizeGuide')}
                     </button>
                   </div>
@@ -472,25 +472,25 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
             {/* Quantity */}
             <div className="flex items-center gap-3">
-              <span className={`text-[#0f1419]/40 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+              <span className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                 {t3('Menge', 'Qty', 'الكمية')}
               </span>
-              <div className="flex items-center border border-[#e5e5e5]">
+              <div className="inline-flex items-center border border-[#e5e5e5]" dir="ltr">
                 <button
                   onClick={() => setQty(Math.max(1, qty - 1))}
                   disabled={qty <= 1}
-                  className="h-9 w-9 flex items-center justify-center text-[#0f1419]/40 hover:text-[#0f1419] transition-colors disabled:opacity-20"
+                  className="h-10 w-10 flex items-center justify-center text-[#0f1419]/50 hover:text-[#0f1419] transition-colors disabled:opacity-20"
                   aria-label="Decrease"
                 >
                   <Minus className="h-3.5 w-3.5" strokeWidth={1.5} />
                 </button>
-                <span className="w-10 h-9 flex items-center justify-center text-[13px] tabular-nums text-[#0f1419] border-x border-[#e5e5e5]">
+                <span className="w-12 h-10 flex items-center justify-center text-[14px] tabular-nums text-[#0f1419] border-x border-[#e5e5e5] select-none">
                   {qty}
                 </span>
                 <button
                   onClick={() => setQty(Math.min(maxQty, qty + 1))}
                   disabled={qty >= maxQty}
-                  className="h-9 w-9 flex items-center justify-center text-[#0f1419]/40 hover:text-[#0f1419] transition-colors disabled:opacity-20"
+                  className="h-10 w-10 flex items-center justify-center text-[#0f1419]/50 hover:text-[#0f1419] transition-colors disabled:opacity-20"
                   aria-label="Increase"
                 >
                   <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -552,17 +552,17 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* ═══ SHARE ═══ */}
           <div className="flex items-center gap-3 pt-6">
-            <span className={`text-[#0f1419]/25 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.08em] uppercase'}`}>{t('share')}</span>
+            <span className={`text-[#0f1419]/50 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.08em] uppercase'}`}>{t('share')}</span>
             <a
               href={currentUrl ? getWhatsAppShareUrl(name, `€${price.toFixed(2)}`, currentUrl, locale) : '#'}
               target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"
-              className="h-9 w-9 flex items-center justify-center text-[#0f1419]/25 hover:text-[#25d366] transition-colors"
+              className="h-9 w-9 flex items-center justify-center text-[#0f1419]/40 hover:text-[#25d366] transition-colors"
             >
               <MessageCircle className="h-4 w-4" strokeWidth={1.5} />
             </a>
             <button
               onClick={handleCopyLink}
-              className="h-9 w-9 flex items-center justify-center text-[#0f1419]/25 hover:text-[#0f1419]/50 transition-colors"
+              className="h-9 w-9 flex items-center justify-center text-[#0f1419]/40 hover:text-[#0f1419]/60 transition-colors"
               aria-label={t('copyLink')}
             >
               <Copy className="h-4 w-4" strokeWidth={1.5} />
