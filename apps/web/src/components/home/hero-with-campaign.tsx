@@ -1,13 +1,12 @@
 'use client'
 
 import { useActiveCampaign } from '@/hooks/use-campaign'
-import { HeroSection } from './hero-section'
+import { HeroPremium } from './hero-premium'
 import { CampaignHero } from './campaign-hero'
 
-/**
- * Hero wrapper — shows Campaign Hero if active campaign exists,
- * otherwise falls back to the default HeroSection.
- */
+// Old hero backup: ./hero-section-backup.tsx
+// To revert: import { HeroSection } from './hero-section-backup' and replace HeroPremium below
+
 export function HeroWithCampaign({ locale }: { locale: string }) {
   const { campaign } = useActiveCampaign()
 
@@ -15,5 +14,5 @@ export function HeroWithCampaign({ locale }: { locale: string }) {
     return <CampaignHero campaign={campaign} locale={locale} />
   }
 
-  return <HeroSection locale={locale} />
+  return <HeroPremium locale={locale} />
 }
