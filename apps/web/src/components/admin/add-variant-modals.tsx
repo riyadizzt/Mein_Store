@@ -502,42 +502,46 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
             // Multiple warehouses — show color header + one row per warehouse
             return (
               <tbody key={color as string}>
-                {/* Color header row */}
-                <tr className="border-t bg-muted/10">
-                  <td colSpan={sizes.length + 1} className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: hex as string }} />
-                      <span className="text-xs font-semibold">{translateColor(color as string, locale)}</span>
-                      {/* Total available per size */}
-                      <span className="text-[10px] text-muted-foreground ltr:ml-auto rtl:mr-auto">
-                        {locale === 'ar' ? 'الإجمالي' : 'Gesamt'}: {sizes.map(size => {
-                          const v = getVariant(color as string, size)
-                          return (v?.inventory ?? []).reduce((s: number, inv: any) => s + Math.max(0, inv.quantityOnHand - (inv.quantityReserved ?? 0)), 0)
-                        }).reduce((a: number, b: number) => a + b, 0)}
-                      </span>
+                {/* Color header row with total badge */}
+                <tr className="border-t border-muted/40 bg-[#1a1a2e]/[0.03]">
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-5 w-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: hex as string }} />
+                      <span className="text-xs font-bold">{translateColor(color as string, locale)}</span>
                     </div>
                   </td>
+                  {sizes.map(size => {
+                    const v = getVariant(color as string, size)
+                    const sizeTotal = (v?.inventory ?? []).reduce((s: number, inv: any) => s + Math.max(0, inv.quantityOnHand - (inv.quantityReserved ?? 0)), 0)
+                    return (
+                      <td key={size} className="px-1 py-2.5 text-center">
+                        <span className={`inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded-md text-[10px] font-bold ${
+                          sizeTotal <= 0 ? 'bg-red-500/10 text-red-600' : sizeTotal <= 5 ? 'bg-orange-500/10 text-orange-600' : 'bg-green-500/10 text-green-700'
+                        }`}>{sizeTotal}</span>
+                      </td>
+                    )
+                  })}
                 </tr>
                 {/* One row per warehouse */}
-                {warehouses.map(([whId, whName]) => (
-                  <tr key={`${color}-${whId}`} className="border-t border-dashed hover:bg-muted/5 transition-colors">
-                    <td className="px-3 py-1.5 ltr:pl-9 rtl:pr-9">
-                      <span className="text-[11px] text-muted-foreground">{whName}</span>
+                {warehouses.map(([whId, whName], wi) => (
+                  <tr key={`${color}-${whId}`} className={`hover:bg-muted/5 transition-colors ${wi < warehouses.length - 1 ? 'border-b border-dashed border-muted/30' : ''}`}>
+                    <td className="px-4 py-2 ltr:pl-12 rtl:pr-12">
+                      <span className="text-[11px] text-muted-foreground/70">{whName}</span>
                     </td>
                     {sizes.map((size) => {
                       const v = getVariant(color as string, size)
                       const inv = getInvForWarehouse(v, whId)
-                      const avail = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : 0
+                      const avail = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : -1
                       return (
-                        <td key={size} className="px-1 py-1 text-center">
+                        <td key={size} className="px-1 py-1.5 text-center">
                           {inv ? (
                             <input type="number" min={0} defaultValue={inv.quantityOnHand}
-                              className={`w-14 h-7 text-center text-[11px] font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 ${avail <= 0 ? 'text-red-600 border-red-200' : avail <= 5 ? 'text-orange-600 border-orange-200' : 'text-green-600 border-muted'}`}
+                              className={`w-14 h-7 text-center text-[11px] font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-[#d4a853]/30 ${avail <= 0 ? 'text-red-500 border-red-200/60' : avail <= 5 ? 'text-orange-500 border-orange-200/60' : 'text-green-600 border-muted/60'}`}
                               onBlur={(e) => { const val = parseInt(e.target.value); if (!isNaN(val) && val !== inv.quantityOnHand) adjustMut.mutate({ id: inv.id, qty: val }) }}
                               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                             />
                           ) : (
-                            <span className="text-[10px] text-muted-foreground/30">—</span>
+                            <span className="text-[10px] text-muted-foreground/20">—</span>
                           )}
                         </td>
                       )
