@@ -484,7 +484,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 >
                   <Minus className="h-3.5 w-3.5" strokeWidth={1.5} />
                 </button>
-                <span className="w-12 h-10 flex items-center justify-center text-[14px] tabular-nums text-[#0f1419] border-x border-[#e5e5e5] select-none">
+                <span className="w-12 h-10 inline-flex items-center justify-center text-[14px] text-center leading-none tabular-nums text-[#0f1419] border-x border-[#e5e5e5] select-none" dir="ltr">
                   {qty}
                 </span>
                 <button
