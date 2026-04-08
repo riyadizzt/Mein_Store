@@ -1,11 +1,10 @@
 'use client'
 
 import { useActiveCampaign } from '@/hooks/use-campaign'
-import { HeroPremium } from './hero-premium'
+import { HeroSection } from './hero-section'
 import { CampaignHero } from './campaign-hero'
 
-// Old hero backup: ./hero-section-backup.tsx
-// To revert: import { HeroSection } from './hero-section-backup' and replace HeroPremium below
+// Premium hero available at ./hero-premium.tsx if needed later
 
 export function HeroWithCampaign({ locale }: { locale: string }) {
   const { campaign } = useActiveCampaign()
@@ -14,5 +13,5 @@ export function HeroWithCampaign({ locale }: { locale: string }) {
     return <CampaignHero campaign={campaign} locale={locale} />
   }
 
-  return <HeroPremium locale={locale} />
+  return <HeroSection locale={locale} />
 }
