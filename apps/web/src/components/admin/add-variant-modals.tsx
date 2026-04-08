@@ -451,17 +451,13 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
   if (colors.length === 0 || sizes.length === 0) return null
 
   return (
-    <div className="overflow-x-auto rounded-xl border" dir="ltr">
-      <table className="w-full text-sm table-fixed" style={{ direction: 'ltr' }}>
-        <colgroup>
-          <col style={{ width: sizes.length <= 3 ? '35%' : '28%' }} />
-          {sizes.map((s) => <col key={s} />)}
-        </colgroup>
+    <div className="overflow-x-auto rounded-xl border">
+      <table className="w-full text-sm">
         <thead>
           <tr className="bg-muted/30">
-            <th className={`px-4 py-2.5 text-xs font-semibold text-muted-foreground ${locale === 'ar' ? 'text-right' : 'text-left'}`}>{locale === 'ar' ? 'اللون / المقاس' : 'Farbe / Größe'}</th>
+            <th className={`px-4 py-2.5 text-xs font-semibold text-muted-foreground text-start`}>{locale === 'ar' ? 'اللون / المقاس' : 'Farbe / Größe'}</th>
             {sizes.map((size) => (
-              <th key={size} className="px-2 py-2.5 text-center text-xs font-bold">{size}</th>
+              <th key={size} className="w-20 px-2 py-2.5 text-center text-xs font-bold">{size}</th>
             ))}
           </tr>
         </thead>
@@ -472,7 +468,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
               return (
                 <tr key={color as string} className="border-t hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-2">
-                    <div className={`flex items-center gap-2 ${locale === 'ar' ? 'justify-end flex-row-reverse' : ''}`}>
+                    <div className="flex items-center gap-2">
                       <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: hex as string }} />
                       <span className="text-xs font-medium">{translateColor(color as string, locale)}</span>
                     </div>
@@ -482,16 +478,16 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                     const inv = v?.inventory?.[0]
                     const stock = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : 0
                     return (
-                      <td key={size} className="px-1 py-1.5 text-center">
+                      <td key={size} className="w-20 px-1 py-1.5 text-center">
                         {inv ? (
                           <input type="number" min={0} defaultValue={inv.quantityOnHand}
-                            className={`w-14 h-8 text-center text-xs font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 ${stock <= 0 ? 'text-red-600 border-red-200' : stock <= 5 ? 'text-orange-600 border-orange-200' : 'text-green-600 border-muted'}`}
+                            className={`w-14 h-8 text-center text-xs font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-[#d4a853]/30 ${stock <= 0 ? 'text-red-600 border-red-200' : stock <= 5 ? 'text-orange-600 border-orange-200' : 'text-green-600 border-muted'}`}
                             onBlur={(e) => { const val = parseInt(e.target.value); if (!isNaN(val) && val !== inv.quantityOnHand) adjustMut.mutate({ id: inv.id, qty: val }) }}
                             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                           />
                         ) : (
                           <input type="number" min={0} placeholder="—"
-                            className="w-14 h-8 text-center text-xs rounded-lg border border-dashed border-muted-foreground/20 bg-transparent text-muted-foreground/40 placeholder:text-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:text-foreground focus:font-bold"
+                            className="w-14 h-8 text-center text-xs rounded-lg border border-dashed border-muted-foreground/20 bg-transparent text-muted-foreground/40 placeholder:text-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-[#d4a853]/30 focus:border-[#d4a853] focus:text-foreground focus:font-bold"
                             onBlur={(e) => { const val = parseInt(e.target.value); if (!isNaN(val) && val > 0 && productId) { createMut.mutate({ color: color as string, colorHex: hex as string, size, stock: val }); e.target.value = '' } }}
                             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                           />
@@ -509,8 +505,8 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                 {/* Color header row with total badge */}
                 <tr className="border-t border-muted/40 bg-[#1a1a2e]/[0.03]">
                   <td className="px-4 py-2.5">
-                    <div className={`flex items-center gap-2.5 ${locale === 'ar' ? 'justify-end flex-row-reverse' : ''}`}>
-                      <div className="h-5 w-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: hex as string }} />
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-5 w-5 rounded-full border-2 border-white shadow-sm flex-shrink-0" style={{ backgroundColor: hex as string }} />
                       <span className="text-xs font-bold">{translateColor(color as string, locale)}</span>
                     </div>
                   </td>
@@ -518,7 +514,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                     const v = getVariant(color as string, size)
                     const sizeTotal = (v?.inventory ?? []).reduce((s: number, inv: any) => s + Math.max(0, inv.quantityOnHand - (inv.quantityReserved ?? 0)), 0)
                     return (
-                      <td key={size} className="px-1 py-2.5 text-center">
+                      <td key={size} className="w-20 px-1 py-2.5 text-center">
                         <span className={`inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded-md text-[10px] font-bold ${
                           sizeTotal <= 0 ? 'bg-red-500/10 text-red-600' : sizeTotal <= 5 ? 'bg-orange-500/10 text-orange-600' : 'bg-green-500/10 text-green-700'
                         }`}>{sizeTotal}</span>
@@ -529,7 +525,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                 {/* One row per warehouse */}
                 {warehouses.map(([whId, whName], wi) => (
                   <tr key={`${color}-${whId}`} className={`hover:bg-muted/5 transition-colors ${wi < warehouses.length - 1 ? 'border-b border-dashed border-muted/30' : ''}`}>
-                    <td className={`px-4 py-2 ${locale === 'ar' ? 'text-right pr-12' : 'pl-12'}`}>
+                    <td className="px-4 py-2 pl-10">
                       <span className="text-[11px] text-muted-foreground/70">{whName}</span>
                     </td>
                     {sizes.map((size) => {
@@ -537,7 +533,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                       const inv = getInvForWarehouse(v, whId)
                       const avail = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : -1
                       return (
-                        <td key={size} className="px-1 py-1.5 text-center">
+                        <td key={size} className="w-20 px-1 py-1.5 text-center">
                           {inv ? (
                             <input type="number" min={0} defaultValue={inv.quantityOnHand}
                               className={`w-14 h-7 text-center text-[11px] font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-[#d4a853]/30 ${avail <= 0 ? 'text-red-500 border-red-200/60' : avail <= 5 ? 'text-orange-500 border-orange-200/60' : 'text-green-600 border-muted/60'}`}
