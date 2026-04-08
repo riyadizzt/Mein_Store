@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Mail, Phone, MapPin, Clock, Send, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 export default function ContactPage() {
@@ -17,27 +16,29 @@ export default function ContactPage() {
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12 py-12 sm:py-20">
-      <div className="text-center mb-12 animate-fade-up">
+      <div className="text-center mb-14 animate-fade-up">
         <h1 className="text-3xl sm:text-4xl font-bold mb-3">{t('title')}</h1>
-        <p className="text-muted-foreground max-w-md mx-auto">{t('subtitle')}</p>
+        <p className="text-muted-foreground max-w-md mx-auto text-base">{t('subtitle')}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 max-w-5xl mx-auto">
-        {/* Info */}
-        <div className="lg:col-span-2 space-y-6 animate-fade-up delay-100">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-14 max-w-5xl mx-auto">
+        {/* Contact Info */}
+        <div className="lg:col-span-2 space-y-8 animate-fade-up delay-100">
           {[
-            { Icon: Mail, label: t('email'), value: 'info@malak-bekleidung.com' },
-            { Icon: Phone, label: t('phone'), value: '+49 (0) 30 123 456 78' },
-            { Icon: MapPin, label: t('address'), value: 'Berlin, Deutschland' },
-            { Icon: Clock, label: t('hours'), value: t('hoursValue') },
-          ].map(({ Icon, label, value }) => (
+            { Icon: Mail, label: t('email'), value: 'info@malak-bekleidung.com', ltr: true },
+            { Icon: Phone, label: t('phone'), value: '+49 (0) 30 123 456 78', ltr: true },
+            { Icon: MapPin, label: t('address'), value: 'Berlin, Deutschland', ltr: false },
+            { Icon: Clock, label: t('hours'), value: t('hoursValue'), ltr: false },
+          ].map(({ Icon, label, value, ltr }) => (
             <div key={label} className="flex items-start gap-4 group">
-              <div className="h-11 w-11 rounded-xl bg-brand-gold/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-brand-gold/20 group-hover:scale-105">
-                <Icon className="h-5 w-5 text-brand-gold" />
+              <div className="h-12 w-12 rounded-xl bg-[#d4a853]/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-[#d4a853]/20 group-hover:scale-105">
+                <Icon className="h-5 w-5 text-[#d4a853]" />
               </div>
               <div>
-                <p className="text-sm font-semibold">{label}</p>
-                <p className="text-sm text-muted-foreground">{value}</p>
+                <p className="text-sm font-semibold text-[#0f1419] mb-1">{label}</p>
+                <p className={`text-base text-[#0f1419]/60 ${ltr ? 'dir-ltr' : ''}`} dir={ltr ? 'ltr' : undefined}>
+                  {value}
+                </p>
               </div>
             </div>
           ))}
@@ -49,31 +50,34 @@ export default function ContactPage() {
             <div className="text-center py-16 animate-scale-in">
               <CheckCircle2 className="h-16 w-16 mx-auto mb-4 text-green-500" />
               <h3 className="text-xl font-bold mb-2">{t('sent')}</h3>
-              <p className="text-muted-foreground">{t('sentMessage')}</p>
+              <p className="text-muted-foreground text-base">{t('sentMessage')}</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-5 bg-background border rounded-2xl p-6 sm:p-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-5 bg-white border border-[#e5e5e5]/60 rounded-2xl shadow-lg p-7 sm:p-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">{t('name')}</label>
-                  <Input required className="h-11" />
+                  <label className="text-sm font-medium text-[#0f1419]/70 mb-2 block">{t('name')}</label>
+                  <Input required className="h-12 rounded-xl border-[#e0e0e0] focus:border-[#d4a853] focus:ring-[#d4a853]/20 text-base" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">{t('emailField')}</label>
-                  <Input type="email" required className="h-11" />
+                  <label className="text-sm font-medium text-[#0f1419]/70 mb-2 block">{t('emailField')}</label>
+                  <Input type="email" required className="h-12 rounded-xl border-[#e0e0e0] focus:border-[#d4a853] focus:ring-[#d4a853]/20 text-base" dir="ltr" />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">{t('subject')}</label>
-                <Input required className="h-11" />
+                <label className="text-sm font-medium text-[#0f1419]/70 mb-2 block">{t('subject')}</label>
+                <Input required className="h-12 rounded-xl border-[#e0e0e0] focus:border-[#d4a853] focus:ring-[#d4a853]/20 text-base" />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">{t('message')}</label>
-                <textarea required rows={5} className="w-full px-3 py-2.5 rounded-xl border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring/20" />
+                <label className="text-sm font-medium text-[#0f1419]/70 mb-2 block">{t('message')}</label>
+                <textarea required rows={5} className="w-full px-4 py-3 rounded-xl border border-[#e0e0e0] bg-white text-base resize-none focus:outline-none focus:border-[#d4a853] focus:ring-2 focus:ring-[#d4a853]/20 transition-colors" />
               </div>
-              <Button type="submit" size="lg" className="w-full gap-2 btn-press">
+              <button
+                type="submit"
+                className="w-full h-13 rounded-xl bg-[#d4a853] text-white text-base font-semibold hover:bg-[#c49b45] transition-colors flex items-center justify-center gap-2"
+              >
                 <Send className="h-4 w-4" /> {t('send')}
-              </Button>
+              </button>
             </form>
           )}
         </div>
