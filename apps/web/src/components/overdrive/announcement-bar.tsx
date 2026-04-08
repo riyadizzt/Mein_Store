@@ -5,19 +5,19 @@ import { Truck, RotateCcw, Shield, Sparkles } from 'lucide-react'
 
 const ITEMS_DE = [
   { icon: Truck, text: 'Kostenloser Versand ab 50\u20AC' },
-  { icon: RotateCcw, text: '14 Tage kostenlose R\u00FCcksendung' },
+  { icon: RotateCcw, text: '14 Tage R\u00FCckgaberecht' },
   { icon: Shield, text: 'Sichere Bezahlung' },
   { icon: Sparkles, text: 'Premium Qualit\u00E4t' },
 ]
 const ITEMS_AR = [
   { icon: Truck, text: '\u0634\u062D\u0646 \u0645\u062C\u0627\u0646\u064A \u0645\u0646 50\u20AC' },
-  { icon: RotateCcw, text: '\u0625\u0631\u062C\u0627\u0639 \u0645\u062C\u0627\u0646\u064A \u062E\u0644\u0627\u0644 14 \u064A\u0648\u0645' },
+  { icon: RotateCcw, text: '\u0625\u0631\u062C\u0627\u0639 \u062E\u0644\u0627\u0644 14 \u064A\u0648\u0645\u0627\u064B' },
   { icon: Shield, text: '\u062F\u0641\u0639 \u0622\u0645\u0646' },
   { icon: Sparkles, text: '\u062C\u0648\u062F\u0629 \u0645\u0645\u064A\u0632\u0629' },
 ]
 const ITEMS_EN = [
   { icon: Truck, text: 'Free shipping over \u20AC50' },
-  { icon: RotateCcw, text: '14-day free returns' },
+  { icon: RotateCcw, text: '14-day return policy' },
   { icon: Shield, text: 'Secure payment' },
   { icon: Sparkles, text: 'Premium quality' },
 ]
