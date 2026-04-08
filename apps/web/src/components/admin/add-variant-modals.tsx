@@ -451,11 +451,11 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
   if (colors.length === 0 || sizes.length === 0) return null
 
   return (
-    <div className="overflow-x-auto rounded-xl border">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto rounded-xl border" dir="ltr">
+      <table className="w-full text-sm" style={{ direction: 'ltr' }}>
         <thead>
           <tr className="bg-muted/30">
-            <th className="px-3 py-2.5 text-start text-xs font-semibold text-muted-foreground">{locale === 'ar' ? 'اللون / المقاس' : 'Farbe / Größe'}</th>
+            <th className={`px-4 py-2.5 text-xs font-semibold text-muted-foreground ${locale === 'ar' ? 'text-right' : 'text-left'}`}>{locale === 'ar' ? 'اللون / المقاس' : 'Farbe / Größe'}</th>
             {sizes.map((size) => (
               <th key={size} className="px-2 py-2.5 text-center text-xs font-bold min-w-[60px]">{size}</th>
             ))}
@@ -467,8 +467,8 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
             if (warehouses.length <= 1) {
               return (
                 <tr key={color as string} className="border-t hover:bg-muted/10 transition-colors">
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
+                  <td className="px-4 py-2">
+                    <div className={`flex items-center gap-2 ${locale === 'ar' ? 'justify-end flex-row-reverse' : ''}`}>
                       <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: hex as string }} />
                       <span className="text-xs font-medium">{translateColor(color as string, locale)}</span>
                     </div>
@@ -505,7 +505,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                 {/* Color header row with total badge */}
                 <tr className="border-t border-muted/40 bg-[#1a1a2e]/[0.03]">
                   <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2.5">
+                    <div className={`flex items-center gap-2.5 ${locale === 'ar' ? 'justify-end flex-row-reverse' : ''}`}>
                       <div className="h-5 w-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: hex as string }} />
                       <span className="text-xs font-bold">{translateColor(color as string, locale)}</span>
                     </div>
@@ -525,7 +525,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                 {/* One row per warehouse */}
                 {warehouses.map(([whId, whName], wi) => (
                   <tr key={`${color}-${whId}`} className={`hover:bg-muted/5 transition-colors ${wi < warehouses.length - 1 ? 'border-b border-dashed border-muted/30' : ''}`}>
-                    <td className="px-4 py-2 ltr:pl-12 rtl:pr-12">
+                    <td className={`px-4 py-2 ${locale === 'ar' ? 'text-right pr-12' : 'pl-12'}`}>
                       <span className="text-[11px] text-muted-foreground/70">{whName}</span>
                     </td>
                     {sizes.map((size) => {
