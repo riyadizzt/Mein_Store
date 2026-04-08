@@ -47,7 +47,21 @@ export function EditorialBanner({ locale }: { locale: string }) {
         <p data-editorial-text className="mt-6 text-lg text-ink/60 leading-relaxed max-w-2xl mx-auto">
           {copy.body}
         </p>
-        <div data-editorial-text className="mt-10">
+        {/* Social Proof Numbers */}
+        <div data-editorial-text className="mt-10 flex items-center justify-center gap-8 sm:gap-12">
+          {[
+            { value: '2.000+', label: locale === 'ar' ? 'عملاء سعداء' : locale === 'en' ? 'Happy Customers' : 'Zufriedene Kunden' },
+            { value: '4.9', label: locale === 'ar' ? 'تقييم العملاء' : locale === 'en' ? 'Customer Rating' : 'Kundenbewertung' },
+            { value: '14', label: locale === 'ar' ? 'يوم إرجاع مجاني' : locale === 'en' ? 'Days Free Returns' : 'Tage Rückgabe' },
+          ].map((stat, i) => (
+            <div key={i} className="text-center">
+              <p className="text-2xl sm:text-3xl font-bold text-ink tabular-nums">{stat.value}</p>
+              <p className="text-[11px] text-ink/40 mt-1">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div data-editorial-text className="mt-8">
           <Link
             href={`/${locale}/legal/impressum`}
             className="inline-flex items-center gap-2 text-sm font-semibold text-ink hover:text-brand-gold transition-colors underline underline-offset-4 decoration-brand-gold/30 hover:decoration-brand-gold"

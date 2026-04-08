@@ -8,6 +8,10 @@ import { NewsletterSection } from '@/components/home/newsletter-section'
 
 export const revalidate = 60
 
+function SectionDivider() {
+  return <div className="mx-auto max-w-xs h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+}
+
 export default function HomePage({
   params: { locale },
 }: {
@@ -20,11 +24,13 @@ export default function HomePage({
       {/* 1. Hero — full viewport, immersive */}
       <HeroWithCampaign locale={locale} />
 
-      {/* 2. Trust signals bar */}
+      {/* 2. Trust signals */}
       <TrustSignals />
 
-      {/* 3. Categories — asymmetric showcase */}
+      {/* 3. Categories */}
       <CategoryShowcase />
+
+      <SectionDivider />
 
       {/* 4. Bestsellers */}
       <FeaturedProducts
@@ -34,10 +40,10 @@ export default function HomePage({
         locale={locale}
       />
 
-      {/* 5. Editorial brand statement */}
+      {/* 5. Editorial */}
       <EditorialBanner locale={locale} />
 
-      {/* 6. New Arrivals — subtle bg change for rhythm */}
+      {/* 6. New Arrivals */}
       <FeaturedProducts
         title={t('newArrivals')}
         eyebrow={locale === 'ar' ? 'وصل حديثاً' : locale === 'en' ? 'Just Arrived' : 'Neu eingetroffen'}
@@ -46,7 +52,9 @@ export default function HomePage({
         bgClass="bg-paper"
       />
 
-      {/* 8. Newsletter — dark section for contrast */}
+      <SectionDivider />
+
+      {/* 7. Newsletter */}
       <NewsletterSection />
     </>
   )

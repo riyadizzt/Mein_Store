@@ -1,5 +1,8 @@
+'use client'
+
 import { Truck, RotateCcw, Shield, CreditCard } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { motion } from 'motion/react'
 
 export function TrustSignals() {
   const t = useTranslations('trust')
@@ -12,16 +15,23 @@ export function TrustSignals() {
   ]
 
   return (
-    <section className="bg-foreground text-background py-5">
+    <section className="border-y border-border/30 py-4 sm:py-5 bg-paper/50">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
           {signals.map((signal, i) => (
-            <div key={i} className="flex items-center gap-3 justify-center">
-              <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                <signal.icon className="h-5 w-5 text-accent" />
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.4 }}
+              className="flex items-center gap-3 justify-center group"
+            >
+              <div className="h-9 w-9 rounded-full bg-brand-gold/8 flex items-center justify-center flex-shrink-0 transition-colors duration-300 group-hover:bg-brand-gold/15">
+                <signal.icon className="h-4 w-4 text-brand-gold" strokeWidth={1.5} />
               </div>
-              <span className="text-sm font-medium text-white/90">{signal.label}</span>
-            </div>
+              <span className="text-xs sm:text-sm font-medium text-ink/70">{signal.label}</span>
+            </motion.div>
           ))}
         </div>
       </div>

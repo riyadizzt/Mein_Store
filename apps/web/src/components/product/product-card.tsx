@@ -159,12 +159,19 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
           />
         </button>
 
-        {/* Sale Badge — premium with pulse */}
-        {hasDiscount && (
-          <span className="absolute top-3 left-3 rtl:left-auto rtl:right-3 px-3 py-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-bold tracking-wide uppercase shadow-sm animate-sale-pulse">
-            -{discountPercent}%
-          </span>
-        )}
+        {/* Badges — Sale / New / Bestseller */}
+        <div className="absolute top-3 left-3 rtl:left-auto rtl:right-3 flex flex-col gap-1.5">
+          {hasDiscount && (
+            <span className="px-2.5 py-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-bold tracking-wide uppercase shadow-sm animate-sale-pulse">
+              -{discountPercent}%
+            </span>
+          )}
+          {p.isFeatured && !hasDiscount && (
+            <span className="px-2.5 py-1 rounded-full bg-brand-gold text-white text-[10px] font-bold tracking-wide uppercase shadow-sm">
+              {locale === 'ar' ? 'مميز' : 'Best'}
+            </span>
+          )}
+        </div>
 
         {/* Add to Cart — smooth slide-up with icon */}
         {available > 0 && (
@@ -196,21 +203,15 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
           )}
         </div>
 
-        {/* Availability */}
-        <div className="flex items-center gap-1.5">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              available > 0 ? 'bg-green-500' : 'bg-red-500'
-            }`}
-          />
-          <span className="text-xs text-muted-foreground">
-            {available > 0
-              ? available <= 3
-                ? t('lowStock', { count: available })
-                : t('inStock')
-              : t('outOfStock')}
-          </span>
-        </div>
+        {/* Availability — with urgency for low stock */}
+        {available <= 0 ? (
+          <p className="text-xs text-destructive font-medium">{t('outOfStock')}</p>
+        ) : available <= 3 ? (
+          <p className="text-xs text-orange-600 font-medium flex items-center gap-1">
+            <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute h-full w-full rounded-full bg-orange-400 opacity-75" /><span className="relative rounded-full h-1.5 w-1.5 bg-orange-500" /></span>
+            {t('lowStock', { count: available })}
+          </p>
+        ) : null}
       </div>
     </Link>
   )
