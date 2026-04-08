@@ -135,10 +135,12 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
             )}
           </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
-            <span className="text-3xl font-bold text-muted-foreground/20">
-              {name.charAt(0)}
-            </span>
+          <div className="w-full h-full flex flex-col items-center justify-center bg-[#f5f5f5] gap-2">
+            <div className="h-16 w-16 rounded-full bg-[#e8e8e8] flex items-center justify-center">
+              <span className="text-2xl font-display font-light text-[#b0b0b0] select-none">
+                {name.charAt(0).toUpperCase()}
+              </span>
+            </div>
           </div>
         )}
 
@@ -159,15 +161,15 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
           />
         </button>
 
-        {/* Badges — Sale / New / Bestseller */}
+        {/* Badges — Sale / Featured */}
         <div className="absolute top-3 left-3 rtl:left-auto rtl:right-3 flex flex-col gap-1.5">
           {hasDiscount && (
-            <span className="px-2.5 py-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-bold tracking-wide uppercase shadow-sm animate-sale-pulse">
+            <span className="px-2 py-0.5 text-[10px] font-medium tracking-wide bg-[#0f1419]/70 text-white backdrop-blur-sm">
               -{discountPercent}%
             </span>
           )}
           {p.isFeatured && !hasDiscount && (
-            <span className="px-2.5 py-1 rounded-full bg-brand-gold text-white text-[10px] font-bold tracking-wide uppercase shadow-sm">
+            <span className="px-2 py-0.5 text-[10px] font-medium tracking-wide bg-[#0f1419]/70 text-white backdrop-blur-sm">
               {locale === 'ar' ? 'مميز' : 'Best'}
             </span>
           )}
