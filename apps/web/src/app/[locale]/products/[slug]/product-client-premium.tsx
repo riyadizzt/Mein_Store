@@ -23,6 +23,7 @@ import { PremiumGallery } from '@/components/product/premium/premium-gallery'
 import { PremiumTabs } from '@/components/product/premium/premium-tabs'
 import { PremiumTrustBar } from '@/components/product/premium/premium-trust-bar'
 import { PremiumRecentlyViewed, saveRecentlyViewed } from '@/components/product/premium/premium-recently-viewed'
+import { ProductCard } from '@/components/product/product-card'
 
 // ────────────────────────────────────────────────────
 // Types
@@ -591,34 +592,10 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           <h2 className={`text-[#0f1419]/50 mb-10 ${isRTL ? 'text-lg font-semibold' : 'text-base tracking-[0.08em] uppercase'}`}>
             {t3('Das könnte dir auch gefallen', 'You may also like', 'قد يعجبك أيضاً')}
           </h2>
-          <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">
-            {similarProducts.map((sp: any) => {
-              const spName = sp.name ?? sp.translations?.[0]?.name ?? sp.slug
-              const spImage = sp.imageUrl ?? sp.images?.find((i: any) => i.isPrimary)?.url ?? sp.images?.[0]?.url
-              const spPrice = sp.salePrice ?? sp.basePrice
-              return (
-                <Link key={sp.id} href={`/${locale}/products/${sp.slug}`} className="flex-shrink-0 w-[180px] sm:w-[210px] group">
-                  <div className="aspect-[3/4] bg-[#f5f5f5] overflow-hidden mb-3 flex items-center justify-center">
-                    {spImage ? (
-                      <img
-                        src={spImage} alt={spName}
-                        className="w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] group-hover:scale-[1.03]"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="h-14 w-14 rounded-full bg-[#e8e8e8] flex items-center justify-center">
-                          <span className="text-xl font-display font-light text-[#b0b0b0] select-none">{(spName ?? '?').charAt(0).toUpperCase()}</span>
-                        </div>
-                        <span className="text-[10px] text-[#c0c0c0] tracking-wide">{t3('Kein Bild', 'No image', 'بدون صورة')}</span>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-sm text-[#0f1419] truncate leading-snug">{spName}</p>
-                  <p className="text-sm font-semibold text-[#0f1419]/60 mt-1 tabular-nums">&euro;{Number(spPrice).toFixed(2)}</p>
-                </Link>
-              )
-            })}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+            {similarProducts.slice(0, 4).map((sp: any) => (
+              <ProductCard key={sp.id} product={sp} />
+            ))}
           </div>
         </section>
       )}

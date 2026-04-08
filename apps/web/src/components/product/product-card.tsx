@@ -180,7 +180,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
           <button
             onClick={handleAddToCart}
             aria-label={`${name} ${t('addToCart')}`}
-            className="absolute bottom-0 left-0 right-0 h-11 bg-foreground/95 backdrop-blur-sm text-background text-sm font-medium flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-full group-hover:translate-y-0 btn-press"
+            className="absolute bottom-0 left-0 right-0 h-11 bg-foreground/95 backdrop-blur-sm text-background text-sm font-medium flex items-center justify-center gap-2 transition-all duration-300 lg:opacity-0 lg:group-hover:opacity-100 lg:translate-y-full lg:group-hover:translate-y-0 btn-press"
           >
             <ShoppingBag className="h-4 w-4" />
             {t('addToCart')}
