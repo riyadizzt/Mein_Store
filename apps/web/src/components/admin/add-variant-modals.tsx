@@ -452,12 +452,16 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
 
   return (
     <div className="overflow-x-auto rounded-xl border" dir="ltr">
-      <table className="w-full text-sm" style={{ direction: 'ltr' }}>
+      <table className="w-full text-sm table-fixed" style={{ direction: 'ltr' }}>
+        <colgroup>
+          <col style={{ width: sizes.length <= 3 ? '35%' : '28%' }} />
+          {sizes.map((s) => <col key={s} />)}
+        </colgroup>
         <thead>
           <tr className="bg-muted/30">
             <th className={`px-4 py-2.5 text-xs font-semibold text-muted-foreground ${locale === 'ar' ? 'text-right' : 'text-left'}`}>{locale === 'ar' ? 'اللون / المقاس' : 'Farbe / Größe'}</th>
             {sizes.map((size) => (
-              <th key={size} className="px-2 py-2.5 text-center text-xs font-bold min-w-[60px]">{size}</th>
+              <th key={size} className="px-2 py-2.5 text-center text-xs font-bold">{size}</th>
             ))}
           </tr>
         </thead>
