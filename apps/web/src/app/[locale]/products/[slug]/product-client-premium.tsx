@@ -299,14 +299,14 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   return (
     <div>
       {/* ═══════════════ MAIN GRID ═══════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(360px,420px)] lg:gap-14 xl:gap-20">
+      <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] lg:gap-12 xl:gap-16">
 
-        {/* ─── LEFT: Gallery (≈ 58-62%) ─── */}
-        <div className="order-2 lg:order-1">
+        {/* ─── LEFT: Gallery (55%) ─── */}
+        <div className="order-2 lg:order-1 max-h-[700px] lg:max-h-none">
           <PremiumGallery images={images} productName={name} isRTL={isRTL} />
         </div>
 
-        {/* ─── RIGHT: Product Info ─── */}
+        {/* ─── RIGHT: Product Info (45%) ─── */}
         <div className="order-1 lg:order-2 lg:sticky lg:top-16 lg:self-start pt-6 lg:pt-0">
 
           {/* Category */}

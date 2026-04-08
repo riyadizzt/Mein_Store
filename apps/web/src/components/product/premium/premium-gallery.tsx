@@ -162,7 +162,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
       {/* ─── Main Image ─── */}
       <div className="space-y-3">
         <div
-          className="relative aspect-[4/5] bg-[#f5f5f5] overflow-hidden select-none group"
+          className="relative aspect-[4/5] max-h-[620px] bg-[#f5f5f5] overflow-hidden select-none group"
           style={{ cursor: isDragging.current ? 'grabbing' : 'grab', touchAction: 'pan-y' }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
