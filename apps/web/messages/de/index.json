@@ -116,11 +116,12 @@
       "price": "Preis",
       "priceMin": "Min",
       "priceMax": "Max",
-      "inStockOnly": "Nur auf Lager",
+      "inStockOnly": "Nur verfügbare Artikel",
       "reset": "Filter zurücksetzen",
       "showResults": "Ergebnisse anzeigen",
       "removeAll": "Alle entfernen",
-      "products": "{count} Produkte"
+      "products": "{count} Produkte",
+      "availability": "Verfügbarkeit"
     },
     "noReturnTitle": "Dieser Artikel kann nicht zurückgegeben werden",
     "noReturnHygiene": "Aus Hygienegründen kann dieser Artikel nach dem Öffnen nicht zurückgegeben werden",

@@ -77,15 +77,15 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
                     href={`/${locale}${item.href}`}
                     className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors duration-200 ${
                       isActive
-                        ? 'text-accent-foreground font-medium'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        ? 'text-foreground font-medium'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                     } ${item.key === 'delete' ? 'text-destructive hover:text-destructive' : ''}`}
                   >
-                    {/* Animated active background */}
+                    {/* Animated active indicator — subtle gold */}
                     {isActive && (
                       <motion.div
                         layoutId="account-nav-active"
-                        className="absolute inset-0 bg-accent rounded-xl shadow-sm"
+                        className="absolute inset-0 bg-brand-gold/10 border border-brand-gold/20 rounded-xl"
                         transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                       />
                     )}
@@ -120,7 +120,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
                   href={`/${locale}${item.href}`}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-all duration-200 ${
                     isActive
-                      ? 'bg-accent text-accent-foreground shadow-sm'
+                      ? 'bg-brand-gold/15 text-foreground border border-brand-gold/25'
                       : 'bg-muted text-muted-foreground'
                   } ${item.key === 'delete' ? 'text-destructive bg-destructive/10' : ''}`}
                 >

@@ -5,7 +5,6 @@ import { CategoryShowcase } from '@/components/home/category-showcase'
 import { FeaturedProducts } from '@/components/home/featured-products'
 import { EditorialBanner } from '@/components/home/editorial-banner'
 import { NewsletterSection } from '@/components/home/newsletter-section'
-import { TrustCounter } from '@/components/overdrive/trust-counter'
 
 export const revalidate = 60
 
@@ -46,9 +45,6 @@ export default function HomePage({
         locale={locale}
         bgClass="bg-paper"
       />
-
-      {/* 7. Trust counter — social proof */}
-      <TrustCounter />
 
       {/* 8. Newsletter — dark section for contrast */}
       <NewsletterSection />

@@ -1,0 +1,25 @@
+
+> @omnichannel/web@0.0.1 lint /Users/riyadizzt/Desktop/Malak_Be_pro/omnichannel-store/apps/web
+> next lint
+
+
+./src/app/[locale]/admin/inventory/movements/page.tsx
+90:9  Warning: The 'movements' logical expression could make the dependencies of useMemo Hook (at line 132) change on every render. To fix this, wrap the initialization of 'movements' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+
+./src/app/[locale]/admin/inventory/page.tsx
+263:6  Warning: React Hook useCallback has a missing dependency: 'removeScanLogItem'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/app/[locale]/admin/maintenance/page.tsx
+232:15  Warning: Image elements must have an alt prop, either with meaningful text, or an empty string for decorative images.  jsx-a11y/alt-text
+
+./src/app/[locale]/admin/orders/[id]/page.tsx
+101:6  Warning: React Hook useEffect has missing dependencies: 'downloadDeliveryNote' and 'downloadInvoice'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+
+./src/components/admin/label-printer.tsx
+44:9  Warning: The 'fmtPrice' function makes the dependencies of useCallback Hook (at line 97) change on every render. To fix this, wrap the definition of 'fmtPrice' in its own useCallback() Hook.  react-hooks/exhaustive-deps
+44:9  Warning: The 'fmtPrice' function makes the dependencies of useCallback Hook (at line 124) change on every render. To fix this, wrap the definition of 'fmtPrice' in its own useCallback() Hook.  react-hooks/exhaustive-deps
+
+./src/components/product/add-to-cart.tsx
+72:6  Warning: React Hook useCallback has a missing dependency: 't'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules

@@ -32,8 +32,8 @@ export default function ContactPage() {
             { Icon: Clock, label: t('hours'), value: t('hoursValue') },
           ].map(({ Icon, label, value }) => (
             <div key={label} className="flex items-start gap-4 group">
-              <div className="h-11 w-11 rounded-xl bg-accent/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-accent/20 group-hover:scale-105">
-                <Icon className="h-5 w-5 text-accent" />
+              <div className="h-11 w-11 rounded-xl bg-brand-gold/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-brand-gold/20 group-hover:scale-105">
+                <Icon className="h-5 w-5 text-brand-gold" />
               </div>
               <div>
                 <p className="text-sm font-semibold">{label}</p>

@@ -12,7 +12,8 @@ import { useGSAP } from '@gsap/react'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const DEFAULT_HERO = 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&q=80&auto=format&fit=crop'
+// Fallback: kein Unsplash-Bild — eleganter Gradient wird als Hintergrund genutzt
+const DEFAULT_HERO = ''
 
 function MagneticCTA({ children, href }: { children: React.ReactNode; href: string }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -57,21 +58,21 @@ export function HeroSection({ locale }: { locale: string }) {
   useGSAP(() => {
     if (reduced) return
 
-    // Parallax
+    // Parallax — subtle (12% instead of 20%, reduces motion sickness risk)
     gsap.to(imageWrap.current, {
-      yPercent: 20,
+      yPercent: 12,
       ease: 'none',
       scrollTrigger: { trigger: heroRef.current, start: 'top top', end: 'bottom top', scrub: true },
     })
 
-    // Content reveal
-    const tl = gsap.timeline({ defaults: { ease: 'power3.out' }, delay: 0.2 })
-    tl.from('[data-hero-accent]', { scaleX: 0, transformOrigin: isRTL ? 'right' : 'left', duration: 0.5 })
-      .from('[data-hero-eyebrow]', { y: 20, opacity: 0, duration: 0.6 }, '-=0.2')
-      .from('[data-hero-heading]', { y: 50, opacity: 0, duration: 0.8 }, '-=0.3')
-      .from('[data-hero-sub]', { y: 30, opacity: 0, duration: 0.6 }, '-=0.4')
-      .from('[data-hero-cta]', { y: 20, opacity: 0, duration: 0.5 }, '-=0.3')
-      .from('[data-hero-scroll]', { opacity: 0, duration: 0.4 }, '-=0.1')
+    // Content reveal — snappier timings (max 600ms per UX guideline)
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out' }, delay: 0.15 })
+    tl.from('[data-hero-accent]', { scaleX: 0, transformOrigin: isRTL ? 'right' : 'left', duration: 0.4 })
+      .from('[data-hero-eyebrow]', { y: 16, opacity: 0, duration: 0.45 }, '-=0.15')
+      .from('[data-hero-heading]', { y: 40, opacity: 0, duration: 0.6 }, '-=0.25')
+      .from('[data-hero-sub]', { y: 24, opacity: 0, duration: 0.45 }, '-=0.3')
+      .from('[data-hero-cta]', { y: 16, opacity: 0, duration: 0.4 }, '-=0.25')
+      .from('[data-hero-scroll]', { opacity: 0, duration: 0.3 }, '-=0.1')
   }, { scope: heroRef, dependencies: [reduced, isRTL] })
 
   const scrollDown = () => {
@@ -80,22 +81,31 @@ export function HeroSection({ locale }: { locale: string }) {
   }
 
   return (
-    <section ref={heroRef} className="relative w-full h-[100svh] min-h-[600px] overflow-hidden">
-      {/* Background with parallax */}
-      <div ref={imageWrap} className="absolute inset-0 will-change-transform scale-[1.2]">
-        <Image src={heroImage} alt="" fill priority sizes="100vw" className="object-cover" />
-      </div>
-
-      {/* Gradient overlays */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: isRTL
-            ? 'linear-gradient(to left, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 40%, transparent 70%)'
-            : 'linear-gradient(to right, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 40%, transparent 70%)',
-        }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10" />
+    <section ref={heroRef} aria-label="Hero" className="relative w-full h-[100svh] min-h-[600px] overflow-hidden">
+      {/* Background — image with parallax OR elegant gradient fallback */}
+      {heroImage ? (
+        <>
+          <div ref={imageWrap} className="absolute inset-0 scale-[1.15]">
+            <Image src={heroImage} alt={heading} fill priority sizes="100vw" className="object-cover" />
+          </div>
+          <div
+            className="absolute inset-0"
+            style={{
+              background: isRTL
+                ? 'linear-gradient(to left, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 40%, transparent 70%)'
+                : 'linear-gradient(to right, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 40%, transparent 70%)',
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10" />
+        </>
+      ) : (
+        /* Premium gradient fallback — dark charcoal to subtle gold hint */
+        <div className="absolute inset-0 bg-[#1a1a2e]">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e] via-[#1a1a2e] to-[#2a2233]" />
+          <div className="absolute bottom-0 right-0 w-[60%] h-[60%] bg-[#d4a853]/[0.06] rounded-full blur-[120px] translate-x-1/4 translate-y-1/4" />
+          <div className="absolute top-1/4 left-1/4 w-[30%] h-[30%] bg-[#d4a853]/[0.03] rounded-full blur-[80px]" />
+        </div>
+      )}
 
       {/* Content */}
       <div className="relative z-10 h-full flex items-center">
@@ -149,7 +159,7 @@ export function HeroSection({ locale }: { locale: string }) {
         aria-label="Scroll down"
       >
         <span className="text-[10px] tracking-[0.3em] uppercase">Scroll</span>
-        <ChevronDown className="h-5 w-5 animate-bounce" />
+        <ChevronDown className="h-5 w-5 animate-fade-up motion-reduce:animate-none" style={{ animationDuration: '1.5s', animationIterationCount: '2' }} />
       </button>
     </section>
   )

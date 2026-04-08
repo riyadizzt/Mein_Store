@@ -38,7 +38,7 @@ export function AnnouncementBar() {
           <span key={i} className="inline-flex items-center gap-1.5 text-xs font-medium tracking-wide">
             <item.icon className="h-3 w-3 text-brand-gold" />
             {item.text}
-            <span className="text-brand-gold/40 ltr:ml-4 rtl:mr-4">\u2022</span>
+            <span className="text-brand-gold/40 ltr:ml-4 rtl:mr-4">•</span>
           </span>
         ))}
       </div>

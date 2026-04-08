@@ -29,7 +29,7 @@ export function CategoryShowcase() {
     })
 
     gsap.from('[data-cat-card]', {
-      y: 60, opacity: 0, scale: 0.97, duration: 0.7, ease: 'power3.out', stagger: 0.15,
+      y: 48, opacity: 0, scale: 0.97, duration: 0.55, ease: 'power3.out', stagger: 0.08,
       scrollTrigger: { trigger: sectionRef.current, start: 'top 75%', once: true },
     })
   }, { scope: sectionRef, dependencies: [categories] })
@@ -55,7 +55,7 @@ export function CategoryShowcase() {
   const tertiary = categories.slice(3, 5)
 
   return (
-    <section ref={sectionRef} className="py-16 sm:py-24">
+    <section ref={sectionRef} aria-label={t('categories')} className="py-16 sm:py-24">
       <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12">
         {/* Section header */}
         <div data-cat-title className="flex items-end justify-between mb-10">

@@ -1,11 +1,43 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { CreditCard, Shield, Truck, RotateCcw, Mail, Instagram, Facebook, Check, Send } from 'lucide-react'
-import { motion, AnimatePresence } from 'motion/react'
+import { Check, ArrowRight, Instagram, Facebook, Truck, RotateCcw, ShieldCheck, Lock } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
 
+/* ── TikTok SVG ── */
+const TikTokIcon = () => (
+  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V9.39a8.16 8.16 0 004.76 1.52V7.46a4.85 4.85 0 01-1-.77z" />
+  </svg>
+)
+
+/* ── Payment Logos (simple pill badges — always visible, always correct) ── */
+function PaymentBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="h-8 px-4 rounded-md bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-white/70 text-[13px] font-bold tracking-tight">
+      {children}
+    </span>
+  )
+}
+
+/* ── Footer Link with gold underline hover ── */
+function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="relative inline-block text-sm text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
+      >
+        {children}
+        <span className="absolute bottom-0 left-0 rtl:left-auto rtl:right-0 w-0 h-px bg-brand-gold transition-all duration-300 group-hover:w-full" />
+      </Link>
+    </li>
+  )
+}
+
+/* ── Main Footer Component ── */
 export function Footer({ locale }: { locale: string }) {
   const t = useTranslations('footer')
   const tt = useTranslations('trust')
@@ -13,7 +45,6 @@ export function Footer({ locale }: { locale: string }) {
   const [email, setEmail] = useState('')
   const [subscribed, setSubscribed] = useState(false)
   const [focused, setFocused] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   const handleNewsletter = (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,66 +55,56 @@ export function Footer({ locale }: { locale: string }) {
   }
 
   return (
-    <footer className="bg-slate-950 text-white/80">
-      {/* Trust Signals Bar */}
-      <div className="border-b border-white/10">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+    <footer>
+      {/* ═══════════════════════════════════════════════════════
+          BEREICH 1 — Trust-Leiste (Lucide Icons, Gold)
+          ═══════════════════════════════════════════════════════ */}
+      <div className="bg-[#141425]">
+        <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 py-10 sm:py-12">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-12">
             {[
               { Icon: Truck, label: tt('freeShipping') },
               { Icon: RotateCcw, label: tt('returns') },
-              { Icon: Shield, label: tt('gdpr') },
-              { Icon: CreditCard, label: tt('securePayment') },
+              { Icon: ShieldCheck, label: tt('gdpr') },
+              { Icon: Lock, label: tt('securePayment') },
             ].map(({ Icon, label }, i) => (
-              <motion.div
-                key={i}
-                whileHover={{ y: -2 }}
-                className="flex flex-col items-center gap-2.5 group"
-              >
-                <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center transition-all duration-300 group-hover:bg-white/10 group-hover:scale-110">
-                  <Icon className="h-5 w-5 text-accent" />
+              <div key={i} className="flex flex-col items-center text-center gap-3 group">
+                <div className="h-11 w-11 rounded-full border border-brand-gold/25 flex items-center justify-center transition-all duration-300 group-hover:border-brand-gold/50 group-hover:bg-brand-gold/5">
+                  <Icon className="h-[18px] w-[18px] text-brand-gold" strokeWidth={1.5} />
                 </div>
-                <span className="text-xs font-medium">{label}</span>
-              </motion.div>
+                <span className="text-[13px] text-white/55 leading-tight">{label}</span>
+              </div>
             ))}
           </div>
         </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-brand-gold/25 to-transparent" />
       </div>
 
-      {/* Newsletter — animated input + success */}
-      <div className="border-b border-white/10">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
-          <div className="max-w-xl mx-auto text-center">
-            <motion.div
-              animate={{ y: focused ? -2 : 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-            >
-              <Mail className="h-8 w-8 mx-auto mb-4 text-accent" />
-            </motion.div>
-            <h3 className="text-lg font-bold text-white mb-2">
-              {t('newsletterTitle')}
-            </h3>
-            <p className="text-sm text-white/60 mb-6">
-              {t('newsletterSubtitle')}
-            </p>
+      {/* ═══════════════════════════════════════════════════════
+          BEREICH 2 — Newsletter (schmaler, eleganter)
+          ═══════════════════════════════════════════════════════ */}
+      <div className="bg-[#111120] relative overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[250px] bg-brand-gold/[0.03] rounded-full blur-[100px]" />
 
+        <div className="relative mx-auto max-w-lg px-6 sm:px-8 py-14 sm:py-16 text-center">
+          <h3 className="text-xl sm:text-2xl font-display font-bold text-white leading-tight">
+            {t('newsletterTitle')}
+          </h3>
+          <p className="mt-2.5 text-[13px] text-white/40">
+            {t('newsletterSubtitle')}
+          </p>
+
+          <div className="mt-7">
             <AnimatePresence mode="wait">
               {subscribed ? (
                 <motion.div
                   key="success"
-                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                  className="flex items-center justify-center gap-2 text-sm text-accent font-medium"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center justify-center gap-2 text-brand-gold text-sm font-medium"
                 >
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 20, delay: 0.1 }}
-                  >
-                    <Check className="h-5 w-5" />
-                  </motion.div>
+                  <Check className="h-4 w-4" />
                   {t('newsletterSuccess')}
                 </motion.div>
               ) : (
@@ -93,173 +114,123 @@ export function Footer({ locale }: { locale: string }) {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onSubmit={handleNewsletter}
-                  className="flex gap-2 max-w-md mx-auto"
+                  className="flex gap-2.5 max-w-sm mx-auto"
                 >
-                  <div className={`relative flex-1 transition-all duration-300 ${focused ? 'scale-[1.02]' : ''}`}>
-                    <input
-                      ref={inputRef}
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      onFocus={() => setFocused(true)}
-                      onBlur={() => setFocused(false)}
-                      placeholder={t('newsletterPlaceholder')}
-                      className={`w-full h-11 px-4 rounded-xl bg-white/10 border text-white text-sm placeholder:text-white/40 focus:outline-none transition-all duration-300 ${
-                        focused
-                          ? 'border-accent/60 ring-2 ring-accent/20 bg-white/15'
-                          : 'border-white/10'
-                      }`}
-                      required
-                    />
-                  </div>
-                  <motion.button
-                    whileTap={{ scale: 0.93 }}
-                    whileHover={{ scale: 1.05 }}
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                    placeholder={t('newsletterPlaceholder')}
+                    required
+                    className={`flex-1 h-11 px-4 bg-white/[0.05] border rounded-full text-white text-sm placeholder:text-white/25 focus:outline-none transition-all duration-300 ${
+                      focused ? 'border-brand-gold/40 ring-1 ring-brand-gold/15' : 'border-white/[0.07]'
+                    }`}
+                  />
+                  <button
                     type="submit"
-                    className="h-11 px-6 rounded-xl bg-accent text-white font-medium text-sm flex items-center gap-2 hover:bg-accent/90 transition-colors duration-200"
+                    className="h-11 px-6 rounded-full bg-brand-gold text-white text-sm font-medium flex items-center gap-1.5 hover:bg-brand-gold-dark transition-colors duration-200 btn-press shrink-0"
                   >
-                    <Send className="h-4 w-4" />
-                  </motion.button>
+                    <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
+                  </button>
                 </motion.form>
               )}
             </AnimatePresence>
           </div>
         </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-brand-gold/15 to-transparent" />
       </div>
 
-      {/* Main Footer */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
-          {/* Brand */}
-          <div className="col-span-2 md:col-span-1">
-            <span className="text-xl font-bold text-white tracking-[0.2em] logo-shimmer">
-              MALAK
-            </span>
-            <p className="mt-3 text-sm text-white/50 leading-relaxed">
-              {t('tagline')}
-            </p>
-            {/* Social — enhanced hover */}
-            <div className="flex gap-3 mt-5">
-              {[
-                { label: 'Instagram', icon: <Instagram className="h-4 w-4" />, color: 'hover:bg-gradient-to-br hover:from-purple-500 hover:to-pink-500' },
-                { label: 'Facebook', icon: <Facebook className="h-4 w-4" />, color: 'hover:bg-blue-600' },
-                { label: 'TikTok', icon: (
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V9.39a8.16 8.16 0 004.76 1.52V7.46a4.85 4.85 0 01-1-.77z" />
-                  </svg>
-                ), color: 'hover:bg-black hover:ring-1 hover:ring-white/20' },
-              ].map(({ label, icon, color }) => (
-                <motion.a
-                  key={label}
-                  href="#"
-                  aria-label={label}
-                  whileHover={{ scale: 1.15, y: -2 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`h-11 w-11 rounded-full bg-white/5 flex items-center justify-center transition-all duration-300 hover:text-white ${color}`}
-                >
-                  {icon}
-                </motion.a>
-              ))}
+      {/* ═══════════════════════════════════════════════════════
+          BEREICH 3 — Links + Brand
+          ═══════════════════════════════════════════════════════ */}
+      <div className="bg-[#0a0a0a] text-white/60">
+        <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 pt-14 sm:pt-18 pb-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-10 lg:gap-16">
+
+            {/* Brand */}
+            <div className="col-span-2 md:col-span-1">
+              <span className="text-2xl font-display font-bold text-white tracking-[0.3em] logo-shimmer">
+                MALAK
+              </span>
+              <p className="mt-4 text-[13px] text-white/35 leading-relaxed max-w-[200px]">
+                {t('tagline')}
+              </p>
+              <div className="flex gap-2.5 mt-6">
+                {[
+                  { label: 'Instagram', icon: <Instagram className="h-4 w-4" /> },
+                  { label: 'Facebook', icon: <Facebook className="h-4 w-4" /> },
+                  { label: 'TikTok', icon: <TikTokIcon /> },
+                ].map(({ label, icon }) => (
+                  <a
+                    key={label}
+                    href="#"
+                    aria-label={label}
+                    className="h-9 w-9 rounded-full border border-white/10 flex items-center justify-center text-white/35 transition-all duration-300 hover:border-brand-gold/40 hover:text-brand-gold"
+                  >
+                    {icon}
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Shop */}
+            <div>
+              <h2 className="text-[11px] font-semibold text-brand-gold/80 tracking-[0.2em] uppercase mb-5">{t('shop')}</h2>
+              <ul className="space-y-3">
+                <FooterLink href={`/${locale}/products`}>{t('allProducts')}</FooterLink>
+                <FooterLink href={`/${locale}/products?department=damen`}>{t('women')}</FooterLink>
+                <FooterLink href={`/${locale}/products?department=herren`}>{t('men')}</FooterLink>
+              </ul>
+            </div>
+
+            {/* Customer Service */}
+            <div>
+              <h2 className="text-[11px] font-semibold text-brand-gold/80 tracking-[0.2em] uppercase mb-5">{t('customerService')}</h2>
+              <ul className="space-y-3">
+                <FooterLink href={`/${locale}/contact`}>{t('contact')}</FooterLink>
+                <FooterLink href={`/${locale}/tracking`}>{t('trackOrder')}</FooterLink>
+                <FooterLink href={`/${locale}/legal/widerruf`}>{t('returnsAndWithdrawal')}</FooterLink>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h2 className="text-[11px] font-semibold text-brand-gold/80 tracking-[0.2em] uppercase mb-5">{t('legal')}</h2>
+              <ul className="space-y-3">
+                <FooterLink href={`/${locale}/legal/impressum`}>{t('imprint')}</FooterLink>
+                <FooterLink href={`/${locale}/legal/datenschutz`}>{t('privacy')}</FooterLink>
+                <FooterLink href={`/${locale}/legal/agb`}>{t('terms')}</FooterLink>
+                <FooterLink href={`/${locale}/legal/widerruf`}>{t('withdrawal')}</FooterLink>
+              </ul>
             </div>
           </div>
 
-          {/* Shop */}
-          <div>
-            <h2 className="text-sm font-semibold text-white mb-4">
-              {t('shop')}
-            </h2>
-            <ul className="space-y-2.5">
-              <li>
-                <Link href={`/${locale}/products`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('allProducts')}
-                </Link>
-              </li>
-              <li>
-                <Link href={`/${locale}/products?department=damen`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('women')}
-                </Link>
-              </li>
-              <li>
-                <Link href={`/${locale}/products?department=herren`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('men')}
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {/* Divider */}
+          <div className="mt-12 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
 
-          {/* Customer Service */}
-          <div>
-            <h2 className="text-sm font-semibold text-white mb-4">
-              {t('customerService')}
-            </h2>
-            <ul className="space-y-2.5">
-              <li>
-                <Link href={`/${locale}/contact`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('contact')}
-                </Link>
-              </li>
-              <li>
-                <Link href={`/${locale}/tracking`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('trackOrder')}
-                </Link>
-              </li>
-              <li>
-                <Link href={`/${locale}/legal/widerruf`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('returnsAndWithdrawal')}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Legal */}
-          <div>
-            <h2 className="text-sm font-semibold text-white mb-4">
-              {t('legal')}
-            </h2>
-            <ul className="space-y-2.5">
-              <li>
-                <Link href={`/${locale}/legal/impressum`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('imprint')}
-                </Link>
-              </li>
-              <li>
-                <Link href={`/${locale}/legal/datenschutz`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('privacy')}
-                </Link>
-              </li>
-              <li>
-                <Link href={`/${locale}/legal/agb`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('terms')}
-                </Link>
-              </li>
-              <li>
-                <Link href={`/${locale}/legal/widerruf`} className="text-sm hover:text-white transition-colors duration-200">
-                  {t('withdrawal')}
-                </Link>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Separator */}
-        <div className="mt-12 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-        {/* Copyright + Payment */}
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <p className="text-xs text-white/50">
-            &copy; {new Date().getFullYear()} Malak. {tc('allRightsReserved')}
-          </p>
-          <div className="flex items-center gap-2">
-            {['Visa', 'Mastercard', 'Klarna', 'PayPal', 'Apple Pay'].map(
-              (m) => (
-                <span
-                  key={m}
-                  className="px-3 py-1.5 border border-white/15 rounded-lg text-[11px] font-medium text-white/60 hover:border-white/30 hover:text-white/80 transition-all duration-200"
-                >
-                  {m}
+          {/* Bottom — Payments + Copyright */}
+          <div className="mt-8 flex flex-col items-center gap-5">
+            <div className="flex items-center gap-3 flex-wrap justify-center">
+              <PaymentBadge>
+                <svg viewBox="0 0 48 30" className="h-5 w-auto" aria-label="Mastercard">
+                  <circle cx="17" cy="15" r="9" fill="#eb001b" opacity="0.7"/><circle cx="31" cy="15" r="9" fill="#f79e1b" opacity="0.7"/><path d="M24 8a9 9 0 010 14 9 9 0 000-14z" fill="#ff5f00" opacity="0.8"/>
+                </svg>
+              </PaymentBadge>
+              <PaymentBadge>VISA</PaymentBadge>
+              <PaymentBadge>PayPal</PaymentBadge>
+              <PaymentBadge>Klarna</PaymentBadge>
+              <PaymentBadge>
+                <span className="flex items-center gap-1">
+                  <svg viewBox="0 0 17 20" className="h-4 w-auto" fill="currentColor"><path d="M14.5 10.3c0-2.1 1.7-3.1 1.8-3.2-1-1.5-2.5-1.7-3-1.7-1.3-.1-2.5.8-3.1.8-.7 0-1.7-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1.1 8.3.7 1 1.5 2.2 2.6 2.1 1.1 0 1.4-.7 2.7-.7 1.3 0 1.5.7 2.7.7 1.1 0 1.8-1 2.5-2.1.8-1.2 1.1-2.3 1.1-2.4-1.7-.8-2.3-4-.3-5.2zM12 4c.6-.7 1-1.7.9-2.7-1 0-2.1.7-2.7 1.3-.6.6-1 1.5-.9 2.5 1 .1 2.1-.5 2.7-1.1z"/></svg>
+                  Pay
                 </span>
-              ),
-            )}
+              </PaymentBadge>
+            </div>
+            <p className="text-[11px] text-white/25">
+              &copy; {new Date().getFullYear()} Malak Bekleidung. {tc('allRightsReserved')}
+            </p>
           </div>
         </div>
       </div>

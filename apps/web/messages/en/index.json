@@ -120,7 +120,8 @@
       "reset": "Reset filters",
       "showResults": "Show results",
       "removeAll": "Remove all",
-      "products": "{count} products"
+      "products": "{count} products",
+      "availability": "Availability"
     },
     "noReturnTitle": "This item cannot be returned",
     "noReturnHygiene": "For hygiene reasons, this product cannot be returned once opened",

@@ -1,0 +1,15 @@
+
+> @omnichannel/api@0.0.1 lint /Users/riyadizzt/Desktop/Malak_Be_pro/omnichannel-store/apps/api
+> eslint "{src,apps,libs,test}/**/*.ts" --fix
+
+
+/Users/riyadizzt/Desktop/Malak_Be_pro/omnichannel-store/apps/api/src/modules/ai/ai.controller.ts
+  142:14  warning  'e' is defined but never used  @typescript-eslint/no-unused-vars
+  218:14  warning  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/riyadizzt/Desktop/Malak_Be_pro/omnichannel-store/apps/api/src/modules/orders/__tests__/orders.integration.spec.ts
+  149:24  warning  '_w' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  149:37  warning  '_v' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 4 problems (0 errors, 4 warnings)
+

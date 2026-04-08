@@ -32,12 +32,12 @@ export function EditorialBanner({ locale }: { locale: string }) {
   }, { scope: sectionRef })
 
   return (
-    <section ref={sectionRef} className="relative py-24 sm:py-32 bg-warm overflow-hidden">
+    <section ref={sectionRef} aria-label={copy.eyebrow} className="relative py-24 sm:py-32 bg-warm overflow-hidden">
       {/* Subtle decorative elements */}
-      <div className="absolute top-0 left-0 w-64 h-64 bg-brand-gold/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-brand-gold/5 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" />
+      <div className="absolute top-0 left-0 w-72 h-72 bg-brand-gold/8 rounded-full blur-[80px] -translate-x-1/2 -translate-y-1/2" />
+      <div className="absolute bottom-0 right-0 w-[28rem] h-[28rem] bg-brand-gold/6 rounded-full blur-[100px] translate-x-1/3 translate-y-1/3" />
 
-      <div className="relative mx-auto max-w-4xl px-6 sm:px-8 text-center">
+      <div className="relative mx-auto max-w-4xl px-6 sm:px-8 text-center backdrop-blur-[1px]">
         <p data-editorial-text className="text-brand-gold text-sm font-medium tracking-[0.25em] uppercase mb-6">
           {copy.eyebrow}
         </p>

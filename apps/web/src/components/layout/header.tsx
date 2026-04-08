@@ -2,7 +2,7 @@
 
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
-import { Search, ShoppingBag, User, Menu, X, ChevronDown } from 'lucide-react'
+import { Search, ShoppingBag, User, Menu, X, ChevronDown, HelpCircle } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useCartStore } from '@/store/cart-store'
 import { useAuthStore } from '@/store/auth-store'
@@ -211,6 +211,14 @@ export function Header({ locale }: { locale: string }) {
                   <User className="h-5 w-5" />
                 </Link>
               )}
+              <Link
+                href={`/${locale}/contact`}
+                className="hidden sm:flex p-2.5 min-h-[44px] min-w-[44px] items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={loc === 'ar' ? 'مساعدة' : loc === 'en' ? 'Help' : 'Hilfe'}
+                title={loc === 'ar' ? 'مساعدة' : loc === 'en' ? 'Help' : 'Hilfe'}
+              >
+                <HelpCircle className="h-5 w-5" />
+              </Link>
               <button
                 className="relative p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 onClick={openDrawer}

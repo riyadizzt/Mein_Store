@@ -120,7 +120,8 @@
       "reset": "إعادة تعيين الفلاتر",
       "showResults": "عرض النتائج",
       "removeAll": "إزالة الكل",
-      "products": "{count} منتج"
+      "products": "{count} منتج",
+      "availability": "التوفر"
     },
     "noReturnTitle": "لا يمكن إرجاع هذا المنتج",
     "noReturnHygiene": "لأسباب صحية، لا يمكن إرجاع هذا المنتج بعد فتحه",

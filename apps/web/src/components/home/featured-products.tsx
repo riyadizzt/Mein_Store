@@ -69,7 +69,7 @@ export function FeaturedProducts({ title, eyebrow, sort, locale, bgClass = '' }:
   if (isError) return null
 
   return (
-    <section ref={sectionRef} className={`py-16 sm:py-24 ${bgClass}`}>
+    <section ref={sectionRef} aria-label={title} className={`py-20 sm:py-28 ${bgClass}`}>
       <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12">
         {/* Section header */}
         <div data-section-header className="flex items-end justify-between mb-10">
@@ -83,7 +83,7 @@ export function FeaturedProducts({ title, eyebrow, sort, locale, bgClass = '' }:
               <button
                 onClick={() => scroll('left')}
                 disabled={!canLeft}
-                className="h-10 w-10 rounded-full border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-20"
+                className="h-10 w-10 rounded-full border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-20 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 outline-none"
                 aria-label="Previous"
               >
                 <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
@@ -91,7 +91,7 @@ export function FeaturedProducts({ title, eyebrow, sort, locale, bgClass = '' }:
               <button
                 onClick={() => scroll('right')}
                 disabled={!canRight}
-                className="h-10 w-10 rounded-full border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-20"
+                className="h-10 w-10 rounded-full border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-20 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 outline-none"
                 aria-label="Next"
               >
                 <ChevronRight className="h-4 w-4 rtl:rotate-180" />

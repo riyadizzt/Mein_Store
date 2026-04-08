@@ -2,27 +2,99 @@
 
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useState } from 'react'
-import { SlidersHorizontal, X, ChevronDown } from 'lucide-react'
+import { useCallback, useState, useRef } from 'react'
+import { SlidersHorizontal, X, ChevronDown, Check } from 'lucide-react'
 import { useCategories } from '@/hooks/use-categories'
 import { Button } from '@/components/ui/button'
 
+/* ── Animated Accordion FilterGroup ── */
 function FilterGroup({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen)
+  const contentRef = useRef<HTMLDivElement>(null)
+
   return (
-    <div className="border-b border-border/50 pb-4 last:border-0">
+    <div className="border-b border-border/40 pb-4 last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full py-1 text-sm font-semibold hover:text-foreground transition-colors"
+        className="flex items-center justify-between w-full py-2 text-sm font-semibold tracking-wide hover:text-foreground transition-colors"
       >
-        {title}
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <span className="uppercase text-xs">{title}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 ease-out ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && <div className="mt-3">{children}</div>}
+      <div
+        className="grid transition-[grid-template-rows] duration-300 ease-out"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+      >
+        <div ref={contentRef} className="overflow-hidden">
+          <div className="pt-3">{children}</div>
+        </div>
+      </div>
     </div>
   )
 }
 
+/* ── Premium Checkbox ── */
+function PremiumCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <label className="flex items-center gap-3 py-1.5 text-sm cursor-pointer group transition-colors">
+      <span
+        className={`relative h-[18px] w-[18px] rounded-[4px] border-[1.5px] flex items-center justify-center transition-all duration-200 ${
+          checked
+            ? 'bg-foreground border-foreground'
+            : 'border-border group-hover:border-foreground/40'
+        }`}
+        onClick={(e) => { e.preventDefault(); onChange() }}
+      >
+        {checked && <Check className="h-3 w-3 text-background" strokeWidth={3} />}
+      </span>
+      <span className={`transition-colors ${checked ? 'text-foreground font-medium' : 'text-muted-foreground group-hover:text-foreground'}`}>
+        {label}
+      </span>
+    </label>
+  )
+}
+
+/* ── Price Range Slider ── */
+function PriceRangeInputs({
+  min, max, onChangeMin, onChangeMax, labelMin, labelMax,
+}: {
+  min: string; max: string
+  onChangeMin: (v: string | null) => void
+  onChangeMax: (v: string | null) => void
+  labelMin: string; labelMax: string
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">€</span>
+          <input
+            type="number"
+            placeholder={labelMin}
+            value={min}
+            onChange={(e) => onChangeMin(e.target.value || null)}
+            className="w-full h-10 pl-7 pr-3 rounded-lg border bg-background text-sm tabular-nums focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent/40 transition-all outline-none"
+            min={0}
+          />
+        </div>
+        <div className="w-4 h-px bg-border" />
+        <div className="flex-1 relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">€</span>
+          <input
+            type="number"
+            placeholder={labelMax}
+            value={max}
+            onChange={(e) => onChangeMax(e.target.value || null)}
+            className="w-full h-10 pl-7 pr-3 rounded-lg border bg-background text-sm tabular-nums focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:border-accent/40 transition-all outline-none"
+            min={0}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Main FilterSidebar ── */
 export function FilterSidebar() {
   const t = useTranslations('product')
   const locale = useLocale()
@@ -70,59 +142,59 @@ export function FilterSidebar() {
   ]
 
   const filterContent = (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {/* Sort */}
       <FilterGroup title={t('sort.title')} defaultOpen={true}>
-        <select
-          value={activeSort}
-          onChange={(e) => updateParams('sort', e.target.value || null)}
-          className="w-full h-9 px-3 rounded-xl border bg-background text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
+        <div className="space-y-0.5">
           {sortOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <button
+              key={opt.value}
+              onClick={() => updateParams('sort', opt.value || null)}
+              className={`w-full text-start px-3 py-2 rounded-lg text-sm transition-colors ${
+                activeSort === opt.value
+                  ? 'bg-foreground/5 text-foreground font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              {opt.label}
+            </button>
           ))}
-        </select>
+        </div>
       </FilterGroup>
 
       {/* Category */}
       {activeDepartment && subcategories.length > 0 ? (
         <FilterGroup title={t('filter.category')} defaultOpen={true}>
-          <div className="space-y-2">
+          <div className="space-y-0.5">
             {subcategories.map((cat: any) => {
               const name = cat.name
                 ?? cat.translations?.find((tr: any) => tr.language === locale)?.name
                 ?? cat.translations?.[0]?.name ?? cat.slug
               return (
-                <label key={cat.id} className="flex items-center gap-2.5 text-sm cursor-pointer hover:text-foreground transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={activeCategory === cat.slug}
-                    onChange={() => updateParams('category', activeCategory === cat.slug ? null : cat.slug)}
-                    className="rounded border-border accent-accent"
-                  />
-                  {name}
-                </label>
+                <PremiumCheckbox
+                  key={cat.id}
+                  checked={activeCategory === cat.slug}
+                  onChange={() => updateParams('category', activeCategory === cat.slug ? null : cat.slug)}
+                  label={name}
+                />
               )
             })}
           </div>
         </FilterGroup>
       ) : categories && categories.length > 0 ? (
         <FilterGroup title={t('filter.category')} defaultOpen={true}>
-          <div className="space-y-2">
+          <div className="space-y-0.5">
             {categories.map((cat: any) => {
               const name = cat.name
                 ?? cat.translations?.find((tr: any) => tr.language === locale)?.name
                 ?? cat.translations?.[0]?.name ?? cat.slug
               return (
-                <label key={cat.id} className="flex items-center gap-2.5 text-sm cursor-pointer hover:text-foreground transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={activeCategory === cat.slug}
-                    onChange={() => updateParams('category', activeCategory === cat.slug ? null : cat.slug)}
-                    className="rounded border-border accent-accent"
-                  />
-                  {name}
-                </label>
+                <PremiumCheckbox
+                  key={cat.id}
+                  checked={activeCategory === cat.slug}
+                  onChange={() => updateParams('category', activeCategory === cat.slug ? null : cat.slug)}
+                  label={name}
+                />
               )
             })}
           </div>
@@ -131,45 +203,33 @@ export function FilterSidebar() {
 
       {/* Price Range */}
       <FilterGroup title={t('filter.price')} defaultOpen={!!activeMinPrice || !!activeMaxPrice}>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            placeholder={t('filter.priceMin')}
-            value={activeMinPrice}
-            onChange={(e) => updateParams('minPrice', e.target.value || null)}
-            className="w-full h-9 px-3 rounded-xl border bg-background text-sm tabular-nums focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            min={0}
-          />
-          <span className="text-muted-foreground text-xs">—</span>
-          <input
-            type="number"
-            placeholder={t('filter.priceMax')}
-            value={activeMaxPrice}
-            onChange={(e) => updateParams('maxPrice', e.target.value || null)}
-            className="w-full h-9 px-3 rounded-xl border bg-background text-sm tabular-nums focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            min={0}
-          />
-        </div>
+        <PriceRangeInputs
+          min={activeMinPrice}
+          max={activeMaxPrice}
+          onChangeMin={(v) => updateParams('minPrice', v)}
+          onChangeMax={(v) => updateParams('maxPrice', v)}
+          labelMin={t('filter.priceMin')}
+          labelMax={t('filter.priceMax')}
+        />
       </FilterGroup>
 
       {/* In Stock */}
-      <FilterGroup title={t('filter.availability') ?? (locale === 'ar' ? 'التوفر' : locale === 'en' ? 'Availability' : 'Verfügbarkeit')} defaultOpen={activeInStock}>
-        <label className="flex items-center gap-2.5 text-sm cursor-pointer hover:text-foreground transition-colors">
-          <input
-            type="checkbox"
-            checked={activeInStock}
-            onChange={() => updateParams('inStock', activeInStock ? null : 'true')}
-            className="rounded border-border accent-accent"
-          />
-          {t('inStock')}
-        </label>
+      <FilterGroup title={t('filter.availability')} defaultOpen={activeInStock}>
+        <PremiumCheckbox
+          checked={activeInStock}
+          onChange={() => updateParams('inStock', activeInStock ? null : 'true')}
+          label={t('filter.inStockOnly')}
+        />
       </FilterGroup>
 
       {/* Clear */}
       {hasActiveFilters && (
-        <Button variant="outline" size="sm" className="w-full rounded-xl" onClick={clearAll}>
+        <button
+          onClick={clearAll}
+          className="w-full text-center py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+        >
           {t('filter.reset')}
-        </Button>
+        </button>
       )}
     </div>
   )
@@ -185,7 +245,7 @@ export function FilterSidebar() {
         <SlidersHorizontal className="h-4 w-4" />
         Filter
         {hasActiveFilters && (
-          <span className="h-5 w-5 rounded-full bg-accent text-accent-foreground text-xs flex items-center justify-center font-bold">!</span>
+          <span className="h-2 w-2 rounded-full bg-accent" />
         )}
       </button>
 
@@ -193,8 +253,7 @@ export function FilterSidebar() {
       {mobileOpen && (
         <>
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)} />
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-2xl max-h-[80vh] overflow-y-auto lg:hidden"
-            style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-2xl max-h-[80vh] overflow-y-auto lg:hidden animate-fade-up">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-lg font-semibold">Filter</h2>
               <button onClick={() => setMobileOpen(false)} className="p-2 rounded-lg hover:bg-muted transition-colors" aria-label="Close">
@@ -202,8 +261,8 @@ export function FilterSidebar() {
               </button>
             </div>
             <div className="px-6 py-4">{filterContent}</div>
-            <div className="px-6 py-4 border-t">
-              <Button className="w-full rounded-xl" onClick={() => setMobileOpen(false)}>
+            <div className="px-6 py-4 border-t safe-bottom">
+              <Button className="w-full rounded-xl btn-press" onClick={() => setMobileOpen(false)}>
                 {t('filter.showResults')}
               </Button>
             </div>
@@ -212,10 +271,7 @@ export function FilterSidebar() {
       )}
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block w-60 flex-shrink-0 sticky top-20 self-start">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-          {locale === 'ar' ? 'تصفية' : locale === 'en' ? 'Filters' : 'Filter'}
-        </h2>
+      <aside className="hidden lg:block w-56 flex-shrink-0 sticky top-20 self-start">
         {filterContent}
       </aside>
 
@@ -251,22 +307,12 @@ function ActiveFilterChips({
   }
   return (
     <div className="flex flex-wrap gap-2 lg:hidden mb-4">
-      {category && (
-        <Chip label={`${t('filter.category')}: ${category}`} onRemove={() => onRemove('category', null)} />
-      )}
-      {minPrice && (
-        <Chip label={`Ab €${minPrice}`} onRemove={() => onRemove('minPrice', null)} />
-      )}
-      {maxPrice && (
-        <Chip label={`Bis €${maxPrice}`} onRemove={() => onRemove('maxPrice', null)} />
-      )}
-      {inStock && (
-        <Chip label={t('inStock')} onRemove={() => onRemove('inStock', null)} />
-      )}
-      {sort && (
-        <Chip label={sortLabelMap[sort] ?? sort} onRemove={() => onRemove('sort', null)} />
-      )}
-      <button onClick={onClearAll} className="text-xs text-destructive hover:underline">
+      {category && <Chip label={category} onRemove={() => onRemove('category', null)} />}
+      {minPrice && <Chip label={`€${minPrice}+`} onRemove={() => onRemove('minPrice', null)} />}
+      {maxPrice && <Chip label={`–€${maxPrice}`} onRemove={() => onRemove('maxPrice', null)} />}
+      {inStock && <Chip label={t('inStock')} onRemove={() => onRemove('inStock', null)} />}
+      {sort && <Chip label={sortLabelMap[sort] ?? sort} onRemove={() => onRemove('sort', null)} />}
+      <button onClick={onClearAll} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
         {t('filter.removeAll')}
       </button>
     </div>
@@ -275,9 +321,9 @@ function ActiveFilterChips({
 
 function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-muted text-xs font-medium">
+    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-foreground/5 text-xs font-medium">
       {label}
-      <button onClick={onRemove} className="hover:text-destructive min-h-[44px] min-w-[22px] flex items-center" aria-label="Remove">
+      <button onClick={onRemove} className="hover:text-destructive transition-colors min-h-[44px] min-w-[22px] flex items-center" aria-label="Remove">
         <X className="h-3 w-3" />
       </button>
     </span>
