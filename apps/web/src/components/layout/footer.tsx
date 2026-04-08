@@ -47,7 +47,7 @@ export function Footer({ locale }: { locale: string }) {
           Links + Brand (Trust + Newsletter sind auf der Homepage)
           ═══════════════════════════════════════════════════════ */}
       <div className="bg-[#0a0a0a] text-white/60">
-        <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 pt-14 sm:pt-18 pb-10">
+        <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 pt-14 sm:pt-18 pb-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-10 lg:gap-16">
 
             {/* Brand */}

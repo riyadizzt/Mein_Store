@@ -45,7 +45,7 @@ function ProductsContent() {
   const allProducts = data?.pages.flatMap((page) => page.items ?? page ?? []) ?? []
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12 py-6 sm:py-8">
       <div className="flex flex-col lg:flex-row lg:items-start lg:gap-8">
         {/* Filter Sidebar (mobile: button+drawer, desktop: sidebar) */}
         <FilterSidebar />
@@ -134,7 +134,7 @@ export default function ProductsPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12 py-8">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
             {Array.from({ length: 8 }).map((_, i) => (
               <ProductCardSkeleton key={i} />

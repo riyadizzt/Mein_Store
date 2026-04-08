@@ -36,7 +36,7 @@ export function CategoryShowcase() {
 
   if (isLoading) {
     return (
-      <section className="py-20 px-6 sm:px-8 lg:px-12 max-w-7xl mx-auto">
+      <section className="py-20 px-6 sm:px-8 lg:px-12 max-w-[1440px] mx-auto">
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 h-[500px]">
           {[1, 2, 3].map((i) => <div key={i} className="rounded-2xl animate-shimmer" />)}
         </div>
@@ -56,7 +56,7 @@ export function CategoryShowcase() {
 
   return (
     <section ref={sectionRef} aria-label={t('categories')} className="py-16 sm:py-24">
-      <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12">
+      <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12">
         {/* Section header */}
         <div data-cat-title className="flex items-end justify-between mb-10">
           <div>

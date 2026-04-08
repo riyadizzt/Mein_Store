@@ -152,7 +152,7 @@ export function HeroBanner({ locale }: { locale: string }) {
 
       {/* Content */}
       <div className="relative z-10 h-full flex items-center">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 w-full">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12 w-full">
           <div className="max-w-xl">
             {/* Gold accent bar */}
             <div

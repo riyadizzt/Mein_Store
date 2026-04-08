@@ -174,7 +174,7 @@ export function CampaignHero({ campaign, locale }: { campaign: Campaign; locale:
 
       {/* Content */}
       <div className="relative z-10 w-full">
-        <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 py-16 sm:py-24">
+        <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 py-16 sm:py-24">
           <div className="max-w-2xl">
             {/* Urgency Badge */}
             <UrgencyBadge locale={currentLocale} />

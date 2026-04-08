@@ -79,7 +79,7 @@ export default async function ProductDetailPage({
       }) }} />
 
       {/* Premium PDP Layout */}
-      <div className="mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-12 pt-4 pb-8">
+      <div className="mx-auto max-w-[1536px] px-4 sm:px-8 lg:px-12 pt-4 pb-8">
 
         {/* Minimal Breadcrumbs */}
         <nav className="flex items-center gap-2.5 text-sm text-[#0f1419]/40 mb-8 lg:mb-12" aria-label="Breadcrumb">

@@ -109,7 +109,7 @@ export function HeroSection({ locale }: { locale: string }) {
 
       {/* Content */}
       <div className="relative z-10 h-full flex items-center">
-        <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 w-full">
+        <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
           <div className="max-w-2xl">
             {/* Gold accent */}
             <div data-hero-accent className="h-[3px] w-12 bg-brand-gold mb-6 rounded-full" />

@@ -70,7 +70,7 @@ export function FeaturedProducts({ title, eyebrow, sort, locale, bgClass = '' }:
 
   return (
     <section ref={sectionRef} aria-label={title} className={`py-20 sm:py-28 ${bgClass}`}>
-      <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12">
+      <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12">
         {/* Section header */}
         <div data-section-header className="flex items-end justify-between mb-10">
           <div>

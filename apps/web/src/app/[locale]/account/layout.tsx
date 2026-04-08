@@ -52,7 +52,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
+    <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12 py-4 lg:py-6">
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-10">
         {/* Desktop Sidebar */}
         <aside className="hidden lg:block w-64 flex-shrink-0">

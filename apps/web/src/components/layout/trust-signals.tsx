@@ -16,7 +16,7 @@ export function TrustSignals() {
 
   return (
     <section className="border-y border-border/30 py-4 sm:py-5 bg-paper/50">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
           {signals.map((signal, i) => (
             <motion.div

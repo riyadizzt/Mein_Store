@@ -47,7 +47,7 @@ function SaleContent() {
       )}
 
       {/* Products Grid */}
-      <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 py-12">
+      <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 py-12">
         {isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
             {Array.from({ length: 8 }).map((_, i) => <ProductCardSkeleton key={i} />)}

@@ -54,7 +54,7 @@ function SearchContent() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 py-8 sm:py-12">
+    <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 py-8 sm:py-12">
       {/* Header */}
       <div className="mb-8">
         <p className="text-sm text-muted-foreground">{copy.resultsFor}</p>

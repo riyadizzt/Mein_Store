@@ -70,7 +70,7 @@ export function Header({ locale }: { locale: string }) {
             : 'bg-background/80 border-border/50'
         }`}
       >
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-8 lg:px-12">
           <div
             className={`flex items-center justify-between transition-all duration-300 ${
               scrolled ? 'h-14' : 'h-16'
