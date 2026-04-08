@@ -1,7 +1,7 @@
 'use client'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-declare const BarcodeDetector: any
+// eslint-disable-next-line no-var
+declare var BarcodeDetector: any
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Flashlight, FlashlightOff, Camera, Minus, Plus, Trash2, PackagePlus, ClipboardList, RotateCcw, Package, Check } from 'lucide-react'
