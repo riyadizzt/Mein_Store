@@ -30,15 +30,15 @@ export function PremiumTabs({ tabs, defaultTab, isRTL }: PremiumTabsProps) {
               onClick={() => setActiveTab(tab.id)}
               className={`relative px-0 py-4 transition-colors ${
                 tabs.indexOf(tab) > 0 ? 'ltr:ml-10 rtl:mr-10' : ''
-              } ${isRTL ? 'text-sm font-medium' : 'text-[13px] tracking-[0.08em] uppercase'} ${
-                activeTab === tab.id ? 'text-[#0f1419]' : 'text-[#0f1419]/30 hover:text-[#0f1419]/50'
+              } ${isRTL ? 'text-base font-medium' : 'text-sm tracking-[0.06em] uppercase'} ${
+                activeTab === tab.id ? 'text-[#0f1419]' : 'text-[#0f1419]/35 hover:text-[#0f1419]/55'
               }`}
             >
               {tab.label}
               {activeTab === tab.id && (
                 <motion.div
                   layoutId="premium-tab-indicator"
-                  className="absolute bottom-0 left-0 right-0 h-px bg-[#0f1419]"
+                  className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#d4a853]"
                   transition={{ type: 'spring', stiffness: 400, damping: 35 }}
                 />
               )}
@@ -83,7 +83,7 @@ function AccordionItem({ label, isOpen, onToggle, children }: {
     <div>
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between py-5 text-sm text-[#0f1419]"
+        className="w-full flex items-center justify-between py-5 text-base text-[#0f1419]"
       >
         {label}
         <ChevronDown

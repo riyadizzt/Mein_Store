@@ -588,7 +588,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       {/* ═══════════════ RELATED PRODUCTS ═══════════════ */}
       {similarProducts.length > 0 && (
         <section className="py-16 border-t border-[#e5e5e5]">
-          <h2 className={`text-[#0f1419]/30 mb-10 ${isRTL ? 'text-base font-medium' : 'text-sm tracking-[0.12em] uppercase'}`}>
+          <h2 className={`text-[#0f1419]/50 mb-10 ${isRTL ? 'text-lg font-semibold' : 'text-base tracking-[0.08em] uppercase'}`}>
             {t3('Das könnte dir auch gefallen', 'You may also like', 'قد يعجبك أيضاً')}
           </h2>
           <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">
@@ -614,8 +614,8 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                       </div>
                     )}
                   </div>
-                  <p className="text-[13px] font-light text-[#0f1419] truncate leading-snug">{spName}</p>
-                  <p className="text-[13px] text-[#0f1419]/40 mt-1 tabular-nums">&euro;{Number(spPrice).toFixed(2)}</p>
+                  <p className="text-sm text-[#0f1419] truncate leading-snug">{spName}</p>
+                  <p className="text-sm font-semibold text-[#0f1419]/60 mt-1 tabular-nums">&euro;{Number(spPrice).toFixed(2)}</p>
                 </Link>
               )
             })}
@@ -628,7 +628,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
       {/* ═══════════════ REVIEWS PLACEHOLDER ═══════════════ */}
       <section className="py-16 border-t border-[#e5e5e5]">
-        <h2 className={`text-[#0f1419]/30 mb-8 ${isRTL ? 'text-base font-medium' : 'text-sm tracking-[0.12em] uppercase'}`}>
+        <h2 className={`text-[#0f1419]/50 mb-8 ${isRTL ? 'text-lg font-semibold' : 'text-base tracking-[0.08em] uppercase'}`}>
           {t('reviews')}
         </h2>
         <div className="flex items-center gap-1 mb-4">

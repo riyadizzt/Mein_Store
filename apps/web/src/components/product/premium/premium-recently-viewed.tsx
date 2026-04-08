@@ -48,7 +48,7 @@ export function PremiumRecentlyViewed({ currentProductId, locale }: Props) {
 
   return (
     <section className="py-16 border-t border-[#e5e5e5]">
-      <h2 className={`text-[#0f1419]/30 mb-10 ${locale === 'ar' ? 'text-base font-medium' : 'text-sm tracking-[0.12em] uppercase'}`}>
+      <h2 className={`text-[#0f1419]/50 mb-10 ${locale === 'ar' ? 'text-lg font-semibold' : 'text-base tracking-[0.08em] uppercase'}`}>
         {t3('Zuletzt angesehen', 'Recently Viewed', 'شوهدت مؤخراً')}
       </h2>
       <div className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4 lg:mx-0 lg:px-0">
@@ -72,8 +72,8 @@ export function PremiumRecentlyViewed({ currentProductId, locale }: Props) {
                 </div>
               )}
             </div>
-            <p className="text-[13px] font-light text-[#0f1419] truncate leading-snug">{p.name}</p>
-            <p className="text-[13px] text-[#0f1419]/40 mt-1 tabular-nums">&euro;{p.price.toFixed(2)}</p>
+            <p className="text-sm text-[#0f1419] truncate leading-snug">{p.name}</p>
+            <p className="text-sm font-semibold text-[#0f1419]/60 mt-1 tabular-nums">&euro;{p.price.toFixed(2)}</p>
           </Link>
         ))}
       </div>

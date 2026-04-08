@@ -18,8 +18,8 @@ export function PremiumTrustBar({ locale }: PremiumTrustBarProps) {
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-8 py-14">
       {items.map((item, i) => (
         <div key={i} className="flex items-center gap-3">
-          <item.icon className="h-[18px] w-[18px] text-[#d4a853] flex-shrink-0" strokeWidth={1.5} />
-          <span className={`text-[#0f1419]/40 leading-snug ${locale === 'ar' ? 'text-[13px]' : 'text-[12px] tracking-[0.04em]'}`}>{item.text}</span>
+          <item.icon className="h-5 w-5 text-[#d4a853] flex-shrink-0" strokeWidth={1.5} />
+          <span className="text-sm text-[#0f1419]/50 leading-snug">{item.text}</span>
         </div>
       ))}
     </div>
