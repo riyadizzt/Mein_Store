@@ -82,18 +82,18 @@ export default async function ProductDetailPage({
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-12 pt-4 pb-8">
 
         {/* Minimal Breadcrumbs */}
-        <nav className="flex items-center gap-2 text-[11px] tracking-[0.08em] text-[#0f1419]/25 mb-8 lg:mb-12" aria-label="Breadcrumb">
-          <Link href={`/${locale}`} className="hover:text-[#0f1419]/50 transition-colors">
+        <nav className="flex items-center gap-2.5 text-sm text-[#0f1419]/40 mb-8 lg:mb-12" aria-label="Breadcrumb">
+          <Link href={`/${locale}`} className="hover:text-[#0f1419]/70 transition-colors">
             {locale === 'ar' ? 'الرئيسية' : 'Home'}
           </Link>
-          <span className="text-[#0f1419]/15">/</span>
+          <span className="text-[#0f1419]/20">/</span>
           {categoryName && (
             <>
-              <span className="hover:text-[#0f1419]/50 transition-colors">{categoryName}</span>
-              <span className="text-[#0f1419]/15">/</span>
+              <span className="hover:text-[#0f1419]/70 transition-colors">{categoryName}</span>
+              <span className="text-[#0f1419]/20">/</span>
             </>
           )}
-          <span className="text-[#0f1419]/50 truncate max-w-[200px]">{name}</span>
+          <span className="text-[#0f1419]/60 truncate max-w-[250px]">{name}</span>
         </nav>
 
         {/* Product */}
