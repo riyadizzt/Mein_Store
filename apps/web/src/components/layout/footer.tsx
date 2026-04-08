@@ -15,7 +15,7 @@ const TikTokIcon = () => (
 /* ── Payment Logos (simple pill badges — always visible, always correct) ── */
 function PaymentBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="h-8 px-4 rounded-md bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-white/70 text-[13px] font-bold tracking-tight">
+    <span className="h-9 px-5 rounded-md bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-white/70 text-sm font-bold tracking-tight">
       {children}
     </span>
   )
@@ -27,7 +27,7 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
     <li>
       <Link
         href={href}
-        className="relative inline-block text-sm text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
+        className="relative inline-block text-base text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
       >
         {children}
         <span className="absolute bottom-0 left-0 rtl:left-auto rtl:right-0 w-0 h-px bg-brand-gold transition-all duration-300 group-hover:w-full" />
@@ -55,7 +55,7 @@ export function Footer({ locale }: { locale: string }) {
               <span className="text-2xl font-display font-bold text-white tracking-[0.3em] logo-shimmer">
                 MALAK
               </span>
-              <p className="mt-4 text-[13px] text-white/35 leading-relaxed max-w-[200px]">
+              <p className="mt-4 text-sm text-white/40 leading-relaxed max-w-[220px]">
                 {t('tagline')}
               </p>
               <div className="flex gap-2.5 mt-6">
@@ -78,8 +78,8 @@ export function Footer({ locale }: { locale: string }) {
 
             {/* Shop */}
             <div>
-              <h2 className="text-[11px] font-semibold text-brand-gold/80 tracking-[0.2em] uppercase mb-5">{t('shop')}</h2>
-              <ul className="space-y-3">
+              <h2 className="text-sm font-semibold text-brand-gold/80 tracking-[0.15em] uppercase mb-5">{t('shop')}</h2>
+              <ul className="space-y-3.5">
                 <FooterLink href={`/${locale}/products`}>{t('allProducts')}</FooterLink>
                 <FooterLink href={`/${locale}/products?department=damen`}>{t('women')}</FooterLink>
                 <FooterLink href={`/${locale}/products?department=herren`}>{t('men')}</FooterLink>
@@ -88,8 +88,8 @@ export function Footer({ locale }: { locale: string }) {
 
             {/* Customer Service */}
             <div>
-              <h2 className="text-[11px] font-semibold text-brand-gold/80 tracking-[0.2em] uppercase mb-5">{t('customerService')}</h2>
-              <ul className="space-y-3">
+              <h2 className="text-sm font-semibold text-brand-gold/80 tracking-[0.15em] uppercase mb-5">{t('customerService')}</h2>
+              <ul className="space-y-3.5">
                 <FooterLink href={`/${locale}/contact`}>{t('contact')}</FooterLink>
                 <FooterLink href={`/${locale}/tracking`}>{t('trackOrder')}</FooterLink>
                 <FooterLink href={`/${locale}/legal/widerruf`}>{t('returnsAndWithdrawal')}</FooterLink>
@@ -98,8 +98,8 @@ export function Footer({ locale }: { locale: string }) {
 
             {/* Legal */}
             <div>
-              <h2 className="text-[11px] font-semibold text-brand-gold/80 tracking-[0.2em] uppercase mb-5">{t('legal')}</h2>
-              <ul className="space-y-3">
+              <h2 className="text-sm font-semibold text-brand-gold/80 tracking-[0.15em] uppercase mb-5">{t('legal')}</h2>
+              <ul className="space-y-3.5">
                 <FooterLink href={`/${locale}/legal/impressum`}>{t('imprint')}</FooterLink>
                 <FooterLink href={`/${locale}/legal/datenschutz`}>{t('privacy')}</FooterLink>
                 <FooterLink href={`/${locale}/legal/agb`}>{t('terms')}</FooterLink>
@@ -107,7 +107,7 @@ export function Footer({ locale }: { locale: string }) {
                 <li>
                   <button
                     onClick={() => useConsentStore.getState().openSettings()}
-                    className="relative inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
+                    className="relative inline-flex items-center gap-1.5 text-base text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
                   >
                     <Cookie className="h-3.5 w-3.5" />
                     {locale === 'ar' ? 'إعدادات الكوكيز' : locale === 'en' ? 'Cookie Settings' : 'Cookie-Einstellungen'}
@@ -139,7 +139,7 @@ export function Footer({ locale }: { locale: string }) {
                 </span>
               </PaymentBadge>
             </div>
-            <p className="text-[11px] text-white/25">
+            <p className="text-sm text-white/30">
               &copy; {new Date().getFullYear()} Malak Bekleidung. {tc('allRightsReserved')}
             </p>
           </div>
