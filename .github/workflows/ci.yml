@@ -26,7 +26,7 @@ jobs:
         run: pnpm install
 
       - name: Generate Prisma Client
-        run: pnpm --filter api exec prisma generate
+        run: npx prisma generate
 
       - name: Lint API
         run: pnpm --filter api lint
@@ -61,7 +61,7 @@ jobs:
         run: pnpm install
 
       - name: Generate Prisma Client
-        run: pnpm --filter api exec prisma generate
+        run: npx prisma generate
 
       - name: Run unit tests
         run: pnpm --filter api exec jest --passWithNoTests --no-cache
