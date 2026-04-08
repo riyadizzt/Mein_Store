@@ -167,17 +167,17 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
 
         {/* ─── Thumbnails ─── */}
         {total > 1 && (
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1 mt-3">
             {images.map((im, i) => (
               <button
                 key={i}
                 onClick={() => go(i)}
                 aria-label={`${productName} ${i + 1}`}
-                className={`relative flex-shrink-0 w-[68px] h-[85px] overflow-hidden transition-opacity duration-200 ${
-                  i === active ? 'opacity-100 ring-1 ring-[#0f1419]' : 'opacity-40 hover:opacity-70'
+                className={`relative flex-shrink-0 w-20 h-[100px] overflow-hidden transition-all duration-200 ${
+                  i === active ? 'opacity-100 ring-2 ring-[#d4a853] ring-offset-1' : 'opacity-40 hover:opacity-70'
                 }`}
               >
-                <Image src={im.url} alt="" fill sizes="68px" className="object-cover" loading="lazy" />
+                <Image src={im.url} alt="" fill sizes="80px" className="object-cover" loading="lazy" />
               </button>
             ))}
           </div>

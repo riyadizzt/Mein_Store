@@ -58,14 +58,16 @@ export function PremiumRecentlyViewed({ currentProductId, locale }: Props) {
             href={`/${locale}/products/${p.slug}`}
             className="flex-shrink-0 w-[160px] sm:w-[190px] group"
           >
-            <div className="aspect-[3/4] bg-[#f5f5f5] overflow-hidden mb-3">
-              {p.imageUrl && (
+            <div className="aspect-[3/4] bg-[#f5f5f5] overflow-hidden mb-3 flex items-center justify-center">
+              {p.imageUrl ? (
                 <img
                   src={p.imageUrl}
                   alt={p.name}
                   className="w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] group-hover:scale-[1.03]"
                   loading="lazy"
                 />
+              ) : (
+                <span className="text-3xl font-light text-[#d5d5d5] select-none">{(p.name ?? '?').charAt(0).toUpperCase()}</span>
               )}
             </div>
             <p className="text-[13px] font-light text-[#0f1419] truncate leading-snug">{p.name}</p>

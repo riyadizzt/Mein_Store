@@ -299,23 +299,23 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   return (
     <div>
       {/* ═══════════════ MAIN GRID ═══════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 lg:gap-16 xl:gap-20">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(360px,420px)] lg:gap-14 xl:gap-20">
 
-        {/* ─── LEFT: Gallery (7 cols ≈ 58%) ─── */}
-        <div className="lg:col-span-7">
+        {/* ─── LEFT: Gallery (≈ 58-62%) ─── */}
+        <div className="order-2 lg:order-1">
           <PremiumGallery images={images} productName={name} isRTL={isRTL} />
         </div>
 
-        {/* ─── RIGHT: Product Info (5 cols ≈ 42%) ─── */}
-        <div className="lg:col-span-5 lg:sticky lg:top-20 lg:self-start pt-8 lg:pt-2 space-y-0">
+        {/* ─── RIGHT: Product Info ─── */}
+        <div className="order-1 lg:order-2 lg:sticky lg:top-16 lg:self-start pt-6 lg:pt-0">
 
           {/* Category */}
           {categoryName && (
-            <p className={`uppercase text-[#0f1419]/30 mb-4 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.15em]'}`}>{categoryName}</p>
+            <p className={`uppercase text-[#0f1419]/30 mb-5 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.15em]'}`}>{categoryName}</p>
           )}
 
-          {/* Product Name — Cairo for Arabic, Playfair for Latin */}
-          <h1 className={`leading-[1.25] text-[#0f1419] mb-6 ${
+          {/* Product Name */}
+          <h1 className={`leading-[1.25] text-[#0f1419] mb-8 ${
             isRTL
               ? 'font-arabic text-[28px] sm:text-[34px] font-semibold'
               : 'font-display font-light text-[26px] sm:text-[32px]'
@@ -335,32 +335,42 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               </>
             )}
           </div>
-          <p className={`text-[#0f1419]/30 mb-7 ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+          <p className={`text-[#0f1419]/30 ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
             {t('priceIncludesVat', { rate: Number(product.taxRate).toFixed(0) })}
           </p>
 
-          {/* Stock Progress Bar (urgency) */}
-          {showLowStock && (
-            <div className="mb-7">
-              <div className="flex items-center justify-between mb-2">
+          {/* Stock indicator */}
+          <div className="mt-5 mb-10">
+            {available > 5 && (
+              <span className={`text-[#16a34a] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                {t('inStock')}
+              </span>
+            )}
+            {showLowStock && (
+              <div>
                 <span className={`font-medium ${available <= 2 ? 'text-[#dc2626]' : 'text-[#b45309]'} ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
                   {t('lowStock', { count: available })}
                 </span>
+                <div className="h-[3px] bg-[#f5f5f5] rounded-full overflow-hidden mt-2">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(available / 5) * 100}%` }}
+                    transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
+                    className={`h-full rounded-full ${available <= 2 ? 'bg-[#dc2626]' : 'bg-[#d97706]'}`}
+                  />
+                </div>
               </div>
-              <div className="h-[3px] bg-[#f5f5f5] rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(available / 5) * 100}%` }}
-                  transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
-                  className={`h-full rounded-full ${available <= 2 ? 'bg-[#dc2626]' : 'bg-[#d97706]'}`}
-                />
-              </div>
-            </div>
-          )}
+            )}
+            {available <= 0 && (
+              <span className={`text-[#dc2626] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                {t('outOfStock')}
+              </span>
+            )}
+          </div>
 
           {/* Campaign Countdown (urgency - alternative) */}
           {showCampaign && countdown && (
-            <div className={`flex items-center gap-2 mb-7 text-[#0f1419]/40 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em]'}`}>
+            <div className={`flex items-center gap-2 mb-10 text-[#0f1419]/40 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em]'}`}>
               <span>{t3('Angebot endet in', 'Offer ends in', 'ينتهي العرض في')}</span>
               <span className="font-mono tabular-nums text-[#b45309]">{countdown}</span>
             </div>
@@ -368,7 +378,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Delivery */}
           {available > 0 && (
-            <div className={`flex items-center gap-2.5 mb-8 text-[#0f1419]/45 ${isRTL ? 'text-sm' : 'text-[13px]'}`}>
+            <div className={`flex items-center gap-2.5 mb-10 text-[#0f1419]/45 ${isRTL ? 'text-sm' : 'text-[13px]'}`}>
               <Truck className="h-4 w-4 flex-shrink-0" strokeWidth={1.5} />
               <span>{t('deliveryEstimate')} <span className="text-[#0f1419]/70 font-medium">{deliveryDate}</span></span>
             </div>
@@ -376,7 +386,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* No-Return Notice */}
           {product.excludeFromReturns && (
-            <div className={`flex items-start gap-2.5 py-3 px-4 mb-6 border border-[#d97706]/20 text-[#b45309]/80 leading-relaxed ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+            <div className={`flex items-start gap-2.5 py-3 px-4 mb-8 border border-[#d97706]/20 text-[#b45309]/80 leading-relaxed ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
               <span className="mt-0.5 flex-shrink-0">&#9888;</span>
               <span>{t3('Dieser Artikel ist vom Umtausch ausgeschlossen', 'This item cannot be returned', 'لا يمكن إرجاع هذا المنتج')}</span>
             </div>
@@ -384,15 +394,15 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* ═══ VARIANTS ═══ */}
           {variants.length > 1 && (
-            <div className="border-t border-[#e5e5e5] pt-7 pb-1 space-y-6">
+            <div className="border-t border-[#e5e5e5] pt-8 pb-2 space-y-8">
 
               {/* Color Selector */}
               {colors.length > 0 && (
                 <div>
-                  <label className={`text-[#0f1419]/40 mb-3 block ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+                  <label className={`text-[#0f1419]/40 mb-4 block ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                     {t('color')}{selectedColor ? ` — ${translateColor(selectedColor, locale)}` : ''}
                   </label>
-                  <div className="flex flex-wrap gap-2.5">
+                  <div className="flex flex-wrap gap-3">
                     {colors.map(({ color, hex }: any) => {
                       const avail = isColorAvailable(color)
                       const sel = selectedColor === color
@@ -405,8 +415,8 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                           }}
                           disabled={!avail}
                           title={translateColor(color, locale)}
-                          className={`relative h-9 w-9 rounded-full transition-all duration-200 ${
-                            sel ? 'ring-[1.5px] ring-[#0f1419] ring-offset-2' : 'ring-1 ring-[#e5e5e5] hover:ring-[#0f1419]/30'
+                          className={`relative h-10 w-10 rounded-full transition-all duration-200 ${
+                            sel ? 'ring-[1.5px] ring-[#0f1419] ring-offset-[3px]' : 'ring-1 ring-[#e5e5e5] hover:ring-[#0f1419]/30'
                           } ${!avail ? 'opacity-25 cursor-not-allowed' : ''}`}
                         >
                           <span className="absolute inset-[3px] rounded-full" style={{ backgroundColor: hex ?? color?.toLowerCase() ?? '#ccc' }} />
@@ -421,7 +431,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               {/* Size Selector */}
               {sizes.length > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-4">
                     <label className={`text-[#0f1419]/40 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                       {t('size')}{selectedSize ? ` — ${selectedSize}` : ''}
                     </label>
@@ -429,7 +439,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                       {t('sizeGuide')}
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2.5">
                     {sizes.map((size) => {
                       const avail = isSizeAvailable(size)
                       const sel = selectedSize === size
@@ -441,7 +451,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                             if (v) handleVariantSelect(v.id)
                           }}
                           disabled={!avail}
-                          className={`h-10 min-w-[2.75rem] px-3.5 text-[13px] tracking-wide transition-all duration-200 border ${
+                          className={`h-11 min-w-[2.75rem] px-4 text-[13px] tracking-wide transition-all duration-200 border ${
                             sel
                               ? 'border-[#0f1419] bg-[#0f1419] text-white'
                               : 'border-[#e5e5e5] text-[#0f1419]/60 hover:border-[#0f1419]/30'
@@ -458,7 +468,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           )}
 
           {/* ═══ ADD TO CART ═══ */}
-          <div className="border-t border-[#e5e5e5] pt-7 space-y-4">
+          <div className="border-t border-[#e5e5e5] pt-8 space-y-5">
 
             {/* Quantity */}
             <div className="flex items-center gap-3">
@@ -494,8 +504,8 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 whileTap={!cartDisabled && available > 0 ? { scale: 0.98 } : undefined}
                 onClick={handleAddToCart}
                 disabled={available <= 0 || cartDisabled}
-                className={`flex-1 h-[52px] flex items-center justify-center gap-2.5 font-medium transition-all duration-300 ${
-                  isRTL ? 'text-[15px]' : 'text-[13px] tracking-[0.1em] uppercase'
+                className={`flex-1 h-14 flex items-center justify-center gap-2.5 font-semibold transition-all duration-300 ${
+                  isRTL ? 'text-[15px]' : 'text-[14px] tracking-[0.1em] uppercase'
                 } ${
                   added
                     ? 'bg-[#1a7a3a] text-white'
@@ -507,13 +517,13 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 <AnimatePresence mode="wait">
                   {added ? (
                     <motion.span key="ok" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} className="flex items-center gap-2">
-                      <Check className="h-4 w-4" strokeWidth={2} />{t('added')}
+                      <Check className="h-5 w-5" strokeWidth={2} />{t('added')}
                     </motion.span>
                   ) : available <= 0 ? (
                     <span>{t('outOfStock')}</span>
                   ) : (
-                    <motion.span key="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2">
-                      <ShoppingBag className="h-4 w-4" strokeWidth={1.5} />{t('addToCart')}
+                    <motion.span key="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5">
+                      <ShoppingBag className="h-5 w-5" strokeWidth={1.5} />{t('addToCart')}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -523,12 +533,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={handleWishlist}
-                className={`h-[52px] w-[52px] flex items-center justify-center border transition-all duration-200 flex-shrink-0 ${
+                className={`h-14 w-14 flex items-center justify-center border transition-all duration-200 flex-shrink-0 ${
                   wishlisted ? 'border-[#fecaca] bg-[#fef2f2]' : 'border-[#e5e5e5] hover:border-[#0f1419]/20'
                 } ${wishPop ? 'scale-110' : ''}`}
                 aria-label={t('addToWishlist')}
               >
-                <Heart className={`h-[18px] w-[18px] transition-all duration-200 ${wishlisted ? 'fill-[#ef4444] text-[#ef4444]' : 'text-[#0f1419]/30'}`} strokeWidth={1.5} />
+                <Heart className={`h-5 w-5 transition-all duration-200 ${wishlisted ? 'fill-[#ef4444] text-[#ef4444]' : 'text-[#0f1419]/30'}`} strokeWidth={1.5} />
               </motion.button>
             </div>
 
@@ -584,13 +594,15 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               const spPrice = sp.salePrice ?? sp.basePrice
               return (
                 <Link key={sp.id} href={`/${locale}/products/${sp.slug}`} className="flex-shrink-0 w-[180px] sm:w-[210px] group">
-                  <div className="aspect-[3/4] bg-[#f5f5f5] overflow-hidden mb-3">
-                    {spImage && (
+                  <div className="aspect-[3/4] bg-[#f5f5f5] overflow-hidden mb-3 flex items-center justify-center">
+                    {spImage ? (
                       <img
                         src={spImage} alt={spName}
                         className="w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] group-hover:scale-[1.03]"
                         loading="lazy"
                       />
+                    ) : (
+                      <span className="text-3xl font-display font-light text-[#d5d5d5] select-none">{(spName ?? '?').charAt(0).toUpperCase()}</span>
                     )}
                   </div>
                   <p className="text-[13px] font-light text-[#0f1419] truncate leading-snug">{spName}</p>
