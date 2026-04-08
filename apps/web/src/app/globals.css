@@ -56,7 +56,7 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { cursor: point
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
-    --accent: 32 95% 44%;
+    --accent: 40 60% 58%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
