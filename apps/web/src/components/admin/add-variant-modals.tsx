@@ -506,20 +506,21 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
             } else {
               // Multiple warehouses — color summary row + warehouse rows
               rows.push(
-                <tr key={`${color}-hdr`} className="border-t bg-muted/10">
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
+                <tr key={`${color}-hdr`} className="border-t bg-muted/30">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
                       <div className="h-5 w-5 rounded-full border-2 border-white shadow-sm flex-shrink-0" style={{ backgroundColor: hex as string }} />
-                      <span className="text-xs font-bold">{translateColor(color as string, locale)}</span>
+                      <span className="text-sm font-bold text-foreground">{translateColor(color as string, locale)}</span>
+                      <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 rounded bg-muted/50">{locale === 'ar' ? 'المجموع' : 'Gesamt'}</span>
                     </div>
                   </td>
                   {sizes.map(size => {
                     const v = getVariant(color as string, size)
                     const sizeTotal = (v?.inventory ?? []).reduce((s: number, inv: any) => s + Math.max(0, inv.quantityOnHand - (inv.quantityReserved ?? 0)), 0)
                     return (
-                      <td key={size} className="py-2.5 text-center">
-                        <span className={`inline-flex items-center justify-center h-6 min-w-[1.5rem] px-1.5 rounded-md text-[10px] font-bold ${
-                          sizeTotal <= 0 ? 'bg-red-500/10 text-red-600' : sizeTotal <= 5 ? 'bg-orange-500/10 text-orange-600' : 'bg-green-500/10 text-green-700'
+                      <td key={size} className="py-3 text-center">
+                        <span className={`inline-flex items-center justify-center h-7 min-w-[1.75rem] px-2 rounded-lg text-xs font-bold ${
+                          sizeTotal <= 0 ? 'bg-red-500/15 text-red-600' : sizeTotal <= 5 ? 'bg-orange-500/15 text-orange-600' : 'bg-green-500/15 text-green-700'
                         }`}>{sizeTotal}</span>
                       </td>
                     )
@@ -528,9 +529,9 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
               )
               for (const [whId, whName] of warehouses) {
                 rows.push(
-                  <tr key={`${color}-${whId}`} className="border-t border-dashed border-muted/20 hover:bg-muted/5">
-                    <td className="px-4 py-1.5 pl-10">
-                      <span className="text-[11px] text-muted-foreground/70">{whName}</span>
+                  <tr key={`${color}-${whId}`} className="border-t border-dashed border-muted/15 hover:bg-muted/5">
+                    <td className="py-2 pl-14 pr-4">
+                      <span className="text-[11px] text-muted-foreground/50">{whName}</span>
                     </td>
                     {sizes.map((size) => {
                       const v = getVariant(color as string, size)
