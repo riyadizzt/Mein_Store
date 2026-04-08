@@ -8,6 +8,7 @@ import { Loader2, Eye, EyeOff, AlertCircle, Lock, WifiOff } from 'lucide-react'
 import { useLogin } from '@/hooks/use-auth'
 import { Input } from '@/components/ui/input'
 import { GoogleSignIn } from '@/components/auth/google-sign-in'
+import { FacebookSignIn } from '@/components/auth/facebook-sign-in'
 
 function getErrorInfo(error: any, locale: string): { msg: string; icon: 'auth' | 'lock' | 'network'; showReset?: boolean } | null {
   if (!error) return null
@@ -117,7 +118,10 @@ export default function LoginPage() {
           <h1 className="text-xl font-semibold text-center text-[#0f1419]">{t('loginTitle')}</h1>
 
           {/* Social Login */}
-          <GoogleSignIn label={`Google ${t('loginButton')}`} />
+          <div className="space-y-3">
+            <GoogleSignIn label={`Google ${t('loginButton')}`} />
+            <FacebookSignIn label={`Facebook ${t('loginButton')}`} />
+          </div>
 
           {/* Divider */}
           <div className="relative">

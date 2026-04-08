@@ -330,6 +330,27 @@ export class AuthController {
     )
   }
 
+  // ── Facebook OAuth ──────────────────────────────────────────
+
+  @Get('facebook')
+  @UseGuards(AuthGuard('facebook'))
+  @ApiOperation({ summary: 'Facebook OAuth Login' })
+  facebookLogin() {
+    // Redirects to Facebook
+  }
+
+  @Get('facebook/callback')
+  @UseGuards(AuthGuard('facebook'))
+  async facebookCallback(@Req() req: any, @Res() res: Response) {
+    const fbUser = req.user
+    const result = await this.authService.socialLogin(fbUser)
+    const frontendUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    this.setCustomerCookie(res, result.refreshToken)
+    res.redirect(
+      `${frontendUrl}/auth/facebook/callback?accessToken=${result.accessToken}`,
+    )
+  }
+
   // ── Guest Account Creation via Token ────────────────────────
 
   @Get('create-account')

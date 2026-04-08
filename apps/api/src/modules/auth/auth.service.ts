@@ -439,6 +439,72 @@ export class AuthService {
     return { accessToken, refreshToken }
   }
 
+  // ── Generic Social Login (Facebook, Apple, etc.) ──────────
+
+  async socialLogin(socialUser: {
+    email: string
+    firstName: string
+    lastName: string
+    profileImageUrl?: string
+    provider?: string
+  }): Promise<{ accessToken: string; refreshToken: string }> {
+    if (!socialUser.email) {
+      throw new UnauthorizedException('E-Mail wird benötigt für die Anmeldung')
+    }
+
+    let user = await this.prisma.user.findUnique({
+      where: { email: socialUser.email },
+    })
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email: socialUser.email,
+          firstName: socialUser.firstName,
+          lastName: socialUser.lastName,
+          profileImageUrl: socialUser.profileImageUrl,
+          isVerified: true,
+          role: 'customer',
+          gdprConsents: {
+            create: {
+              consentType: 'data_processing',
+              isGranted: true,
+              grantedAt: new Date(),
+              consentVersion: '1.0',
+              ipAddress: `${socialUser.provider ?? 'social'}-oauth`,
+              source: 'registration',
+            },
+          },
+        },
+      })
+      this.logger.log(`New ${socialUser.provider ?? 'social'} user created: ${user.email}`)
+    }
+
+    if (user.isBlocked) {
+      throw new UnauthorizedException('Account blocked')
+    }
+
+    const accessToken = this.jwt.sign(
+      { sub: user.id, email: user.email, role: user.role },
+    )
+    const refreshToken = crypto.randomBytes(32).toString('hex')
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashToken(refreshToken),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    })
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    })
+
+    return { accessToken, refreshToken }
+  }
+
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex')
   }

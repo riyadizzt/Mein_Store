@@ -9,6 +9,7 @@ import { useRegister } from '@/hooks/use-auth'
 import { PasswordStrength } from '@/components/auth/password-strength'
 import { Input } from '@/components/ui/input'
 import { GoogleSignIn } from '@/components/auth/google-sign-in'
+import { FacebookSignIn } from '@/components/auth/facebook-sign-in'
 
 export default function RegisterPage() {
   const t = useTranslations('auth')
@@ -90,7 +91,10 @@ export default function RegisterPage() {
           <h1 className="text-xl font-semibold text-center text-[#0f1419]">{t('registerTitle')}</h1>
 
           {/* Social Login */}
-          <GoogleSignIn label={`Google ${t('registerButton')}`} />
+          <div className="space-y-3">
+            <GoogleSignIn label={`Google ${t('registerButton')}`} />
+            <FacebookSignIn label={`Facebook ${t('registerButton')}`} />
+          </div>
 
           {/* Divider */}
           <div className="relative">
