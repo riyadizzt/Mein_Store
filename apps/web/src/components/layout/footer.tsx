@@ -1,10 +1,8 @@
 'use client'
 
-import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { Check, ArrowRight, Instagram, Facebook, Truck, RotateCcw, ShieldCheck, Lock, Cookie } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
+import { Instagram, Facebook, Cookie } from 'lucide-react'
 import { useConsentStore } from '@/store/consent-store'
 
 /* ── TikTok SVG ── */
@@ -41,110 +39,12 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
 /* ── Main Footer Component ── */
 export function Footer({ locale }: { locale: string }) {
   const t = useTranslations('footer')
-  const tt = useTranslations('trust')
   const tc = useTranslations('common')
-  const [email, setEmail] = useState('')
-  const [subscribed, setSubscribed] = useState(false)
-  const [focused, setFocused] = useState(false)
-
-  const handleNewsletter = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email) return
-    setSubscribed(true)
-    setEmail('')
-    setTimeout(() => setSubscribed(false), 4000)
-  }
 
   return (
     <footer>
       {/* ═══════════════════════════════════════════════════════
-          BEREICH 1 — Trust-Leiste (Lucide Icons, Gold)
-          ═══════════════════════════════════════════════════════ */}
-      <div className="bg-[#141425]">
-        <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 py-10 sm:py-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-12">
-            {[
-              { Icon: Truck, label: tt('freeShipping') },
-              { Icon: RotateCcw, label: tt('returns') },
-              { Icon: ShieldCheck, label: tt('gdpr') },
-              { Icon: Lock, label: tt('securePayment') },
-            ].map(({ Icon, label }, i) => (
-              <div key={i} className="flex flex-col items-center text-center gap-3 group">
-                <div className="h-11 w-11 rounded-full border border-brand-gold/25 flex items-center justify-center transition-all duration-300 group-hover:border-brand-gold/50 group-hover:bg-brand-gold/5">
-                  <Icon className="h-[18px] w-[18px] text-brand-gold" strokeWidth={1.5} />
-                </div>
-                <span className="text-[13px] text-white/55 leading-tight">{label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="h-px bg-gradient-to-r from-transparent via-brand-gold/25 to-transparent" />
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════
-          BEREICH 2 — Newsletter (schmaler, eleganter)
-          ═══════════════════════════════════════════════════════ */}
-      <div className="bg-[#111120] relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[250px] bg-brand-gold/[0.03] rounded-full blur-[100px]" />
-
-        <div className="relative mx-auto max-w-lg px-6 sm:px-8 py-14 sm:py-16 text-center">
-          <h3 className="text-xl sm:text-2xl font-display font-bold text-white leading-tight">
-            {t('newsletterTitle')}
-          </h3>
-          <p className="mt-2.5 text-[13px] text-white/40">
-            {t('newsletterSubtitle')}
-          </p>
-
-          <div className="mt-7">
-            <AnimatePresence mode="wait">
-              {subscribed ? (
-                <motion.div
-                  key="success"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center justify-center gap-2 text-brand-gold text-sm font-medium"
-                >
-                  <Check className="h-4 w-4" />
-                  {t('newsletterSuccess')}
-                </motion.div>
-              ) : (
-                <motion.form
-                  key="form"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onSubmit={handleNewsletter}
-                  className="flex gap-2.5 max-w-sm mx-auto"
-                >
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onFocus={() => setFocused(true)}
-                    onBlur={() => setFocused(false)}
-                    placeholder={t('newsletterPlaceholder')}
-                    required
-                    className={`flex-1 h-11 px-4 bg-white/[0.05] border rounded-full text-white text-sm placeholder:text-white/25 focus:outline-none transition-all duration-300 ${
-                      focused ? 'border-brand-gold/40 ring-1 ring-brand-gold/15' : 'border-white/[0.07]'
-                    }`}
-                  />
-                  <button
-                    type="submit"
-                    className="h-11 px-6 rounded-full bg-brand-gold text-white text-sm font-medium flex items-center gap-1.5 hover:bg-brand-gold-dark transition-colors duration-200 btn-press shrink-0"
-                  >
-                    <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" />
-                  </button>
-                </motion.form>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-        <div className="h-px bg-gradient-to-r from-transparent via-brand-gold/15 to-transparent" />
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════
-          BEREICH 3 — Links + Brand
+          Links + Brand (Trust + Newsletter sind auf der Homepage)
           ═══════════════════════════════════════════════════════ */}
       <div className="bg-[#0a0a0a] text-white/60">
         <div className="mx-auto max-w-7xl px-6 sm:px-8 lg:px-12 pt-14 sm:pt-18 pb-10">

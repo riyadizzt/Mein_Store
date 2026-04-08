@@ -146,7 +146,7 @@ export class ProductsService {
         include: {
           translations: { where: { language: lang as any } },
           images: {
-            where: { isPrimary: true },
+            orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
             take: 1,
           },
           variants: {
@@ -331,7 +331,7 @@ export class ProductsService {
       where: { id: { in: ids } },
       include: {
         translations: { where: { language: lang as any } },
-        images: { where: { isPrimary: true }, take: 1 },
+        images: { orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }], take: 1 },
         variants: {
           where: { isActive: true },
           include: {
