@@ -4,19 +4,19 @@ import { useLocale } from 'next-intl'
 import { Truck, Headphones, Shield, Sparkles } from 'lucide-react'
 
 const ITEMS_DE = [
-  { icon: Truck, text: 'Kostenloser Versand ab 50\u20AC' },
+  { icon: Truck, text: 'Kostenloser Versand ab 100\u20AC' },
   { icon: Headphones, text: 'Pers\u00F6nlicher Kundenservice' },
   { icon: Shield, text: 'Sichere Bezahlung' },
   { icon: Sparkles, text: 'Premium Qualit\u00E4t' },
 ]
 const ITEMS_AR = [
-  { icon: Truck, text: '\u0634\u062D\u0646 \u0645\u062C\u0627\u0646\u064A \u0645\u0646 50\u20AC' },
+  { icon: Truck, text: '\u0634\u062D\u0646 \u0645\u062C\u0627\u0646\u064A \u0645\u0646 100\u20AC' },
   { icon: Headphones, text: '\u062E\u062F\u0645\u0629 \u0639\u0645\u0644\u0627\u0621 \u0634\u062E\u0635\u064A\u0629' },
   { icon: Shield, text: '\u062F\u0641\u0639 \u0622\u0645\u0646' },
   { icon: Sparkles, text: '\u062C\u0648\u062F\u0629 \u0645\u0645\u064A\u0632\u0629' },
 ]
 const ITEMS_EN = [
-  { icon: Truck, text: 'Free shipping over \u20AC50' },
+  { icon: Truck, text: 'Free shipping over \u20AC100' },
   { icon: Headphones, text: 'Personal customer service' },
   { icon: Shield, text: 'Secure payment' },
   { icon: Sparkles, text: 'Premium quality' },
