@@ -434,6 +434,20 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-product'] }); qc.invalidateQueries({ queryKey: ['admin-inventory'] }) },
   })
 
+  // Collect all warehouses from all inventory records
+  const warehouseMap = new Map<string, string>()
+  for (const v of variants) {
+    for (const inv of v.inventory ?? []) {
+      const whId = inv.warehouse?.id ?? inv.warehouseId
+      const whName = inv.warehouse?.name ?? inv.warehouseName ?? whId
+      if (whId && !warehouseMap.has(whId)) warehouseMap.set(whId, whName)
+    }
+  }
+  const warehouses = [...warehouseMap.entries()] // [[id, name], ...]
+
+  const getInvForWarehouse = (variant: any, warehouseId: string) =>
+    (variant?.inventory ?? []).find((inv: any) => (inv.warehouse?.id ?? inv.warehouseId) === warehouseId)
+
   if (colors.length === 0 || sizes.length === 0) return null
 
   return (
@@ -448,48 +462,91 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
           </tr>
         </thead>
         <tbody>
-          {colors.map(([color, hex]) => (
-            <tr key={color} className="border-t hover:bg-muted/10 transition-colors">
-              <td className="px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: hex as string }} />
-                  <span className="text-xs font-medium">{translateColor(color as string, locale)}</span>
-                </div>
-              </td>
-              {sizes.map((size) => {
-                const v = getVariant(color as string, size)
-                const inv = v?.inventory?.[0]
-                const stock = v?.stock ?? (inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : 0)
-                return (
-                  <td key={size} className="px-1 py-1.5 text-center">
-                    {inv ? (
-                      /* Existing variant with inventory — editable */
-                      <input
-                        type="number" min={0} defaultValue={inv.quantityOnHand}
-                        className={`w-14 h-8 text-center text-xs font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 ${stock <= 0 ? 'text-red-600 border-red-200' : stock <= 5 ? 'text-orange-600 border-orange-200' : 'text-green-600 border-muted'}`}
-                        onBlur={(e) => { const val = parseInt(e.target.value); if (!isNaN(val) && val !== inv.quantityOnHand) adjustMut.mutate({ id: inv.id, qty: val }) }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                      />
-                    ) : (
-                      /* Missing variant — type a number to auto-create */
-                      <input
-                        type="number" min={0} placeholder="—"
-                        className="w-14 h-8 text-center text-xs rounded-lg border border-dashed border-muted-foreground/20 bg-transparent text-muted-foreground/40 placeholder:text-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:text-foreground focus:font-bold"
-                        onBlur={(e) => {
-                          const val = parseInt(e.target.value)
-                          if (!isNaN(val) && val > 0 && productId) {
-                            createMut.mutate({ color: color as string, colorHex: hex as string, size, stock: val })
-                            e.target.value = ''
-                          }
-                        }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                      />
-                    )}
+          {colors.map(([color, hex]) => {
+            // If only 1 warehouse, show simple row (like before)
+            if (warehouses.length <= 1) {
+              return (
+                <tr key={color as string} className="border-t hover:bg-muted/10 transition-colors">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: hex as string }} />
+                      <span className="text-xs font-medium">{translateColor(color as string, locale)}</span>
+                    </div>
                   </td>
-                )
-              })}
-            </tr>
-          ))}
+                  {sizes.map((size) => {
+                    const v = getVariant(color as string, size)
+                    const inv = v?.inventory?.[0]
+                    const stock = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : 0
+                    return (
+                      <td key={size} className="px-1 py-1.5 text-center">
+                        {inv ? (
+                          <input type="number" min={0} defaultValue={inv.quantityOnHand}
+                            className={`w-14 h-8 text-center text-xs font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 ${stock <= 0 ? 'text-red-600 border-red-200' : stock <= 5 ? 'text-orange-600 border-orange-200' : 'text-green-600 border-muted'}`}
+                            onBlur={(e) => { const val = parseInt(e.target.value); if (!isNaN(val) && val !== inv.quantityOnHand) adjustMut.mutate({ id: inv.id, qty: val }) }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                          />
+                        ) : (
+                          <input type="number" min={0} placeholder="—"
+                            className="w-14 h-8 text-center text-xs rounded-lg border border-dashed border-muted-foreground/20 bg-transparent text-muted-foreground/40 placeholder:text-muted-foreground/20 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:text-foreground focus:font-bold"
+                            onBlur={(e) => { const val = parseInt(e.target.value); if (!isNaN(val) && val > 0 && productId) { createMut.mutate({ color: color as string, colorHex: hex as string, size, stock: val }); e.target.value = '' } }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                          />
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            }
+
+            // Multiple warehouses — show color header + one row per warehouse
+            return (
+              <tbody key={color as string}>
+                {/* Color header row */}
+                <tr className="border-t bg-muted/10">
+                  <td colSpan={sizes.length + 1} className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: hex as string }} />
+                      <span className="text-xs font-semibold">{translateColor(color as string, locale)}</span>
+                      {/* Total available per size */}
+                      <span className="text-[10px] text-muted-foreground ltr:ml-auto rtl:mr-auto">
+                        {locale === 'ar' ? 'الإجمالي' : 'Gesamt'}: {sizes.map(size => {
+                          const v = getVariant(color as string, size)
+                          return (v?.inventory ?? []).reduce((s: number, inv: any) => s + Math.max(0, inv.quantityOnHand - (inv.quantityReserved ?? 0)), 0)
+                        }).reduce((a: number, b: number) => a + b, 0)}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+                {/* One row per warehouse */}
+                {warehouses.map(([whId, whName]) => (
+                  <tr key={`${color}-${whId}`} className="border-t border-dashed hover:bg-muted/5 transition-colors">
+                    <td className="px-3 py-1.5 ltr:pl-9 rtl:pr-9">
+                      <span className="text-[11px] text-muted-foreground">{whName}</span>
+                    </td>
+                    {sizes.map((size) => {
+                      const v = getVariant(color as string, size)
+                      const inv = getInvForWarehouse(v, whId)
+                      const avail = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : 0
+                      return (
+                        <td key={size} className="px-1 py-1 text-center">
+                          {inv ? (
+                            <input type="number" min={0} defaultValue={inv.quantityOnHand}
+                              className={`w-14 h-7 text-center text-[11px] font-bold rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/30 ${avail <= 0 ? 'text-red-600 border-red-200' : avail <= 5 ? 'text-orange-600 border-orange-200' : 'text-green-600 border-muted'}`}
+                              onBlur={(e) => { const val = parseInt(e.target.value); if (!isNaN(val) && val !== inv.quantityOnHand) adjustMut.mutate({ id: inv.id, qty: val }) }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                            />
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/30">—</span>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            )
+          })}
         </tbody>
       </table>
     </div>
