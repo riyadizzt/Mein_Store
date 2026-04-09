@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { PrismaModule } from '../../prisma/prisma.module'
+// EmailModule not needed — VorkasseCron sends via Resend directly
 import { PaymentsController } from './payments.controller'
 import { PaymentsWebhookController } from './payments-webhook.controller'
 import { PaymentsService } from './payments.service'
@@ -9,6 +10,7 @@ import { KlarnaProvider } from './providers/klarna.provider'
 import { PayPalProvider } from './providers/paypal.provider'
 import { VorkasseProvider } from './providers/vorkasse.provider'
 import { SumUpProvider } from './providers/sumup.provider'
+import { VorkasseCron } from './vorkasse.cron'
 import { PAYMENT_PROVIDERS } from './payment-provider.interface'
 
 @Module({
@@ -22,6 +24,7 @@ import { PAYMENT_PROVIDERS } from './payment-provider.interface'
     PayPalProvider,
     VorkasseProvider,
     SumUpProvider,
+    VorkasseCron,
     {
       provide: PAYMENT_PROVIDERS,
       useFactory: (
