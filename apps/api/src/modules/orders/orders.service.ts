@@ -245,6 +245,11 @@ export class OrdersService {
             discountAmount = Math.min(Number(coupon.discountAmount), subtotal)
           }
 
+          // Free shipping coupon: set shipping to 0
+          if (coupon.freeShipping) {
+            shipping.cost = 0
+          }
+
           validatedCouponCode = coupon.code
         }
       }
