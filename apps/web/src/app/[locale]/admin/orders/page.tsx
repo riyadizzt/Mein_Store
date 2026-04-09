@@ -133,7 +133,7 @@ export default function AdminOrdersPage() {
               <div className="px-2 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
               <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.date')}</div>
               <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.status')}</div>
-              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-end">{t('orders.amount')}</div>
+              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{t('orders.amount')}</div>
               <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.payment')}</div>
             </div>
             {isLoading ? (
@@ -171,7 +171,7 @@ export default function AdminOrdersPage() {
                     <div className="px-4 py-3.5">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
                     </div>
-                    <div className="px-4 py-3.5 text-end text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
+                    <div className="px-4 py-3.5 text-center text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
                     <div className="px-4 py-3.5 text-xs text-muted-foreground">{order.payment?.provider ?? '—'}</div>
                   </div>
                 )

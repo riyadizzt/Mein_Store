@@ -304,7 +304,7 @@ export default function AdminReturnsPage() {
                 <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Kunde', 'Customer', 'العميل')}</div>
                 <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Grund', 'Reason', 'السبب')}</div>
                 <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Status', 'Status', 'الحالة')}</div>
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-end">{t3('Betrag', 'Amount', 'المبلغ')}</div>
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{t3('Betrag', 'Amount', 'المبلغ')}</div>
                 <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Datum', 'Date', 'التاريخ')}</div>
               </div>
               {isLoading ? (
@@ -343,7 +343,7 @@ export default function AdminReturnsPage() {
                         {statusLabel(ret.status)}
                       </span>
                     </div>
-                    <div className="px-4 py-3.5 text-end text-sm font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</div>
+                    <div className="px-4 py-3.5 text-center text-sm font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</div>
                     <div className="px-4 py-3.5 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
                   </div>
                 ))
