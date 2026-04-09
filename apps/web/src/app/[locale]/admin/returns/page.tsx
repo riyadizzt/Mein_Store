@@ -5,7 +5,6 @@ import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { useConfirm } from '@/components/ui/confirm-modal'
 import { Button } from '@/components/ui/button'
@@ -297,62 +296,60 @@ export default function AdminReturnsPage() {
       <div className="flex gap-6 items-start">
         {/* Table */}
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead>{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</TableHead>
-                <TableHead>{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</TableHead>
-                <TableHead>{t3('Kunde', 'Customer', 'العميل')}</TableHead>
-                <TableHead>{t3('Grund', 'Reason', 'السبب')}</TableHead>
-                <TableHead>{t3('Status', 'Status', 'الحالة')}</TableHead>
-                <TableHead className="text-end">{t3('Betrag', 'Amount', 'المبلغ')}</TableHead>
-                <TableHead>{t3('Datum', 'Date', 'التاريخ')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <div className="overflow-x-auto">
+            <div className="min-w-[900px]">
+              <div className="grid grid-cols-[1fr_1.2fr_1.4fr_90px_100px_90px_100px] bg-muted/50 border-b">
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</div>
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</div>
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Kunde', 'Customer', 'العميل')}</div>
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Grund', 'Reason', 'السبب')}</div>
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Status', 'Status', 'الحالة')}</div>
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-end">{t3('Betrag', 'Amount', 'المبلغ')}</div>
+                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Datum', 'Date', 'التاريخ')}</div>
+              </div>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
+                  <div key={i} className="grid grid-cols-[1fr_1.2fr_1.4fr_90px_100px_90px_100px] border-b">
                     {Array.from({ length: 7 }).map((_, j) => (
-                      <TableCell key={j}><div className="h-4 bg-muted rounded animate-pulse" /></TableCell>
+                      <div key={j} className="px-4 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></div>
                     ))}
-                  </TableRow>
+                  </div>
                 ))
               ) : returns.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</TableCell></TableRow>
+                <div className="px-4 py-12 text-center text-muted-foreground">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</div>
               ) : (
                 returns.map((ret: any) => (
-                  <TableRow
+                  <div
                     key={ret.id}
-                    className={`cursor-pointer ${selectedId === ret.id ? 'bg-primary/5' : ''}`}
+                    className={`grid grid-cols-[1fr_1.2fr_1.4fr_90px_100px_90px_100px] border-b cursor-pointer transition-colors items-center ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                     onClick={() => openDetail(ret)}
                   >
-                    <TableCell className="whitespace-nowrap">
-                      <span className="font-mono font-medium text-[#d4a853]">{ret.returnNumber}</span>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <div className="px-4 py-3.5">
+                      <span className="font-mono text-sm font-medium text-[#d4a853]">{ret.returnNumber}</span>
+                    </div>
+                    <div className="px-4 py-3.5">
                       <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
+                    </div>
+                    <div className="px-4 py-3.5">
+                      <p className="text-sm font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
                       <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    </div>
+                    <div className="px-4 py-3.5">
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    </div>
+                    <div className="px-4 py-3.5">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
                         {statusLabel(ret.status)}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-end font-medium whitespace-nowrap">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">{formatDate(ret.createdAt, locale)}</TableCell>
-                  </TableRow>
+                    </div>
+                    <div className="px-4 py-3.5 text-end text-sm font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</div>
+                    <div className="px-4 py-3.5 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
+                  </div>
                 ))
               )}
-            </TableBody>
-          </Table>
+            </div>
+          </div>
           {result?.meta?.total != null && (
             <div className="px-4 py-3 border-t text-xs text-muted-foreground">
               {result.meta.total} {t3('Retouren insgesamt', 'returns total', '\u0645\u0631\u062a\u062c\u0639 \u0625\u062c\u0645\u0627\u0644\u064a')}

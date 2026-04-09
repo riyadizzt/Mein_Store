@@ -9,7 +9,6 @@ import { api } from '@/lib/api'
 import { formatDate, formatCurrency } from '@/lib/locale-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { ChannelIcon, CHANNEL_CONFIG } from '@/components/admin/channel-icon'
 
@@ -126,62 +125,60 @@ export default function AdminOrdersPage() {
 
       {/* Table */}
       <div className="bg-background border rounded-xl overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead>{t('orders.order')}</TableHead>
-              <TableHead>{t('orders.customer')}</TableHead>
-              <TableHead className="text-center">{locale === 'ar' ? 'القناة' : locale === 'en' ? 'Channel' : 'Kanal'}</TableHead>
-              <TableHead>{t('orders.date')}</TableHead>
-              <TableHead>{t('orders.status')}</TableHead>
-              <TableHead className="text-end">{t('orders.amount')}</TableHead>
-              <TableHead>{t('orders.payment')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <div className="overflow-x-auto">
+          <div className="min-w-[900px]">
+            <div className="grid grid-cols-[1fr_1.4fr_50px_100px_100px_100px_80px] bg-muted/50 border-b">
+              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.order')}</div>
+              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.customer')}</div>
+              <div className="px-2 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
+              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.date')}</div>
+              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.status')}</div>
+              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-end">{t('orders.amount')}</div>
+              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.payment')}</div>
+            </div>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
+                <div key={i} className="grid grid-cols-[1fr_1.4fr_50px_100px_100px_100px_80px] border-b">
                   {Array.from({ length: 7 }).map((_, j) => (
-                    <TableCell key={j}><div className="h-4 bg-muted rounded animate-pulse" /></TableCell>
+                    <div key={j} className="px-4 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></div>
                   ))}
-                </TableRow>
+                </div>
               ))
             ) : (orders ?? []).length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">{t('orders.noOrders')}</TableCell></TableRow>
+              <div className="px-4 py-12 text-center text-muted-foreground">{t('orders.noOrders')}</div>
             ) : (
               (orders ?? []).map((order: any) => {
                 const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
                 return (
-                  <TableRow key={order.id}>
-                    <TableCell className="whitespace-nowrap">
-                      <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono font-medium text-primary hover:underline">
+                  <div key={order.id} className="grid grid-cols-[1fr_1.4fr_50px_100px_100px_100px_80px] border-b hover:bg-muted/30 transition-colors items-center">
+                    <div className="px-4 py-3.5">
+                      <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono text-sm font-medium text-primary hover:underline">
                         {order.orderNumber}
                       </Link>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium">
+                    </div>
+                    <div className="px-4 py-3.5">
+                      <p className="text-sm font-medium">
                         {getCustomerName(order)}
                         {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground"> (Gast)</span>}
-                        {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg}`}>{badge.label}</span> : null })()}
+                        {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg} ltr:ml-1.5 rtl:mr-1.5`}>{badge.label}</span> : null })()}
                       </p>
                       <p className="text-xs text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex justify-center"><ChannelIcon channel={order.channel ?? 'website'} size={18} /></div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">{formatDate(order.createdAt, locale)}</TableCell>
-                    <TableCell>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusColor}`}>{t(`status.${order.status}`)}</span>
-                    </TableCell>
-                    <TableCell className="text-end font-medium whitespace-nowrap">{formatCurrency(Number(order.totalAmount), locale)}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{order.payment?.provider ?? '—'}</TableCell>
-                  </TableRow>
+                    </div>
+                    <div className="px-2 py-3.5 flex justify-center">
+                      <ChannelIcon channel={order.channel ?? 'website'} size={18} />
+                    </div>
+                    <div className="px-4 py-3.5 text-sm text-muted-foreground">{formatDate(order.createdAt, locale)}</div>
+                    <div className="px-4 py-3.5">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
+                    </div>
+                    <div className="px-4 py-3.5 text-end text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
+                    <div className="px-4 py-3.5 text-xs text-muted-foreground">{order.payment?.provider ?? '—'}</div>
+                  </div>
                 )
               })
             )}
-          </TableBody>
-        </Table>
+          </div>
+        </div>
       </div>
     </div>
   )
