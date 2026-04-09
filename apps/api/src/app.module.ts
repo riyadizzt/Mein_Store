@@ -22,6 +22,7 @@ import { FeedsModule } from './modules/feeds/feeds.module'
 import { AiModule } from './modules/ai/ai.module'
 import { MaintenanceModule } from './modules/maintenance/maintenance.module'
 import { SizingModule } from './modules/sizing/sizing.module'
+import { ReviewsModule } from './modules/reviews/reviews.module'
 import { EmailModule } from './modules/email/email.module'
 import { StorageModule } from './common/services/storage.module'
 
@@ -81,6 +82,7 @@ import { StorageModule } from './common/services/storage.module'
     AiModule,
     MaintenanceModule,
     SizingModule,
+    ReviewsModule,
     EmailModule,
   ],
 })

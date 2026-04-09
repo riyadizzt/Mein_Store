@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
   Truck, Heart, MessageCircle, Minus, Plus,
-  ShoppingBag, Check, Star, Copy,
+  ShoppingBag, Check, Copy,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
@@ -25,6 +25,7 @@ import { PremiumTrustBar } from '@/components/product/premium/premium-trust-bar'
 import { PremiumRecentlyViewed, saveRecentlyViewed } from '@/components/product/premium/premium-recently-viewed'
 import { ProductCard } from '@/components/product/product-card'
 import { SizeGuideModal } from '@/components/product/size-guide-modal'
+import { ProductReviews } from '@/components/product/product-reviews'
 
 // ────────────────────────────────────────────────────
 // Types
@@ -623,20 +624,8 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       {/* ═══════════════ RECENTLY VIEWED ═══════════════ */}
       <PremiumRecentlyViewed currentProductId={product.id} locale={locale} />
 
-      {/* ═══════════════ REVIEWS PLACEHOLDER ═══════════════ */}
-      <section className="py-16 border-t border-[#e5e5e5]">
-        <h2 className={`text-[#0f1419]/50 mb-8 ${isRTL ? 'text-lg font-semibold' : 'text-base tracking-[0.08em] uppercase'}`}>
-          {t('reviews')}
-        </h2>
-        <div className="flex items-center gap-1 mb-4">
-          {[1, 2, 3, 4, 5].map(i => (
-            <Star key={i} className="h-4 w-4 text-[#e5e5e5]" strokeWidth={1.5} />
-          ))}
-        </div>
-        <p className="text-[13px] font-light text-[#0f1419]/30 italic">
-          {t('noReviews')}
-        </p>
-      </section>
+      {/* ═══════════════ REVIEWS ═══════════════ */}
+      <ProductReviews productId={product.id} />
 
       {/* ═══════════════ MOBILE STICKY BAR ═══════════════ */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#e5e5e5] px-4 py-3 lg:hidden safe-bottom">
