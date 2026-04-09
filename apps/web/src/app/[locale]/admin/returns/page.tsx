@@ -298,7 +298,7 @@ export default function AdminReturnsPage() {
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[900px]">
-              <div className="grid grid-cols-7 bg-muted/50 border-b">
+              <div className="grid grid-cols-7 gap-x-2 bg-muted/50 border-b">
                 <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</div>
                 <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</div>
                 <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Kunde', 'Customer', 'العميل')}</div>
@@ -309,7 +309,7 @@ export default function AdminReturnsPage() {
               </div>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="grid grid-cols-7 border-b">
+                  <div key={i} className="grid grid-cols-7 gap-x-2 border-b">
                     {Array.from({ length: 7 }).map((_, j) => (
                       <div key={j} className="px-4 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></div>
                     ))}
@@ -321,7 +321,7 @@ export default function AdminReturnsPage() {
                 returns.map((ret: any) => (
                   <div
                     key={ret.id}
-                    className={`grid grid-cols-7 border-b cursor-pointer transition-colors items-center ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
+                    className={`grid grid-cols-7 gap-x-2 border-b cursor-pointer transition-colors items-center ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                     onClick={() => openDetail(ret)}
                   >
                     <div className="px-4 py-3.5">
