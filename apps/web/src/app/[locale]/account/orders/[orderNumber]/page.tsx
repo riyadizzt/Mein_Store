@@ -117,17 +117,34 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
         </div>
       )}
 
-      {/* Tracking */}
-      {order.shipment?.trackingNumber && (
-        <div className="border rounded-lg p-4 mb-6 flex items-center gap-3">
-          <Truck className="h-5 w-5 text-primary" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">Tracking: {order.shipment.trackingNumber}</p>
+      {/* Tracking / Shipping Status */}
+      {(order.status === 'shipped' || order.status === 'delivered' || order.shipment?.trackingNumber) && (
+        <div className="border rounded-xl p-5 mb-6">
+          <div className="flex items-center gap-3 mb-2">
+            <Truck className="h-5 w-5 text-[#d4a853]" />
+            <p className="text-base font-semibold">
+              {order.status === 'delivered'
+                ? (locale === 'ar' ? 'تم التسليم' : locale === 'en' ? 'Delivered' : 'Zugestellt')
+                : (locale === 'ar' ? 'تم الشحن' : locale === 'en' ? 'Shipped' : 'Versendet')}
+            </p>
           </div>
-          {order.shipment.trackingUrl && (
-            <a href={order.shipment.trackingUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-sm flex items-center gap-1 hover:underline">
-              {t('tracking')} <ExternalLink className="h-3 w-3" />
-            </a>
+          {order.shipment?.trackingNumber ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{locale === 'ar' ? 'رقم التتبع' : 'Sendungsnummer'}</p>
+                <p className="text-base font-mono font-medium mt-0.5" dir="ltr">{order.shipment.trackingNumber}</p>
+                {order.shipment.carrier && <p className="text-sm text-muted-foreground mt-0.5">{order.shipment.carrier}</p>}
+              </div>
+              {order.shipment.trackingUrl && (
+                <a href={order.shipment.trackingUrl} target="_blank" rel="noopener noreferrer" className="text-[#d4a853] text-sm flex items-center gap-1 hover:underline">
+                  {t('tracking')} <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {locale === 'ar' ? 'تم شحن طلبك. ستتلقى رقم التتبع قريباً عبر البريد الإلكتروني.' : locale === 'en' ? 'Your order has been shipped. You will receive the tracking number soon by email.' : 'Deine Bestellung wurde versendet. Du erhältst die Sendungsnummer in Kürze per E-Mail.'}
+            </p>
           )}
         </div>
       )}
