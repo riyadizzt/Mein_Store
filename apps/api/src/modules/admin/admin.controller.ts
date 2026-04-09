@@ -1331,6 +1331,12 @@ export class AdminController {
       posthog_host: db.posthog_host ?? 'https://eu.i.posthog.com',
       // Cookie Consent
       cookie_banner_enabled: db.cookie_banner_enabled ?? 'true',
+      // Notifications
+      notif_email_new_order: db.notif_email_new_order ?? 'true',
+      notif_email_low_stock: db.notif_email_low_stock ?? 'true',
+      notif_sound_enabled: db.notif_sound_enabled ?? 'true',
+      notif_daily_summary: db.notif_daily_summary ?? 'false',
+      notif_daily_summary_email: db.notif_daily_summary_email ?? '',
     }
   }
 

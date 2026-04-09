@@ -151,13 +151,11 @@ export default function AdminSettingsPage() {
             {locale === 'ar' ? 'الإشعارات' : 'Benachrichtigungen'}
           </h2>
           <div className="space-y-3">
+            <Field label={locale === 'ar' ? 'البريد الإلكتروني للإشعارات' : 'E-Mail für Benachrichtigungen'} value={form.notif_daily_summary_email || ''} onChange={(v) => updateField('notif_daily_summary_email', v)} placeholder="admin@malak-bekleidung.com" />
             <Toggle label={locale === 'ar' ? 'إشعار بريدي عند طلب جديد' : 'E-Mail bei neuer Bestellung'} enabled={form.notif_email_new_order !== 'false'} onToggle={() => updateField('notif_email_new_order', form.notif_email_new_order === 'false' ? 'true' : 'false')} />
             <Toggle label={locale === 'ar' ? 'إشعار بريدي عند نقص المخزون' : 'E-Mail bei Mindestbestand'} enabled={form.notif_email_low_stock !== 'false'} onToggle={() => updateField('notif_email_low_stock', form.notif_email_low_stock === 'false' ? 'true' : 'false')} />
             <Toggle label={locale === 'ar' ? 'صوت عند طلب جديد' : 'Sound bei neuer Bestellung'} enabled={form.notif_sound_enabled !== 'false'} onToggle={() => updateField('notif_sound_enabled', form.notif_sound_enabled === 'false' ? 'true' : 'false')} />
             <Toggle label={locale === 'ar' ? 'ملخص يومي بالبريد (8:00 صباحاً)' : 'Tägliche Zusammenfassung per E-Mail (08:00)'} enabled={form.notif_daily_summary === 'true'} onToggle={() => updateField('notif_daily_summary', form.notif_daily_summary === 'true' ? 'false' : 'true')} />
-            {form.notif_daily_summary === 'true' && (
-              <Field label={locale === 'ar' ? 'بريد الملخص اليومي' : 'E-Mail für Tagesbericht'} value={form.notif_daily_summary_email || ''} onChange={(v) => updateField('notif_daily_summary_email', v)} />
-            )}
           </div>
         </div>
 
