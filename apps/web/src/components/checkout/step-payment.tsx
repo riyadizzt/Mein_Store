@@ -67,6 +67,8 @@ function StepPaymentInner() {
 
   const klarnaEnabled = !!shopSettings?.klarnaEnabled
   const [vorkasseData, setVorkasseData] = useState<any>(null)
+  const [sumupEnabled, setSumupEnabled] = useState(false)
+  const [sumupLoaded, setSumupLoaded] = useState(false)
 
   // Fetch available payment methods
   useEffect(() => {
@@ -74,17 +76,30 @@ function StepPaymentInner() {
       if (data?.vorkasse && data?.vorkasseBankDetails) {
         setVorkasseData(data.vorkasseBankDetails)
       }
+      if (data?.sumup) setSumupEnabled(true)
     }).catch(() => {})
   }, [])
 
+  // Load SumUp SDK script
+  useEffect(() => {
+    if (!sumupEnabled || sumupLoaded) return
+    if (document.getElementById('sumup-sdk')) { setSumupLoaded(true); return }
+    const script = document.createElement('script')
+    script.id = 'sumup-sdk'
+    script.src = 'https://gateway.sumup.com/gateway/ecom/card/v2/sdk.js'
+    script.async = true
+    script.onload = () => setSumupLoaded(true)
+    document.head.appendChild(script)
+  }, [sumupEnabled, sumupLoaded])
+
   const vorkasseEnabled = !!vorkasseData?.enabled
-  const [activeTab, setActiveTab] = useState<'card' | 'klarna' | 'vorkasse'>('card')
+  const [activeTab, setActiveTab] = useState<'card' | 'klarna' | 'vorkasse' | 'sumup'>('card')
 
   const handlePlaceOrder = useCallback(async () => {
     if (!termsAccepted || isProcessing) return
 
-    // Vorkasse doesn't need Stripe
-    if (activeTab !== 'vorkasse') {
+    // Vorkasse and SumUp don't need Stripe
+    if (activeTab === 'card' || activeTab === 'klarna') {
       if (!stripe || !elements) return
     }
 
@@ -96,7 +111,7 @@ function StepPaymentInner() {
 
     try {
       const idempotencyKey = generateIdempotencyKey()
-      const method = activeTab === 'vorkasse' ? 'vorkasse' : activeTab === 'klarna' ? 'klarna_pay_now' : 'stripe_card'
+      const method = activeTab === 'vorkasse' ? 'vorkasse' : activeTab === 'sumup' ? 'sumup' : activeTab === 'klarna' ? 'klarna_pay_now' : 'stripe_card'
       setPaymentMethod(method as any)
 
       // 1. Create order — mit vollständiger Adresse
@@ -157,6 +172,42 @@ function StepPaymentInner() {
           }))
         } catch {}
         window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
+        return
+      }
+
+      // SumUp: Mount card widget with checkout_id
+      if (activeTab === 'sumup' && payment.clientSecret && sumupLoaded) {
+        const sumupLocale = locale === 'ar' ? 'en-GB' : locale === 'en' ? 'en-GB' : 'de-DE'
+        const SumUpCard = (window as any).SumUpCard
+        if (SumUpCard) {
+          SumUpCard.mount({
+            id: 'sumup-card',
+            checkoutId: payment.clientSecret,
+            locale: sumupLocale,
+            currency: 'EUR',
+            onResponse: (type: string, body: any) => {
+              if (type === 'success') {
+                // Confirm payment on backend
+                fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/confirm`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                }).catch(() => {})
+                try {
+                  sessionStorage.setItem('malak-last-order', JSON.stringify({
+                    orderNumber: order.orderNumber, orderId: order.id,
+                    totalAmount: order.totalAmount, subtotal: order.subtotal,
+                    shippingCost: order.shippingCost, taxAmount: order.taxAmount,
+                    guestEmail: guestEmail || '',
+                  }))
+                } catch {}
+                window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
+              } else if (type === 'fail' || type === 'error') {
+                setError(body?.message ?? (locale === 'ar' ? 'فشل الدفع' : 'Zahlung fehlgeschlagen'))
+                setProcessing(false)
+              }
+            },
+          })
+        }
+        setProcessing(false)
         return
       }
 
@@ -248,7 +299,7 @@ function StepPaymentInner() {
           )}
 
           {/* Payment method tabs */}
-          {(klarnaEnabled || vorkasseEnabled) && (
+          {(klarnaEnabled || vorkasseEnabled || sumupEnabled) && (
             <div className="flex border rounded-xl overflow-hidden" role="tablist">
               <button
                 role="tab"
@@ -284,6 +335,19 @@ function StepPaymentInner() {
                 >
                   <Building2 className="h-4 w-4 mx-auto mb-1" />
                   {locale === 'ar' ? 'تحويل بنكي' : locale === 'en' ? 'Bank Transfer' : 'Vorkasse'}
+                </button>
+              )}
+              {sumupEnabled && (
+                <button
+                  role="tab"
+                  aria-selected={activeTab === 'sumup'}
+                  onClick={() => setActiveTab('sumup')}
+                  className={`flex-1 py-3.5 px-4 text-sm font-medium border-s transition-all duration-200 ${
+                    activeTab === 'sumup' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
+                  }`}
+                >
+                  <CreditCard className="h-4 w-4 mx-auto mb-1" />
+                  SumUp
                 </button>
               )}
             </div>
@@ -340,6 +404,19 @@ function StepPaymentInner() {
             </div>
           )}
 
+          {/* SumUp card widget */}
+          {activeTab === 'sumup' && (
+            <div className="space-y-3">
+              <div id="sumup-card" className="min-h-[200px] rounded-xl border bg-background p-1" />
+              {!sumupLoaded && (
+                <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  {locale === 'ar' ? 'جاري تحميل نموذج الدفع...' : 'Zahlungsformular wird geladen...'}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Legal */}
           <label className="flex items-start gap-2.5 text-sm cursor-pointer">
             <input
@@ -362,7 +439,7 @@ function StepPaymentInner() {
           {/* Place Order */}
           <Button
             onClick={handlePlaceOrder}
-            disabled={!termsAccepted || isProcessing || (activeTab !== 'vorkasse' && !stripe) || stockError}
+            disabled={!termsAccepted || isProcessing || (activeTab === 'card' && !stripe) || (activeTab === 'sumup' && !sumupLoaded) || stockError}
             className="w-full h-14 text-base gap-2 bg-accent text-accent-foreground rounded-xl font-semibold hover:bg-accent/90 btn-press"
             size="lg"
           >
