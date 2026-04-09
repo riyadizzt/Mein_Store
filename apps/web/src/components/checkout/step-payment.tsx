@@ -282,10 +282,16 @@ function StepPaymentInner() {
           await goToConfirmation()
           return
         }
+
+        // Any other status (processing, canceled, etc.) — show error, don't confirm
+        setError(locale === 'ar' ? 'لم يتم إتمام الدفع. يرجى المحاولة مرة أخرى.' : 'Zahlung nicht abgeschlossen. Bitte erneut versuchen.')
+        setProcessing(false)
+        return
       }
 
-      // Fallback success
-      await goToConfirmation()
+      // Klarna redirect already handled above — if we reach here, something is wrong
+      setError(locale === 'ar' ? 'حدث خطأ في الدفع' : 'Zahlungsfehler')
+      setProcessing(false)
     } catch (err: any) {
       console.error('Checkout error:', err?.response?.data ?? err?.message)
       const status = err?.response?.status
