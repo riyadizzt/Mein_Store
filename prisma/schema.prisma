@@ -283,6 +283,7 @@ model User {
   activities          CustomerActivity[]
   abandonedCarts      AbandonedCart[]
   notifications       Notification[]  @relation("UserNotifications")
+  measurements        CustomerMeasurement?
 
   @@map("users")
 }
@@ -408,6 +409,7 @@ model Category {
   products     Product[]
   coupons      Coupon[]
   promotions   Promotion[]
+  sizeCharts   SizeChart[]
 
   @@map("categories")
 }
@@ -1337,6 +1339,7 @@ model Supplier {
 
   deliveries SupplierDelivery[]
   payments   SupplierPayment[]
+  sizeCharts SizeChart[]
 
   @@map("suppliers")
 }
@@ -1543,4 +1546,86 @@ model Campaign {
   @@index([status])
   @@index([startAt, endAt])
   @@map("campaigns")
+}
+
+// ─────────────────────────────────────────────────────────────
+// SMART SIZING SYSTEM
+// ─────────────────────────────────────────────────────────────
+
+enum SizeChartType {
+  tops        // Brust, Taille, Länge
+  bottoms     // Taille, Hüfte, Innenbeinlänge
+  dresses     // Brust, Taille, Hüfte, Länge
+  shoes       // Fußlänge
+  kids        // Körpergröße
+  accessories // Einheitsgröße
+}
+
+model SizeChart {
+  id            String        @id @default(uuid())
+  name          String        // z.B. "Özdemir Textil — Damenkleider"
+  supplierId    String?       @map("supplier_id")
+  categoryId    String?       @map("category_id")
+  chartType     SizeChartType @default(tops) @map("chart_type")
+  fitNote       String?       @map("fit_note")     // "Fällt klein aus", "Normal geschnitten"
+  fitNoteAr     String?       @map("fit_note_ar")
+  fitNoteEn     String?       @map("fit_note_en")
+  isDefault     Boolean       @default(false) @map("is_default")  // Default for category if no supplier match
+  isActive      Boolean       @default(true) @map("is_active")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  entries       SizeChartEntry[]
+  supplier      Supplier?     @relation(fields: [supplierId], references: [id])
+  category      Category?     @relation(fields: [categoryId], references: [id])
+
+  @@index([supplierId])
+  @@index([categoryId])
+  @@index([chartType, isDefault])
+  @@map("size_charts")
+}
+
+model SizeChartEntry {
+  id            String    @id @default(uuid())
+  sizeChartId   String    @map("size_chart_id")
+  size          String    // S, M, L, XL, 38, 39, 40, 110, 116...
+  sortOrder     Int       @default(0) @map("sort_order")
+  // Measurements in cm
+  bust          Decimal?  @db.Decimal(5, 1)  // Brust
+  waist         Decimal?  @db.Decimal(5, 1)  // Taille
+  hip           Decimal?  @db.Decimal(5, 1)  // Hüfte
+  length        Decimal?  @db.Decimal(5, 1)  // Gesamtlänge
+  inseam        Decimal?  @db.Decimal(5, 1)  // Innenbeinlänge
+  shoulder      Decimal?  @db.Decimal(5, 1)  // Schulterbreite
+  sleeve        Decimal?  @db.Decimal(5, 1)  // Ärmellänge
+  footLength    Decimal?  @map("foot_length") @db.Decimal(5, 1)  // Fußlänge
+  bodyHeight    Decimal?  @map("body_height") @db.Decimal(5, 1)  // Körpergröße (Kinder)
+  euSize        String?   @map("eu_size")     // EU-Größe Mapping (z.B. "38")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  sizeChart     SizeChart @relation(fields: [sizeChartId], references: [id], onDelete: Cascade)
+
+  @@index([sizeChartId, sortOrder])
+  @@map("size_chart_entries")
+}
+
+model CustomerMeasurement {
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  heightCm      Decimal?  @map("height_cm") @db.Decimal(5, 1)
+  weightKg      Decimal?  @map("weight_kg") @db.Decimal(5, 1)
+  usualSizeTop  String?   @map("usual_size_top")     // S, M, L, XL
+  usualSizeBottom String? @map("usual_size_bottom")  // 38, 40, 42
+  usualShoeSize String?   @map("usual_shoe_size")    // 42, 43
+  bodyType      String?   @map("body_type")          // slim, regular, athletic, plus
+  bustCm        Decimal?  @map("bust_cm") @db.Decimal(5, 1)
+  waistCm       Decimal?  @map("waist_cm") @db.Decimal(5, 1)
+  hipCm         Decimal?  @map("hip_cm") @db.Decimal(5, 1)
+  footLengthCm  Decimal?  @map("foot_length_cm") @db.Decimal(5, 1)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("customer_measurements")
 }
