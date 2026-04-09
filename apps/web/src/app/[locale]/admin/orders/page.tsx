@@ -127,7 +127,7 @@ export default function AdminOrdersPage() {
       <div className="bg-background border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <div className="min-w-[900px]">
-            <div className="grid grid-cols-[1fr_1.4fr_50px_100px_100px_100px_80px] bg-muted/50 border-b">
+            <div className="grid grid-cols-7 bg-muted/50 border-b">
               <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.order')}</div>
               <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.customer')}</div>
               <div className="px-2 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
@@ -138,7 +138,7 @@ export default function AdminOrdersPage() {
             </div>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1.4fr_50px_100px_100px_100px_80px] border-b">
+                <div key={i} className="grid grid-cols-7 border-b">
                   {Array.from({ length: 7 }).map((_, j) => (
                     <div key={j} className="px-4 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></div>
                   ))}
@@ -150,7 +150,7 @@ export default function AdminOrdersPage() {
               (orders ?? []).map((order: any) => {
                 const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
                 return (
-                  <div key={order.id} className="grid grid-cols-[1fr_1.4fr_50px_100px_100px_100px_80px] border-b hover:bg-muted/30 transition-colors items-center">
+                  <div key={order.id} className="grid grid-cols-7 border-b hover:bg-muted/30 transition-colors items-center">
                     <div className="px-4 py-3.5">
                       <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono text-sm font-medium text-primary hover:underline">
                         {order.orderNumber}
