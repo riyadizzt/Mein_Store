@@ -60,7 +60,7 @@ export class NotificationService {
     return notification
   }
 
-  private async sendAdminEmail(_type: string, title: string, body: string) {
+  private async sendAdminEmail(type: string, title: string, body: string) {
     // Check if email notifications are enabled
     const emailEnabled = await this.prisma.shopSetting.findUnique({
       where: { key: 'notif_email_new_order' },
@@ -83,18 +83,41 @@ export class NotificationService {
       const resend = new Resend(process.env.RESEND_API_KEY)
       const from = process.env.EMAIL_FROM_NOREPLY || 'noreply@malak-bekleidung.com'
 
+      // Arabic translations for email
+      const arTitles: Record<string, string> = {
+        new_order: 'طلب جديد',
+        order_confirmed: 'تأكيد الطلب',
+        order_cancelled: 'إلغاء الطلب',
+        order_delivered: 'تم التسليم',
+        return_submitted: 'طلب إرجاع جديد',
+        return_approved: 'تمت الموافقة على الإرجاع',
+        return_rejected: 'تم رفض الإرجاع',
+        return_received: 'تم استلام الإرجاع',
+        return_refunded: 'تم الاسترداد',
+        payment_failed: 'فشل الدفع',
+      }
+      const arTitle = arTitles[type] ? `${arTitles[type]} — ${title.replace(/^[^#]*#/, '#')}` : title
+      // Arabic body: replace German words
+      const arBody = body
+        .replace(/von /g, 'من ')
+        .replace(/Bestellung /g, 'طلب ')
+        .replace(/ automatisch storniert/g, ' تم إلغاؤه تلقائياً')
+
       await resend.emails.send({
         from,
         to: adminEmail,
-        subject: `Malak Admin: ${title}`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        subject: `ملاك — ${arTitle}`,
+        html: `<div style="font-family:'Cairo',Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;direction:rtl;text-align:right">
           <div style="background:#1a1a2e;padding:20px;border-radius:12px;text-align:center;margin-bottom:20px">
             <h1 style="color:#d4a853;font-size:20px;letter-spacing:4px;margin:0">MALAK</h1>
+            <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:6px 0 0">إشعار إداري</p>
           </div>
-          <h2 style="color:#0f1419;font-size:16px;margin:0 0 8px">${title}</h2>
-          <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 16px">${body}</p>
-          <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin" style="display:inline-block;background:#d4a853;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px">Dashboard öffnen</a>
-          <p style="color:#999;font-size:11px;margin-top:24px">Malak Bekleidung — Admin-Benachrichtigung</p>
+          <h2 style="color:#0f1419;font-size:18px;margin:0 0 10px">${arTitle}</h2>
+          <p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 20px">${arBody}</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/ar/admin" style="display:inline-block;background:#d4a853;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:bold">فتح لوحة التحكم</a>
+          </div>
+          <p style="color:#999;font-size:11px;margin-top:24px;text-align:center">ملاك للملابس — إشعارات إدارية</p>
         </div>`,
       })
 
