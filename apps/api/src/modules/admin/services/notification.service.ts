@@ -46,11 +46,62 @@ export class NotificationService {
   }
 
   async createForAllAdmins(data: Omit<CreateNotificationData, 'userId'>) {
-    return this.create({
+    const notification = await this.create({
       ...data,
       userId: undefined,
       channel: data.channel ?? 'admin',
     })
+
+    // Send email notification to admin
+    this.sendAdminEmail(data.type, data.title, data.body).catch((err) =>
+      this.logger.error(`Admin email failed: ${err.message}`),
+    )
+
+    return notification
+  }
+
+  private async sendAdminEmail(_type: string, title: string, body: string) {
+    // Check if email notifications are enabled
+    const emailEnabled = await this.prisma.shopSetting.findUnique({
+      where: { key: 'notif_email_new_order' },
+    })
+    if (emailEnabled?.value === 'false') return
+
+    // Get admin notification email
+    const emailSetting = await this.prisma.shopSetting.findUnique({
+      where: { key: 'notif_daily_summary_email' },
+    })
+    const adminEmail = emailSetting?.value?.trim()
+    if (!adminEmail) {
+      this.logger.warn('No admin email configured for notifications')
+      return
+    }
+
+    // Send directly via Resend (bypass template system)
+    try {
+      const { Resend } = await import('resend')
+      const resend = new Resend(process.env.RESEND_API_KEY)
+      const from = process.env.EMAIL_FROM_NOREPLY || 'noreply@malak-bekleidung.com'
+
+      await resend.emails.send({
+        from,
+        to: adminEmail,
+        subject: `Malak Admin: ${title}`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+          <div style="background:#1a1a2e;padding:20px;border-radius:12px;text-align:center;margin-bottom:20px">
+            <h1 style="color:#d4a853;font-size:20px;letter-spacing:4px;margin:0">MALAK</h1>
+          </div>
+          <h2 style="color:#0f1419;font-size:16px;margin:0 0 8px">${title}</h2>
+          <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 16px">${body}</p>
+          <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin" style="display:inline-block;background:#d4a853;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px">Dashboard öffnen</a>
+          <p style="color:#999;font-size:11px;margin-top:24px">Malak Bekleidung — Admin-Benachrichtigung</p>
+        </div>`,
+      })
+
+      this.logger.log(`Admin email sent to ${adminEmail}: ${title}`)
+    } catch (err: any) {
+      this.logger.error(`Resend email failed: ${err.message}`)
+    }
   }
 
   async findForAdmin(query: {
