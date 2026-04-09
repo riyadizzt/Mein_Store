@@ -181,35 +181,49 @@ function StepPaymentInner() {
       if (activeTab === 'sumup' && payment.clientSecret && sumupLoaded) {
         const sumupLocale = locale === 'ar' ? 'en-GB' : locale === 'en' ? 'en-GB' : 'de-DE'
         const SumUpCard = (window as any).SumUpCard
-        if (SumUpCard) {
-          SumUpCard.mount({
-            id: 'sumup-card',
-            checkoutId: payment.clientSecret,
-            locale: sumupLocale,
-            currency: 'EUR',
-            onResponse: (type: string, body: any) => {
-              if (type === 'success') {
-                // Confirm payment on backend
-                fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/confirm`, {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                }).catch(() => {})
-                try {
-                  sessionStorage.setItem('malak-last-order', JSON.stringify({
-                    orderNumber: order.orderNumber, orderId: order.id,
-                    totalAmount: order.totalAmount, subtotal: order.subtotal,
-                    shippingCost: order.shippingCost, taxAmount: order.taxAmount,
-                    guestEmail: guestEmail || '',
-                  }))
-                } catch {}
-                window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
-              } else if (type === 'fail' || type === 'error') {
-                setError(body?.message ?? (locale === 'ar' ? 'فشل الدفع' : 'Zahlung fehlgeschlagen'))
-                setProcessing(false)
-              }
-            },
-          })
+        if (!SumUpCard) {
+          setError(locale === 'ar' ? 'فشل تحميل نموذج الدفع' : 'Zahlungsformular konnte nicht geladen werden')
+          setProcessing(false)
+          return
         }
+
+        // Mount the widget — user enters card details and pays INSIDE the widget
+        // We do NOT navigate anywhere until onResponse('success') fires
+        SumUpCard.mount({
+          id: 'sumup-card',
+          checkoutId: payment.clientSecret,
+          locale: sumupLocale,
+          currency: 'EUR',
+          onResponse: (type: string, _body: any) => {
+            if (type === 'success') {
+              // Payment confirmed by SumUp — NOW confirm on backend and navigate
+              fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/confirm`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+              }).catch(() => {})
+              try {
+                sessionStorage.setItem('malak-last-order', JSON.stringify({
+                  orderNumber: order.orderNumber, orderId: order.id,
+                  totalAmount: order.totalAmount, subtotal: order.subtotal,
+                  shippingCost: order.shippingCost, taxAmount: order.taxAmount,
+                  guestEmail: guestEmail || '',
+                }))
+              } catch {}
+              window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
+            } else if (type === 'fail' || type === 'error') {
+              setError(
+                locale === 'ar' ? 'فشل الدفع. يرجى المحاولة مرة أخرى.'
+                : locale === 'en' ? 'Payment failed. Please try again.'
+                : 'Zahlung fehlgeschlagen. Bitte erneut versuchen.'
+              )
+              setProcessing(false)
+            }
+            // 'sent', 'auth-screen' → do nothing, widget handles it
+          },
+        })
+
+        // Widget is now mounted — stop processing spinner, user interacts with widget
         setProcessing(false)
+        // CRITICAL: return here — do NOT fall through to goToConfirmation()
         return
       }
 
