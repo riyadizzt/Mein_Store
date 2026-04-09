@@ -12,7 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone,
-  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame,
+  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -36,6 +36,7 @@ const NAV_GROUPS = [
       { key: 'products', labelKey: 'products', href: '/admin/products', icon: Package, permission: 'products.view' },
       { key: 'categories', labelKey: 'categories', href: '/admin/categories', icon: Tag, permission: 'categories.view' },
       { key: 'inventory', labelKey: 'inventory', href: '/admin/inventory', icon: Warehouse, badgeKey: 'lowStock', permission: 'inventory.view' },
+      { key: 'sizing', labelKey: 'sizing', href: '/admin/sizing', icon: Ruler, permission: 'products.view' },
     ],
   },
   {

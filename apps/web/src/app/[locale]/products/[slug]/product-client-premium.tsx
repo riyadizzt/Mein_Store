@@ -24,6 +24,7 @@ import { PremiumTabs } from '@/components/product/premium/premium-tabs'
 import { PremiumTrustBar } from '@/components/product/premium/premium-trust-bar'
 import { PremiumRecentlyViewed, saveRecentlyViewed } from '@/components/product/premium/premium-recently-viewed'
 import { ProductCard } from '@/components/product/product-card'
+import { SizeGuideModal } from '@/components/product/size-guide-modal'
 
 // ────────────────────────────────────────────────────
 // Types
@@ -176,6 +177,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   // ── Wishlist ──
   const wishlisted = isInWishlist(product.id)
   const [wishPop, setWishPop] = useState(false)
+  const [sizeGuideOpen, setSizeGuideOpen] = useState(false)
   const handleWishlist = () => {
     if (!isAuthenticated || wishPending) return
     setWishPop(true); toggleWishlist(product.id); setTimeout(() => setWishPop(false), 400)
@@ -445,7 +447,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                     <label className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                       {t('size')}{selectedSize ? ` — ${selectedSize}` : ''}
                     </label>
-                    <button className={`underline underline-offset-4 decoration-[#0f1419]/20 text-[#0f1419]/50 hover:text-[#0f1419]/70 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+                    <button onClick={() => setSizeGuideOpen(true)} className={`underline underline-offset-4 decoration-[#0f1419]/20 text-[#0f1419]/50 hover:text-[#0f1419]/70 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
                       {t('sizeGuide')}
                     </button>
                   </div>
@@ -651,6 +653,9 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
       {/* Bottom padding for mobile sticky bar */}
       <div className="h-20 lg:hidden" />
+
+      {/* Size Guide Modal */}
+      <SizeGuideModal productId={product.id} isOpen={sizeGuideOpen} onClose={() => setSizeGuideOpen(false)} />
     </div>
   )
 }

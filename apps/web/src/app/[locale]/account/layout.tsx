@@ -4,13 +4,14 @@ import { useLocale, useTranslations } from 'next-intl'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Package, MapPin, User, Heart, Monitor, Trash2, LogOut } from 'lucide-react'
+import { Package, MapPin, User, Heart, Monitor, Trash2, LogOut, Ruler } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { motion } from 'motion/react'
 
 const NAV_ITEMS = [
   { key: 'orders', icon: Package, href: '/account/orders' },
   { key: 'addresses', icon: MapPin, href: '/account/addresses' },
+  { key: 'measurements', icon: Ruler, href: '/account/measurements' },
   { key: 'profile', icon: User, href: '/account/profile' },
   { key: 'wishlist', icon: Heart, href: '/account/wishlist' },
   { key: 'sessions', icon: Monitor, href: '/account/sessions' },
@@ -45,6 +46,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const labels: Record<string, string> = {
     orders: t('orders.title'),
     addresses: t('addresses.title'),
+    measurements: locale === 'ar' ? 'مقاساتي' : locale === 'en' ? 'My Measurements' : 'Meine Maße',
     profile: t('profile.title'),
     wishlist: t('wishlist.title'),
     sessions: t('sessions.title'),
