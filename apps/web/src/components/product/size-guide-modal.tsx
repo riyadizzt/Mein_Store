@@ -129,35 +129,95 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
               <>
                 {/* ═══ TAB 1: How to Measure — Mannequin ═══ */}
                 {tab === 'measure' && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-[#1a1a2e]/50 text-center">
-                      {t3(locale, 'Verwende ein flexibles Maßband. Stehe gerade und trage leichte Kleidung.', 'Use a flexible tape measure. Stand straight and wear light clothing.', 'استخدم شريط قياس مرن. قف بشكل مستقيم وارتدِ ملابس خفيفة.')}
-                    </p>
+                  <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start">
+                    {/* Left: Elegant outline silhouette */}
+                    <div className="flex justify-center">
+                      <svg viewBox="0 0 160 420" className="w-40 h-auto" xmlns="http://www.w3.org/2000/svg">
+                        {/* Elegant female silhouette — outline only, fashion sketch style */}
+                        <g fill="none" stroke="#1a1a2e" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.25">
+                          {/* Head */}
+                          <ellipse cx="80" cy="38" rx="16" ry="20" />
+                          {/* Neck */}
+                          <line x1="74" y1="58" x2="74" y2="72" />
+                          <line x1="86" y1="58" x2="86" y2="72" />
+                          {/* Shoulders + Arms */}
+                          <path d="M74 72 Q60 72 48 78 Q36 85 32 110 Q30 130 34 155" />
+                          <path d="M86 72 Q100 72 112 78 Q124 85 128 110 Q130 130 126 155" />
+                          {/* Torso */}
+                          <path d="M48 78 Q46 95 50 120 Q54 145 52 168" />
+                          <path d="M112 78 Q114 95 110 120 Q106 145 108 168" />
+                          {/* Waist curve */}
+                          <path d="M52 168 Q55 170 58 175 Q65 182 80 185 Q95 182 102 175 Q105 170 108 168" />
+                          {/* Hips + Legs */}
+                          <path d="M58 175 Q52 195 48 220 Q44 260 48 300 Q50 330 54 365 L66 365 Q64 330 62 300 Q58 260 62 220 Q66 195 72 185" />
+                          <path d="M102 175 Q108 195 112 220 Q116 260 112 300 Q110 330 106 365 L94 365 Q96 330 98 300 Q102 260 98 220 Q94 195 88 185" />
+                          {/* Feet */}
+                          <path d="M54 365 Q50 370 48 375 L68 375 Q66 370 66 365" />
+                          <path d="M94 365 Q94 370 92 375 L112 375 Q110 370 106 365" />
+                        </g>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* ═══ MEASUREMENT INDICATORS ═══ */}
+                        {/* 1: Shoulder — horizontal line with arrows */}
+                        <g>
+                          <line x1="42" y1="78" x2="118" y2="78" stroke="#D85A30" strokeWidth="1.5" strokeDasharray="5 3" />
+                          <polygon points="42,75 42,81 36,78" fill="#D85A30" />
+                          <polygon points="118,75 118,81 124,78" fill="#D85A30" />
+                          <text x="80" y="73" textAnchor="middle" fill="#D85A30" fontSize="8" fontWeight="600">1</text>
+                        </g>
+
+                        {/* 2: Bust — arc with arrows */}
+                        <g>
+                          <path d="M44 110 Q80 128 116 110" fill="none" stroke="#d4a853" strokeWidth="1.5" strokeDasharray="5 3" />
+                          <circle cx="44" cy="110" r="2.5" fill="#d4a853" />
+                          <circle cx="116" cy="110" r="2.5" fill="#d4a853" />
+                          <text x="80" y="124" textAnchor="middle" fill="#d4a853" fontSize="8" fontWeight="600">2</text>
+                        </g>
+
+                        {/* 3: Waist — arc with arrows */}
+                        <g>
+                          <path d="M48 148 Q80 162 112 148" fill="none" stroke="#378ADD" strokeWidth="1.5" strokeDasharray="5 3" />
+                          <circle cx="48" cy="148" r="2.5" fill="#378ADD" />
+                          <circle cx="112" cy="148" r="2.5" fill="#378ADD" />
+                          <text x="80" y="160" textAnchor="middle" fill="#378ADD" fontSize="8" fontWeight="600">3</text>
+                        </g>
+
+                        {/* 4: Hip — arc with arrows */}
+                        <g>
+                          <path d="M46 195 Q80 212 114 195" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeDasharray="5 3" />
+                          <circle cx="46" cy="195" r="2.5" fill="#1D9E75" />
+                          <circle cx="114" cy="195" r="2.5" fill="#1D9E75" />
+                          <text x="80" y="210" textAnchor="middle" fill="#1D9E75" fontSize="8" fontWeight="600">4</text>
+                        </g>
+
+                        {/* 5: Height — vertical line */}
+                        <g>
+                          <line x1="145" y1="18" x2="145" y2="375" stroke="#7F77DD" strokeWidth="1" strokeDasharray="4 3" />
+                          <polygon points="142,18 148,18 145,12" fill="#7F77DD" />
+                          <polygon points="142,375 148,375 145,381" fill="#7F77DD" />
+                          <text x="145" y="200" textAnchor="middle" fill="#7F77DD" fontSize="8" fontWeight="600" transform="rotate(-90,145,200)">5</text>
+                        </g>
+                      </svg>
+                    </div>
+
+                    {/* Right: Measurement descriptions */}
+                    <div className="space-y-2.5">
                       {MEASUREMENTS.map((m, i) => (
-                        <div
-                          key={m.key}
-                          className="flex items-start gap-4 p-4 rounded-xl bg-white border border-[#e5e0d8] hover:border-[#d4a853]/30 hover:shadow-sm transition-all"
-                        >
-                          <div className="flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: m.color }}>
+                        <div key={m.key} className="flex items-center gap-3 p-3 rounded-xl bg-white border border-[#e5e0d8]">
+                          <div className="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: m.color }}>
                             {i + 1}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold text-[#1a1a2e]">
                               {locale === 'ar' ? m.ar : locale === 'en' ? m.en : m.de}
                             </p>
-                            <p className="text-xs text-[#1a1a2e]/40 mt-1 leading-relaxed">
+                            <p className="text-[11px] text-[#1a1a2e]/35 leading-snug">
                               {locale === 'ar' ? m.descAr : m.descDe}
                             </p>
                           </div>
                         </div>
                       ))}
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-[#d4a853]/8 border border-[#d4a853]/15 text-center">
-                      <p className="text-xs text-[#1a1a2e]/50">
-                        {t3(locale, 'Alle Maße in Zentimetern (cm). Die Maße beziehen sich auf den Körper, nicht auf das Kleidungsstück.', 'All measurements in centimeters (cm). Measurements refer to the body, not the garment.', 'جميع المقاسات بالسنتيمتر (سم). المقاسات تشير إلى الجسم وليس الملابس.')}
+                      <p className="text-[10px] text-[#1a1a2e]/25 text-center pt-2">
+                        {t3(locale, 'Alle Maße in cm · Maßband eng anlegen, nicht einschnürend', 'All measurements in cm · Keep tape snug, not tight', 'جميع المقاسات بالسم · ضع الشريط بإحكام دون شد')}
                       </p>
                     </div>
                   </div>
