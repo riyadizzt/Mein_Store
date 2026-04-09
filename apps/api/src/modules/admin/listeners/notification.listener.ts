@@ -73,6 +73,26 @@ const TRILINGUAL = {
     en: (orderNumber: string) => `Return for Order #${orderNumber}`,
     ar: (orderNumber: string) => `إرجاع للطلب #${orderNumber}`,
   },
+  return_approved: {
+    de: (orderNumber: string) => `Retoure genehmigt #${orderNumber}`,
+    en: (orderNumber: string) => `Return approved #${orderNumber}`,
+    ar: (orderNumber: string) => `تمت الموافقة على الإرجاع #${orderNumber}`,
+  },
+  return_rejected: {
+    de: (orderNumber: string) => `Retoure abgelehnt #${orderNumber}`,
+    en: (orderNumber: string) => `Return rejected #${orderNumber}`,
+    ar: (orderNumber: string) => `تم رفض الإرجاع #${orderNumber}`,
+  },
+  return_received: {
+    de: (orderNumber: string) => `Retoure eingegangen #${orderNumber}`,
+    en: (orderNumber: string) => `Return received #${orderNumber}`,
+    ar: (orderNumber: string) => `تم استلام الإرجاع #${orderNumber}`,
+  },
+  return_refunded: {
+    de: (orderNumber: string) => `Erstattung durchgeführt #${orderNumber}`,
+    en: (orderNumber: string) => `Refund processed #${orderNumber}`,
+    ar: (orderNumber: string) => `تم الاسترداد #${orderNumber}`,
+  },
   payment_failed: {
     de: (orderNumber: string) => `Zahlung fehlgeschlagen für #${orderNumber}`,
     en: (orderNumber: string) => `Payment failed for #${orderNumber}`,
@@ -265,6 +285,44 @@ export class NotificationListener {
         `Failed to create notification for return.submitted: ${error.message}`,
         error.stack,
       )
+    }
+  }
+
+  @OnEvent('return.status_changed')
+  async handleReturnStatusChanged(event: {
+    returnId: string; orderId: string; orderNumber: string;
+    status: string; adminId?: string; refundAmount?: number;
+  }) {
+    try {
+      const statusMap: Record<string, keyof typeof TRILINGUAL> = {
+        approved: 'return_approved',
+        rejected: 'return_rejected',
+        received: 'return_received',
+        inspected: 'return_received',
+        refunded: 'return_refunded',
+      }
+      const type = statusMap[event.status]
+      if (!type) return
+
+      const title = t(type, 'de', event.orderNumber)
+
+      await this.notificationService.createForAllAdmins({
+        type,
+        title,
+        body: event.refundAmount
+          ? `Bestellung #${event.orderNumber} — ${event.refundAmount.toFixed(2)} EUR`
+          : `Bestellung #${event.orderNumber}`,
+        entityType: 'return',
+        entityId: event.returnId,
+        data: {
+          returnId: event.returnId,
+          orderId: event.orderId,
+          orderNumber: event.orderNumber,
+          status: event.status,
+        },
+      })
+    } catch (error: any) {
+      this.logger.error(`Failed to create notification for return.status_changed: ${error.message}`)
     }
   }
 

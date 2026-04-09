@@ -413,6 +413,15 @@ export class ShipmentsService {
       }).catch(() => {})
     }
 
+    // Emit event for admin notifications
+    this.eventEmitter.emit('return.submitted', {
+      returnId: returnRequest.id,
+      orderId,
+      orderNumber: order.orderNumber,
+      reason: dto.reason,
+      itemCount: dto.items?.length ?? 0,
+    })
+
     this.logger.log(
       `[${correlationId}] Return request: ${returnRequest.id} | order=${order.orderNumber} | reason=${dto.reason}`,
     )
