@@ -641,42 +641,63 @@ function VatTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
         <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
         <ExportButtons t3={t3} onCsv={() => downloadDataAsCsv(data, 'Finanzbericht.json')} />
       </div>
-      <div className="bg-[#1a1a2e] rounded-xl p-5 text-white inline-block">
-        <span className="text-sm text-white/60">{t3('MwSt gesamt', 'Total VAT', '\u0625\u062C\u0645\u0627\u0644\u064A \u0627\u0644\u0636\u0631\u064A\u0628\u0629')}</span>
-        <p className="text-2xl font-bold mt-1">{fmt(data?.totalTax)}</p>
-      </div>
-      {rates.length > 0 && (
-        <div className="bg-background border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <colgroup>
-                <col style={{ width: '25%' }} />
-                <col style={{ width: '25%' }} />
-                <col style={{ width: '25%' }} />
-                <col style={{ width: '25%' }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Steuersatz', 'Tax Rate', '\u0645\u0639\u062F\u0644 \u0627\u0644\u0636\u0631\u064A\u0628\u0629')}</th>
-                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Nettobetrag', 'Taxable Amount', '\u0627\u0644\u0645\u0628\u0644\u063A \u0627\u0644\u062E\u0627\u0636\u0639')}</th>
-                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Steuerbetrag', 'Tax Amount', '\u0645\u0628\u0644\u063A \u0627\u0644\u0636\u0631\u064A\u0628\u0629')}</th>
-                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Bruttobetrag', 'Gross Amount', '\u0627\u0644\u0645\u0628\u0644\u063A \u0627\u0644\u0625\u062C\u0645\u0627\u0644\u064A')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rates.map((r: any, i: number) => (
-                  <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 text-sm font-semibold">{r.rate}%</td>
-                    <td className="px-4 py-3 text-end tabular-nums">{fmt(r.taxableAmount)}</td>
-                    <td className="px-4 py-3 text-end tabular-nums">{fmt(r.taxAmount)}</td>
-                    <td className="px-4 py-3 text-end tabular-nums font-medium">{fmt(r.grossAmount)}</td>
-                  </tr>
+      {(() => {
+        const totalTax = Number(data?.totalTax ?? 0)
+        const gross = Number(data?.grossRevenue ?? data?.totalGross ?? 0)
+        const net = gross > 0 ? gross - totalTax : 0
+        const hasRates = rates.length > 0
+        // If no rates from API, show calculated 19% row
+        const displayRates = hasRates ? rates : (totalTax > 0 ? [{ rate: 19, taxableAmount: net, taxAmount: totalTax, grossAmount: gross }] : [])
+
+        return (
+          <>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden">
+              <div className="bg-[#1a1a2e] p-5 text-white">
+                <p className="text-xs text-white/50 mb-1">{t3('Bruttoerlöse', 'Gross Revenue', 'إجمالي الإيرادات')}</p>
+                <p className="text-xl font-bold tabular-nums">{fmt(gross || data?.totalGross)}</p>
+              </div>
+              <div className="bg-[#1a1a2e] p-5 text-white">
+                <p className="text-xs text-white/50 mb-1">{t3('Nettoerlöse', 'Net Revenue', 'صافي الإيرادات')}</p>
+                <p className="text-xl font-bold tabular-nums">{fmt(net || data?.totalNet)}</p>
+              </div>
+              <div className="bg-[#1a1a2e] p-5 text-white">
+                <p className="text-xs text-white/50 mb-1">{t3('MwSt gesamt', 'Total VAT', 'إجمالي الضريبة')}</p>
+                <p className="text-xl font-bold tabular-nums text-[#d4a853]">{fmt(totalTax)}</p>
+              </div>
+            </div>
+
+            {/* Tax Table */}
+            {displayRates.length > 0 && (
+              <div className="bg-background border rounded-xl overflow-hidden">
+                <div className="grid grid-cols-4 gap-x-2 bg-muted/50 border-b">
+                  <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Steuersatz', 'Tax Rate', 'معدل الضريبة')}</div>
+                  <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Nettobetrag', 'Net Amount', 'المبلغ الصافي')}</div>
+                  <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Steuerbetrag', 'Tax Amount', 'مبلغ الضريبة')}</div>
+                  <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Bruttobetrag', 'Gross Amount', 'المبلغ الإجمالي')}</div>
+                </div>
+                {displayRates.map((r: any, i: number) => (
+                  <div key={i} className="grid grid-cols-4 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
+                    <div className="px-4 py-3 text-sm font-semibold">{r.rate}%</div>
+                    <div className="px-4 py-3 text-sm tabular-nums text-center">{fmt(r.taxableAmount)}</div>
+                    <div className="px-4 py-3 text-sm tabular-nums text-center font-medium text-[#d4a853]">{fmt(r.taxAmount)}</div>
+                    <div className="px-4 py-3 text-sm tabular-nums text-center">{fmt(r.grossAmount)}</div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="bg-muted/30 rounded-xl p-4 text-sm text-muted-foreground">
+              {t3(
+                'Die MwSt wird aus den Bruttopreisen herausgerechnet (nicht draufaddiert). Formel: Brutto - (Brutto / 1,19) = enthaltene MwSt.',
+                'VAT is extracted from gross prices (not added on top). Formula: Gross - (Gross / 1.19) = included VAT.',
+                'يتم استخراج الضريبة من الأسعار الإجمالية (لا تُضاف فوقها). المعادلة: إجمالي - (إجمالي / 1.19) = الضريبة المتضمنة.'
+              )}
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }
