@@ -140,7 +140,7 @@ export default function AdminOrdersPage() {
               Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="grid grid-cols-7 gap-x-2 border-b">
                   {Array.from({ length: 7 }).map((_, j) => (
-                    <div key={j} className="px-4 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></div>
+                    <div key={j} className="px-4 py-4"><div className="h-4 bg-muted rounded animate-pulse" /></div>
                   ))}
                 </div>
               ))
@@ -151,28 +151,28 @@ export default function AdminOrdersPage() {
                 const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
                 return (
                   <div key={order.id} className="grid grid-cols-7 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
-                    <div className="px-4 py-3.5">
+                    <div className="px-4 py-4">
                       <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono text-sm font-medium text-primary hover:underline">
                         {order.orderNumber}
                       </Link>
                     </div>
-                    <div className="px-4 py-3.5">
+                    <div className="px-4 py-4">
                       <p className="text-sm font-medium">
                         {getCustomerName(order)}
                         {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground"> (Gast)</span>}
                         {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg} ltr:ml-1.5 rtl:mr-1.5`}>{badge.label}</span> : null })()}
                       </p>
-                      <p className="text-xs text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
+                      <p className="text-sm text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
                     </div>
-                    <div className="px-2 py-3.5 flex justify-center">
+                    <div className="px-2 py-4 flex justify-center">
                       <ChannelIcon channel={order.channel ?? 'website'} size={18} />
                     </div>
-                    <div className="px-4 py-3.5 text-sm text-muted-foreground">{formatDate(order.createdAt, locale)}</div>
-                    <div className="px-4 py-3.5">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
+                    <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(order.createdAt, locale)}</div>
+                    <div className="px-4 py-4">
+                      <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
                     </div>
-                    <div className="px-4 py-3.5 text-center text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
-                    <div className="px-4 py-3.5 text-xs text-muted-foreground">{order.payment?.provider ?? '—'}</div>
+                    <div className="px-4 py-4 text-center text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
+                    <div className="px-4 py-4 text-sm text-muted-foreground">{order.payment?.provider ?? '—'}</div>
                   </div>
                 )
               })

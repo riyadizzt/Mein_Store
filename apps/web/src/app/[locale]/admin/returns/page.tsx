@@ -311,7 +311,7 @@ export default function AdminReturnsPage() {
                 Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="grid grid-cols-7 gap-x-2 border-b">
                     {Array.from({ length: 7 }).map((_, j) => (
-                      <div key={j} className="px-4 py-3.5"><div className="h-4 bg-muted rounded animate-pulse" /></div>
+                      <div key={j} className="px-4 py-4"><div className="h-4 bg-muted rounded animate-pulse" /></div>
                     ))}
                   </div>
                 ))
@@ -324,27 +324,27 @@ export default function AdminReturnsPage() {
                     className={`grid grid-cols-7 gap-x-2 border-b cursor-pointer transition-colors items-center ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                     onClick={() => openDetail(ret)}
                   >
-                    <div className="px-4 py-3.5">
+                    <div className="px-4 py-4">
                       <span className="font-mono text-sm font-medium text-[#d4a853]">{ret.returnNumber}</span>
                     </div>
-                    <div className="px-4 py-3.5">
-                      <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
+                    <div className="px-4 py-4">
+                      <span className="font-mono text-sm text-primary">{ret.order?.orderNumber ?? '—'}</span>
                     </div>
-                    <div className="px-4 py-3.5">
+                    <div className="px-4 py-4">
                       <p className="text-sm font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
-                      <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
+                      <p className="text-sm text-muted-foreground">{ret.order?.user?.email}</p>
                     </div>
-                    <div className="px-4 py-3.5">
+                    <div className="px-4 py-4">
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
                     </div>
-                    <div className="px-4 py-3.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
+                    <div className="px-4 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
                         {statusLabel(ret.status)}
                       </span>
                     </div>
-                    <div className="px-4 py-3.5 text-center text-sm font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</div>
-                    <div className="px-4 py-3.5 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
+                    <div className="px-4 py-4 text-center text-sm font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</div>
+                    <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
                   </div>
                 ))
               )}
