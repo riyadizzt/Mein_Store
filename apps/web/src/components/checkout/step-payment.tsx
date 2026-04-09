@@ -62,8 +62,10 @@ function StepPaymentInner() {
   const cartSubtotal = subtotal()
   const [stockError, setStockError] = useState(false)
 
-  const shippingCost = Number(shippingOption?.price ?? 0)
-  const totalAmount = cartSubtotal + shippingCost
+  const { appliedCoupon, discountAmount } = useCheckoutStore()
+  const rawShipping = Number(shippingOption?.price ?? 0)
+  const shippingCost = appliedCoupon?.freeShipping ? 0 : rawShipping
+  const totalAmount = cartSubtotal + shippingCost - (discountAmount || 0)
 
   const klarnaEnabled = !!shopSettings?.klarnaEnabled
   const [vorkasseData, setVorkasseData] = useState<any>(null)
@@ -446,7 +448,7 @@ function StepPaymentInner() {
             {isProcessing ? (
               <><Loader2 className="h-5 w-5 animate-spin" />{t('processing')}</>
             ) : (
-              <><Lock className="h-4 w-4" />{t('placeOrderAmount', { amount: (totalAmount - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2) })}</>
+              <><Lock className="h-4 w-4" />{t('placeOrderAmount', { amount: totalAmount.toFixed(2) })}</>
             )}
           </Button>
 
@@ -489,13 +491,13 @@ function StepPaymentInner() {
                   <span>-&euro;{useCheckoutStore.getState().discountAmount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{(totalAmount - (useCheckoutStore.getState().discountAmount || 0)).toFixed(2)}</span></div>
+              <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{totalAmount.toFixed(2)}</span></div>
               <p className="text-[11px] text-muted-foreground text-end">
                 {locale === 'ar'
-                  ? `شامل ${((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) - ((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) / 1.19)).toFixed(2)}€ ضريبة القيمة المضافة`
+                  ? `شامل ${(totalAmount - (totalAmount / 1.19)).toFixed(2)}€ ضريبة القيمة المضافة`
                   : locale === 'en'
-                    ? `Incl. €${((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) - ((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) / 1.19)).toFixed(2)} VAT`
-                    : `Inkl. ${((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) - ((totalAmount - (useCheckoutStore.getState().discountAmount || 0)) / 1.19)).toFixed(2)} € MwSt.`}
+                    ? `Incl. €${(totalAmount - (totalAmount / 1.19)).toFixed(2)} VAT`
+                    : `Inkl. ${(totalAmount - (totalAmount / 1.19)).toFixed(2)} € MwSt.`}
               </p>
               {/* Coupon Input */}
               <div className="pt-3 border-t">
