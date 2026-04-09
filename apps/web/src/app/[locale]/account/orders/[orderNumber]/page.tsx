@@ -111,7 +111,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
           </div>
           <div className="flex justify-between mt-1.5 max-w-lg">
             {TIMELINE_STEPS.map((step) => (
-              <span key={step} className="text-[10px] text-muted-foreground w-8 text-center">{t(`status_${step}`)}</span>
+              <span key={step} className="text-xs text-muted-foreground w-8 text-center">{t(`status_${step}`)}</span>
             ))}
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
       {/* Shipping Address */}
       {order.shippingAddress && (
         <div className="border rounded-lg p-4 mb-6">
-          <p className="text-xs font-medium text-muted-foreground mb-1">{t('shippingAddress')}</p>
+          <p className="text-sm font-medium text-muted-foreground mb-1">{t('shippingAddress')}</p>
           <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
           <p className="text-sm text-muted-foreground">{order.shippingAddress.street} {order.shippingAddress.houseNumber}</p>
           <p className="text-sm text-muted-foreground">{order.shippingAddress.postalCode} {order.shippingAddress.city}, {order.shippingAddress.country}</p>
@@ -153,7 +153,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">{item.snapshotName}</p>
-              <p className="text-xs text-muted-foreground">{item.variant?.color}{item.variant?.size ? ` / ${item.variant.size}` : ''} × {item.quantity}</p>
+              <p className="text-sm text-muted-foreground">{item.variant?.color}{item.variant?.size ? ` / ${item.variant.size}` : ''} × {item.quantity}</p>
             </div>
             <p className="text-sm font-semibold">&euro;{Number(item.totalPrice).toFixed(2)}</p>
           </div>
@@ -161,7 +161,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
       </div>
 
       {/* Totals */}
-      <div className="border rounded-lg p-4 mb-6 space-y-1.5 text-sm">
+      <div className="border rounded-lg p-5 mb-6 space-y-2 text-base">
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{Number(order.subtotal).toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>&euro;{Number(order.shippingCost).toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('tax')}</span><span>&euro;{Number(order.taxAmount).toFixed(2)}</span></div>
