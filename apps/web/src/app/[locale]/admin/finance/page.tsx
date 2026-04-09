@@ -536,9 +536,9 @@ function DailyTab({ data, isLoading, date, setDate, t3 }: {
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 font-medium">{t3('Produkt', 'Product', 'المنتج')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Menge', 'Qty', 'الكمية')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Umsatz', 'Revenue', 'الإيراد')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Produkt', 'Product', 'المنتج')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Menge', 'Qty', 'الكمية')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Umsatz', 'Revenue', 'الإيراد')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -620,15 +620,15 @@ function ProductProfitTable({ title, items, t3 }: { title: string; items: any[];
           </colgroup>
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="text-start px-4 py-3 font-medium">{t3('Produkt', 'Product', 'المنتج')}</th>
-              <th className="text-end px-4 py-3 font-medium">{t3('Umsatz', 'Revenue', 'الإيراد')}</th>
-              <th className="text-end px-4 py-3 font-medium">{t3('Menge', 'Quantity', 'الكمية')}</th>
+              <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Produkt', 'Product', 'المنتج')}</th>
+              <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Umsatz', 'Revenue', 'الإيراد')}</th>
+              <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Menge', 'Quantity', 'الكمية')}</th>
             </tr>
           </thead>
           <tbody>
             {items.map((p: any, i: number) => (
               <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-medium">{p.productName}</td>
+                <td className="px-4 py-3 text-sm font-semibold">{p.productName}</td>
                 <td className="px-4 py-3 text-end tabular-nums">{fmt(p.revenue)}</td>
                 <td className="px-4 py-3 text-end tabular-nums">{p.quantitySold ?? p.quantity ?? '—'}</td>
               </tr>
@@ -669,16 +669,16 @@ function VatTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 font-medium">{t3('Steuersatz', 'Tax Rate', '\u0645\u0639\u062F\u0644 \u0627\u0644\u0636\u0631\u064A\u0628\u0629')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Nettobetrag', 'Taxable Amount', '\u0627\u0644\u0645\u0628\u0644\u063A \u0627\u0644\u062E\u0627\u0636\u0639')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Steuerbetrag', 'Tax Amount', '\u0645\u0628\u0644\u063A \u0627\u0644\u0636\u0631\u064A\u0628\u0629')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Bruttobetrag', 'Gross Amount', '\u0627\u0644\u0645\u0628\u0644\u063A \u0627\u0644\u0625\u062C\u0645\u0627\u0644\u064A')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Steuersatz', 'Tax Rate', '\u0645\u0639\u062F\u0644 \u0627\u0644\u0636\u0631\u064A\u0628\u0629')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Nettobetrag', 'Taxable Amount', '\u0627\u0644\u0645\u0628\u0644\u063A \u0627\u0644\u062E\u0627\u0636\u0639')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Steuerbetrag', 'Tax Amount', '\u0645\u0628\u0644\u063A \u0627\u0644\u0636\u0631\u064A\u0628\u0629')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Bruttobetrag', 'Gross Amount', '\u0627\u0644\u0645\u0628\u0644\u063A \u0627\u0644\u0625\u062C\u0645\u0627\u0644\u064A')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rates.map((r: any, i: number) => (
                   <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 font-medium">{r.rate}%</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{r.rate}%</td>
                     <td className="px-4 py-3 text-end tabular-nums">{fmt(r.taxableAmount)}</td>
                     <td className="px-4 py-3 text-end tabular-nums">{fmt(r.taxAmount)}</td>
                     <td className="px-4 py-3 text-end tabular-nums font-medium">{fmt(r.grossAmount)}</td>
@@ -719,18 +719,18 @@ function BestsellersTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 font-medium">#</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Produkt', 'Product', '\u0627\u0644\u0645\u0646\u062A\u062C')}</th>
-                  <th className="text-start px-4 py-3 font-medium">SKU</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Menge', 'Qty Sold', '\u0627\u0644\u0643\u0645\u064A\u0629')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Umsatz', 'Revenue', '\u0627\u0644\u0625\u064A\u0631\u0627\u062F')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">#</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Produkt', 'Product', '\u0627\u0644\u0645\u0646\u062A\u062C')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">SKU</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Menge', 'Qty Sold', '\u0627\u0644\u0643\u0645\u064A\u0629')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Umsatz', 'Revenue', '\u0627\u0644\u0625\u064A\u0631\u0627\u062F')}</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((p: any, i: number) => (
                   <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
-                    <td className="px-4 py-3 font-medium">{p.productName}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{p.productName}</td>
                     <td className="px-4 py-3 font-mono text-xs">{p.sku}</td>
                     <td className="px-4 py-3 text-end tabular-nums">{p.quantitySold}</td>
                     <td className="px-4 py-3 text-end tabular-nums font-medium">{fmt(p.revenue)}</td>
@@ -786,17 +786,17 @@ function CustomersTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 font-medium">{t3('Name', 'Name', '\u0627\u0644\u0627\u0633\u0645')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('E-Mail', 'Email', '\u0627\u0644\u0628\u0631\u064A\u062F')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Bestellungen', 'Orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062A')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Gesamtausgaben', 'Total Spent', '\u0625\u062C\u0645\u0627\u0644\u064A \u0627\u0644\u0625\u0646\u0641\u0627\u0642')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Durchschn.', 'Avg. Order', '\u0627\u0644\u0645\u062A\u0648\u0633\u0637')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Name', 'Name', '\u0627\u0644\u0627\u0633\u0645')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('E-Mail', 'Email', '\u0627\u0644\u0628\u0631\u064A\u062F')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Bestellungen', 'Orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062A')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Gesamtausgaben', 'Total Spent', '\u0625\u062C\u0645\u0627\u0644\u064A \u0627\u0644\u0625\u0646\u0641\u0627\u0642')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Durchschn.', 'Avg. Order', '\u0627\u0644\u0645\u062A\u0648\u0633\u0637')}</th>
                 </tr>
               </thead>
               <tbody>
                 {topCustomers.map((c: any, i: number) => (
                   <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                    <td className="px-4 py-3 text-sm font-semibold">{c.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
                     <td className="px-4 py-3 text-end tabular-nums">{c.orderCount}</td>
                     <td className="px-4 py-3 text-end tabular-nums font-medium">{fmt(c.totalSpent)}</td>

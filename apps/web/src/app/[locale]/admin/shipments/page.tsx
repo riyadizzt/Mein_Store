@@ -149,13 +149,13 @@ export default function AdminShipmentsPage() {
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 font-medium">{t('shipments.order')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t('shipments.customer')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t('shipments.carrier')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t('shipments.tracking')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t('shipments.status')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t('shipments.date')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t('shipments.actions')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t('shipments.order')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t('shipments.customer')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t('shipments.carrier')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t('shipments.tracking')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t('shipments.status')}</th>
+                  <th className="text-start px-4 py-3 text-sm font-semibold">{t('shipments.date')}</th>
+                  <th className="text-end px-4 py-3 text-sm font-semibold">{t('shipments.actions')}</th>
                 </tr>
               </thead>
               <tbody>

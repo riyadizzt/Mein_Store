@@ -83,11 +83,11 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
             </colgroup>
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-start px-4 py-3 font-medium">{t3('Datum', 'Date', 'التاريخ')}</th>
-                <th className="text-end px-4 py-3 font-medium">{t3('Anz.', 'Qty', 'عدد')}</th>
-                <th className="text-end px-4 py-3 font-medium">{t3('Brutto (EUR)', 'Gross (EUR)', 'إجمالي')}</th>
-                <th className="text-end px-4 py-3 font-medium">{t3('Netto (EUR)', 'Net (EUR)', 'صافي')}</th>
-                <th className="text-end px-4 py-3 font-medium">{t3('USt (EUR)', 'VAT (EUR)', 'ضريبة')}</th>
+                <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Datum', 'Date', 'التاريخ')}</th>
+                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Anz.', 'Qty', 'عدد')}</th>
+                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Brutto (EUR)', 'Gross (EUR)', 'إجمالي')}</th>
+                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Netto (EUR)', 'Net (EUR)', 'صافي')}</th>
+                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('USt (EUR)', 'VAT (EUR)', 'ضريبة')}</th>
               </tr>
             </thead>
             <tbody>
@@ -129,8 +129,8 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
             </colgroup>
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-start px-4 py-3 font-medium">{t3('Position', 'Item', 'البند')}</th>
-                <th className="text-end px-4 py-3 font-medium">{t3('Betrag', 'Amount', 'المبلغ')}</th>
+                <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Position', 'Item', 'البند')}</th>
+                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Betrag', 'Amount', 'المبلغ')}</th>
               </tr>
             </thead>
             <tbody>
@@ -198,11 +198,11 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
                 </colgroup>
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-start px-4 py-3 font-medium">{t3('Kanal', 'Channel', 'القناة')}</th>
-                    <th className="text-end px-4 py-3 font-medium">{t3('Bestellungen', 'Orders', 'الطلبات')}</th>
-                    <th className="text-end px-4 py-3 font-medium">{t3('Umsatz (EUR)', 'Revenue (EUR)', 'الإيرادات')}</th>
-                    <th className="text-end px-4 py-3 font-medium">{t3('Ø Bestellwert', 'Avg. Order', 'متوسط الطلب')}</th>
-                    <th className="text-end px-4 py-3 font-medium">{t3('Anteil', 'Share', 'الحصة')}</th>
+                    <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Kanal', 'Channel', 'القناة')}</th>
+                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Bestellungen', 'Orders', 'الطلبات')}</th>
+                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Umsatz (EUR)', 'Revenue (EUR)', 'الإيرادات')}</th>
+                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Ø Bestellwert', 'Avg. Order', 'متوسط الطلب')}</th>
+                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Anteil', 'Share', 'الحصة')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -210,7 +210,7 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
                     const share = totalGross > 0 ? ((Number(ch.gross) / totalGross) * 100).toFixed(1) : '0.0'
                     return (
                       <tr key={ch.channel} className="border-b hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 font-medium capitalize">{ch.channel}</td>
+                        <td className="px-4 py-3 text-sm font-semibold capitalize">{ch.channel}</td>
                         <td className="px-4 py-3 text-end tabular-nums">{ch.count}</td>
                         <td className="px-4 py-3 text-end tabular-nums font-medium">{Number(ch.gross).toFixed(2).replace('.', ',')} €</td>
                         <td className="px-4 py-3 text-end tabular-nums">{Number(ch.avgOrderValue ?? 0).toFixed(2).replace('.', ',')} €</td>
