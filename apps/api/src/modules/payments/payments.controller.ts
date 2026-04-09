@@ -19,6 +19,8 @@ import { RolesGuard } from '../../common/guards/roles.guard'
 import { Roles } from '../../common/decorators/roles.decorator'
 import { PaymentsService } from './payments.service'
 import { InvoiceService } from './invoice.service'
+import { VorkasseProvider } from './providers/vorkasse.provider'
+import { SumUpProvider } from './providers/sumup.provider'
 import { CreatePaymentDto } from './dto/create-payment.dto'
 import { CreateRefundDto } from './dto/create-refund.dto'
 
@@ -27,6 +29,8 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly invoiceService: InvoiceService,
+    private readonly vorkasseProvider: VorkasseProvider,
+    private readonly sumupProvider: SumUpProvider,
   ) {}
 
   @Post()
@@ -57,6 +61,34 @@ export class PaymentsController {
     @Headers('x-correlation-id') correlationId: string,
   ) {
     return this.paymentsService.createRefund(dto, req.user.id, correlationId ?? 'no-corr')
+  }
+
+  // ── Admin: Confirm Vorkasse Payment ──────────────────────
+  @Post(':orderId/confirm-vorkasse')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  @HttpCode(HttpStatus.OK)
+  async confirmVorkassePayment(
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Req() req: any,
+  ) {
+    return this.paymentsService.confirmVorkassePayment(orderId, req.user.id)
+  }
+
+  // ── Public: Available payment methods ───────────────────
+  @Get('methods')
+  async getAvailableMethods() {
+    const vorkasseConfigured = await this.vorkasseProvider.isConfigured()
+    const sumupConfigured = this.sumupProvider.isConfigured()
+
+    return {
+      stripe: true, // Always available if keys exist
+      klarna: !!process.env.KLARNA_USERNAME,
+      paypal: !!process.env.PAYPAL_CLIENT_ID,
+      vorkasse: vorkasseConfigured,
+      sumup: sumupConfigured,
+      vorkasseBankDetails: vorkasseConfigured ? await this.vorkasseProvider.getBankDetails() : null,
+    }
   }
 
   // ── Invoice PDF Download (streams actual PDF) ────────────

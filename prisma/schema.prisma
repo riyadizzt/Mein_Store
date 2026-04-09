@@ -96,6 +96,8 @@ enum PaymentMethod {
   apple_pay
   google_pay
   cash_on_delivery
+  vorkasse
+  sumup
 }
 
 enum ShipmentStatus {
@@ -208,6 +210,8 @@ enum PaymentProvider {
   STRIPE
   KLARNA
   PAYPAL
+  VORKASSE
+  SUMUP
 }
 
 enum RefundStatus {

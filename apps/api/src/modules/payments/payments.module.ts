@@ -7,6 +7,8 @@ import { InvoiceService } from './invoice.service'
 import { StripeProvider } from './providers/stripe.provider'
 import { KlarnaProvider } from './providers/klarna.provider'
 import { PayPalProvider } from './providers/paypal.provider'
+import { VorkasseProvider } from './providers/vorkasse.provider'
+import { SumUpProvider } from './providers/sumup.provider'
 import { PAYMENT_PROVIDERS } from './payment-provider.interface'
 
 @Module({
@@ -18,16 +20,20 @@ import { PAYMENT_PROVIDERS } from './payment-provider.interface'
     StripeProvider,
     KlarnaProvider,
     PayPalProvider,
+    VorkasseProvider,
+    SumUpProvider,
     {
       provide: PAYMENT_PROVIDERS,
-      useFactory: (stripe: StripeProvider, klarna: KlarnaProvider, paypal: PayPalProvider) => [
-        stripe,
-        klarna,
-        paypal,
-      ],
-      inject: [StripeProvider, KlarnaProvider, PayPalProvider],
+      useFactory: (
+        stripe: StripeProvider,
+        klarna: KlarnaProvider,
+        paypal: PayPalProvider,
+        vorkasse: VorkasseProvider,
+        sumup: SumUpProvider,
+      ) => [stripe, klarna, paypal, vorkasse, sumup],
+      inject: [StripeProvider, KlarnaProvider, PayPalProvider, VorkasseProvider, SumUpProvider],
     },
   ],
-  exports: [PaymentsService, InvoiceService],
+  exports: [PaymentsService, InvoiceService, VorkasseProvider, SumUpProvider],
 })
 export class PaymentsModule {}

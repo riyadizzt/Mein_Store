@@ -1337,6 +1337,18 @@ export class AdminController {
       notif_sound_enabled: db.notif_sound_enabled ?? 'true',
       notif_daily_summary: db.notif_daily_summary ?? 'false',
       notif_daily_summary_email: db.notif_daily_summary_email ?? '',
+      // Vorkasse (Bank Transfer)
+      vorkasse_enabled: db.vorkasse_enabled ?? 'false',
+      vorkasse_account_holder: db.vorkasse_account_holder ?? '',
+      vorkasse_iban: db.vorkasse_iban ?? '',
+      vorkasse_bic: db.vorkasse_bic ?? '',
+      vorkasse_bank_name: db.vorkasse_bank_name ?? '',
+      vorkasse_deadline_days: db.vorkasse_deadline_days ?? '7',
+      vorkasse_reminder_days: db.vorkasse_reminder_days ?? '7',
+      vorkasse_cancel_days: db.vorkasse_cancel_days ?? '10',
+      // SumUp
+      sumup_enabled: db.sumup_enabled ?? 'false',
+      sumup_merchant_code: db.sumup_merchant_code ?? '',
     }
   }
 
@@ -1397,6 +1409,11 @@ export class AdminController {
       'posthog_enabled', 'posthog_key', 'posthog_host',
       // Cookie Consent
       'cookie_banner_enabled',
+      // Vorkasse (Bank Transfer)
+      'vorkasse_enabled', 'vorkasse_account_holder', 'vorkasse_iban', 'vorkasse_bic',
+      'vorkasse_bank_name', 'vorkasse_deadline_days', 'vorkasse_reminder_days', 'vorkasse_cancel_days',
+      // SumUp
+      'sumup_enabled', 'sumup_merchant_code',
     ]
     const entries = Object.entries(body).filter(([k]) => allowed.includes(k))
 

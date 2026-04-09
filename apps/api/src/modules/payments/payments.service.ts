@@ -27,6 +27,8 @@ const METHOD_TO_PROVIDER: Record<string, string> = {
   paypal: 'PAYPAL',
   sepa_direct_debit: 'STRIPE',
   giropay: 'STRIPE',
+  vorkasse: 'VORKASSE',
+  sumup: 'SUMUP',
 }
 
 @Injectable()
@@ -227,6 +229,37 @@ export class PaymentsService {
       status: intentResult.status,
       redirectUrl: intentResult.redirectUrl,
     }
+  }
+
+  // ── CONFIRM VORKASSE PAYMENT (admin action) ────────────────
+
+  async confirmVorkassePayment(orderId: string, adminUserId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { payment: true },
+    })
+
+    if (!order) throw new NotFoundException('Order not found')
+    if (!order.payment || order.payment.provider !== 'VORKASSE') {
+      throw new BadRequestException('This order does not use Vorkasse payment')
+    }
+    if (order.payment.status === 'captured') {
+      throw new BadRequestException('Payment already confirmed')
+    }
+
+    // Mark payment as captured
+    await this.prisma.payment.update({
+      where: { orderId },
+      data: { status: 'captured', paidAt: new Date() },
+    })
+
+    // Use the standard markAsCaptured flow for order confirmation + invoice
+    const result = await this.markAsCaptured(orderId)
+
+    // Audit log
+    this.logger.log(`Vorkasse payment confirmed by admin ${adminUserId} for order ${order.orderNumber}`)
+
+    return { ...result, confirmedBy: adminUserId }
   }
 
   // ── HANDLE PAYMENT SUCCESS (called from webhook) ───────────
