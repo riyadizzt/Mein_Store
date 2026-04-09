@@ -61,6 +61,7 @@ function StepPaymentInner() {
   const { items, subtotal } = useCartStore()
   const cartSubtotal = subtotal()
   const [stockError, setStockError] = useState(false)
+  const [sumupMounted, setSumupMounted] = useState(false)
 
   const { appliedCoupon, discountAmount } = useCheckoutStore()
   const rawShipping = Number(shippingOption?.price ?? 0)
@@ -97,7 +98,8 @@ function StepPaymentInner() {
   }, [sumupEnabled, sumupLoaded])
 
   const vorkasseEnabled = !!vorkasseData?.enabled
-  const [activeTab, setActiveTab] = useState<'card' | 'klarna' | 'vorkasse' | 'sumup' | 'paypal'>('card')
+  const [activeTab, setActiveTabRaw] = useState<'card' | 'klarna' | 'vorkasse' | 'sumup' | 'paypal'>('card')
+  const setActiveTab = (tab: typeof activeTab) => { setActiveTabRaw(tab); if (tab !== 'sumup') setSumupMounted(false) }
 
   const handlePlaceOrder = useCallback(async () => {
     if (!termsAccepted || isProcessing) return
@@ -119,11 +121,13 @@ function StepPaymentInner() {
       setPaymentMethod(method as any)
 
       // 1. Create order — mit vollständiger Adresse
+      const couponCode = useCheckoutStore.getState().couponCode
       const orderPayload: Record<string, any> = {
         items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
         countryCode: shippingAddress?.country ?? 'DE',
         channel: getChannelFromUtm(),
         locale,
+        ...(couponCode ? { couponCode } : {}),
       }
 
       // Adresse: gespeicherte ID oder inline Objekt
@@ -224,6 +228,7 @@ function StepPaymentInner() {
         })
 
         // Widget is now mounted — stop processing spinner, user interacts with widget
+        setSumupMounted(true)
         setProcessing(false)
         // CRITICAL: return here — do NOT fall through to goToConfirmation()
         return
@@ -476,8 +481,8 @@ function StepPaymentInner() {
             </div>
           )}
 
-          {/* Legal */}
-          <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+          {/* Legal — hidden when SumUp widget is active (has its own submit) */}
+          {!sumupMounted && <label className="flex items-start gap-2.5 text-sm cursor-pointer">
             <input
               type="checkbox"
               checked={termsAccepted}
@@ -493,22 +498,23 @@ function StepPaymentInner() {
                 <>Ich habe die <a href={`/${locale}/legal/agb`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">AGB</a> und <a href={`/${locale}/legal/widerruf`} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:no-underline">Widerrufsbelehrung</a> gelesen und akzeptiere sie.</>
               )}
             </span>
-          </label>
+          </label>}
 
-          {/* Place Order */}
-          <Button
-            onClick={handlePlaceOrder}
-            disabled={!termsAccepted || isProcessing || (activeTab === 'card' && !stripe) || (activeTab === 'sumup' && !sumupLoaded) || stockError}
-
-            className="w-full h-14 text-base gap-2 bg-accent text-accent-foreground rounded-xl font-semibold hover:bg-accent/90 btn-press"
-            size="lg"
-          >
-            {isProcessing ? (
-              <><Loader2 className="h-5 w-5 animate-spin" />{t('processing')}</>
-            ) : (
-              <><Lock className="h-4 w-4" />{t('placeOrderAmount', { amount: totalAmount.toFixed(2) })}</>
-            )}
-          </Button>
+          {/* Place Order — hidden when SumUp widget is active */}
+          {!sumupMounted && (
+            <Button
+              onClick={handlePlaceOrder}
+              disabled={!termsAccepted || isProcessing || (activeTab === 'card' && !stripe) || (activeTab === 'sumup' && !sumupLoaded) || stockError}
+              className="w-full h-14 text-base gap-2 bg-accent text-accent-foreground rounded-xl font-semibold hover:bg-accent/90 btn-press"
+              size="lg"
+            >
+              {isProcessing ? (
+                <><Loader2 className="h-5 w-5 animate-spin" />{t('processing')}</>
+              ) : (
+                <><Lock className="h-4 w-4" />{t('placeOrderAmount', { amount: totalAmount.toFixed(2) })}</>
+              )}
+            </Button>
+          )}
 
           {/* Security */}
           <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
