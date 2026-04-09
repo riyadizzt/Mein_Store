@@ -7,7 +7,7 @@ import Image from 'next/image'
 import {
   Check, Truck, Download, Ban, Loader2, ExternalLink, StickyNote,
   Package, CreditCard, MapPin, User, Clock, FileText,
-  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro
+  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro, Building2
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
@@ -528,6 +528,49 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
               </Button>
             </div>
           </div>
+
+          {/* Vorkasse: Confirm Payment */}
+          {order.payment?.provider === 'VORKASSE' && order.payment?.status === 'pending' && (
+            <div className="bg-[#d4a853]/5 border-2 border-[#d4a853]/30 rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 400ms both' }}>
+              <h3 className="text-sm font-bold text-[#d4a853] mb-3 flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                {t3('Vorkasse — Zahlung bestätigen', 'Bank Transfer — Confirm Payment', 'تحويل بنكي — تأكيد الدفع')}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t3(
+                  'Bestätige den Zahlungseingang per Banküberweisung. Die Bestellung wird dann automatisch bearbeitet und eine Rechnung erstellt.',
+                  'Confirm the bank transfer has been received. The order will be automatically processed and an invoice generated.',
+                  'أكد استلام التحويل البنكي. سيتم تجهيز الطلب تلقائياً وإنشاء الفاتورة.'
+                )}
+              </p>
+              <Button
+                className="w-full rounded-xl font-semibold gap-2 bg-[#d4a853] text-white hover:bg-[#c49b45]"
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t3('Zahlungseingang bestätigen', 'Confirm Payment Received', 'تأكيد استلام الدفع'),
+                    description: t3(
+                      `Wurde der Betrag von ${formatCurrency(Number(order.totalAmount), locale)} für Bestellung ${order.orderNumber} überwiesen?`,
+                      `Has the amount of ${formatCurrency(Number(order.totalAmount), locale)} been received for order ${order.orderNumber}?`,
+                      `هل تم استلام مبلغ ${formatCurrency(Number(order.totalAmount), locale)} للطلب ${order.orderNumber}؟`
+                    ),
+                    confirmLabel: t3('Ja, Zahlung eingegangen', 'Yes, Payment Received', 'نعم، تم استلام الدفع'),
+                    cancelLabel: t3('Abbrechen', 'Cancel', 'إلغاء'),
+                  })
+                  if (ok) {
+                    try {
+                      await api.post(`/payments/${order.id}/confirm-vorkasse`)
+                      queryClient.invalidateQueries({ queryKey: ['admin-order'] })
+                    } catch (err: any) {
+                      alert(err?.response?.data?.message ?? 'Error')
+                    }
+                  }
+                }}
+              >
+                <Check className="h-4 w-4" />
+                {t3('Zahlung eingegangen', 'Payment Received', 'تم استلام الدفع')}
+              </Button>
+            </div>
+          )}
 
           {/* Danger Zone */}
           {canCancel && !isCancelled && (

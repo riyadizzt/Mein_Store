@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import Image from 'next/image'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
-import { ArrowLeft, Loader2, CreditCard, Lock, Shield } from 'lucide-react'
+import { ArrowLeft, Loader2, CreditCard, Lock, Shield, Building2 } from 'lucide-react'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { useCartStore } from '@/store/cart-store'
 import { CouponInput } from '@/components/coupon-input'
@@ -65,14 +65,30 @@ function StepPaymentInner() {
   const shippingCost = Number(shippingOption?.price ?? 0)
   const totalAmount = cartSubtotal + shippingCost
 
-  // Only show card (Klarna/PayPal hidden until they have real integrations)
   const klarnaEnabled = !!shopSettings?.klarnaEnabled
-  const [activeTab, setActiveTab] = useState<'card' | 'klarna'>('card')
+  const [vorkasseData, setVorkasseData] = useState<any>(null)
+
+  // Fetch available payment methods
+  useEffect(() => {
+    api.get('/payments/methods').then(({ data }) => {
+      if (data?.vorkasse && data?.vorkasseBankDetails) {
+        setVorkasseData(data.vorkasseBankDetails)
+      }
+    }).catch(() => {})
+  }, [])
+
+  const vorkasseEnabled = !!vorkasseData?.enabled
+  const [activeTab, setActiveTab] = useState<'card' | 'klarna' | 'vorkasse'>('card')
 
   const handlePlaceOrder = useCallback(async () => {
-    if (!termsAccepted || isProcessing || !stripe || !elements) return
+    if (!termsAccepted || isProcessing) return
 
-    const cardElement = elements.getElement(CardElement)
+    // Vorkasse doesn't need Stripe
+    if (activeTab !== 'vorkasse') {
+      if (!stripe || !elements) return
+    }
+
+    const cardElement = activeTab === 'card' ? elements?.getElement(CardElement) : null
     if (activeTab === 'card' && !cardElement) return
 
     setProcessing(true)
@@ -80,7 +96,7 @@ function StepPaymentInner() {
 
     try {
       const idempotencyKey = generateIdempotencyKey()
-      const method = activeTab === 'card' ? 'stripe_card' : 'klarna_pay_now'
+      const method = activeTab === 'vorkasse' ? 'vorkasse' : activeTab === 'klarna' ? 'klarna_pay_now' : 'stripe_card'
       setPaymentMethod(method as any)
 
       // 1. Create order — mit vollständiger Adresse
@@ -128,6 +144,22 @@ function StepPaymentInner() {
         idempotencyKey,
       })
 
+      // Vorkasse: no Stripe confirmation needed — go to confirmation with bank details
+      if (activeTab === 'vorkasse') {
+        try {
+          sessionStorage.setItem('malak-last-order', JSON.stringify({
+            orderNumber: order.orderNumber, orderId: order.id,
+            totalAmount: order.totalAmount, subtotal: order.subtotal,
+            shippingCost: order.shippingCost, taxAmount: order.taxAmount,
+            guestEmail: guestEmail || '',
+            paymentMethod: 'vorkasse',
+            bankDetails: vorkasseData,
+          }))
+        } catch {}
+        window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
+        return
+      }
+
       if (activeTab === 'klarna' && payment.redirectUrl) {
         window.location.href = payment.redirectUrl
         return
@@ -157,7 +189,7 @@ function StepPaymentInner() {
       }
 
       // 3. Confirm card payment with Stripe
-      if (activeTab === 'card' && payment.clientSecret) {
+      if (activeTab === 'card' && payment.clientSecret && stripe) {
         const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(payment.clientSecret, {
           payment_method: { card: cardElement! },
         })
@@ -174,7 +206,7 @@ function StepPaymentInner() {
         }
 
         if (paymentIntent?.status === 'requires_action') {
-          const { error: confirmError } = await stripe.confirmCardPayment(payment.clientSecret)
+          const { error: confirmError } = await stripe!.confirmCardPayment(payment.clientSecret)
           if (confirmError) {
             setError(confirmError.message ?? t('errors.cardNotCharged'))
             setProcessing(false)
@@ -216,29 +248,44 @@ function StepPaymentInner() {
           )}
 
           {/* Payment method tabs */}
-          {klarnaEnabled && (
-            <div className="flex border rounded-xl overflow-hidden" role="tablist" aria-label={t('paymentMethods.card')}>
+          {(klarnaEnabled || vorkasseEnabled) && (
+            <div className="flex border rounded-xl overflow-hidden" role="tablist">
               <button
                 role="tab"
                 aria-selected={activeTab === 'card'}
                 onClick={() => setActiveTab('card')}
-                className={`flex-1 py-3.5 px-4 text-sm font-medium border-r transition-all duration-200 ${
+                className={`flex-1 py-3.5 px-4 text-sm font-medium border-e transition-all duration-200 ${
                   activeTab === 'card' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
                 }`}
               >
                 <CreditCard className="h-4 w-4 mx-auto mb-1" />
                 {t('paymentMethods.card')}
               </button>
-              <button
-                role="tab"
-                aria-selected={activeTab === 'klarna'}
-                onClick={() => setActiveTab('klarna')}
-                className={`flex-1 py-3.5 px-4 text-sm font-medium transition-all duration-200 ${
-                  activeTab === 'klarna' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
-                }`}
-              >
-                Klarna
-              </button>
+              {klarnaEnabled && (
+                <button
+                  role="tab"
+                  aria-selected={activeTab === 'klarna'}
+                  onClick={() => setActiveTab('klarna')}
+                  className={`flex-1 py-3.5 px-4 text-sm font-medium border-e transition-all duration-200 ${
+                    activeTab === 'klarna' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
+                  }`}
+                >
+                  Klarna
+                </button>
+              )}
+              {vorkasseEnabled && (
+                <button
+                  role="tab"
+                  aria-selected={activeTab === 'vorkasse'}
+                  onClick={() => setActiveTab('vorkasse')}
+                  className={`flex-1 py-3.5 px-4 text-sm font-medium transition-all duration-200 ${
+                    activeTab === 'vorkasse' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
+                  }`}
+                >
+                  <Building2 className="h-4 w-4 mx-auto mb-1" />
+                  {locale === 'ar' ? 'تحويل بنكي' : locale === 'en' ? 'Bank Transfer' : 'Vorkasse'}
+                </button>
+              )}
             </div>
           )}
 
@@ -270,6 +317,29 @@ function StepPaymentInner() {
             </div>
           )}
 
+          {/* Vorkasse info */}
+          {activeTab === 'vorkasse' && vorkasseData && (
+            <div className="p-5 rounded-xl bg-[#d4a853]/5 border border-[#d4a853]/20 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Building2 className="h-4 w-4 text-[#d4a853]" />
+                {locale === 'ar' ? 'الدفع المسبق عبر التحويل البنكي' : locale === 'en' ? 'Pay via Bank Transfer' : 'Zahlung per Banküberweisung'}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {locale === 'ar'
+                  ? `بعد تقديم الطلب ستصلك بيانات البنك عبر البريد الإلكتروني. يرجى التحويل خلال ${vorkasseData.paymentDeadlineDays} أيام. سيتم تجهيز طلبك بعد استلام الدفع.`
+                  : locale === 'en'
+                    ? `After placing the order, you'll receive our bank details by email. Please transfer within ${vorkasseData.paymentDeadlineDays} days. Your order will be processed after payment is received.`
+                    : `Nach der Bestellung erhältst du unsere Bankdaten per E-Mail. Bitte überweise den Betrag innerhalb von ${vorkasseData.paymentDeadlineDays} Tagen. Deine Bestellung wird nach Zahlungseingang bearbeitet.`}
+              </p>
+              <div className="bg-background rounded-lg p-3 text-sm space-y-1 border" dir="ltr">
+                <div className="flex justify-between"><span className="text-muted-foreground">{locale === 'ar' ? 'صاحب الحساب' : 'Empfänger'}:</span><span className="font-medium">{vorkasseData.accountHolder}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">IBAN:</span><span className="font-mono font-medium">{vorkasseData.iban}</span></div>
+                {vorkasseData.bic && <div className="flex justify-between"><span className="text-muted-foreground">BIC:</span><span className="font-mono">{vorkasseData.bic}</span></div>}
+                {vorkasseData.bankName && <div className="flex justify-between"><span className="text-muted-foreground">{locale === 'ar' ? 'البنك' : 'Bank'}:</span><span>{vorkasseData.bankName}</span></div>}
+              </div>
+            </div>
+          )}
+
           {/* Legal */}
           <label className="flex items-start gap-2.5 text-sm cursor-pointer">
             <input
@@ -292,7 +362,7 @@ function StepPaymentInner() {
           {/* Place Order */}
           <Button
             onClick={handlePlaceOrder}
-            disabled={!termsAccepted || isProcessing || !stripe || stockError}
+            disabled={!termsAccepted || isProcessing || (activeTab !== 'vorkasse' && !stripe) || stockError}
             className="w-full h-14 text-base gap-2 bg-accent text-accent-foreground rounded-xl font-semibold hover:bg-accent/90 btn-press"
             size="lg"
           >

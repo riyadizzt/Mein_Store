@@ -45,6 +45,16 @@ export default function AdminSettingsPage() {
         notif_daily_summary: String(settings.notif_daily_summary ?? 'false'),
         notif_daily_summary_email: String(settings.notif_daily_summary_email ?? ''),
         returnsEnabled: String(settings.returnsEnabled ?? 'true'),
+        // Vorkasse
+        vorkasse_enabled: String(settings.vorkasse_enabled ?? 'false'),
+        vorkasse_account_holder: String(settings.vorkasse_account_holder ?? ''),
+        vorkasse_iban: String(settings.vorkasse_iban ?? ''),
+        vorkasse_bic: String(settings.vorkasse_bic ?? ''),
+        vorkasse_bank_name: String(settings.vorkasse_bank_name ?? ''),
+        vorkasse_deadline_days: String(settings.vorkasse_deadline_days ?? '7'),
+        // SumUp
+        sumup_enabled: String(settings.sumup_enabled ?? 'false'),
+        sumup_merchant_code: String(settings.sumup_merchant_code ?? ''),
       })
     }
   }, [settings])
@@ -126,6 +136,23 @@ export default function AdminSettingsPage() {
             <Toggle label="Stripe (Kreditkarte, Apple Pay, Google Pay)" enabled={form.stripeEnabled === 'true'} onToggle={() => toggleField('stripeEnabled')} />
             <Toggle label="Klarna (Rechnung, Ratenzahlung)" enabled={form.klarnaEnabled === 'true'} onToggle={() => toggleField('klarnaEnabled')} />
             <Toggle label="PayPal" enabled={form.paypalEnabled === 'true'} onToggle={() => toggleField('paypalEnabled')} />
+            <Toggle label={locale === 'ar' ? 'الدفع المسبق (تحويل بنكي)' : 'Vorkasse (Banküberweisung)'} enabled={form.vorkasse_enabled === 'true'} onToggle={() => updateField('vorkasse_enabled', form.vorkasse_enabled === 'true' ? 'false' : 'true')} />
+            {form.vorkasse_enabled === 'true' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 ltr:pl-8 rtl:pr-8 border-s-2 border-[#d4a853]/30 ltr:ml-2 rtl:mr-2">
+                <Field label={locale === 'ar' ? 'صاحب الحساب' : 'Kontoinhaber'} value={form.vorkasse_account_holder} onChange={(v) => updateField('vorkasse_account_holder', v)} />
+                <Field label="IBAN" value={form.vorkasse_iban} onChange={(v) => updateField('vorkasse_iban', v)} />
+                <Field label="BIC / SWIFT" value={form.vorkasse_bic} onChange={(v) => updateField('vorkasse_bic', v)} />
+                <Field label={locale === 'ar' ? 'اسم البنك' : 'Bankname'} value={form.vorkasse_bank_name} onChange={(v) => updateField('vorkasse_bank_name', v)} />
+                <Field label={locale === 'ar' ? 'مهلة الدفع (أيام)' : 'Zahlungsfrist (Tage)'} value={form.vorkasse_deadline_days} onChange={(v) => updateField('vorkasse_deadline_days', v)} type="number" />
+              </div>
+            )}
+            <Toggle label={locale === 'ar' ? 'SumUp (بطاقة ائتمان)' : 'SumUp (Kartenzahlung)'} enabled={form.sumup_enabled === 'true'} onToggle={() => updateField('sumup_enabled', form.sumup_enabled === 'true' ? 'false' : 'true')} />
+            {form.sumup_enabled === 'true' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 ltr:pl-8 rtl:pr-8 border-s-2 border-[#d4a853]/30 ltr:ml-2 rtl:mr-2">
+                <Field label="Merchant Code" value={form.sumup_merchant_code} onChange={(v) => updateField('sumup_merchant_code', v)} />
+                <p className="text-xs text-muted-foreground col-span-full">{locale === 'ar' ? 'مفتاح API يُضاف في ملف .env (SUMUP_API_KEY)' : 'API Key wird in .env gesetzt (SUMUP_API_KEY)'}</p>
+              </div>
+            )}
           </div>
         </div>
 
