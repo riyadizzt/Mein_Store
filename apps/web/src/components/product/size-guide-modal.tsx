@@ -61,11 +61,12 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
     setRecommending(false)
   }
 
-  const fields = chart?.entries?.[0] ? Object.keys(chart.entries[0]).filter(k =>
-    !['id', 'sizeChartId', 'size', 'sortOrder', 'createdAt'].includes(k) && chart.entries.some((e: any) => e[k] != null)
+  const entries = chart?.entries ?? []
+  const fields = entries.length > 0 ? Object.keys(entries[0]).filter(k =>
+    !['id', 'sizeChartId', 'size', 'sortOrder', 'createdAt'].includes(k) && entries.some((e: any) => e[k] != null)
   ) : []
 
-  const fitNote = locale === 'ar' ? (chart?.fitNoteAr || chart?.fitNote) : locale === 'en' ? (chart?.fitNoteEn || chart?.fitNote) : chart?.fitNote
+  const fitNote = chart ? (locale === 'ar' ? (chart.fitNoteAr || chart.fitNote) : locale === 'en' ? (chart.fitNoteEn || chart.fitNote) : chart.fitNote) : null
 
   const TABS = [
     { id: 'table' as const, icon: Ruler, label: t3(locale, 'Größentabelle', 'Size Chart', 'جدول المقاسات') },
@@ -147,7 +148,7 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
                           </tr>
                         </thead>
                         <tbody>
-                          {chart.entries.map((entry: any) => (
+                          {entries.map((entry: any) => (
                             <tr key={entry.id} className="border-b hover:bg-muted/30">
                               <td className="px-3 py-2 font-bold">{entry.size}</td>
                               {fields.map((f: string) => (
