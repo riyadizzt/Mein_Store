@@ -297,22 +297,20 @@ export default function AdminReturnsPage() {
         {/* Table */}
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+            <table className="w-full text-sm">
               <colgroup>
-                <col style={{ width: '15%' }} />
-                <col style={{ width: '17%' }} />
                 <col style={{ width: '18%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '13%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '14%' }} />
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="text-start px-4 py-3 font-medium">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Kunde', 'Customer', 'العميل')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Grund', 'Reason', 'السبب')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Status', 'Status', 'الحالة')}</th>
                   <th className="text-end px-4 py-3 font-medium">{t3('Betrag', 'Amount', 'المبلغ')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Datum', 'Date', 'التاريخ')}</th>
@@ -321,10 +319,14 @@ export default function AdminReturnsPage() {
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} className="border-b">{Array.from({ length: 7 }).map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>)}</tr>
+                    <tr key={i} className="border-b">
+                      {Array.from({ length: 6 }).map((_, j) => (
+                        <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>
+                      ))}
+                    </tr>
                   ))
                 ) : returns.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">{t3('Keine Retouren gefunden', 'No returns found', '\u0644\u0645 \u064a\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0645\u0631\u062a\u062c\u0639\u0627\u062a')}</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</td></tr>
                 ) : (
                   returns.map((ret: any) => (
                     <tr
@@ -332,25 +334,25 @@ export default function AdminReturnsPage() {
                       className={`border-b cursor-pointer transition-colors ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                       onClick={() => openDetail(ret)}
                     >
-                      <td className="text-start px-4 py-3 font-mono font-medium text-[#d4a853] truncate">{ret.returnNumber}</td>
-                      <td className="text-start px-4 py-3 font-mono text-xs text-primary truncate">{ret.order?.orderNumber ?? '—'}</td>
-                      <td className="text-start px-4 py-3 overflow-hidden">
-                        <p className="font-medium truncate">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
-                        <p className="text-xs text-muted-foreground truncate">{ret.order?.user?.email}</p>
+                      <td className="px-4 py-3">
+                        <span className="font-mono font-medium text-[#d4a853]">{ret.returnNumber}</span>
                       </td>
-                      <td className="text-start px-4 py-3 overflow-hidden">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
+                        {ret.reason && <p className="text-[10px] text-muted-foreground mt-0.5">{reasonLabel(ret.reason)}</p>}
                       </td>
-                      <td className="text-start px-4 py-3 overflow-hidden">
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
+                        <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
+                      </td>
+                      <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
                           {statusLabel(ret.status)}
                         </span>
                       </td>
-                      <td className="text-end px-4 py-3 font-medium tabular-nums">
-                        {ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}
-                      </td>
-                      <td className="text-start px-4 py-3 text-muted-foreground tabular-nums">{formatDate(ret.createdAt, locale)}</td>
+                      <td className="px-4 py-3 text-end font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{formatDate(ret.createdAt, locale)}</td>
                     </tr>
                   ))
                 )}
