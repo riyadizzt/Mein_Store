@@ -24,7 +24,7 @@ import { RefundStatusBanner } from '@/components/admin/refund-status-banner'
 // ── Status Helpers ───────────────────────────────────────────
 const STATUS_FLOW = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'] as const
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800', confirmed: 'bg-blue-100 text-blue-800',
+  pending: 'bg-yellow-100 text-yellow-800', pending_payment: 'bg-orange-100 text-orange-800', confirmed: 'bg-blue-100 text-blue-800',
   processing: 'bg-purple-100 text-purple-800', shipped: 'bg-indigo-100 text-indigo-800',
   delivered: 'bg-green-100 text-green-800', cancelled: 'bg-red-100 text-red-800',
   refunded: 'bg-orange-100 text-orange-800',
@@ -133,7 +133,9 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
   const currentStatus = optimisticStatus ?? order?.status
   const statusLabel = (s: string) => {
     const map: Record<string, string> = {
-      pending: t3('Ausstehend', 'Pending', 'معلق'), confirmed: t3('Bestätigt', 'Confirmed', 'مؤكد'),
+      pending: t3('Ausstehend', 'Pending', 'معلق'),
+      pending_payment: t3('Zahlung ausstehend', 'Awaiting Payment', 'بانتظار الدفع'),
+      confirmed: t3('Bestätigt', 'Confirmed', 'مؤكد'),
       processing: t3('In Bearbeitung', 'Processing', 'قيد المعالجة'), shipped: t3('Versendet', 'Shipped', 'تم الشحن'),
       delivered: t3('Zugestellt', 'Delivered', 'تم التسليم'), cancelled: t3('Storniert', 'Cancelled', 'ملغى'),
       refunded: t3('Erstattet', 'Refunded', 'مسترد'),
