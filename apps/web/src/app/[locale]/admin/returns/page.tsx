@@ -5,6 +5,7 @@ import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { useConfirm } from '@/components/ui/confirm-modal'
 import { Button } from '@/components/ui/button'
@@ -296,64 +297,62 @@ export default function AdminReturnsPage() {
       <div className="flex gap-6 items-start">
         {/* Table */}
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 font-medium">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Kunde', 'Customer', 'العميل')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Grund', 'Reason', 'السبب')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Status', 'Status', 'الحالة')}</th>
-                  <th className="text-end px-4 py-3 font-medium">{t3('Betrag', 'Amount', 'المبلغ')}</th>
-                  <th className="text-start px-4 py-3 font-medium">{t3('Datum', 'Date', 'التاريخ')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} className="border-b">
-                      {Array.from({ length: 7 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>
-                      ))}
-                    </tr>
-                  ))
-                ) : returns.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</td></tr>
-                ) : (
-                  returns.map((ret: any) => (
-                    <tr
-                      key={ret.id}
-                      className={`border-b cursor-pointer transition-colors ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
-                      onClick={() => openDetail(ret)}
-                    >
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="font-mono font-medium text-[#d4a853]">{ret.returnNumber}</span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
-                        <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
-                          {statusLabel(ret.status)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-end font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatDate(ret.createdAt, locale)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead>{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</TableHead>
+                <TableHead>{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</TableHead>
+                <TableHead>{t3('Kunde', 'Customer', 'العميل')}</TableHead>
+                <TableHead>{t3('Grund', 'Reason', 'السبب')}</TableHead>
+                <TableHead>{t3('Status', 'Status', 'الحالة')}</TableHead>
+                <TableHead className="text-end">{t3('Betrag', 'Amount', 'المبلغ')}</TableHead>
+                <TableHead>{t3('Datum', 'Date', 'التاريخ')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <TableCell key={j}><div className="h-4 bg-muted rounded animate-pulse" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : returns.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground h-24">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</TableCell></TableRow>
+              ) : (
+                returns.map((ret: any) => (
+                  <TableRow
+                    key={ret.id}
+                    className={`cursor-pointer ${selectedId === ret.id ? 'bg-primary/5' : ''}`}
+                    onClick={() => openDetail(ret)}
+                  >
+                    <TableCell className="whitespace-nowrap">
+                      <span className="font-mono font-medium text-[#d4a853]">{ret.returnNumber}</span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
+                      <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
+                        {statusLabel(ret.status)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-end font-medium whitespace-nowrap">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">{formatDate(ret.createdAt, locale)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
           {result?.meta?.total != null && (
             <div className="px-4 py-3 border-t text-xs text-muted-foreground">
               {result.meta.total} {t3('Retouren insgesamt', 'returns total', '\u0645\u0631\u062a\u062c\u0639 \u0625\u062c\u0645\u0627\u0644\u064a')}
