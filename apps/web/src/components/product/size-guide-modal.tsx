@@ -229,40 +229,34 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
                       </div>
                     )}
                     {entries.length > 0 ? (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-[#1a1a2e]/[0.03]">
-                              <th className="px-3 py-2.5 text-start font-semibold text-[#1a1a2e]">
-                                {t3(locale, 'Größe', 'Size', 'المقاس')}
-                              </th>
+                      <div className="overflow-x-auto rounded-xl border border-[#e5e0d8]">
+                        {/* Header */}
+                        <div className={`grid gap-x-1 bg-[#1a1a2e]/[0.04] border-b border-[#e5e0d8]`} style={{ gridTemplateColumns: `1fr repeat(${fields.length}, 1fr)` }}>
+                          <div className="px-3 py-3 text-sm font-semibold text-[#1a1a2e] text-center">{t3(locale, 'Größe', 'Size', 'المقاس')}</div>
+                          {fields.map(f => (
+                            <div key={f} className="px-2 py-3 text-center text-xs font-semibold text-[#1a1a2e]/50">
+                              {FIELD_LABELS[f]?.[locale === 'ar' ? 'ar' : locale === 'en' ? 'en' : 'de'] ?? f}
+                              <span className="text-[#1a1a2e]/20 font-normal"> cm</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Rows */}
+                        {entries.map((entry: any) => {
+                          const isRecommended = recommendation?.recommendation === entry.size
+                          return (
+                            <div key={entry.id} className={`grid gap-x-1 border-b border-[#e5e0d8] last:border-0 transition-colors ${isRecommended ? 'bg-[#d4a853]/10' : 'hover:bg-white'}`} style={{ gridTemplateColumns: `1fr repeat(${fields.length}, 1fr)` }}>
+                              <div className="px-3 py-3 text-sm font-bold text-center">
+                                {entry.size}
+                                {isRecommended && <span className="text-[9px] text-[#d4a853] font-medium block">{t3(locale, 'Empfohlen', 'Rec.', 'موصى')}</span>}
+                              </div>
                               {fields.map(f => (
-                                <th key={f} className="px-3 py-2.5 text-center font-semibold text-[#1a1a2e]/60 text-xs">
-                                  {FIELD_LABELS[f]?.[locale === 'ar' ? 'ar' : locale === 'en' ? 'en' : 'de'] ?? f}
-                                  <span className="text-[#1a1a2e]/20 font-normal"> cm</span>
-                                </th>
+                                <div key={f} className="px-2 py-3 text-center text-sm tabular-nums text-[#1a1a2e]/65">
+                                  {entry[f] != null ? Number(entry[f]) : '—'}
+                                </div>
                               ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {entries.map((entry: any) => {
-                              const isRecommended = recommendation?.recommendation === entry.size
-                              return (
-                                <tr key={entry.id} className={`border-b transition-colors ${isRecommended ? 'bg-[#d4a853]/10 font-semibold' : 'hover:bg-white'}`}>
-                                  <td className="px-3 py-2.5 font-bold">
-                                    {entry.size}
-                                    {isRecommended && <span className="text-[10px] text-[#d4a853] font-medium ltr:ml-2 rtl:mr-2">{t3(locale, 'Empfohlen', 'Recommended', 'موصى به')}</span>}
-                                  </td>
-                                  {fields.map(f => (
-                                    <td key={f} className="px-3 py-2.5 text-center tabular-nums text-[#1a1a2e]/70">
-                                      {entry[f] != null ? Number(entry[f]) : '—'}
-                                    </td>
-                                  ))}
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
+                            </div>
+                          )
+                        })}
                       </div>
                     ) : (
                       <div className="py-12 text-center text-[#1a1a2e]/25">
