@@ -299,7 +299,13 @@ export default function AdminReturnsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
               <colgroup>
-                {Array.from({ length: 7 }).map((_, i) => <col key={i} style={{ width: '14.28%' }} />)}
+                <col style={{ width: '15%' }} />{/* رقم المرتجع */}
+                <col style={{ width: '17%' }} />{/* رقم الطلب */}
+                <col style={{ width: '20%' }} />{/* العميل */}
+                <col style={{ width: '12%' }} />{/* السبب */}
+                <col style={{ width: '12%' }} />{/* الحالة */}
+                <col style={{ width: '12%' }} />{/* المبلغ */}
+                <col style={{ width: '12%' }} />{/* التاريخ */}
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">

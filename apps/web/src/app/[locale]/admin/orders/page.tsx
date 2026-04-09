@@ -128,7 +128,13 @@ export default function AdminOrdersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
             <colgroup>
-              {Array.from({ length: 7 }).map((_, i) => <col key={i} style={{ width: '14.28%' }} />)}
+              <col style={{ width: '18%' }} />{/* الطلب Order# */}
+              <col style={{ width: '22%' }} />{/* العميل Customer */}
+              <col style={{ width: '5%' }} /> {/* القناة Channel icon */}
+              <col style={{ width: '13%' }} />{/* التاريخ Date */}
+              <col style={{ width: '13%' }} />{/* الحالة Status */}
+              <col style={{ width: '14%' }} />{/* المبلغ Amount */}
+              <col style={{ width: '15%' }} />{/* الدفع Payment */}
             </colgroup>
             <thead>
               <tr className="border-b bg-muted/50">
