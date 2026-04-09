@@ -299,18 +299,20 @@ export default function AdminReturnsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <colgroup>
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '14%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '17%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '15%' }} />
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="text-start px-4 py-3 font-medium">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Kunde', 'Customer', 'العميل')}</th>
+                  <th className="text-start px-4 py-3 font-medium">{t3('Grund', 'Reason', 'السبب')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Status', 'Status', 'الحالة')}</th>
                   <th className="text-end px-4 py-3 font-medium">{t3('Betrag', 'Amount', 'المبلغ')}</th>
                   <th className="text-start px-4 py-3 font-medium">{t3('Datum', 'Date', 'التاريخ')}</th>
@@ -320,13 +322,13 @@ export default function AdminReturnsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-b">
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded animate-pulse" /></td>
                       ))}
                     </tr>
                   ))
                 ) : returns.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</td></tr>
                 ) : (
                   returns.map((ret: any) => (
                     <tr
@@ -339,11 +341,13 @@ export default function AdminReturnsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
-                        {ret.reason && <p className="text-[10px] text-muted-foreground mt-0.5">{reasonLabel(ret.reason)}</p>}
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
                         <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>

@@ -128,13 +128,13 @@ export default function AdminOrdersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <colgroup>
+              <col style={{ width: '16%' }} />
               <col style={{ width: '18%' }} />
-              <col style={{ width: '20%' }} />
               <col style={{ width: '6%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '14%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
             </colgroup>
             <thead>
               <tr className="border-b bg-muted/50">
