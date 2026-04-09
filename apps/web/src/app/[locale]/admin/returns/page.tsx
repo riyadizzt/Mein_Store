@@ -299,13 +299,13 @@ export default function AdminReturnsPage() {
           <div className="overflow-x-auto">
             <div className="min-w-[900px]">
               <div className="grid grid-cols-7 gap-x-2 bg-muted/50 border-b">
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</div>
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</div>
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Kunde', 'Customer', 'العميل')}</div>
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Grund', 'Reason', 'السبب')}</div>
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Status', 'Status', 'الحالة')}</div>
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{t3('Betrag', 'Amount', 'المبلغ')}</div>
-                <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t3('Datum', 'Date', 'التاريخ')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Bestell-Nr', 'Order No', 'رقم الطلب')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Kunde', 'Customer', 'العميل')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Grund', 'Reason', 'السبب')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Status', 'Status', 'الحالة')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Betrag', 'Amount', 'المبلغ')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Datum', 'Date', 'التاريخ')}</div>
               </div>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (

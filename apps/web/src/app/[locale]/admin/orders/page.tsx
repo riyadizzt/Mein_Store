@@ -128,13 +128,13 @@ export default function AdminOrdersPage() {
         <div className="overflow-x-auto">
           <div className="min-w-[900px]">
             <div className="grid grid-cols-7 gap-x-2 bg-muted/50 border-b">
-              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.order')}</div>
-              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.customer')}</div>
-              <div className="px-2 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
-              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.date')}</div>
-              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.status')}</div>
-              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">{t('orders.amount')}</div>
-              <div className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('orders.payment')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.order')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.customer')}</div>
+              <div className="px-2 py-3 text-sm font-semibold text-muted-foreground text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.date')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.status')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.amount')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.payment')}</div>
             </div>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
