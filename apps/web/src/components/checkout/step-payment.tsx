@@ -471,13 +471,19 @@ function StepPaymentInner() {
           {/* SumUp card widget */}
           {activeTab === 'sumup' && (
             <div className="space-y-3">
-              <div id="sumup-card" className="min-h-[200px] rounded-xl border bg-background p-1" />
-              {!sumupLoaded && (
-                <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  {locale === 'ar' ? 'جاري تحميل نموذج الدفع...' : 'Zahlungsformular wird geladen...'}
+              {!sumupMounted && (
+                <div className="p-5 rounded-xl bg-muted/30 border text-center space-y-2">
+                  <CreditCard className="h-8 w-8 mx-auto text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'اضغط على الزر أدناه لفتح نموذج الدفع بالبطاقة عبر SumUp'
+                      : locale === 'en'
+                        ? 'Click the button below to open the SumUp card payment form'
+                        : 'Klicke auf den Button um das SumUp-Kartenformular zu öffnen'}
+                  </p>
                 </div>
               )}
+              <div id="sumup-card" />
             </div>
           )}
 
