@@ -476,7 +476,7 @@ function StepPaymentInner() {
                   <CreditCard className="h-8 w-8 mx-auto text-muted-foreground/40" />
                   <p className="text-sm text-muted-foreground">
                     {locale === 'ar'
-                      ? 'اضغط على الزر أدناه لفتح نموذج الدفع بالبطاقة عبر SumUp'
+                      ? 'اضغط على الزر أدناه لمتابعة الدفع بالبطاقة عبر SumUp'
                       : locale === 'en'
                         ? 'Click the button below to open the SumUp card payment form'
                         : 'Klicke auf den Button um das SumUp-Kartenformular zu öffnen'}
