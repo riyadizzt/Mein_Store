@@ -284,12 +284,12 @@ export default function AdminProductsPage() {
                 <tr className="border-b bg-muted/30">
                   <th className="px-3 py-3 w-8"><button onClick={toggleSelectAll} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selected.size === products.length && products.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selected.size === products.length && products.length > 0 && <Check className="h-3 w-3 text-white" />}</button></th>
                   <th className="px-3 py-3 w-16"></th>
-                  <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.product')}</th>
-                  <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.category')}</th>
-                  <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.variants')}</th>
-                  <th className="text-end px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.price')}</th>
-                  <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.stock')}</th>
-                  <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('products.status')}</th>
+                  <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('products.product')}</th>
+                  <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('products.category')}</th>
+                  <th className="text-center px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('products.variants')}</th>
+                  <th className="text-end px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('products.price')}</th>
+                  <th className="text-center px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('products.stock')}</th>
+                  <th className="text-center px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('products.status')}</th>
                   <th className="px-3 py-3 w-20"></th>
                 </tr>
               </thead>

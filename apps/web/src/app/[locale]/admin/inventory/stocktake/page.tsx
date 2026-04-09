@@ -97,12 +97,12 @@ export default function StocktakePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b bg-muted/30">
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">{t('inventory.product')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">SKU</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">{t('inventory.variant')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">{t('inventory.stocktakeExpected')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">{t('inventory.stocktakeActual')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase text-muted-foreground">{t('inventory.stocktakeDiff')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase text-muted-foreground">{t('inventory.product')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase text-muted-foreground">SKU</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase text-muted-foreground">{t('inventory.variant')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase text-muted-foreground">{t('inventory.stocktakeExpected')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase text-muted-foreground">{t('inventory.stocktakeActual')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase text-muted-foreground">{t('inventory.stocktakeDiff')}</th>
               </tr></thead>
               <tbody>
                 {items.map((item: any) => {

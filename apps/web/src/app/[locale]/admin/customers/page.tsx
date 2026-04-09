@@ -294,12 +294,12 @@ export default function AdminCustomersPage() {
                     {selectedIds.size === customers.length && customers.length > 0 && <Check className="h-3 w-3 text-white" />}
                   </button>
                 </th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.customer')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.email')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.orders')}</th>
-                <th className="text-end px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.revenue')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.registered')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.status')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.customer')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.email')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.orders')}</th>
+                <th className="text-end px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.revenue')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.registered')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.status')}</th>
                 <th className="px-4 py-3 w-10"></th>
               </tr>
             </thead>

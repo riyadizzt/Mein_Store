@@ -263,12 +263,12 @@ export default function CustomerDetailPage() {
           <div className="bg-background border rounded-2xl overflow-hidden">
             {/* ── Orders ── */}
             {activeTab === 'orders' && (<div>{(customer.orders?.length ?? 0) === 0 ? <Empty icon={ShoppingBag} text={t('users.noOrders')} /> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/30">
-              <th className="text-start px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.orderNumber')}</th>
-              <th className="text-start px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.date')}</th>
-              <th className="text-center px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.status')}</th>
-              <th className="text-center px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.items')}</th>
-              <th className="text-end px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.amount')}</th>
-              <th className="text-center px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.channel')}</th>
+              <th className="text-start px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.orderNumber')}</th>
+              <th className="text-start px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.date')}</th>
+              <th className="text-center px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.status')}</th>
+              <th className="text-center px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.items')}</th>
+              <th className="text-end px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.amount')}</th>
+              <th className="text-center px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.channel')}</th>
               <th className="px-5 py-3"></th>
             </tr></thead><tbody>{customer.orders.map((o: any, i: number) => (
               <tr key={o.id} className="border-b hover:bg-muted/20 transition-colors group" style={{ animationDelay: `${i * 25}ms`, animation: 'fadeIn 250ms ease-out both' }}>
@@ -367,9 +367,9 @@ export default function CustomerDetailPage() {
             {/* ── Email History ── */}
             {activeTab === 'emails' && (<div>{(!emails || emails.length === 0) ? <div className="p-6"><Empty icon={MailOpen} text={t('users.noEmails')} /></div> :
               <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b bg-muted/30">
-                <th className="text-start px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.emailSubject')}</th>
-                <th className="text-start px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.date')}</th>
-                <th className="text-center px-5 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('users.emailStatus')}</th>
+                <th className="text-start px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.emailSubject')}</th>
+                <th className="text-start px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.date')}</th>
+                <th className="text-center px-5 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('users.emailStatus')}</th>
               </tr></thead><tbody>{(emails as any[]).map((e, i: number) => {
                 const sc: Record<string, string> = { queued: 'bg-yellow-100 text-yellow-800', sent: 'bg-blue-100 text-blue-800', delivered: 'bg-green-100 text-green-800', failed: 'bg-red-100 text-red-800' }
                 return (<tr key={e.id} className="border-b hover:bg-muted/20 transition-colors" style={{ animationDelay: `${i * 25}ms`, animation: 'fadeIn 250ms ease-out both' }}>

@@ -210,11 +210,11 @@ export default function SupplierProfilePage() {
                 <col style={{ width: '15%' }} />
               </colgroup>
               <thead><tr className="border-b bg-muted/30">
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">#</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Datum', 'Date', 'التاريخ')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Artikel', 'Items', 'القطع')}</th>
-                <th className="text-end px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Betrag', 'Amount', 'المبلغ')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Status', 'Status', 'الحالة')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">#</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Datum', 'Date', 'التاريخ')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Artikel', 'Items', 'القطع')}</th>
+                <th className="text-end px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Betrag', 'Amount', 'المبلغ')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Status', 'Status', 'الحالة')}</th>
               </tr></thead>
               <tbody>
                 {(deliveries?.data ?? []).slice(0, 5).map((d: any) => (
@@ -249,10 +249,10 @@ export default function SupplierProfilePage() {
                 <col style={{ width: '25%' }} />
               </colgroup>
               <thead><tr className="border-b bg-muted/30">
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Datum', 'Date', 'التاريخ')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Art', 'Method', 'الطريقة')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Notiz', 'Note', 'ملاحظة')}</th>
-                <th className="text-end px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Betrag', 'Amount', 'المبلغ')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Datum', 'Date', 'التاريخ')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Art', 'Method', 'الطريقة')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Notiz', 'Note', 'ملاحظة')}</th>
+                <th className="text-end px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Betrag', 'Amount', 'المبلغ')}</th>
               </tr></thead>
               <tbody>
                 {(payments?.data ?? []).slice(0, 5).map((p: any) => (
@@ -411,10 +411,10 @@ export default function SupplierProfilePage() {
           <div className="bg-background border rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead><tr className="border-b bg-muted/30">
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Datum', 'Date', 'التاريخ')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Zahlungsart', 'Method', 'طريقة الدفع')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Notiz', 'Note', 'ملاحظة')}</th>
-                <th className="text-end px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Betrag', 'Amount', 'المبلغ')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Datum', 'Date', 'التاريخ')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Zahlungsart', 'Method', 'طريقة الدفع')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Notiz', 'Note', 'ملاحظة')}</th>
+                <th className="text-end px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Betrag', 'Amount', 'المبلغ')}</th>
                 <th className="px-4 py-3 w-20"></th>
               </tr></thead>
               <tbody>

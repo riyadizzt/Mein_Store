@@ -351,10 +351,10 @@ export default function ReceivingPage() {
             <div className="bg-background border rounded-xl overflow-hidden text-start">
               <table className="w-full text-sm">
                 <thead><tr className="bg-muted/30 border-b">
-                  <th className="text-start px-4 py-2 text-xs font-medium">SKU</th>
-                  <th className="text-start px-4 py-2 text-xs font-medium">{t3(locale, 'Produkt', 'Product', 'المنتج')}</th>
-                  <th className="text-center px-4 py-2 text-xs font-medium">{t3(locale, 'Farbe/Größe', 'Color/Size', 'اللون/المقاس')}</th>
-                  <th className="text-end px-4 py-2 text-xs font-medium">{t3(locale, 'Menge', 'Qty', 'الكمية')}</th>
+                  <th className="text-start px-4 py-2 text-sm font-medium">SKU</th>
+                  <th className="text-start px-4 py-2 text-sm font-medium">{t3(locale, 'Produkt', 'Product', 'المنتج')}</th>
+                  <th className="text-center px-4 py-2 text-sm font-medium">{t3(locale, 'Farbe/Größe', 'Color/Size', 'اللون/المقاس')}</th>
+                  <th className="text-end px-4 py-2 text-sm font-medium">{t3(locale, 'Menge', 'Qty', 'الكمية')}</th>
                 </tr></thead>
                 <tbody>
                   {labelItems.map((item: any, idx: number) => (
@@ -551,11 +551,11 @@ export default function ReceivingPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
-                        <th className="text-start px-4 py-2 text-xs font-medium">{t3(locale, 'Produkt', 'Product', 'المنتج')}</th>
-                        <th className="text-start px-4 py-2 text-xs font-medium">SKU</th>
-                        <th className="text-center px-4 py-2 text-xs font-medium">{t3(locale, 'Menge', 'Qty', 'الكمية')}</th>
-                        <th className="text-center px-4 py-2 text-xs font-medium">{t3(locale, 'EK-Preis', 'Cost', 'سعر الشراء')}</th>
-                        <th className="text-end px-4 py-2 text-xs font-medium">{t3(locale, 'Summe', 'Total', 'المجموع')}</th>
+                        <th className="text-start px-4 py-2 text-sm font-medium">{t3(locale, 'Produkt', 'Product', 'المنتج')}</th>
+                        <th className="text-start px-4 py-2 text-sm font-medium">SKU</th>
+                        <th className="text-center px-4 py-2 text-sm font-medium">{t3(locale, 'Menge', 'Qty', 'الكمية')}</th>
+                        <th className="text-center px-4 py-2 text-sm font-medium">{t3(locale, 'EK-Preis', 'Cost', 'سعر الشراء')}</th>
+                        <th className="text-end px-4 py-2 text-sm font-medium">{t3(locale, 'Summe', 'Total', 'المجموع')}</th>
                         <th className="px-2 py-2" />
                       </tr>
                     </thead>

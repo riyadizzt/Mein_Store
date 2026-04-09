@@ -451,19 +451,19 @@ export default function AdminStaffPage() {
               </colgroup>
               <thead>
                 <tr className="border-b bg-muted/30">
-                  <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Mitarbeiter', 'Staff', 'الموظف')}
                   </th>
-                  <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Rolle', 'Role', 'الدور')}
                   </th>
-                  <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Status', 'Status', 'الحالة')}
                   </th>
-                  <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground hidden md:table-cell">
+                  <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground hidden md:table-cell">
                     {t3(locale, 'Letzter Login', 'Last Login', 'آخر تسجيل دخول')}
                   </th>
-                  <th className="text-end px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="text-end px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">
                     {t3(locale, 'Aktionen', 'Actions', 'الإجراءات')}
                   </th>
                 </tr>

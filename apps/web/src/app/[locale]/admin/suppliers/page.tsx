@@ -151,12 +151,12 @@ export default function SuppliersPage() {
             </colgroup>
             <thead>
               <tr className="border-b bg-muted/30">
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Name', 'Name', 'الاسم')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Land', 'Country', 'البلد')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Kontakt', 'Contact', 'جهة الاتصال')}</th>
-                <th className="text-end px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Offener Saldo', 'Balance', 'الرصيد')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Lieferungen', 'Deliveries', 'التوريدات')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3(locale, 'Letzte Lieferung', 'Last Delivery', 'آخر توريد')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Name', 'Name', 'الاسم')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Land', 'Country', 'البلد')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Kontakt', 'Contact', 'جهة الاتصال')}</th>
+                <th className="text-end px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Offener Saldo', 'Balance', 'الرصيد')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Lieferungen', 'Deliveries', 'التوريدات')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3(locale, 'Letzte Lieferung', 'Last Delivery', 'آخر توريد')}</th>
                 <th className="px-4 py-3 w-20"></th>
               </tr>
             </thead>

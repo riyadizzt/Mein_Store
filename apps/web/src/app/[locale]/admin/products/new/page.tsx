@@ -496,10 +496,10 @@ export default function NewProductPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b bg-muted/30">
-                <th className="text-start px-4 py-2.5 text-xs font-semibold text-muted-foreground">{t('inventory.variant')}</th>
-                <th className="text-start px-4 py-2.5 text-xs font-semibold text-muted-foreground">SKU</th>
-                <th className="text-center px-4 py-2.5 text-xs font-semibold text-muted-foreground">{t('products.price')}</th>
-                <th className="text-center px-4 py-2.5 text-xs font-semibold text-muted-foreground">{t('products.stock')}</th>
+                <th className="text-start px-4 py-2.5 text-sm font-semibold text-muted-foreground">{t('inventory.variant')}</th>
+                <th className="text-start px-4 py-2.5 text-sm font-semibold text-muted-foreground">SKU</th>
+                <th className="text-center px-4 py-2.5 text-sm font-semibold text-muted-foreground">{t('products.price')}</th>
+                <th className="text-center px-4 py-2.5 text-sm font-semibold text-muted-foreground">{t('products.stock')}</th>
               </tr></thead>
               <tbody>{variants.map((v, i) => (
                 <tr key={v.key} className="border-b hover:bg-muted/10" style={{ animationDelay: `${i * 15}ms`, animation: 'fadeIn 200ms ease-out both' }}>

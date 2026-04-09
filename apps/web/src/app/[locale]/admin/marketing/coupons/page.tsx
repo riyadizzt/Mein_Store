@@ -223,12 +223,12 @@ export default function AdminCouponsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30">
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3('Code', 'Code', 'الكود')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3('Typ', 'Type', 'النوع')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3('Rabatt', 'Discount', 'الخصم')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3('Genutzt/Max', 'Used/Max', 'مستخدم/أقصى')}</th>
-                <th className="text-start px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3('Gültig bis', 'Valid Until', 'صالح حتى')}</th>
-                <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t3('Status', 'Status', 'الحالة')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3('Code', 'Code', 'الكود')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3('Typ', 'Type', 'النوع')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3('Rabatt', 'Discount', 'الخصم')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3('Genutzt/Max', 'Used/Max', 'مستخدم/أقصى')}</th>
+                <th className="text-start px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3('Gültig bis', 'Valid Until', 'صالح حتى')}</th>
+                <th className="text-center px-4 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t3('Status', 'Status', 'الحالة')}</th>
                 <th className="px-4 py-3 w-28"></th>
               </tr>
             </thead>

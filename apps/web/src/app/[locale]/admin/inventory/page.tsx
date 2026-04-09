@@ -439,11 +439,11 @@ export default function InventoryPage() {
               <tr className="border-b bg-muted/30">
                 {viewMode === 'flat' && <th className="px-3 py-3 w-8"><button onClick={toggleSelectAll} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selectedIds.size === items.length && items.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selectedIds.size === items.length && items.length > 0 && <Check className="h-3 w-3 text-white" />}</button></th>}
                 {viewMode === 'grouped' && <th className="px-2 py-3 w-8"></th>}
-                <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.product')}</th>
-                <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">SKU</th>
-                <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.stock')}</th>
-                <th className="text-center px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.minimum')}</th>
-                <th className="text-start px-3 py-3 font-semibold text-xs uppercase tracking-wider text-muted-foreground">{t('inventory.warehouse')}</th>
+                <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.product')}</th>
+                <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">SKU</th>
+                <th className="text-center px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.stock')}</th>
+                <th className="text-center px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.minimum')}</th>
+                <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.warehouse')}</th>
                 <th className="px-3 py-3 w-20 text-center">{viewMode === 'grouped' ? '' : ''}</th>
               </tr>
             </thead>
@@ -638,12 +638,12 @@ export default function InventoryPage() {
           <div className="max-h-[400px] overflow-y-auto">
             {!historyData || historyData.length === 0 ? <p className="text-sm text-muted-foreground py-8 text-center">{t('inventory.noHistory')}</p> :
               <table className="w-full text-sm"><thead><tr className="border-b bg-muted/30">
-                <th className="text-start px-3 py-2 text-xs font-semibold text-muted-foreground">{t('inventory.date')}</th>
-                <th className="text-start px-3 py-2 text-xs font-semibold text-muted-foreground">{t('inventory.movementType')}</th>
-                <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">{t('inventory.qty')}</th>
-                <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">{t('inventory.before')}</th>
-                <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">{t('inventory.after')}</th>
-                <th className="text-start px-3 py-2 text-xs font-semibold text-muted-foreground">{t('inventory.notes')}</th>
+                <th className="text-start px-3 py-2 text-sm font-semibold text-muted-foreground">{t('inventory.date')}</th>
+                <th className="text-start px-3 py-2 text-sm font-semibold text-muted-foreground">{t('inventory.movementType')}</th>
+                <th className="text-center px-3 py-2 text-sm font-semibold text-muted-foreground">{t('inventory.qty')}</th>
+                <th className="text-center px-3 py-2 text-sm font-semibold text-muted-foreground">{t('inventory.before')}</th>
+                <th className="text-center px-3 py-2 text-sm font-semibold text-muted-foreground">{t('inventory.after')}</th>
+                <th className="text-start px-3 py-2 text-sm font-semibold text-muted-foreground">{t('inventory.notes')}</th>
               </tr></thead><tbody>
                 {(historyData as any[]).map((m: any) => (
                   <tr key={m.id} className="border-b"><td className="px-3 py-2 text-xs text-muted-foreground">{fmtDate(m.createdAt)}</td>
@@ -732,7 +732,7 @@ export default function InventoryPage() {
                     <div>
                       <div className="max-h-60 overflow-y-auto mb-4 rounded-xl border border-white/10">
                         <table className="w-full text-sm">
-                          <thead><tr className="border-b border-white/10"><th className="text-start px-3 py-2 text-white/50 text-xs">SKU</th><th className="text-center px-3 py-2 text-white/50 text-xs">{t('inventory.qty')}</th></tr></thead>
+                          <thead><tr className="border-b border-white/10"><th className="text-start px-3 py-2 text-white/50 text-sm">SKU</th><th className="text-center px-3 py-2 text-white/50 text-sm">{t('inventory.qty')}</th></tr></thead>
                           <tbody>{csvData.map((row, i) => (
                             <tr key={i} className="border-b border-white/5"><td className="px-3 py-2 text-white/80 font-mono text-xs">{row.sku}</td><td className="px-3 py-2 text-center text-white font-bold">+{row.quantity}</td></tr>
                           ))}</tbody>

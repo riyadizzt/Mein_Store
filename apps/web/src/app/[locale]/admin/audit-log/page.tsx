@@ -321,11 +321,11 @@ export default function AuditLogPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-start px-4 py-3 font-medium text-xs">{locale === 'ar' ? 'الوقت' : 'Zeit'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-xs">{locale === 'ar' ? 'الإجراء' : 'Aktion'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-xs">{locale === 'ar' ? 'الكائن' : 'Objekt'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-xs">{locale === 'ar' ? 'التغييرات' : 'Änderungen'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-xs">IP</th>
+                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'الوقت' : 'Zeit'}</th>
+                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'الإجراء' : 'Aktion'}</th>
+                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'الكائن' : 'Objekt'}</th>
+                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'التغييرات' : 'Änderungen'}</th>
+                    <th className="text-start px-4 py-3 font-medium text-sm">IP</th>
                   </tr>
                 </thead>
                 <tbody>
