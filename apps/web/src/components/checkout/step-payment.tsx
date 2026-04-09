@@ -200,21 +200,40 @@ function StepPaymentInner() {
           checkoutId: payment.clientSecret,
           locale: sumupLocale,
           currency: 'EUR',
-          onResponse: (type: string, _body: any) => {
+          onResponse: async (type: string, body: any) => {
+            console.log('[SumUp] onResponse:', type, body)
+
             if (type === 'success') {
-              // Payment confirmed by SumUp — NOW confirm on backend and navigate
-              fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/confirm`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-              }).catch(() => {})
+              // Verify with SumUp API that checkout is actually PAID
               try {
-                sessionStorage.setItem('malak-last-order', JSON.stringify({
-                  orderNumber: order.orderNumber, orderId: order.id,
-                  totalAmount: order.totalAmount, subtotal: order.subtotal,
-                  shippingCost: order.shippingCost, taxAmount: order.taxAmount,
-                  guestEmail: guestEmail || '',
-                }))
-              } catch {}
-              window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
+                const verifyRes = await fetch(
+                  `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/verify-sumup`,
+                  { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' },
+                )
+                const verifyData = await verifyRes.json().catch(() => ({}))
+
+                if (verifyRes.ok && verifyData.paid) {
+                  try {
+                    sessionStorage.setItem('malak-last-order', JSON.stringify({
+                      orderNumber: order.orderNumber, orderId: order.id,
+                      totalAmount: order.totalAmount, subtotal: order.subtotal,
+                      shippingCost: order.shippingCost, taxAmount: order.taxAmount,
+                      guestEmail: guestEmail || '',
+                    }))
+                  } catch {}
+                  window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
+                } else {
+                  // Backend says not captured — payment actually failed
+                  setError(
+                    locale === 'ar' ? 'لم يتم إتمام الدفع. يرجى المحاولة مرة أخرى.'
+                    : 'Zahlung nicht abgeschlossen. Bitte erneut versuchen.'
+                  )
+                  setProcessing(false)
+                }
+              } catch {
+                setError(locale === 'ar' ? 'خطأ في التحقق من الدفع' : 'Zahlungsverifizierung fehlgeschlagen')
+                setProcessing(false)
+              }
             } else if (type === 'fail' || type === 'error') {
               setError(
                 locale === 'ar' ? 'فشل الدفع. يرجى المحاولة مرة أخرى.'

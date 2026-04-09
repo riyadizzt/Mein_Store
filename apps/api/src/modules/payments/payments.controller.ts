@@ -77,6 +77,38 @@ export class PaymentsController {
     return this.paymentsService.confirmVorkassePayment(orderId, req.user.id)
   }
 
+  // ── SumUp: Verify checkout status before confirming ─────
+  @Post(':orderId/verify-sumup')
+  @UseGuards(JwtOptionalGuard)
+  @HttpCode(HttpStatus.OK)
+  async verifySumup(@Param('orderId', ParseUUIDPipe) orderId: string) {
+    const payment = await this.paymentsService.findByOrderId(orderId)
+    if (!payment || payment.provider !== 'SUMUP' || !payment.providerPaymentId) {
+      return { paid: false, reason: 'Not a SumUp payment' }
+    }
+
+    // Check SumUp checkout status via API
+    const apiKey = process.env.SUMUP_API_KEY
+    if (!apiKey) return { paid: false, reason: 'SumUp not configured' }
+
+    try {
+      const res = await fetch(`https://api.sumup.com/v0.1/checkouts/${payment.providerPaymentId}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      })
+      const data: any = await res.json()
+
+      if (data.status === 'PAID') {
+        // Actually paid — now confirm
+        await this.paymentsService.markAsCaptured(orderId)
+        return { paid: true, status: data.status }
+      }
+
+      return { paid: false, status: data.status ?? 'UNKNOWN' }
+    } catch (err: any) {
+      return { paid: false, reason: err.message }
+    }
+  }
+
   // ── PayPal: Capture after redirect ──────────────────────
   @Post(':orderId/capture-paypal')
   @UseGuards(JwtOptionalGuard)
