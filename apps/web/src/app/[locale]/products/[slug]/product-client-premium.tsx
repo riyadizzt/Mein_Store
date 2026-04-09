@@ -249,7 +249,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           {product.sizeGuide ? (
             <div dangerouslySetInnerHTML={{ __html: product.sizeGuide }} />
           ) : (
-            <p className="italic text-[#0f1419]/25">{t('sizeGuideComingSoon')}</p>
+            <div className="space-y-3">
+              <p>{t3('Klicke auf "Größenberatung" bei der Größenauswahl für eine detaillierte Größentabelle und persönliche Empfehlung.', 'Click "Size Guide" at the size selection for a detailed size chart and personal recommendation.', 'اضغط على "دليل المقاسات" عند اختيار المقاس للحصول على جدول مقاسات مفصل وتوصية شخصية.')}</p>
+              <button onClick={() => setSizeGuideOpen(true)} className="text-[#d4a853] underline underline-offset-4 hover:text-[#c49b45] transition-colors">
+                {t('sizeGuide')}
+              </button>
+            </div>
           )}
         </div>
       ),
