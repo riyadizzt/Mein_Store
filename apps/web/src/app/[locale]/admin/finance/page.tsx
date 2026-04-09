@@ -783,41 +783,28 @@ function CustomersTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
       </div>
       {topCustomers.length > 0 ? (
         <div className="bg-background border rounded-xl overflow-hidden">
-          <h3 className="font-semibold p-4 border-b">{t3('Top-Kunden', 'Top Customers', '\u0623\u0641\u0636\u0644 \u0627\u0644\u0639\u0645\u0644\u0627\u0621')}</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <colgroup>
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '28%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '18%' }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Name', 'Name', '\u0627\u0644\u0627\u0633\u0645')}</th>
-                  <th className="text-start px-4 py-3 text-sm font-semibold">{t3('E-Mail', 'Email', '\u0627\u0644\u0628\u0631\u064A\u062F')}</th>
-                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Bestellungen', 'Orders', '\u0627\u0644\u0637\u0644\u0628\u0627\u062A')}</th>
-                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Gesamtausgaben', 'Total Spent', '\u0625\u062C\u0645\u0627\u0644\u064A \u0627\u0644\u0625\u0646\u0641\u0627\u0642')}</th>
-                  <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Durchschn.', 'Avg. Order', '\u0627\u0644\u0645\u062A\u0648\u0633\u0637')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topCustomers.map((c: any, i: number) => (
-                  <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 text-sm font-semibold">{c.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
-                    <td className="px-4 py-3 text-end tabular-nums">{c.orderCount}</td>
-                    <td className="px-4 py-3 text-end tabular-nums font-medium">{fmt(c.totalSpent)}</td>
-                    <td className="px-4 py-3 text-end tabular-nums">{fmt(c.avgOrderValue)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <h3 className="font-semibold p-4 border-b">{t3('Top-Kunden', 'Top Customers', 'أفضل العملاء')}</h3>
+          {/* Header */}
+          <div className="grid grid-cols-5 gap-x-2 bg-muted/50 border-b">
+            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Name', 'Name', 'الاسم')}</div>
+            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('E-Mail', 'Email', 'البريد')}</div>
+            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Bestellungen', 'Orders', 'الطلبات')}</div>
+            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Gesamtausgaben', 'Total Spent', 'إجمالي الإنفاق')}</div>
+            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Durchschn.', 'Avg. Order', 'المتوسط')}</div>
           </div>
+          {/* Rows */}
+          {topCustomers.map((c: any, i: number) => (
+            <div key={i} className="grid grid-cols-5 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
+              <div className="px-4 py-3 text-sm font-medium">{c.name}</div>
+              <div className="px-4 py-3 text-sm text-muted-foreground" dir="ltr">{c.email}</div>
+              <div className="px-4 py-3 text-sm tabular-nums text-center">{c.orderCount}</div>
+              <div className="px-4 py-3 text-sm tabular-nums text-center font-medium">{fmt(c.totalSpent)}</div>
+              <div className="px-4 py-3 text-sm tabular-nums text-center">{fmt(c.avgOrderValue)}</div>
+            </div>
+          ))}
         </div>
       ) : (
-        <p className="text-center text-muted-foreground py-12">{t3('Keine Daten', 'No data', '\u0644\u0627 \u062A\u0648\u062C\u062F \u0628\u064A\u0627\u0646\u0627\u062A')}</p>
+        <p className="text-center text-muted-foreground py-12">{t3('Keine Daten', 'No data', 'لا توجد بيانات')}</p>
       )}
     </div>
   )
