@@ -7,7 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import {
   CheckCircle2, Package, ArrowRight, Copy, Mail, Truck, ShoppingBag,
-  Shield, Headphones, MapPin, CreditCard, Clock, Home, Share2, Printer,
+  Shield, Headphones, MapPin, CreditCard, Clock, Home, Share2, Printer, Building2,
   UserPlus, Zap, Heart, Star, Lock, Eye, EyeOff,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -200,6 +200,83 @@ function ConfirmationContent() {
             </button>
           )}
         </div>
+
+        {/* Vorkasse: Bank Details */}
+        {savedOrder?.paymentMethod === 'vorkasse' && savedOrder?.bankDetails && (
+          <div className={`mb-10 transition-all duration-700 delay-500 ${phase >= 1 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            <div className="bg-[#d4a853]/5 border-2 border-[#d4a853]/20 rounded-2xl p-6 max-w-lg mx-auto">
+              <h3 className="text-base font-bold mb-4 flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-[#d4a853]" />
+                {locale === 'ar' ? 'بيانات التحويل البنكي' : locale === 'en' ? 'Bank Transfer Details' : 'Bankdaten für Überweisung'}
+              </h3>
+
+              <p className="text-sm text-muted-foreground mb-4">
+                {locale === 'ar'
+                  ? 'يرجى تحويل المبلغ مع ذكر مرجع الدفع التالي:'
+                  : locale === 'en'
+                    ? 'Please transfer the amount with the following reference:'
+                    : 'Bitte überweise den Betrag mit folgendem Verwendungszweck:'}
+              </p>
+
+              {/* Verwendungszweck — prominent + copyable */}
+              <button
+                onClick={() => { navigator.clipboard.writeText(orderNumber ?? ''); }}
+                className="w-full mb-4 p-3 bg-[#1a1a2e] rounded-xl text-center group hover:bg-[#1a1a2e]/90 transition-colors"
+              >
+                <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1">
+                  {locale === 'ar' ? 'مرجع الدفع' : 'Verwendungszweck'}
+                </p>
+                <p className="text-xl font-mono font-bold text-[#d4a853] flex items-center justify-center gap-2" dir="ltr">
+                  {orderNumber}
+                  <Copy className="h-4 w-4 text-white/30 group-hover:text-white/60" />
+                </p>
+              </button>
+
+              <p className="text-xs text-red-600/80 mb-4">
+                {locale === 'ar'
+                  ? 'بدون مرجع الدفع الصحيح لا يمكننا تخصيص الدفع لطلبك.'
+                  : locale === 'en'
+                    ? 'Without the correct reference, we cannot assign the payment to your order.'
+                    : 'Ohne korrekten Verwendungszweck kann die Zahlung nicht zugeordnet werden.'}
+              </p>
+
+              <div className="bg-background rounded-xl p-4 space-y-2 text-sm border" dir="ltr">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{locale === 'ar' ? 'صاحب الحساب' : 'Empfänger'}:</span>
+                  <span className="font-medium">{savedOrder.bankDetails.accountHolder}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">IBAN:</span>
+                  <span className="font-mono font-medium">{savedOrder.bankDetails.iban}</span>
+                </div>
+                {savedOrder.bankDetails.bic && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">BIC:</span>
+                    <span className="font-mono">{savedOrder.bankDetails.bic}</span>
+                  </div>
+                )}
+                {savedOrder.bankDetails.bankName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{locale === 'ar' ? 'البنك' : 'Bank'}:</span>
+                    <span>{savedOrder.bankDetails.bankName}</span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-2 border-t font-semibold">
+                  <span>{locale === 'ar' ? 'المبلغ' : 'Betrag'}:</span>
+                  <span>€{Number(savedOrder.totalAmount).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-3 text-center">
+                {locale === 'ar'
+                  ? `يرجى التحويل خلال ${savedOrder.bankDetails.paymentDeadlineDays ?? 7} أيام`
+                  : locale === 'en'
+                    ? `Please transfer within ${savedOrder.bankDetails.paymentDeadlineDays ?? 7} days`
+                    : `Bitte innerhalb von ${savedOrder.bankDetails.paymentDeadlineDays ?? 7} Tagen überweisen`}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Phase 2: Timeline */}
         <div className={`mb-10 transition-all duration-700 ${phase >= 2 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
