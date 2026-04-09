@@ -437,14 +437,14 @@ export default function InventoryPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30">
-                {viewMode === 'flat' && <th className="px-3 py-3 w-8"><button onClick={toggleSelectAll} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selectedIds.size === items.length && items.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selectedIds.size === items.length && items.length > 0 && <Check className="h-3 w-3 text-white" />}</button></th>}
+                {viewMode === 'flat' && <th className="px-3 py-2 w-8"><button onClick={toggleSelectAll} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selectedIds.size === items.length && items.length > 0 ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selectedIds.size === items.length && items.length > 0 && <Check className="h-3 w-3 text-white" />}</button></th>}
                 {viewMode === 'grouped' && <th className="px-2 py-3 w-8"></th>}
-                <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.product')}</th>
-                <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">SKU</th>
-                <th className="text-center px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.stock')}</th>
-                <th className="text-center px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.minimum')}</th>
-                <th className="text-start px-3 py-3 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.warehouse')}</th>
-                <th className="px-3 py-3 w-20 text-center">{viewMode === 'grouped' ? '' : ''}</th>
+                <th className="text-start px-3 py-2 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.product')}</th>
+                <th className="text-start px-3 py-2 font-semibold text-sm uppercase tracking-wider text-muted-foreground">SKU</th>
+                <th className="text-center px-3 py-2 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.stock')}</th>
+                <th className="text-center px-3 py-2 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.minimum')}</th>
+                <th className="text-start px-3 py-2 font-semibold text-sm uppercase tracking-wider text-muted-foreground">{t('inventory.warehouse')}</th>
+                <th className="px-3 py-2 w-20 text-center">{viewMode === 'grouped' ? '' : ''}</th>
               </tr>
             </thead>
             <tbody>
@@ -467,8 +467,8 @@ export default function InventoryPage() {
                     <tr className={`border-b transition-colors group cursor-pointer ${isOut ? 'bg-red-50/50' : isLow ? 'bg-orange-50/30' : 'hover:bg-muted/20'}`}
                       onClick={() => setExpandedProductId(isExpanded ? null : product.productId)}
                       style={{ animationDelay: `${i * 12}ms`, animation: 'fadeIn 200ms ease-out both' }}>
-                      <td className="px-3 py-3"><ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-2"><ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} /></td>
+                      <td className="px-3 py-2">
                         <div className="flex items-center gap-3">
                           {product.image ? <img src={product.image} alt="" className="h-20 w-20 rounded-xl object-cover flex-shrink-0" /> : <div className="h-20 w-20 rounded-xl bg-muted flex items-center justify-center flex-shrink-0"><Package className="h-6 w-6 text-muted-foreground/30" /></div>}
                           <div>
@@ -480,14 +480,14 @@ export default function InventoryPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{product.variantsCount} {t('inventory.variant')}</td>
-                      <td className="px-3 py-3 text-center"><span className={`font-bold text-sm ${isOut ? 'text-red-600' : isLow ? 'text-orange-600' : ''}`}>{product.totalStock}</span></td>
-                      <td className="px-3 py-3 text-center text-xs">
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{product.variantsCount} {t('inventory.variant')}</td>
+                      <td className="px-3 py-2 text-center"><span className={`font-bold text-sm ${isOut ? 'text-red-600' : isLow ? 'text-orange-600' : ''}`}>{product.totalStock}</span></td>
+                      <td className="px-3 py-2 text-center text-xs">
                         {product.lowCount > 0 && <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 text-[10px] font-medium">{product.lowCount} {locale === 'ar' ? 'منخفض' : 'niedrig'}</span>}
                         {product.outCount > 0 && <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-medium ltr:ml-1 rtl:mr-1">{product.outCount} {locale === 'ar' ? 'نفد' : 'leer'}</span>}
                       </td>
-                      <td className="px-3 py-3"></td>
-                      <td className="px-3 py-3"></td>
+                      <td className="px-3 py-2"></td>
+                      <td className="px-3 py-2"></td>
                     </tr>
                     {/* Expanded: one row per variant PER warehouse */}
                     {isExpanded && sortedVariants
@@ -559,12 +559,12 @@ export default function InventoryPage() {
                   return (
                     <tr key={inv.id} className={`border-b transition-colors group ${isOut ? 'bg-red-50/50' : isLow ? 'bg-orange-50/30' : 'hover:bg-muted/20'}`}
                       style={{ animationDelay: `${i * 12}ms`, animation: 'fadeIn 200ms ease-out both' }}>
-                      <td className="px-3 py-3"><button onClick={() => toggleSelect(inv.id)} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selectedIds.has(inv.id) ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selectedIds.has(inv.id) && <Check className="h-3 w-3 text-white" />}</button></td>
-                      <td className="px-3 py-3">{inv.image ? <img src={inv.image} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground/30" /></div>}</td>
-                      <td className="px-3 py-3"><div className="font-semibold text-[13px] line-clamp-1 max-w-[200px]">{getName(inv.productName)}</div><span className={`inline-flex mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase ${STATUS_BADGE[inv.status]}`}>{t(`inventory.status${inv.status === 'in_stock' ? 'InStock' : inv.status === 'low' ? 'Low' : 'OutOfStock'}`)}</span></td>
-                      <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{inv.sku}</td>
-                      <td className="px-3 py-3"><div className="flex items-center gap-1.5">{inv.colorHex && <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: inv.colorHex }} />}<span className="text-xs text-muted-foreground">{translateColor(inv.color, locale)}/{inv.size}</span></div></td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-3 py-2"><button onClick={() => toggleSelect(inv.id)} className={`h-4 w-4 rounded border-2 flex items-center justify-center ${selectedIds.has(inv.id) ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>{selectedIds.has(inv.id) && <Check className="h-3 w-3 text-white" />}</button></td>
+                      <td className="px-3 py-2">{inv.image ? <img src={inv.image} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground/30" /></div>}</td>
+                      <td className="px-3 py-2"><div className="font-semibold text-[13px] line-clamp-1 max-w-[200px]">{getName(inv.productName)}</div><span className={`inline-flex mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase ${STATUS_BADGE[inv.status]}`}>{t(`inventory.status${inv.status === 'in_stock' ? 'InStock' : inv.status === 'low' ? 'Low' : 'OutOfStock'}`)}</span></td>
+                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{inv.sku}</td>
+                      <td className="px-3 py-2"><div className="flex items-center gap-1.5">{inv.colorHex && <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: inv.colorHex }} />}<span className="text-xs text-muted-foreground">{translateColor(inv.color, locale)}/{inv.size}</span></div></td>
+                      <td className="px-3 py-2 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => quickAdjustMut.mutate({ id: inv.id, delta: -1 })} className="h-6 w-6 rounded-md bg-muted hover:bg-red-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"><Minus className="h-3 w-3" /></button>
                           <button onClick={() => { setAdjustItem(inv); setAdjustQty(inv.quantityOnHand); setAdjustReason(''); setShowAdjustModal(true) }}
@@ -576,11 +576,11 @@ export default function InventoryPage() {
                             style={{ width: `${Math.min(100, (inv.available / (inv.maxStock || 100)) * 100)}%` }} />
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-center text-xs text-muted-foreground">{inv.reorderPoint}</td>
-                      <td className="px-3 py-3 text-end text-[13px] font-medium">{fmtCur(inv.salePrice)}</td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{inv.location?.name ?? '—'}</td>
-                      <td className="px-3 py-3 text-center text-[11px] text-muted-foreground">{fmtDate(inv.lastMovement)}</td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-2 text-center text-xs text-muted-foreground">{inv.reorderPoint}</td>
+                      <td className="px-3 py-2 text-end text-[13px] font-medium">{fmtCur(inv.salePrice)}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{inv.location?.name ?? '—'}</td>
+                      <td className="px-3 py-2 text-center text-[11px] text-muted-foreground">{fmtDate(inv.lastMovement)}</td>
+                      <td className="px-3 py-2">
                         <button onClick={() => { setHistoryItem(inv); setShowHistoryModal(true) }} className="p-1.5 rounded-lg hover:bg-muted opacity-0 group-hover:opacity-100 transition-all"><Eye className="h-3.5 w-3.5 text-muted-foreground" /></button>
                       </td>
                     </tr>
