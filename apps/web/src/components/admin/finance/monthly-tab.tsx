@@ -2,15 +2,8 @@
 
 type T3 = (de: string, en: string, ar: string) => string
 
-function fmt(v: number | string | undefined | null): string {
-  const n = Number(v ?? 0)
-  return `€${n.toFixed(2)}`
-}
-
-function pct(current: number, prev: number): { up: boolean; label: string } | null {
-  if (!prev) return null
-  const diff = ((current - prev) / prev) * 100
-  return { up: diff >= 0, label: `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%` }
+function fmtNum(v: number): string {
+  return v.toFixed(2).replace('.', ',') + ' €'
 }
 
 export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, t3, onCsvExport }: {
@@ -27,6 +20,9 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
   const totalTax = totalGross - totalNet
   const refunds = Number(data?.refundsTotal ?? 0)
   const monthNames = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+
+  const gridCols5 = 'grid grid-cols-5 gap-x-2'
+  const gridCols2 = 'grid grid-cols-[1fr_auto] gap-x-4'
 
   return (
     <div className="space-y-6 print:space-y-4">
@@ -53,15 +49,15 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden">
         <div className="bg-[#1a1a2e] p-4 text-white">
           <p className="text-xs text-white/50 mb-1">{t3('Bruttoerlöse', 'Gross Revenue', 'إجمالي الإيرادات')}</p>
-          <p className="text-lg font-bold tabular-nums">{fmt(totalGross)}</p>
+          <p className="text-lg font-bold tabular-nums">€{totalGross.toFixed(2)}</p>
         </div>
         <div className="bg-[#1a1a2e] p-4 text-white">
           <p className="text-xs text-white/50 mb-1">{t3('Nettoerlöse', 'Net Revenue', 'صافي الإيرادات')}</p>
-          <p className="text-lg font-bold tabular-nums">{fmt(totalNet)}</p>
+          <p className="text-lg font-bold tabular-nums">€{totalNet.toFixed(2)}</p>
         </div>
         <div className="bg-[#1a1a2e] p-4 text-white">
           <p className="text-xs text-white/50 mb-1">{t3('USt 19%', 'VAT 19%', 'ضريبة 19%')}</p>
-          <p className="text-lg font-bold tabular-nums">{fmt(totalTax)}</p>
+          <p className="text-lg font-bold tabular-nums">€{totalTax.toFixed(2)}</p>
         </div>
         <div className="bg-[#1a1a2e] p-4 text-white">
           <p className="text-xs text-white/50 mb-1">{t3('Bestellungen', 'Orders', 'الطلبات')}</p>
@@ -69,99 +65,78 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
         </div>
       </div>
 
-      {/* ═══════ DAILY TABLE — exact copy of /admin/orders table structure ═══════ */}
-      <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">{t3('Tägliche Umsatzübersicht', 'Daily Revenue Breakdown', 'التفاصيل اليومية')}</h3>
+      {/* ═══ DAILY BREAKDOWN — CSS Grid ═══ */}
+      <h3 className="text-sm font-semibold text-muted-foreground">{t3('Tägliche Umsatzübersicht', 'Daily Revenue Breakdown', 'التفاصيل اليومية')}</h3>
       <div className="bg-background border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <colgroup>
-              <col style={{ width: '22%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '22%' }} />
-              <col style={{ width: '22%' }} />
-              <col style={{ width: '24%' }} />
-            </colgroup>
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Datum', 'Date', 'التاريخ')}</th>
-                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Anz.', 'Qty', 'عدد')}</th>
-                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Brutto (EUR)', 'Gross (EUR)', 'إجمالي')}</th>
-                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Netto (EUR)', 'Net (EUR)', 'صافي')}</th>
-                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('USt (EUR)', 'VAT (EUR)', 'ضريبة')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeDays.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">{t3('Keine Daten', 'No data', 'لا توجد بيانات')}</td></tr>
-              ) : activeDays.map((d: any) => {
-                const g = Number(d.gross); const n = Number(d.net); const vat = g - n
-                return (
-                  <tr key={d.date} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs">{d.date.split('-').reverse().join('.')}</td>
-                    <td className="px-4 py-3 text-end tabular-nums">{d.orderCount}</td>
-                    <td className="px-4 py-3 text-end tabular-nums font-medium">{g.toFixed(2).replace('.', ',')} €</td>
-                    <td className="px-4 py-3 text-end tabular-nums">{n.toFixed(2).replace('.', ',')} €</td>
-                    <td className="px-4 py-3 text-end tabular-nums text-muted-foreground">{vat.toFixed(2).replace('.', ',')} €</td>
-                  </tr>
-                )
-              })}
-              {/* Total row inside tbody — no tfoot (same as Orders table) */}
-              <tr className="border-b bg-muted/50 font-bold">
-                <td className="px-4 py-3">{t3('SUMME', 'TOTAL', 'المجموع')}</td>
-                <td className="px-4 py-3 text-end tabular-nums">{cur.orderCount ?? 0}</td>
-                <td className="px-4 py-3 text-end tabular-nums">{totalGross.toFixed(2).replace('.', ',')} €</td>
-                <td className="px-4 py-3 text-end tabular-nums">{totalNet.toFixed(2).replace('.', ',')} €</td>
-                <td className="px-4 py-3 text-end tabular-nums">{totalTax.toFixed(2).replace('.', ',')} €</td>
-              </tr>
-            </tbody>
-          </table>
+        {/* Header */}
+        <div className={`${gridCols5} bg-muted/50 border-b`}>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Datum', 'Date', 'التاريخ')}</div>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Anz.', 'Qty', 'عدد')}</div>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Brutto', 'Gross', 'إجمالي')}</div>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Netto', 'Net', 'صافي')}</div>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('USt', 'VAT', 'ضريبة')}</div>
         </div>
+        {/* Rows */}
+        {activeDays.length === 0 ? (
+          <div className="px-4 py-8 text-center text-muted-foreground">{t3('Keine Daten', 'No data', 'لا توجد بيانات')}</div>
+        ) : (
+          <>
+            {activeDays.map((d: any) => {
+              const g = Number(d.gross); const n = Number(d.net); const vat = g - n
+              return (
+                <div key={d.date} className={`${gridCols5} border-b hover:bg-muted/30 transition-colors items-center`}>
+                  <div className="px-4 py-3 text-sm tabular-nums">{d.date.split('-').reverse().join('.')}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center">{d.orderCount}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center font-medium">{fmtNum(g)}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(n)}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center text-muted-foreground">{fmtNum(vat)}</div>
+                </div>
+              )
+            })}
+            {/* Total */}
+            <div className={`${gridCols5} bg-muted/50 font-bold items-center`}>
+              <div className="px-4 py-3 text-sm">{t3('SUMME', 'TOTAL', 'المجموع')}</div>
+              <div className="px-4 py-3 text-sm tabular-nums text-center">{cur.orderCount ?? 0}</div>
+              <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(totalGross)}</div>
+              <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(totalNet)}</div>
+              <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(totalTax)}</div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ═══════ SUMMARY TABLE — exact copy of /admin/orders table structure ═══════ */}
-      <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">{t3('Monatszusammenfassung', 'Monthly Summary', 'ملخص الشهر')}</h3>
+      {/* ═══ MONTHLY SUMMARY — CSS Grid 2 cols ═══ */}
+      <h3 className="text-sm font-semibold text-muted-foreground">{t3('Monatszusammenfassung', 'Monthly Summary', 'ملخص الشهر')}</h3>
       <div className="bg-background border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <colgroup>
-              <col style={{ width: '60%' }} />
-              <col style={{ width: '40%' }} />
-            </colgroup>
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Position', 'Item', 'البند')}</th>
-                <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Betrag', 'Amount', 'المبلغ')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3">{t3('Bruttoerlöse gesamt', 'Total Gross Revenue', 'إجمالي الإيرادات')}</td>
-                <td className="px-4 py-3 text-end font-medium tabular-nums">{totalGross.toFixed(2).replace('.', ',')} €</td>
-              </tr>
-              {refunds > 0 && (
-                <tr className="border-b hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 text-red-600">{t3('./. Retouren/Stornierungen', 'Less Returns/Cancellations', 'ناقص المرتجعات')}</td>
-                  <td className="px-4 py-3 text-end font-medium tabular-nums text-red-600">-{refunds.toFixed(2).replace('.', ',')} €</td>
-                </tr>
-              )}
-              <tr className="border-b bg-muted/30">
-                <td className="px-4 py-3 font-semibold">{t3('= Netto-Bruttoerlöse', '= Net Gross Revenue', '= صافي الإيرادات الإجمالية')}</td>
-                <td className="px-4 py-3 text-end font-bold tabular-nums">{(totalGross - refunds).toFixed(2).replace('.', ',')} €</td>
-              </tr>
-              <tr className="border-b hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3">{t3('Nettoerlöse (ohne USt)', 'Net Revenue (excl. VAT)', 'صافي الإيرادات (بدون ضريبة)')}</td>
-                <td className="px-4 py-3 text-end tabular-nums">{totalNet.toFixed(2).replace('.', ',')} €</td>
-              </tr>
-              <tr className="border-b hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3">{t3('USt 19% (Ausgangs-USt)', 'VAT 19% (Output VAT)', 'ضريبة 19% (مخرجات)')}</td>
-                <td className="px-4 py-3 text-end tabular-nums">{totalTax.toFixed(2).replace('.', ',')} €</td>
-              </tr>
-              <tr className="bg-[#1a1a2e] text-white">
-                <td className="px-4 py-3 font-bold">{t3('USt-Zahllast (an Finanzamt)', 'VAT Payable (to Tax Office)', 'ضريبة مستحقة (لمكتب الضرائب)')}</td>
-                <td className="px-4 py-3 text-end font-bold tabular-nums text-[#d4a853]">{totalTax.toFixed(2).replace('.', ',')} €</td>
-              </tr>
-            </tbody>
-          </table>
+        <div className={`${gridCols2} bg-muted/50 border-b`}>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Position', 'Item', 'البند')}</div>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-end">{t3('Betrag', 'Amount', 'المبلغ')}</div>
+        </div>
+        <div className={`${gridCols2} border-b hover:bg-muted/30 transition-colors`}>
+          <div className="px-4 py-3 text-sm">{t3('Bruttoerlöse gesamt', 'Total Gross Revenue', 'إجمالي الإيرادات')}</div>
+          <div className="px-4 py-3 text-sm text-end font-medium tabular-nums">{fmtNum(totalGross)}</div>
+        </div>
+        {refunds > 0 && (
+          <div className={`${gridCols2} border-b hover:bg-muted/30 transition-colors`}>
+            <div className="px-4 py-3 text-sm text-red-600">{t3('./. Retouren/Stornierungen', 'Less Returns/Cancellations', 'ناقص المرتجعات')}</div>
+            <div className="px-4 py-3 text-sm text-end font-medium tabular-nums text-red-600">-{fmtNum(refunds)}</div>
+          </div>
+        )}
+        <div className={`${gridCols2} border-b bg-muted/30`}>
+          <div className="px-4 py-3 text-sm font-semibold">{t3('= Netto-Bruttoerlöse', '= Net Gross Revenue', '= صافي الإيرادات الإجمالية')}</div>
+          <div className="px-4 py-3 text-sm text-end font-bold tabular-nums">{fmtNum(totalGross - refunds)}</div>
+        </div>
+        <div className={`${gridCols2} border-b hover:bg-muted/30 transition-colors`}>
+          <div className="px-4 py-3 text-sm">{t3('Nettoerlöse (ohne USt)', 'Net Revenue (excl. VAT)', 'صافي الإيرادات (بدون ضريبة)')}</div>
+          <div className="px-4 py-3 text-sm text-end tabular-nums">{fmtNum(totalNet)}</div>
+        </div>
+        <div className={`${gridCols2} border-b hover:bg-muted/30 transition-colors`}>
+          <div className="px-4 py-3 text-sm">{t3('USt 19% (Ausgangs-USt)', 'VAT 19% (Output VAT)', 'ضريبة 19% (مخرجات)')}</div>
+          <div className="px-4 py-3 text-sm text-end tabular-nums">{fmtNum(totalTax)}</div>
+        </div>
+        <div className={`${gridCols2} bg-[#1a1a2e] text-white`}>
+          <div className="px-4 py-3 text-sm font-bold">{t3('USt-Zahllast (an Finanzamt)', 'VAT Payable (to Tax Office)', 'ضريبة مستحقة (لمكتب الضرائب)')}</div>
+          <div className="px-4 py-3 text-sm text-end font-bold tabular-nums text-[#d4a853]">{fmtNum(totalTax)}</div>
         </div>
       </div>
 
@@ -169,65 +144,38 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="border rounded-xl p-4">
           <p className="text-xs text-muted-foreground mb-1">{t3('Vormonat', 'Previous Month', 'الشهر السابق')}</p>
-          <p className="font-bold tabular-nums">{fmt(data?.previousMonth?.gross)}</p>
-          {pct(totalGross, Number(data?.previousMonth?.gross ?? 0)) && (
-            <span className={`text-xs font-medium ${pct(totalGross, Number(data?.previousMonth?.gross ?? 0))!.up ? 'text-green-500' : 'text-red-500'}`}>
-              {pct(totalGross, Number(data?.previousMonth?.gross ?? 0))!.label}
-            </span>
-          )}
+          <p className="font-bold tabular-nums">€{Number(data?.previousMonth?.gross ?? 0).toFixed(2)}</p>
         </div>
         <div className="border rounded-xl p-4">
           <p className="text-xs text-muted-foreground mb-1">{t3('Gleicher Monat Vorjahr', 'Same Month Last Year', 'نفس الشهر العام الماضي')}</p>
-          <p className="font-bold tabular-nums">{fmt(data?.sameMonthLastYear?.gross)}</p>
+          <p className="font-bold tabular-nums">€{Number(data?.sameMonthLastYear?.gross ?? 0).toFixed(2)}</p>
         </div>
       </div>
 
-      {/* ═══════ CHANNEL TABLE — exact copy of /admin/orders table structure ═══════ */}
+      {/* ═══ CHANNEL BREAKDOWN — CSS Grid ═══ */}
       {data?.byChannel?.length > 0 && (
         <>
-          <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">{t3('Umsatz nach Kanal', 'Revenue by Channel', 'الإيرادات حسب القناة')}</h3>
+          <h3 className="text-sm font-semibold text-muted-foreground">{t3('Umsatz nach Kanal', 'Revenue by Channel', 'الإيرادات حسب القناة')}</h3>
           <div className="bg-background border rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <colgroup>
-                  <col style={{ width: '20%' }} />
-                  <col style={{ width: '15%' }} />
-                  <col style={{ width: '22%' }} />
-                  <col style={{ width: '20%' }} />
-                  <col style={{ width: '23%' }} />
-                </colgroup>
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Kanal', 'Channel', 'القناة')}</th>
-                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Bestellungen', 'Orders', 'الطلبات')}</th>
-                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Umsatz (EUR)', 'Revenue (EUR)', 'الإيرادات')}</th>
-                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Ø Bestellwert', 'Avg. Order', 'متوسط الطلب')}</th>
-                    <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Anteil', 'Share', 'الحصة')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...data.byChannel].sort((a: any, b: any) => Number(b.gross) - Number(a.gross)).map((ch: any) => {
-                    const share = totalGross > 0 ? ((Number(ch.gross) / totalGross) * 100).toFixed(1) : '0.0'
-                    return (
-                      <tr key={ch.channel} className="border-b hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 text-sm font-semibold capitalize">{ch.channel}</td>
-                        <td className="px-4 py-3 text-end tabular-nums">{ch.count}</td>
-                        <td className="px-4 py-3 text-end tabular-nums font-medium">{Number(ch.gross).toFixed(2).replace('.', ',')} €</td>
-                        <td className="px-4 py-3 text-end tabular-nums">{Number(ch.avgOrderValue ?? 0).toFixed(2).replace('.', ',')} €</td>
-                        <td className="px-4 py-3 text-end">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-[#d4a853] rounded-full" style={{ width: `${share}%` }} />
-                            </div>
-                            <span className="text-xs tabular-nums">{share}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className={`${gridCols5} bg-muted/50 border-b`}>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Kanal', 'Channel', 'القناة')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Bestellungen', 'Orders', 'الطلبات')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Umsatz', 'Revenue', 'الإيرادات')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Ø Wert', 'Avg.', 'متوسط')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Anteil', 'Share', 'الحصة')}</div>
             </div>
+            {[...data.byChannel].sort((a: any, b: any) => Number(b.gross) - Number(a.gross)).map((ch: any) => {
+              const share = totalGross > 0 ? ((Number(ch.gross) / totalGross) * 100).toFixed(1) : '0.0'
+              return (
+                <div key={ch.channel} className={`${gridCols5} border-b hover:bg-muted/30 transition-colors items-center`}>
+                  <div className="px-4 py-3 text-sm font-medium capitalize">{ch.channel}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center">{ch.count}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center font-medium">{fmtNum(Number(ch.gross))}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(Number(ch.avgOrderValue ?? 0))}</div>
+                  <div className="px-4 py-3 text-sm text-center">{share}%</div>
+                </div>
+              )
+            })}
           </div>
         </>
       )}
