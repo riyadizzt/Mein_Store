@@ -53,6 +53,8 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
 
   const [notes, setNotes] = useState('')
   const [statusNotes, setStatusNotes] = useState('')
+  const [trackingNumber, setTrackingNumber] = useState('')
+  const [trackingCarrier, setTrackingCarrier] = useState('')
   const [partialCancelIds, setPartialCancelIds] = useState<Set<string>>(new Set())
   const [partialCancelReason, setPartialCancelReason] = useState('')
   const [showPartialCancel, setShowPartialCancel] = useState(false)
@@ -510,9 +512,32 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
           {!isCancelled && NEXT_STATUS[currentStatus] && (
             <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 300ms both' }}>
               <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">{t3('Aktion', 'Action', 'الإجراء')}</h3>
+              {/* Tracking number field when marking as shipped */}
+              {NEXT_STATUS[currentStatus] === 'shipped' && (
+                <div className="space-y-2 mb-3">
+                  <Input
+                    value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
+                    placeholder={t3('Sendungsnummer (z.B. DHL-123456)', 'Tracking Number (e.g. DHL-123456)', 'رقم التتبع (مثال: DHL-123456)')}
+                    className="rounded-xl text-sm" dir="ltr"
+                  />
+                  <Input
+                    value={trackingCarrier} onChange={(e) => setTrackingCarrier(e.target.value)}
+                    placeholder={t3('Versanddienstleister (z.B. DHL)', 'Carrier (e.g. DHL)', 'شركة الشحن (مثال: DHL)')}
+                    className="rounded-xl text-sm"
+                  />
+                </div>
+              )}
               <Input value={statusNotes} onChange={(e) => setStatusNotes(e.target.value)} placeholder={t3('Notizen (optional)', 'Notes (optional)', 'ملاحظات (اختياري)')} className="mb-3 rounded-xl text-sm" />
               <Button className={`w-full rounded-xl text-white font-semibold ${NEXT_BTN_COLORS[currentStatus] ?? ''}`} disabled={statusMutation.isPending}
-                onClick={() => statusMutation.mutate(NEXT_STATUS[currentStatus])}>
+                onClick={async () => {
+                  // If shipping, create shipment record first
+                  if (NEXT_STATUS[currentStatus] === 'shipped' && trackingNumber) {
+                    try {
+                      await api.post('/shipments', { orderId: id, trackingNumber, carrier: trackingCarrier || 'DHL', trackingUrl: trackingNumber.startsWith('http') ? trackingNumber : undefined })
+                    } catch {}
+                  }
+                  statusMutation.mutate(NEXT_STATUS[currentStatus])
+                }}>
                 {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin ltr:mr-2 rtl:ml-2" /> : <Check className="h-4 w-4 ltr:mr-2 rtl:ml-2" />}
                 {nextStatusLabel[currentStatus]}
               </Button>
