@@ -70,7 +70,7 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
       <div className="bg-background border rounded-xl overflow-hidden">
         {/* Header */}
         <div className={`${gridCols5} bg-muted/50 border-b`}>
-          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Datum', 'Date', 'التاريخ')}</div>
+          <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Datum', 'Date', 'التاريخ')}</div>
           <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Anz.', 'Qty', 'عدد')}</div>
           <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Brutto', 'Gross', 'إجمالي')}</div>
           <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Netto', 'Net', 'صافي')}</div>
@@ -85,7 +85,7 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
               const g = Number(d.gross); const n = Number(d.net); const vat = g - n
               return (
                 <div key={d.date} className={`${gridCols5} border-b hover:bg-muted/30 transition-colors items-center`}>
-                  <div className="px-4 py-3 text-sm tabular-nums">{d.date.split('-').reverse().join('.')}</div>
+                  <div className="px-4 py-3 text-sm tabular-nums text-center">{d.date.split('-').reverse().join('.')}</div>
                   <div className="px-4 py-3 text-sm tabular-nums text-center">{d.orderCount}</div>
                   <div className="px-4 py-3 text-sm tabular-nums text-center font-medium">{fmtNum(g)}</div>
                   <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(n)}</div>
@@ -95,7 +95,7 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
             })}
             {/* Total */}
             <div className={`${gridCols5} bg-muted/50 font-bold items-center`}>
-              <div className="px-4 py-3 text-sm">{t3('SUMME', 'TOTAL', 'المجموع')}</div>
+              <div className="px-4 py-3 text-sm text-center">{t3('SUMME', 'TOTAL', 'المجموع')}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center">{cur.orderCount ?? 0}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(totalGross)}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(totalNet)}</div>
