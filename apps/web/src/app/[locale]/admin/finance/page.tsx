@@ -795,7 +795,7 @@ function CustomersTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
           {/* Rows */}
           {topCustomers.map((c: any, i: number) => (
             <div key={i} className="grid grid-cols-5 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
-              <div className="px-4 py-3 text-sm font-medium">{c.name}</div>
+              <div className="px-4 py-3 text-sm font-medium">{c.firstName} {c.lastName}</div>
               <div className="px-4 py-3 text-sm text-muted-foreground" dir="ltr">{c.email}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center">{c.orderCount}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center font-medium">{fmt(c.totalSpent)}</div>
