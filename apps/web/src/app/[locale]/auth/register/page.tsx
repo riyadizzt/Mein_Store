@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { useRegister } from '@/hooks/use-auth'
 import { PasswordStrength } from '@/components/auth/password-strength'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,8 @@ export default function RegisterPage() {
   const register = useRegister()
 
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '' })
+  const [showPw, setShowPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [gdprConsent, setGdprConsent] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -129,7 +131,12 @@ export default function RegisterPage() {
 
             <div>
               <label htmlFor="password" className="text-sm font-medium text-[#0f1419]/70 mb-2 block">{t('password')}</label>
-              <Input id="password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" className={inputClass} />
+              <div className="relative">
+                <Input id="password" type={showPw ? 'text' : 'password'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" className={`${inputClass} ltr:pr-12 rtl:pl-12`} />
+                <button type="button" onClick={() => setShowPw(!showPw)} tabIndex={-1} className="absolute top-1/2 -translate-y-1/2 ltr:right-4 rtl:left-4 text-[#0f1419]/30 hover:text-[#0f1419]/60 transition-colors">
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <PasswordStrength password={form.password} />
               {errors.password && <p className="text-xs text-red-600 mt-1.5">{errors.password}</p>}
             </div>
@@ -138,7 +145,12 @@ export default function RegisterPage() {
               <label htmlFor="confirmPassword" className="text-sm font-medium text-[#0f1419]/70 mb-2 block">
                 {locale === 'ar' ? 'تأكيد كلمة المرور' : locale === 'en' ? 'Confirm password' : 'Passwort bestätigen'}
               </label>
-              <Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} autoComplete="new-password" className={inputClass} />
+              <div className="relative">
+                <Input id="confirmPassword" type={showConfirmPw ? 'text' : 'password'} value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} autoComplete="new-password" className={`${inputClass} ltr:pr-12 rtl:pl-12`} />
+                <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} tabIndex={-1} className="absolute top-1/2 -translate-y-1/2 ltr:right-4 rtl:left-4 text-[#0f1419]/30 hover:text-[#0f1419]/60 transition-colors">
+                  {showConfirmPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {errors.confirmPassword && <p className="text-xs text-red-600 mt-1.5">{errors.confirmPassword}</p>}
             </div>
 
