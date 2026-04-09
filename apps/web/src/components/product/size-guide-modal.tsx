@@ -130,54 +130,100 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
                 {/* ═══ TAB 1: How to Measure — Mannequin ═══ */}
                 {tab === 'measure' && (
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-8">
-                    {/* Left: Mannequin SVG */}
-                    <div className="flex justify-center">
-                      <svg viewBox="0 0 200 400" className="w-48 h-auto" xmlns="http://www.w3.org/2000/svg">
-                        {/* Body silhouette */}
-                        <ellipse cx="100" cy="45" rx="22" ry="28" fill="#d4b8a0" />{/* Head */}
-                        <rect x="92" y="73" width="16" height="15" rx="3" fill="#d4b8a0" />{/* Neck */}
-                        <path d="M60 88 Q100 82 140 88 L145 180 Q100 190 55 180 Z" fill="#1a1a2e" />{/* Torso/top */}
-                        <rect x="95" y="175" width="10" height="8" rx="2" fill="#d4a853" />{/* Belt buckle */}
-                        <path d="M55 180 Q58 280 70 340 L90 340 Q85 280 80 188 Z" fill="#1a1a2e" opacity="0.85" />{/* Left leg */}
-                        <path d="M120 188 Q115 280 110 340 L130 340 Q142 280 145 180 Z" fill="#1a1a2e" opacity="0.85" />{/* Right leg */}
-                        <path d="M55 88 L30 180 L45 185 L60 105 Z" fill="#1a1a2e" />{/* Left arm */}
-                        <path d="M140 88 L170 180 L155 185 L140 105 Z" fill="#1a1a2e" />{/* Right arm */}
-                        <ellipse cx="28" cy="183" rx="8" ry="9" fill="#d4b8a0" />{/* Left hand */}
-                        <ellipse cx="172" cy="183" rx="8" ry="9" fill="#d4b8a0" />{/* Right hand */}
-                        <ellipse cx="80" cy="350" rx="14" ry="6" fill="#1a1a2e" />{/* Left shoe */}
-                        <ellipse cx="120" cy="350" rx="14" ry="6" fill="#1a1a2e" />{/* Right shoe */}
+                    {/* Left: Premium Fashion Mannequin */}
+                    <div className="flex justify-center py-4">
+                      <svg viewBox="0 0 220 440" className="w-52 h-auto" xmlns="http://www.w3.org/2000/svg">
+                        {/* Shadow */}
+                        <ellipse cx="110" cy="425" rx="40" ry="6" fill="#1a1a2e" opacity="0.06" />
 
-                        {/* Measurement lines */}
+                        {/* Hair */}
+                        <ellipse cx="110" cy="32" rx="26" ry="30" fill="#2a1a0e" />
+                        <ellipse cx="110" cy="28" rx="24" ry="22" fill="#3d2a18" />
+
+                        {/* Head */}
+                        <ellipse cx="110" cy="42" rx="18" ry="22" fill="#d4b8a0" />
+                        {/* Face details */}
+                        <ellipse cx="103" cy="39" rx="2" ry="1.5" fill="#1a1a2e" opacity="0.3" />
+                        <ellipse cx="117" cy="39" rx="2" ry="1.5" fill="#1a1a2e" opacity="0.3" />
+                        <path d="M106 48 Q110 51 114 48" fill="none" stroke="#c4988a" strokeWidth="1" />
+
+                        {/* Neck */}
+                        <path d="M102 62 L102 78 Q110 80 118 78 L118 62" fill="#d4b8a0" />
+
+                        {/* Upper body - Blouse/Top */}
+                        <path d="M68 85 Q72 78 102 78 L118 78 Q148 78 152 85 L155 95 Q158 140 152 175 Q130 182 110 183 Q90 182 68 175 Q62 140 65 95 Z" fill="#f5efe8" stroke="#e8e0d4" strokeWidth="0.5" />
+                        {/* Collar detail */}
+                        <path d="M98 78 Q110 88 122 78" fill="none" stroke="#d4b8a0" strokeWidth="1.5" />
+                        {/* Center line */}
+                        <line x1="110" y1="85" x2="110" y2="175" stroke="#e8e0d4" strokeWidth="0.5" />
+                        {/* Buttons */}
+                        <circle cx="110" cy="100" r="2" fill="#d4a853" opacity="0.4" />
+                        <circle cx="110" cy="120" r="2" fill="#d4a853" opacity="0.4" />
+                        <circle cx="110" cy="140" r="2" fill="#d4a853" opacity="0.4" />
+
+                        {/* Belt */}
+                        <rect x="68" y="173" width="84" height="10" rx="2" fill="#1a1a2e" />
+                        <rect x="105" y="174" width="10" height="8" rx="1.5" fill="#d4a853" />
+
+                        {/* Skirt / Bottom */}
+                        <path d="M66 183 Q60 260 72 370 L88 370 Q85 300 82 220 L82 188 Q95 192 110 192 Q125 192 138 188 L138 220 Q135 300 132 370 L148 370 Q160 260 154 183 Q132 190 110 192 Q88 190 66 183 Z" fill="#1a1a2e" />
+                        {/* Pant crease */}
+                        <line x1="82" y1="200" x2="80" y2="360" stroke="#0f0f20" strokeWidth="0.8" opacity="0.3" />
+                        <line x1="138" y1="200" x2="140" y2="360" stroke="#0f0f20" strokeWidth="0.8" opacity="0.3" />
+
+                        {/* Arms */}
+                        <path d="M68 85 Q52 90 42 140 Q38 158 40 170 L48 172 Q50 155 52 140 Q58 108 68 95" fill="#f5efe8" stroke="#e8e0d4" strokeWidth="0.5" />
+                        <path d="M152 85 Q168 90 178 140 Q182 158 180 170 L172 172 Q170 155 168 140 Q162 108 152 95" fill="#f5efe8" stroke="#e8e0d4" strokeWidth="0.5" />
+
+                        {/* Hands */}
+                        <ellipse cx="44" cy="174" rx="7" ry="8" fill="#d4b8a0" />
+                        <ellipse cx="176" cy="174" rx="7" ry="8" fill="#d4b8a0" />
+
+                        {/* Shoes */}
+                        <path d="M68 368 L68 380 Q68 388 78 388 L92 388 Q92 380 88 372 Z" fill="#1a1a2e" />
+                        <path d="M128 372 Q124 380 128 388 L142 388 Q152 388 152 380 L152 368 Z" fill="#1a1a2e" />
+                        {/* Shoe soles */}
+                        <line x1="68" y1="388" x2="92" y2="388" stroke="#d4a853" strokeWidth="1.5" />
+                        <line x1="128" y1="388" x2="152" y2="388" stroke="#d4a853" strokeWidth="1.5" />
+
+                        {/* ═══ MEASUREMENT LINES ═══ */}
                         {/* Shoulder */}
-                        <line x1="55" y1="92" x2="145" y2="92" stroke="#D85A30" strokeWidth="2" strokeDasharray="4 2"
-                          opacity={!activeMeasure || activeMeasure === 'shoulder' ? 1 : 0.15}
-                          className="transition-opacity duration-300" />
-                        {activeMeasure === 'shoulder' && <>
-                          <circle cx="55" cy="92" r="4" fill="#D85A30" className="animate-ping" style={{animationDuration:'1.5s'}} />
-                          <circle cx="145" cy="92" r="4" fill="#D85A30" className="animate-ping" style={{animationDuration:'1.5s'}} />
-                        </>}
+                        <g opacity={!activeMeasure || activeMeasure === 'shoulder' ? 1 : 0.12} className="transition-opacity duration-400">
+                          <line x1="58" y1="86" x2="162" y2="86" stroke="#D85A30" strokeWidth="2" strokeDasharray="6 3" />
+                          <circle cx="58" cy="86" r="3.5" fill="#D85A30" />
+                          <circle cx="162" cy="86" r="3.5" fill="#D85A30" />
+                          {activeMeasure === 'shoulder' && <>
+                            <circle cx="58" cy="86" r="6" fill="none" stroke="#D85A30" strokeWidth="1.5" opacity="0.4"><animate attributeName="r" from="4" to="10" dur="1.2s" repeatCount="indefinite" /><animate attributeName="opacity" from="0.6" to="0" dur="1.2s" repeatCount="indefinite" /></circle>
+                            <circle cx="162" cy="86" r="6" fill="none" stroke="#D85A30" strokeWidth="1.5" opacity="0.4"><animate attributeName="r" from="4" to="10" dur="1.2s" repeatCount="indefinite" /><animate attributeName="opacity" from="0.6" to="0" dur="1.2s" repeatCount="indefinite" /></circle>
+                          </>}
+                        </g>
 
                         {/* Bust */}
-                        <ellipse cx="100" cy="120" rx="47" ry="14" fill="none" stroke="#d4a853" strokeWidth="2" strokeDasharray="4 2"
-                          opacity={!activeMeasure || activeMeasure === 'bust' ? 1 : 0.15}
-                          className="transition-opacity duration-300" />
+                        <g opacity={!activeMeasure || activeMeasure === 'bust' ? 1 : 0.12} className="transition-opacity duration-400">
+                          <ellipse cx="110" cy="115" rx="48" ry="13" fill="none" stroke="#d4a853" strokeWidth="2" strokeDasharray="6 3" />
+                          {activeMeasure === 'bust' && <ellipse cx="110" cy="115" rx="48" ry="13" fill="none" stroke="#d4a853" strokeWidth="1" opacity="0.3"><animate attributeName="rx" from="48" to="54" dur="1.2s" repeatCount="indefinite" /><animate attributeName="ry" from="13" to="16" dur="1.2s" repeatCount="indefinite" /><animate attributeName="opacity" from="0.4" to="0" dur="1.2s" repeatCount="indefinite" /></ellipse>}
+                        </g>
 
                         {/* Waist */}
-                        <ellipse cx="100" cy="165" rx="38" ry="10" fill="none" stroke="#378ADD" strokeWidth="2" strokeDasharray="4 2"
-                          opacity={!activeMeasure || activeMeasure === 'waist' ? 1 : 0.15}
-                          className="transition-opacity duration-300" />
+                        <g opacity={!activeMeasure || activeMeasure === 'waist' ? 1 : 0.12} className="transition-opacity duration-400">
+                          <ellipse cx="110" cy="160" rx="40" ry="10" fill="none" stroke="#378ADD" strokeWidth="2" strokeDasharray="6 3" />
+                          {activeMeasure === 'waist' && <ellipse cx="110" cy="160" rx="40" ry="10" fill="none" stroke="#378ADD" strokeWidth="1" opacity="0.3"><animate attributeName="rx" from="40" to="46" dur="1.2s" repeatCount="indefinite" /><animate attributeName="opacity" from="0.4" to="0" dur="1.2s" repeatCount="indefinite" /></ellipse>}
+                        </g>
 
                         {/* Hip */}
-                        <ellipse cx="100" cy="195" rx="46" ry="12" fill="none" stroke="#1D9E75" strokeWidth="2" strokeDasharray="4 2"
-                          opacity={!activeMeasure || activeMeasure === 'hip' ? 1 : 0.15}
-                          className="transition-opacity duration-300" />
+                        <g opacity={!activeMeasure || activeMeasure === 'hip' ? 1 : 0.12} className="transition-opacity duration-400">
+                          <ellipse cx="110" cy="195" rx="48" ry="12" fill="none" stroke="#1D9E75" strokeWidth="2" strokeDasharray="6 3" />
+                          {activeMeasure === 'hip' && <ellipse cx="110" cy="195" rx="48" ry="12" fill="none" stroke="#1D9E75" strokeWidth="1" opacity="0.3"><animate attributeName="rx" from="48" to="54" dur="1.2s" repeatCount="indefinite" /><animate attributeName="opacity" from="0.4" to="0" dur="1.2s" repeatCount="indefinite" /></ellipse>}
+                        </g>
 
                         {/* Height */}
-                        <line x1="180" y1="17" x2="180" y2="350" stroke="#7F77DD" strokeWidth="1.5" strokeDasharray="4 2"
-                          opacity={!activeMeasure || activeMeasure === 'length' ? 1 : 0.15}
-                          className="transition-opacity duration-300" />
-                        <line x1="175" y1="17" x2="185" y2="17" stroke="#7F77DD" strokeWidth="1.5" opacity={!activeMeasure || activeMeasure === 'length' ? 1 : 0.15} />
-                        <line x1="175" y1="350" x2="185" y2="350" stroke="#7F77DD" strokeWidth="1.5" opacity={!activeMeasure || activeMeasure === 'length' ? 1 : 0.15} />
+                        <g opacity={!activeMeasure || activeMeasure === 'length' ? 1 : 0.12} className="transition-opacity duration-400">
+                          <line x1="198" y1="18" x2="198" y2="388" stroke="#7F77DD" strokeWidth="1.5" strokeDasharray="4 3" />
+                          <line x1="192" y1="18" x2="204" y2="18" stroke="#7F77DD" strokeWidth="1.5" />
+                          <line x1="192" y1="388" x2="204" y2="388" stroke="#7F77DD" strokeWidth="1.5" />
+                          <circle cx="198" cy="18" r="3" fill="#7F77DD" />
+                          <circle cx="198" cy="388" r="3" fill="#7F77DD" />
+                        </g>
                       </svg>
                     </div>
 
