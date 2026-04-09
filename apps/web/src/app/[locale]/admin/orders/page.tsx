@@ -126,16 +126,7 @@ export default function AdminOrdersPage() {
       {/* Table */}
       <div className="bg-background border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
-            <colgroup>
-              <col style={{ width: '18%' }} />{/* الطلب Order# */}
-              <col style={{ width: '22%' }} />{/* العميل Customer */}
-              <col style={{ width: '5%' }} /> {/* القناة Channel icon */}
-              <col style={{ width: '13%' }} />{/* التاريخ Date */}
-              <col style={{ width: '13%' }} />{/* الحالة Status */}
-              <col style={{ width: '14%' }} />{/* المبلغ Amount */}
-              <col style={{ width: '15%' }} />{/* الدفع Payment */}
-            </colgroup>
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="text-start px-4 py-3 font-medium">{t('orders.order')}</th>
@@ -163,18 +154,18 @@ export default function AdminOrdersPage() {
                   const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
                   return (
                     <tr key={order.id} className="border-b hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 overflow-hidden">
-                        <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono font-medium text-primary hover:underline truncate block">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono font-medium text-primary hover:underline">
                           {order.orderNumber}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 overflow-hidden">
-                        <p className="font-medium truncate">
+                      <td className="px-4 py-3">
+                        <p className="font-medium">
                           {getCustomerName(order)}
                           {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground"> (Gast)</span>}
                           {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg}`}>{badge.label}</span> : null })()}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate">{order.user?.email ?? order.guestEmail ?? ''}</p>
+                        <p className="text-xs text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
                       </td>
                       <td className="px-2 py-3 text-center">
                         <div className="flex justify-center"><ChannelIcon channel={order.channel ?? 'website'} size={18} /></div>

@@ -297,16 +297,7 @@ export default function AdminReturnsPage() {
         {/* Table */}
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: '15%' }} />{/* رقم المرتجع */}
-                <col style={{ width: '17%' }} />{/* رقم الطلب */}
-                <col style={{ width: '20%' }} />{/* العميل */}
-                <col style={{ width: '12%' }} />{/* السبب */}
-                <col style={{ width: '12%' }} />{/* الحالة */}
-                <col style={{ width: '12%' }} />{/* المبلغ */}
-                <col style={{ width: '12%' }} />{/* التاريخ */}
-              </colgroup>
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="text-start px-4 py-3 font-medium">{t3('RET-Nr', 'RET No', 'رقم المرتجع')}</th>
@@ -336,17 +327,17 @@ export default function AdminReturnsPage() {
                       className={`border-b cursor-pointer transition-colors ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                       onClick={() => openDetail(ret)}
                     >
-                      <td className="px-4 py-3 overflow-hidden">
-                        <span className="font-mono font-medium text-[#d4a853] truncate block">{ret.returnNumber}</span>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="font-mono font-medium text-[#d4a853]">{ret.returnNumber}</span>
                       </td>
-                      <td className="px-4 py-3 overflow-hidden">
-                        <span className="font-mono text-xs text-primary truncate block">{ret.order?.orderNumber ?? '—'}</span>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
                       </td>
-                      <td className="px-4 py-3 overflow-hidden">
-                        <p className="font-medium truncate">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
-                        <p className="text-xs text-muted-foreground truncate">{ret.order?.user?.email}</p>
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
+                        <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
                       </td>
-                      <td className="px-4 py-3 overflow-hidden">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
                       </td>
                       <td className="px-4 py-3">
