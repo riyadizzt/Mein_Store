@@ -608,34 +608,22 @@ function ProfitTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
 
 function ProductProfitTable({ title, items, t3 }: { title: string; items: any[]; t3: T3 }) {
   if (!items.length) return null
+  const cols = 'grid grid-cols-3 gap-x-2'
   return (
     <div className="bg-background border rounded-xl overflow-hidden">
       <h3 className="font-semibold p-4 border-b">{title}</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <colgroup>
-            <col style={{ width: '50%' }} />
-            <col style={{ width: '25%' }} />
-            <col style={{ width: '25%' }} />
-          </colgroup>
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="text-start px-4 py-3 text-sm font-semibold">{t3('Produkt', 'Product', 'المنتج')}</th>
-              <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Umsatz', 'Revenue', 'الإيراد')}</th>
-              <th className="text-end px-4 py-3 text-sm font-semibold">{t3('Menge', 'Quantity', 'الكمية')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((p: any, i: number) => (
-              <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 text-sm font-semibold">{p.productName}</td>
-                <td className="px-4 py-3 text-end tabular-nums">{fmt(p.revenue)}</td>
-                <td className="px-4 py-3 text-end tabular-nums">{p.quantitySold ?? p.quantity ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className={`${cols} bg-muted/50 border-b`}>
+        <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Produkt', 'Product', 'المنتج')}</div>
+        <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Umsatz', 'Revenue', 'الإيراد')}</div>
+        <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Menge', 'Quantity', 'الكمية')}</div>
       </div>
+      {items.map((p: any, i: number) => (
+        <div key={i} className={`${cols} border-b hover:bg-muted/30 transition-colors items-center`}>
+          <div className="px-4 py-3 text-sm font-medium">{p.productName}</div>
+          <div className="px-4 py-3 text-sm tabular-nums text-center">{fmt(p.revenue)}</div>
+          <div className="px-4 py-3 text-sm tabular-nums text-center">{p.quantitySold ?? p.quantity ?? '—'}</div>
+        </div>
+      ))}
     </div>
   )
 }
