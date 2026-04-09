@@ -37,6 +37,6 @@ import { PAYMENT_PROVIDERS } from './payment-provider.interface'
       inject: [StripeProvider, KlarnaProvider, PayPalProvider, VorkasseProvider, SumUpProvider],
     },
   ],
-  exports: [PaymentsService, InvoiceService, VorkasseProvider, SumUpProvider],
+  exports: [PaymentsService, InvoiceService, VorkasseProvider, SumUpProvider, PayPalProvider],
 })
 export class PaymentsModule {}

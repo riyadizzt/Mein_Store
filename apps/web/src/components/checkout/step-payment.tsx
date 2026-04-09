@@ -71,6 +71,7 @@ function StepPaymentInner() {
   const [vorkasseData, setVorkasseData] = useState<any>(null)
   const [sumupEnabled, setSumupEnabled] = useState(false)
   const [sumupLoaded, setSumupLoaded] = useState(false)
+  const [paypalEnabled, setPaypalEnabled] = useState(false)
 
   // Fetch available payment methods
   useEffect(() => {
@@ -79,6 +80,7 @@ function StepPaymentInner() {
         setVorkasseData(data.vorkasseBankDetails)
       }
       if (data?.sumup) setSumupEnabled(true)
+      if (data?.paypal) setPaypalEnabled(true)
     }).catch(() => {})
   }, [])
 
@@ -95,13 +97,13 @@ function StepPaymentInner() {
   }, [sumupEnabled, sumupLoaded])
 
   const vorkasseEnabled = !!vorkasseData?.enabled
-  const [activeTab, setActiveTab] = useState<'card' | 'klarna' | 'vorkasse' | 'sumup'>('card')
+  const [activeTab, setActiveTab] = useState<'card' | 'klarna' | 'vorkasse' | 'sumup' | 'paypal'>('card')
 
   const handlePlaceOrder = useCallback(async () => {
     if (!termsAccepted || isProcessing) return
 
-    // Vorkasse and SumUp don't need Stripe
-    if (activeTab === 'card' || activeTab === 'klarna') {
+    // Only Stripe card needs stripe/elements
+    if (activeTab === 'card') {
       if (!stripe || !elements) return
     }
 
@@ -113,7 +115,7 @@ function StepPaymentInner() {
 
     try {
       const idempotencyKey = generateIdempotencyKey()
-      const method = activeTab === 'vorkasse' ? 'vorkasse' : activeTab === 'sumup' ? 'sumup' : activeTab === 'klarna' ? 'klarna_pay_now' : 'stripe_card'
+      const method = activeTab === 'vorkasse' ? 'vorkasse' : activeTab === 'sumup' ? 'sumup' : activeTab === 'paypal' ? 'paypal' : activeTab === 'klarna' ? 'klarna_pay_now' : 'stripe_card'
       setPaymentMethod(method as any)
 
       // 1. Create order — mit vollständiger Adresse
@@ -227,7 +229,15 @@ function StepPaymentInner() {
         return
       }
 
-      if (activeTab === 'klarna' && payment.redirectUrl) {
+      // Klarna or PayPal: redirect to provider
+      if ((activeTab === 'klarna' || activeTab === 'paypal') && payment.redirectUrl) {
+        // Save order data before redirect so confirmation page can use it
+        try {
+          sessionStorage.setItem('malak-last-order', JSON.stringify({
+            orderNumber: order.orderNumber, orderId: order.id,
+            totalAmount: order.totalAmount, paymentMethod: activeTab,
+          }))
+        } catch {}
         window.location.href = payment.redirectUrl
         return
       }
@@ -321,7 +331,7 @@ function StepPaymentInner() {
           )}
 
           {/* Payment method tabs */}
-          {(klarnaEnabled || vorkasseEnabled || sumupEnabled) && (
+          {(klarnaEnabled || vorkasseEnabled || sumupEnabled || paypalEnabled) && (
             <div className="flex border rounded-xl overflow-hidden" role="tablist">
               <button
                 role="tab"
@@ -344,6 +354,19 @@ function StepPaymentInner() {
                   }`}
                 >
                   Klarna
+                </button>
+              )}
+              {paypalEnabled && (
+                <button
+                  role="tab"
+                  aria-selected={activeTab === 'paypal'}
+                  onClick={() => setActiveTab('paypal')}
+                  className={`flex-1 py-3.5 px-4 text-sm font-medium border-e transition-all duration-200 ${
+                    activeTab === 'paypal' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
+                  }`}
+                >
+                  <svg className="h-4 w-4 mx-auto mb-1" viewBox="0 0 24 24" fill="currentColor"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/></svg>
+                  PayPal
                 </button>
               )}
               {vorkasseEnabled && (
@@ -400,6 +423,20 @@ function StepPaymentInner() {
               <p className="text-sm font-medium mb-2">{t('paymentMethods.klarna')}</p>
               <p className="text-sm text-muted-foreground">{t('payment.klarnaInfo')}</p>
               <p className="text-xs text-muted-foreground mt-1">{t('payment.klarnaRedirect')}</p>
+            </div>
+          )}
+
+          {/* PayPal info */}
+          {activeTab === 'paypal' && (
+            <div className="p-5 rounded-xl bg-[#FFC439]/10 border border-[#FFC439]/30">
+              <p className="text-sm font-medium mb-2">PayPal</p>
+              <p className="text-sm text-muted-foreground">
+                {locale === 'ar'
+                  ? 'ستتم إعادة توجيهك إلى PayPal لإتمام الدفع بأمان.'
+                  : locale === 'en'
+                    ? 'You will be redirected to PayPal to complete your payment securely.'
+                    : 'Du wirst zu PayPal weitergeleitet, um die Zahlung sicher abzuschließen.'}
+              </p>
             </div>
           )}
 
@@ -462,6 +499,7 @@ function StepPaymentInner() {
           <Button
             onClick={handlePlaceOrder}
             disabled={!termsAccepted || isProcessing || (activeTab === 'card' && !stripe) || (activeTab === 'sumup' && !sumupLoaded) || stockError}
+
             className="w-full h-14 text-base gap-2 bg-accent text-accent-foreground rounded-xl font-semibold hover:bg-accent/90 btn-press"
             size="lg"
           >

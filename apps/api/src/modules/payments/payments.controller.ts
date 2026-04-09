@@ -21,6 +21,7 @@ import { PaymentsService } from './payments.service'
 import { InvoiceService } from './invoice.service'
 import { VorkasseProvider } from './providers/vorkasse.provider'
 import { SumUpProvider } from './providers/sumup.provider'
+import { PayPalProvider } from './providers/paypal.provider'
 import { CreatePaymentDto } from './dto/create-payment.dto'
 import { CreateRefundDto } from './dto/create-refund.dto'
 
@@ -31,6 +32,7 @@ export class PaymentsController {
     private readonly invoiceService: InvoiceService,
     private readonly vorkasseProvider: VorkasseProvider,
     private readonly sumupProvider: SumUpProvider,
+    private readonly paypalProvider: PayPalProvider,
   ) {}
 
   @Post()
@@ -75,16 +77,33 @@ export class PaymentsController {
     return this.paymentsService.confirmVorkassePayment(orderId, req.user.id)
   }
 
+  // ── PayPal: Capture after redirect ──────────────────────
+  @Post(':orderId/capture-paypal')
+  @UseGuards(JwtOptionalGuard)
+  @HttpCode(HttpStatus.OK)
+  async capturePaypal(@Param('orderId', ParseUUIDPipe) orderId: string) {
+    const payment = await this.paymentsService.findByOrderId(orderId)
+    if (!payment || payment.provider !== 'PAYPAL') {
+      throw new Error('Not a PayPal payment')
+    }
+    const result = await this.paypalProvider.captureOrder(payment.providerPaymentId!)
+    if (result.status === 'COMPLETED') {
+      return this.paymentsService.markAsCaptured(orderId)
+    }
+    return { status: result.status }
+  }
+
   // ── Public: Available payment methods ───────────────────
   @Get('methods')
   async getAvailableMethods() {
     const vorkasseConfigured = await this.vorkasseProvider.isConfigured()
     const sumupConfigured = this.sumupProvider.isConfigured()
+    const paypalConfigured = this.paypalProvider.isConfigured()
 
     return {
-      stripe: true, // Always available if keys exist
+      stripe: true,
       klarna: !!process.env.KLARNA_USERNAME,
-      paypal: !!process.env.PAYPAL_CLIENT_ID,
+      paypal: paypalConfigured,
       vorkasse: vorkasseConfigured,
       sumup: sumupConfigured,
       vorkasseBankDetails: vorkasseConfigured ? await this.vorkasseProvider.getBankDetails() : null,
