@@ -297,7 +297,7 @@ export default function AdminReturnsPage() {
         {/* Table */}
         <div className="flex-1 bg-background border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
               <colgroup>
                 {Array.from({ length: 7 }).map((_, i) => <col key={i} style={{ width: '14.28%' }} />)}
               </colgroup>
@@ -330,17 +330,17 @@ export default function AdminReturnsPage() {
                       className={`border-b cursor-pointer transition-colors ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                       onClick={() => openDetail(ret)}
                     >
-                      <td className="px-4 py-3">
-                        <span className="font-mono font-medium text-[#d4a853]">{ret.returnNumber}</span>
+                      <td className="px-4 py-3 overflow-hidden">
+                        <span className="font-mono font-medium text-[#d4a853] truncate block">{ret.returnNumber}</span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-primary">{ret.order?.orderNumber ?? '—'}</span>
+                      <td className="px-4 py-3 overflow-hidden">
+                        <span className="font-mono text-xs text-primary truncate block">{ret.order?.orderNumber ?? '—'}</span>
                       </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
-                        <p className="text-xs text-muted-foreground">{ret.order?.user?.email}</p>
+                      <td className="px-4 py-3 overflow-hidden">
+                        <p className="font-medium truncate">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{ret.order?.user?.email}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 overflow-hidden">
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
                       </td>
                       <td className="px-4 py-3">

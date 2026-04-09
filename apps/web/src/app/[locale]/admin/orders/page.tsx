@@ -126,7 +126,7 @@ export default function AdminOrdersPage() {
       {/* Table */}
       <div className="bg-background border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
             <colgroup>
               {Array.from({ length: 7 }).map((_, i) => <col key={i} style={{ width: '14.28%' }} />)}
             </colgroup>
@@ -157,18 +157,18 @@ export default function AdminOrdersPage() {
                   const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
                   return (
                     <tr key={order.id} className="border-b hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3">
-                        <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono font-medium text-primary hover:underline">
+                      <td className="px-4 py-3 overflow-hidden">
+                        <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono font-medium text-primary hover:underline truncate block">
                           {order.orderNumber}
                         </Link>
                       </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium flex items-center gap-1.5">
+                      <td className="px-4 py-3 overflow-hidden">
+                        <p className="font-medium truncate">
                           {getCustomerName(order)}
-                          {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground">(Gast)</span>}
+                          {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground"> (Gast)</span>}
                           {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg}`}>{badge.label}</span> : null })()}
                         </p>
-                        <p className="text-xs text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
+                        <p className="text-xs text-muted-foreground truncate">{order.user?.email ?? order.guestEmail ?? ''}</p>
                       </td>
                       <td className="px-2 py-3 text-center">
                         <div className="flex justify-center"><ChannelIcon channel={order.channel ?? 'website'} size={18} /></div>
