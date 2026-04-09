@@ -41,7 +41,7 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
   const locale = useLocale()
   const { isAuthenticated } = useAuthStore()
   const [tab, setTab] = useState<'measure' | 'table' | 'mysize'>('measure')
-  // activeMeasure removed — using card-based layout instead of interactive mannequin
+  const [active, setActive] = useState<string | null>(null)
   const [chart, setChart] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [customerMeasurements, setCustomerMeasurements] = useState<any>(null)
@@ -134,7 +134,7 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
                     <div className="flex justify-center">
                       <svg viewBox="0 0 160 420" className="w-40 h-auto" xmlns="http://www.w3.org/2000/svg">
                         {/* Elegant female silhouette — outline only, fashion sketch style */}
-                        <g fill="none" stroke="#1a1a2e" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.25">
+                        <g fill="none" stroke="#1a1a2e" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity={active ? 0.12 : 0.25} className="transition-opacity duration-300">
                           {/* Head */}
                           <ellipse cx="80" cy="38" rx="16" ry="20" />
                           {/* Neck */}
@@ -156,65 +156,58 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
                           <path d="M94 365 Q94 370 92 375 L112 375 Q110 370 106 365" />
                         </g>
 
-                        {/* ═══ MEASUREMENT INDICATORS ═══ */}
-                        {/* 1: Shoulder — horizontal line with arrows */}
-                        <g>
-                          <line x1="42" y1="78" x2="118" y2="78" stroke="#D85A30" strokeWidth="1.5" strokeDasharray="5 3" />
-                          <polygon points="42,75 42,81 36,78" fill="#D85A30" />
-                          <polygon points="118,75 118,81 124,78" fill="#D85A30" />
-                          <text x="80" y="73" textAnchor="middle" fill="#D85A30" fontSize="8" fontWeight="600">1</text>
-                        </g>
-
-                        {/* 2: Bust — arc with arrows */}
-                        <g>
-                          <path d="M44 110 Q80 128 116 110" fill="none" stroke="#d4a853" strokeWidth="1.5" strokeDasharray="5 3" />
-                          <circle cx="44" cy="110" r="2.5" fill="#d4a853" />
-                          <circle cx="116" cy="110" r="2.5" fill="#d4a853" />
-                          <text x="80" y="124" textAnchor="middle" fill="#d4a853" fontSize="8" fontWeight="600">2</text>
-                        </g>
-
-                        {/* 3: Waist — arc with arrows */}
-                        <g>
-                          <path d="M48 148 Q80 162 112 148" fill="none" stroke="#378ADD" strokeWidth="1.5" strokeDasharray="5 3" />
-                          <circle cx="48" cy="148" r="2.5" fill="#378ADD" />
-                          <circle cx="112" cy="148" r="2.5" fill="#378ADD" />
-                          <text x="80" y="160" textAnchor="middle" fill="#378ADD" fontSize="8" fontWeight="600">3</text>
-                        </g>
-
-                        {/* 4: Hip — arc with arrows */}
-                        <g>
-                          <path d="M46 195 Q80 212 114 195" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeDasharray="5 3" />
-                          <circle cx="46" cy="195" r="2.5" fill="#1D9E75" />
-                          <circle cx="114" cy="195" r="2.5" fill="#1D9E75" />
-                          <text x="80" y="210" textAnchor="middle" fill="#1D9E75" fontSize="8" fontWeight="600">4</text>
-                        </g>
-
-                        {/* 5: Height — vertical line */}
-                        <g>
-                          <line x1="145" y1="18" x2="145" y2="375" stroke="#7F77DD" strokeWidth="1" strokeDasharray="4 3" />
-                          <polygon points="142,18 148,18 145,12" fill="#7F77DD" />
-                          <polygon points="142,375 148,375 145,381" fill="#7F77DD" />
-                          <text x="145" y="200" textAnchor="middle" fill="#7F77DD" fontSize="8" fontWeight="600" transform="rotate(-90,145,200)">5</text>
-                        </g>
+                        {/* ═══ INTERACTIVE MEASUREMENT INDICATORS ═══ */}
+                        {[
+                          { key: 'shoulder', i: 1, color: '#D85A30', el: <><line x1="42" y1="78" x2="118" y2="78" strokeDasharray="5 3" /><polygon points="42,75 42,81 36,78" /><polygon points="118,75 118,81 124,78" /><text x="80" y="73" textAnchor="middle" fontSize="8" fontWeight="600">1</text></> },
+                          { key: 'bust', i: 2, color: '#d4a853', el: <><path d="M44 110 Q80 128 116 110" fill="none" strokeDasharray="5 3" /><circle cx="44" cy="110" r="2.5" /><circle cx="116" cy="110" r="2.5" /><text x="80" y="124" textAnchor="middle" fontSize="8" fontWeight="600">2</text></> },
+                          { key: 'waist', i: 3, color: '#378ADD', el: <><path d="M48 148 Q80 162 112 148" fill="none" strokeDasharray="5 3" /><circle cx="48" cy="148" r="2.5" /><circle cx="112" cy="148" r="2.5" /><text x="80" y="160" textAnchor="middle" fontSize="8" fontWeight="600">3</text></> },
+                          { key: 'hip', i: 4, color: '#1D9E75', el: <><path d="M46 195 Q80 212 114 195" fill="none" strokeDasharray="5 3" /><circle cx="46" cy="195" r="2.5" /><circle cx="114" cy="195" r="2.5" /><text x="80" y="210" textAnchor="middle" fontSize="8" fontWeight="600">4</text></> },
+                          { key: 'length', i: 5, color: '#7F77DD', el: <><line x1="145" y1="18" x2="145" y2="375" strokeDasharray="4 3" strokeWidth="1" /><polygon points="142,18 148,18 145,12" /><polygon points="142,375 148,375 145,381" /><text x="145" y="200" textAnchor="middle" fontSize="8" fontWeight="600" transform="rotate(-90,145,200)">5</text></> },
+                        ].map(m => (
+                          <g
+                            key={m.key}
+                            stroke={m.color} fill={m.color} strokeWidth="1.5"
+                            opacity={!active || active === m.key ? 1 : 0.1}
+                            onClick={() => setActive(active === m.key ? null : m.key)}
+                            className="cursor-pointer transition-opacity duration-300"
+                          >
+                            {m.el}
+                            {/* Pulse ring on active */}
+                            {active === m.key && m.key !== 'length' && (
+                              <circle cx="80" cy={m.key === 'shoulder' ? 78 : m.key === 'bust' ? 118 : m.key === 'waist' ? 155 : 205} r="8" fill="none" stroke={m.color} strokeWidth="1" opacity="0.3">
+                                <animate attributeName="r" from="6" to="18" dur="1.2s" repeatCount="indefinite" />
+                                <animate attributeName="opacity" from="0.5" to="0" dur="1.2s" repeatCount="indefinite" />
+                              </circle>
+                            )}
+                          </g>
+                        ))}
                       </svg>
                     </div>
 
                     {/* Right: Measurement descriptions */}
                     <div className="space-y-2.5">
                       {MEASUREMENTS.map((m, i) => (
-                        <div key={m.key} className="flex items-center gap-3 p-3 rounded-xl bg-white border border-[#e5e0d8]">
-                          <div className="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: m.color }}>
+                        <button
+                          key={m.key}
+                          onClick={() => setActive(active === m.key ? null : m.key)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl border text-start transition-all duration-200 ${
+                            active === m.key
+                              ? 'bg-[#fef9ef] border-[#d4a853]/40 shadow-sm scale-[1.02]'
+                              : 'bg-white border-[#e5e0d8] hover:border-[#d4a853]/20'
+                          }`}
+                        >
+                          <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold transition-transform duration-200 ${active === m.key ? 'scale-110' : ''}`} style={{ backgroundColor: m.color }}>
                             {i + 1}
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-[#1a1a2e]">
                               {locale === 'ar' ? m.ar : locale === 'en' ? m.en : m.de}
                             </p>
-                            <p className="text-[11px] text-[#1a1a2e]/35 leading-snug">
+                            <p className={`text-[11px] leading-snug transition-colors ${active === m.key ? 'text-[#1a1a2e]/60' : 'text-[#1a1a2e]/30'}`}>
                               {locale === 'ar' ? m.descAr : m.descDe}
                             </p>
                           </div>
-                        </div>
+                        </button>
                       ))}
                       <p className="text-[10px] text-[#1a1a2e]/25 text-center pt-2">
                         {t3(locale, 'Alle Maße in cm · Maßband eng anlegen, nicht einschnürend', 'All measurements in cm · Keep tape snug, not tight', 'جميع المقاسات بالسم · ضع الشريط بإحكام دون شد')}
