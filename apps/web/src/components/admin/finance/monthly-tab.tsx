@@ -69,10 +69,10 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
       {/* ═══ DAILY TABLE ═══ */}
       <h3 className="text-sm font-semibold text-muted-foreground">{t3('Tägliche Umsatzübersicht', 'Daily Revenue Breakdown', 'التفاصيل اليومية')}</h3>
       <div className="bg-background border rounded-xl overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className={`text-start ${thCls}`}>{t3('Datum', 'Date', 'التاريخ')}</th>
+              <th className={`text-center ${thCls}`}>{t3('Datum', 'Date', 'التاريخ')}</th>
               <th className={`text-center ${thCls}`}>{t3('Anz.', 'Qty', 'عدد')}</th>
               <th className={`text-center ${thCls}`}>{t3('Brutto', 'Gross', 'إجمالي')}</th>
               <th className={`text-center ${thCls}`}>{t3('Netto', 'Net', 'صافي')}</th>
@@ -88,7 +88,7 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
                   const g = Number(d.gross); const n = Number(d.net); const vat = g - n
                   return (
                     <tr key={d.date} className="border-b hover:bg-muted/30 transition-colors">
-                      <td className={`text-start ${tdCls}`}>{d.date.split('-').reverse().join('.')}</td>
+                      <td className={`text-center ${tdCls}`}>{d.date.split('-').reverse().join('.')}</td>
                       <td className={`text-center ${tdCls}`}>{d.orderCount}</td>
                       <td className={`text-center ${tdCls} font-medium`}>{fmtNum(g)}</td>
                       <td className={`text-center ${tdCls}`}>{fmtNum(n)}</td>
@@ -97,7 +97,7 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
                   )
                 })}
                 <tr className="bg-muted/50 font-bold">
-                  <td className={`text-start ${tdCls}`}>{t3('SUMME', 'TOTAL', 'المجموع')}</td>
+                  <td className={`text-center ${tdCls}`}>{t3('SUMME', 'TOTAL', 'المجموع')}</td>
                   <td className={`text-center ${tdCls}`}>{cur.orderCount ?? 0}</td>
                   <td className={`text-center ${tdCls}`}>{fmtNum(totalGross)}</td>
                   <td className={`text-center ${tdCls}`}>{fmtNum(totalNet)}</td>
