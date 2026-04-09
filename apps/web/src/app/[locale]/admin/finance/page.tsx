@@ -786,8 +786,8 @@ function CustomersTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
           <h3 className="font-semibold p-4 border-b">{t3('Top-Kunden', 'Top Customers', 'أفضل العملاء')}</h3>
           {/* Header */}
           <div className="grid grid-cols-5 gap-x-2 bg-muted/50 border-b">
-            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Name', 'Name', 'الاسم')}</div>
-            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('E-Mail', 'Email', 'البريد')}</div>
+            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Name', 'Name', 'الاسم')}</div>
+            <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('E-Mail', 'Email', 'البريد')}</div>
             <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Bestellungen', 'Orders', 'الطلبات')}</div>
             <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Gesamtausgaben', 'Total Spent', 'إجمالي الإنفاق')}</div>
             <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Durchschn.', 'Avg. Order', 'المتوسط')}</div>
@@ -795,8 +795,8 @@ function CustomersTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
           {/* Rows */}
           {topCustomers.map((c: any, i: number) => (
             <div key={i} className="grid grid-cols-5 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
-              <div className="px-4 py-3 text-sm font-medium">{c.firstName} {c.lastName}</div>
-              <div className="px-4 py-3 text-sm text-muted-foreground" dir="ltr">{c.email}</div>
+              <div className="px-4 py-3 text-sm font-medium text-center">{c.firstName} {c.lastName}</div>
+              <div className="px-4 py-3 text-sm text-muted-foreground text-center" dir="ltr">{c.email}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center">{c.orderCount}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center font-medium">{fmt(c.totalSpent)}</div>
               <div className="px-4 py-3 text-sm tabular-nums text-center">{fmt(c.avgOrderValue)}</div>
