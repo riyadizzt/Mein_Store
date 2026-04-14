@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Send, Check, Instagram, Facebook } from 'lucide-react'
+import { GoldParticles } from '@/components/maintenance/gold-particles'
 
 export default function MaintenancePage() {
   const locale = useLocale()
@@ -86,7 +87,30 @@ export default function MaintenancePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" dir={locale === 'ar' ? 'rtl' : 'ltr'}
-      style={{ background: bgImage ? `url(${bgImage}) center/cover` : 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)' }}>
+      style={{ background: bgImage ? `url(${bgImage}) center/cover` : 'radial-gradient(ellipse at center, #1f1f36 0%, #1a1a2e 40%, #0d0d1a 100%)' }}>
+
+      {/* Scoped styles for the gold shimmer (respects reduced-motion) */}
+      <style>{`
+        @keyframes malakGoldShimmer {
+          0%, 100% {
+            filter: drop-shadow(0 0 0px rgba(212, 168, 83, 0.35)) drop-shadow(0 0 6px rgba(212, 168, 83, 0.15));
+          }
+          50% {
+            filter: drop-shadow(0 0 3px rgba(212, 168, 83, 0.85)) drop-shadow(0 0 18px rgba(212, 168, 83, 0.35));
+          }
+        }
+        .malak-logo-shimmer {
+          animation: malakGoldShimmer 4s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .malak-logo-shimmer {
+            animation: none !important;
+          }
+        }
+      `}</style>
+
+      {/* Animated gold-dust background — only when no custom bgImage is set */}
+      {!bgImage && <GoldParticles />}
 
       {bgImage && <div className="absolute inset-0 bg-black/60" />}
 
@@ -94,9 +118,9 @@ export default function MaintenancePage() {
         {/* Logo */}
         <div style={{ animation: 'fadeSlide 0.8s ease-out' }}>
           {settings?.logoUrl ? (
-            <img src={settings.logoUrl} alt="Malak Bekleidung" className="h-16 mx-auto mb-6" />
+            <img src={settings.logoUrl} alt="Malak Bekleidung" className="h-16 mx-auto mb-6 malak-logo-shimmer" />
           ) : (
-            <div className="mx-auto mb-6 w-16 h-16 rounded-full border-2 border-[#d4a853] flex items-center justify-center">
+            <div className="mx-auto mb-6 w-16 h-16 rounded-full border-2 border-[#d4a853] flex items-center justify-center malak-logo-shimmer">
               <span className="text-[#d4a853] text-2xl font-bold font-serif">M</span>
             </div>
           )}
