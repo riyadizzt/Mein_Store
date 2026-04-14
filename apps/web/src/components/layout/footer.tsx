@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { Instagram, Facebook, Cookie } from 'lucide-react'
 import { useConsentStore } from '@/store/consent-store'
+import { useShopSettings } from '@/hooks/use-shop-settings'
 import { VisaLogo, MastercardLogo, PayPalLogo, KlarnaLogo, SumUpLogo } from '@/components/ui/payment-logos'
 
 /* ── TikTok SVG ── */
@@ -32,6 +33,9 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
 export function Footer({ locale }: { locale: string }) {
   const t = useTranslations('footer')
   const tc = useTranslations('common')
+  const { data: shopSettings } = useShopSettings()
+  const brandName = shopSettings?.brandName || 'Malak Bekleidung'
+  const isSingleWord = !brandName.trim().includes(' ')
 
   return (
     <footer>
@@ -44,8 +48,12 @@ export function Footer({ locale }: { locale: string }) {
 
             {/* Brand */}
             <div className="col-span-2 md:col-span-1">
-              <span className="text-2xl font-display font-bold text-white tracking-[0.3em] logo-shimmer">
-                MALAK
+              <span
+                className={`font-display font-bold text-white logo-shimmer uppercase ${
+                  isSingleWord ? 'text-2xl tracking-[0.3em]' : 'text-xl tracking-[0.15em]'
+                }`}
+              >
+                {brandName}
               </span>
               <p className="mt-4 text-sm text-white/65 leading-relaxed max-w-[220px]">
                 {t('tagline')}
