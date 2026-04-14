@@ -128,7 +128,6 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   // (which disables the cart button and forces them to choose).
   const available = colorOverride ? 0 : getStock(selectedVariant)
   const selectedColor = effectiveColor
-  const selectedSize = effectiveSize
 
   // ── Images: ALWAYS show all photos, but reorder so the selected color comes first.
   //          When the color changes, PremiumGallery is remounted via `key={selectedColor}`
@@ -497,66 +496,76 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               {sizes.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <label htmlFor="size-select" className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+                    <label className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                       {t('size')}
+                      {effectiveSize && (
+                        <span className="ms-2 text-[#0f1419] font-medium">— {effectiveSize}</span>
+                      )}
                     </label>
                     <button onClick={() => setSizeGuideOpen(true)} className={`underline underline-offset-4 decoration-[#0f1419]/20 text-[#0f1419]/50 hover:text-[#0f1419]/70 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
                       {t('sizeGuide')}
                     </button>
                   </div>
-                  <div className="relative">
-                    <select
-                      id="size-select"
-                      value={effectiveSize ?? ''}
-                      onChange={(e) => {
-                        const newSize = e.target.value
-                        if (!newSize) return
-                        // Resolve to the actual variant for the current effective color + new size.
-                        // The dropdown only ever offers in-stock sizes, so the lookup should succeed.
-                        const v =
-                          findStockedVariant(effectiveColor, newSize) ??
-                          findStockedVariant(undefined, newSize) ??
-                          findVariant(effectiveColor, newSize) ??
-                          findVariant(undefined, newSize)
-                        if (v) {
-                          // Clear the override so subsequent renders read color/size from the URL again.
-                          setColorOverride(null)
-                          handleVariantSelect(v.id)
-                        }
-                      }}
-                      disabled={availableSizesForCurrentColor.length === 0}
-                      className={`w-full h-12 ${isRTL ? 'pr-4 pl-12' : 'pl-4 pr-12'} text-[14px] bg-white border border-[#0f1419]/20 hover:border-[#0f1419]/50 focus:border-[#0f1419] focus:outline-none transition-colors appearance-none cursor-pointer ${
-                        !selectedSize ? 'text-[#0f1419]/50' : 'text-[#0f1419]'
-                      }`}
-                    >
-                      <option value="" disabled>
-                        {locale === 'ar'
-                          ? 'اختر مقاسًا'
-                          : locale === 'en'
-                          ? 'Please select a size'
-                          : 'Bitte Größe wählen'}
-                      </option>
-                      {availableSizesForCurrentColor.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                    {/* Chevron */}
-                    <svg
-                      className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-[#0f1419]/50 pointer-events-none ${isRTL ? 'left-4' : 'right-4'}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                  {availableSizesForCurrentColor.length === 0 && (
-                    <p className="mt-2 text-[12px] text-[#c43d3d]">
+
+                  {/* Size pill grid — each size is a large tappable button.
+                      Replaces the native <select> because iOS/Android render
+                      it with tiny system fonts that are near-illegible on a
+                      dark-backgrounded page. Keeps id="size-select" on the
+                      container so the add-to-cart scroll-to-size still lands
+                      on the right element. */}
+                  {availableSizesForCurrentColor.length > 0 ? (
+                    <div id="size-select" className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                      {availableSizesForCurrentColor.map((size) => {
+                        const isSelected = effectiveSize === size
+                        const inStock = !!findStockedVariant(effectiveColor, size)
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            disabled={!inStock}
+                            onClick={() => {
+                              const v =
+                                findStockedVariant(effectiveColor, size) ??
+                                findStockedVariant(undefined, size) ??
+                                findVariant(effectiveColor, size) ??
+                                findVariant(undefined, size)
+                              if (v) {
+                                setColorOverride(null)
+                                handleVariantSelect(v.id)
+                              }
+                            }}
+                            aria-pressed={isSelected}
+                            aria-label={`${t('size')} ${size}${inStock ? '' : ' — ' + (locale === 'ar' ? 'غير متوفر' : locale === 'en' ? 'out of stock' : 'nicht verfügbar')}`}
+                            className={`relative h-12 min-w-[3rem] px-3 text-[14px] font-medium transition-all select-none ${
+                              isSelected
+                                ? 'bg-[#0f1419] text-white ring-2 ring-[#d4a853] ring-offset-2 ring-offset-white'
+                                : inStock
+                                ? 'bg-white text-[#0f1419] border border-[#0f1419]/20 hover:border-[#0f1419] hover:bg-[#0f1419]/[0.02]'
+                                : 'bg-[#0f1419]/[0.02] text-[#0f1419]/30 border border-dashed border-[#0f1419]/15 cursor-not-allowed line-through'
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[13px] text-[#c43d3d]">
                       {locale === 'ar'
                         ? 'لا توجد مقاسات متوفرة لهذا اللون'
                         : locale === 'en'
                         ? 'No sizes available in this color'
                         : 'Keine Größen in dieser Farbe verfügbar'}
+                    </p>
+                  )}
+
+                  {!effectiveSize && availableSizesForCurrentColor.length > 0 && (
+                    <p className="mt-3 text-[12px] text-[#0f1419]/50">
+                      {locale === 'ar'
+                        ? 'اختر مقاسًا'
+                        : locale === 'en'
+                        ? 'Please select a size'
+                        : 'Bitte Größe wählen'}
                     </p>
                   )}
                 </div>
@@ -628,13 +637,16 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                             : 'bg-[#d4a853] text-white hover:bg-[#c49b45]'
                     }`}
                     onClickCapture={(e) => {
-                      // If they need to pick a size, scroll the dropdown into focus.
+                      // If they need to pick a size, scroll the pill grid into view.
                       if (needsSize) {
                         e.preventDefault()
                         const el = document.getElementById('size-select')
                         if (el) {
                           el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                          ;(el as HTMLSelectElement).focus()
+                          // Focus the first enabled size button so keyboard users
+                          // land right on the grid.
+                          const firstBtn = el.querySelector<HTMLButtonElement>('button:not([disabled])')
+                          firstBtn?.focus()
                         }
                       }
                     }}
