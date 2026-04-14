@@ -7,6 +7,7 @@ import { ScrollText, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-reac
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { labelKey, labelValue } from '@/lib/audit-labels'
 
 // ── Render helpers for the `changes` JSON payload ──────────────
 // Audit logs write three different shapes depending on the action:
@@ -17,24 +18,31 @@ import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 // Settings updates trigger shape #2 which previously fell through to a
 // 80-char JSON.stringify and rendered as garbled raw text in the admin.
 
-function formatAuditValue(v: unknown): string {
+function formatAuditValue(key: string, v: unknown, locale: string): string {
   if (v === null || v === undefined || v === '') return '—'
   if (typeof v === 'boolean') return v ? '✓' : '✗'
   if (typeof v === 'number') return v.toString()
-  if (typeof v === 'string') return v
+  if (typeof v === 'string') {
+    // Try to translate against a known enum (reason, status, method, role).
+    // labelValue() returns the raw string if no mapping exists, so unknown
+    // values pass through unchanged (URLs, free-form text, IDs, etc.).
+    return labelValue(key, v, locale)
+  }
+  if (Array.isArray(v)) return v.map((x) => formatAuditValue(key, x, locale)).join(', ')
   try { return JSON.stringify(v) } catch { return String(v) }
 }
 
 function renderKvList(
   obj: Record<string, unknown>,
   valueClass: string,
+  locale: string,
   strikethrough = false,
 ): React.ReactNode {
   return Object.keys(obj).map((k) => (
     <div key={k} className="text-[11px] leading-snug break-words">
-      <span className="text-muted-foreground">{k}:</span>{' '}
+      <span className="text-muted-foreground">{labelKey(k, locale)}:</span>{' '}
       <span className={`${valueClass} ${strikethrough ? 'line-through' : ''}`}>
-        {formatAuditValue(obj[k])}
+        {formatAuditValue(k, obj[k], locale)}
       </span>
     </div>
   ))
@@ -53,15 +61,15 @@ function renderChanges(ch: any, locale: string): React.ReactNode {
       const changed = JSON.stringify(beforeVal) !== JSON.stringify(afterVal)
       return (
         <div key={k} className="text-[11px] leading-snug break-words">
-          <span className="text-muted-foreground">{k}:</span>{' '}
+          <span className="text-muted-foreground">{labelKey(k, locale)}:</span>{' '}
           {beforeVal !== undefined && (
             <span className={`${changed ? 'text-red-400 line-through' : 'text-foreground'}`}>
-              {formatAuditValue(beforeVal)}
+              {formatAuditValue(k, beforeVal, locale)}
             </span>
           )}
           {changed && afterVal !== undefined && <> → </>}
           {afterVal !== undefined && changed && (
-            <span className="text-green-600">{formatAuditValue(afterVal)}</span>
+            <span className="text-green-600">{formatAuditValue(k, afterVal, locale)}</span>
           )}
         </div>
       )
@@ -74,7 +82,7 @@ function renderChanges(ch: any, locale: string): React.ReactNode {
         <div className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-0.5">
           {locale === 'ar' ? 'القيم الجديدة' : locale === 'en' ? 'New values' : 'Neue Werte'}
         </div>
-        {renderKvList(ch.after as Record<string, unknown>, 'text-green-600')}
+        {renderKvList(ch.after as Record<string, unknown>, 'text-green-600', locale)}
       </>
     )
   }
@@ -85,13 +93,13 @@ function renderChanges(ch: any, locale: string): React.ReactNode {
         <div className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-0.5">
           {locale === 'ar' ? 'تم حذفها' : locale === 'en' ? 'Removed' : 'Gelöschte Werte'}
         </div>
-        {renderKvList(ch.before as Record<string, unknown>, 'text-red-400', true)}
+        {renderKvList(ch.before as Record<string, unknown>, 'text-red-400', locale, true)}
       </>
     )
   }
   // Case 4: flat object (no before/after wrapper)
   if (ch && typeof ch === 'object') {
-    return renderKvList(ch as Record<string, unknown>, 'text-foreground')
+    return renderKvList(ch as Record<string, unknown>, 'text-foreground', locale)
   }
   return <span className="text-[10px] text-muted-foreground">{String(ch).slice(0, 80)}</span>
 }
