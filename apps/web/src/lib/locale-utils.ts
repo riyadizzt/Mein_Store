@@ -112,6 +112,19 @@ export function formatDate(date: string | null, locale: string): string {
   return new Intl.DateTimeFormat(safeLocale, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(date))
 }
 
+// Same as formatDate but prefixes the long weekday name. Used by the
+// admin orders + shipments list day-group headers. Arabic still uses
+// Latin numerals for the date portion (project rule), and the weekday
+// comes from the natural locale (الثلاثاء, Dienstag, Tuesday).
+export function formatDateWithWeekday(date: string | null, locale: string): string {
+  if (!date) return '—'
+  if (locale === 'ar') {
+    return new Intl.DateTimeFormat('ar-EG-u-nu-latn', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(date))
+  }
+  const safeLocale = locale === 'de' ? 'de-DE' : 'en-GB'
+  return new Intl.DateTimeFormat(safeLocale, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(date))
+}
+
 export function formatDateTime(date: string | null, locale: string): string {
   if (!date) return '—'
   if (locale === 'ar') {

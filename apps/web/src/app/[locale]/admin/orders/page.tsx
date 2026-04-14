@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Download, ChevronDown, ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
-import { formatDate, formatCurrency } from '@/lib/locale-utils'
+import { formatDate, formatDateWithWeekday, formatCurrency } from '@/lib/locale-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
@@ -177,7 +177,7 @@ export default function AdminOrdersPage() {
                         {collapsedDays.has(dateKey)
                           ? <ChevronRight className="h-4 w-4 text-[#d4a853]" />
                           : <ChevronDown className="h-4 w-4 text-[#d4a853]" />}
-                        <span className="text-sm font-bold text-[#d4a853]">{formatDate(dateKey, locale)}</span>
+                        <span className="text-sm font-bold text-[#d4a853]">{formatDateWithWeekday(dateKey, locale)}</span>
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {items.length} {locale === 'ar' ? 'طلبات' : locale === 'en' ? 'orders' : 'Bestellungen'}
