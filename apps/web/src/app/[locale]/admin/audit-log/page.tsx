@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ScrollText, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { labelKey, labelValue } from '@/lib/audit-labels'
 
@@ -317,18 +318,26 @@ export default function AuditLogPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
-        <select value={adminFilter} onChange={(e) => { setAdminFilter(e.target.value); setPage(1) }} className="h-10 px-3 rounded-lg border bg-background text-sm min-w-[180px]">
-          <option value="">{t('auditLog.allAdmins')}</option>
-          {(admins ?? []).map((a: any) => (
-            <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
-          ))}
-        </select>
-        <select value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setPage(1) }} className="h-10 px-3 rounded-lg border bg-background text-sm min-w-[180px]">
-          <option value="">{t('auditLog.allActions')}</option>
-          {(actionTypes ?? []).map((a: string) => (
-            <option key={a} value={a}>{getActionLabel(a, locale)}</option>
-          ))}
-        </select>
+        <div className="min-w-[220px]">
+          <SearchableSelect
+            value={adminFilter}
+            onChange={(v) => { setAdminFilter(v); setPage(1) }}
+            options={(admins ?? []).map((a: any) => ({ value: a.id, label: `${a.firstName} ${a.lastName}`.trim() || a.email || a.id }))}
+            placeholder={t('auditLog.allAdmins')}
+            searchPlaceholder={locale === 'ar' ? 'ابحث عن مشرف...' : locale === 'en' ? 'Search admin...' : 'Admin suchen...'}
+            emptyLabel={t('auditLog.allAdmins')}
+          />
+        </div>
+        <div className="min-w-[260px]">
+          <SearchableSelect
+            value={actionFilter}
+            onChange={(v) => { setActionFilter(v); setPage(1) }}
+            options={(actionTypes ?? []).map((a: string) => ({ value: a, label: getActionLabel(a, locale), sublabel: a }))}
+            placeholder={t('auditLog.allActions')}
+            searchPlaceholder={locale === 'ar' ? 'ابحث عن إجراء...' : locale === 'en' ? 'Search action...' : 'Aktion suchen...'}
+            emptyLabel={t('auditLog.allActions')}
+          />
+        </div>
       </div>
 
       {/* Table with Day Grouping */}
