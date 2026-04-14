@@ -14,6 +14,8 @@ export const EMAIL_TYPES = {
   // Contact form — admin notification + customer auto-reply
   CONTACT_NEW: 'contact-new',
   CONTACT_RECEIVED: 'contact-received',
+  // Vorkasse — bank transfer instructions with IBAN/BIC/reference
+  VORKASSE_INSTRUCTIONS: 'vorkasse-instructions',
 } as const
 
 export type EmailType = (typeof EMAIL_TYPES)[keyof typeof EMAIL_TYPES]
@@ -81,6 +83,11 @@ export const EMAIL_SUBJECTS: Record<EmailType, Record<string, string>> = {
     en: 'We received your message',
     ar: 'لقد استلمنا رسالتك',
   },
+  [EMAIL_TYPES.VORKASSE_INSTRUCTIONS]: {
+    de: 'Zahlungsinformationen — Bestellung #{orderNumber}',
+    en: 'Payment instructions — Order #{orderNumber}',
+    ar: '#{orderNumber} تعليمات الدفع — الطلب',
+  },
 }
 
 // ── From address mapping ───────────────────────────────────────
@@ -98,4 +105,5 @@ export const EMAIL_FROM_MAP: Record<EmailType, string> = {
   [EMAIL_TYPES.INVOICE]: 'EMAIL_FROM_ORDERS',
   [EMAIL_TYPES.CONTACT_NEW]: 'EMAIL_FROM_SUPPORT',
   [EMAIL_TYPES.CONTACT_RECEIVED]: 'EMAIL_FROM_SUPPORT',
+  [EMAIL_TYPES.VORKASSE_INSTRUCTIONS]: 'EMAIL_FROM_ORDERS',
 }

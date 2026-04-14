@@ -1,0 +1,99 @@
+<!-- Info Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#fef3c7;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#d4a853;">&euro;</span>
+    </div>
+  </td></tr>
+</table>
+
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:Georgia,'Times New Roman',serif;">Zahlungsinformationen</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;">Hallo <strong style="color:#1a1a2e;">{{firstName}}</strong>, bitte &uuml;berweise den Gesamtbetrag auf unser Konto, damit wir deine Bestellung bearbeiten k&ouml;nnen.</p>
+
+<!-- Order Number Badge -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
+  <tr><td align="center">
+    <div style="display:inline-block;padding:12px 28px;background:#f5eed9;border:1px solid #dcc68a;border-radius:12px;">
+      <span style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;color:#1a1a2e;letter-spacing:1px;">{{orderNumber}}</span>
+    </div>
+    <p style="margin:8px 0 0;color:#9ca3af;font-size:12px;">{{orderDate}}</p>
+  </td></tr>
+</table>
+
+<!-- Amount Highlight -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+  <tr><td align="center" style="padding:20px;background:#1a1a2e;border-radius:12px;">
+    <p style="margin:0 0 4px;color:#d4a853;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;">Zu &uuml;berweisender Betrag</p>
+    <p style="margin:0;color:#ffffff;font-size:32px;font-weight:700;font-family:Georgia,'Times New Roman',serif;">&euro;{{total}}</p>
+  </td></tr>
+</table>
+
+<!-- Bank Details -->
+<p style="font-weight:700;font-size:13px;margin:0 0 12px;color:#1a1a2e;text-transform:uppercase;letter-spacing:1px;">Bankverbindung</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Kontoinhaber</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;">{{accountHolder}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">IBAN</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;font-family:'Courier New',monospace;letter-spacing:1px;">{{iban}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">BIC</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;font-family:'Courier New',monospace;letter-spacing:1px;">{{bic}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Bank</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;">{{bankName}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;background:#f5eed9;border-radius:0 0 12px 12px;">
+      <p style="margin:0 0 2px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;">Verwendungszweck &mdash; unbedingt angeben!</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1a1a2e;font-family:'Courier New',monospace;letter-spacing:1px;">{{orderNumber}}</p>
+    </td>
+  </tr>
+</table>
+
+<!-- Payment Deadline Warning -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fef3c7;border-radius:12px;border:1px solid #fcd34d;">
+  <tr><td style="padding:16px 20px;">
+    <p style="margin:0 0 4px;font-size:12px;color:#92400e;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">&#9888; Zahlungsfrist</p>
+    <p style="margin:0;font-size:14px;color:#78350f;line-height:1.6;">Bitte &uuml;berweise den Betrag innerhalb von <strong>{{paymentDeadlineDays}} Tagen</strong> (bis sp&auml;testens {{paymentDueDate}}). Ohne fristgerechten Zahlungseingang wird die Bestellung automatisch storniert.</p>
+  </td></tr>
+</table>
+
+<!-- Process Info -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+  <tr><td style="padding:0;">
+    <p style="font-weight:700;font-size:13px;margin:0 0 10px;color:#1a1a2e;text-transform:uppercase;letter-spacing:1px;">So geht es weiter</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:6px 0;font-size:14px;color:#4b5563;line-height:1.6;">
+        <strong style="color:#1a1a2e;">1.</strong> &Uuml;berweise den Betrag mit der angegebenen Verwendungszweck-Angabe.
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#4b5563;line-height:1.6;">
+        <strong style="color:#1a1a2e;">2.</strong> Wir pr&uuml;fen den Zahlungseingang (1&ndash;3 Werktage nach &Uuml;berweisung).
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#4b5563;line-height:1.6;">
+        <strong style="color:#1a1a2e;">3.</strong> Sobald die Zahlung bei uns ankommt, versenden wir deine Bestellung.
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+
+<!-- CTA Button -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:32px 0 16px;">
+  <tr><td align="center">
+    <a href="{{{appUrl}}}/de/tracking?mode=order&orderNumber={{orderNumber}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;min-height:48px;line-height:20px;">Bestellung ansehen</a>
+  </td></tr>
+</table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">Bei Fragen zur Zahlung kannst du jederzeit unseren Kundenservice kontaktieren.</p>

@@ -170,6 +170,15 @@ export class EmailService {
     await this.enqueue({ to, type: 'order-cancellation', lang, data })
   }
 
+  // Vorkasse (bank transfer) — sent AFTER order-confirmation so the
+  // customer has two emails: one with order details, one with bank
+  // details. Triggered from payments.service.createPayment() when the
+  // resolved provider is VORKASSE. Fire-and-forget with catch at the
+  // caller site.
+  async queueVorkasseInstructions(to: string, lang: string, data: Record<string, unknown>): Promise<void> {
+    await this.enqueue({ to, type: 'vorkasse-instructions' as any, lang, data })
+  }
+
   async queueGuestInvite(to: string, lang: string, data: Record<string, unknown>): Promise<void> {
     await this.enqueue({ to, type: 'guest-invite' as any, lang, data })
   }

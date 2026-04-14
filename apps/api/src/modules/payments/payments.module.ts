@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common'
 import { PrismaModule } from '../../prisma/prisma.module'
-// EmailModule not needed — VorkasseCron sends via Resend directly
+import { EmailModule } from '../email/email.module'
 import { PaymentsController } from './payments.controller'
 import { PaymentsWebhookController } from './payments-webhook.controller'
 import { PaymentsService } from './payments.service'
@@ -14,7 +14,7 @@ import { VorkasseCron } from './vorkasse.cron'
 import { PAYMENT_PROVIDERS } from './payment-provider.interface'
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, EmailModule],
   controllers: [PaymentsController, PaymentsWebhookController],
   providers: [
     PaymentsService,

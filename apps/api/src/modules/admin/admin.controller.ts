@@ -47,6 +47,7 @@ import { CampaignService } from './services/campaign.service'
 import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
 import { ShipmentsService } from '../shipments/shipments.service'
+import { PaymentsService } from '../payments/payments.service'
 import { Response } from 'express'
 
 /**
@@ -146,6 +147,10 @@ export class AdminController {
     private readonly translation: TranslationService,
     private readonly campaigns: CampaignService,
     private readonly shipmentsService: ShipmentsService,
+    // Appended at the end so the existing admin-settings-parity.spec.ts
+    // positional constructor (Array(19) + prisma at index 9) keeps working.
+    // The test only exercises getSettings() which doesn't touch payments.
+    private readonly payments: PaymentsService,
   ) {}
 
   // ── Dashboard ─────────────────────────────────────────────
@@ -359,6 +364,58 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   markRefundManual(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
     return this.orders.markRefundManual(id, req.user.id, ip)
+  }
+
+  // Resend the Vorkasse (bank transfer) instructions email. Used for
+  // customers who placed a Vorkasse order before the instructions-email
+  // feature was deployed (14.04.2026 incident ORD-20260414-000032)
+  // or whenever the customer claims they never received the bank
+  // details. Looks up the order, queues the email through the standard
+  // EmailService, and writes an audit log entry.
+  @Post('orders/:id/resend-vorkasse-instructions')
+  @RequirePermission(PERMISSIONS.ORDERS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  async resendVorkasseInstructions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: { id: true, orderNumber: true, payment: { select: { provider: true } } },
+    })
+    if (!order) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'OrderNotFound',
+        message: {
+          de: 'Bestellung nicht gefunden.',
+          en: 'Order not found.',
+          ar: 'الطلب غير موجود.',
+        },
+      })
+    }
+    if (order.payment?.provider !== 'VORKASSE') {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'NotVorkasseOrder',
+        message: {
+          de: 'Diese Bestellung verwendet keine Vorkasse.',
+          en: 'This order is not a Vorkasse (bank transfer) order.',
+          ar: 'هذا الطلب لا يستخدم الدفع المسبق.',
+        },
+      })
+    }
+    await this.payments.sendVorkasseInstructions(id, `admin-resend-${req.user.id.slice(0, 8)}`)
+    await this.audit.log({
+      adminId: req.user.id,
+      action: 'VORKASSE_INSTRUCTIONS_RESENT',
+      entityType: 'order',
+      entityId: id,
+      changes: { after: { orderNumber: order.orderNumber } },
+      ipAddress: ip,
+    })
+    return { success: true }
   }
 
   @Post('orders/:id/notes')

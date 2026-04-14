@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   Inject,
+  Optional,
   BadRequestException,
   NotFoundException,
   ConflictException,
@@ -14,6 +15,8 @@ import { CreatePaymentDto } from './dto/create-payment.dto'
 import { CreateRefundDto } from './dto/create-refund.dto'
 import { PaymentFailedException } from './exceptions/payment-failed.exception'
 import { InvoiceService } from './invoice.service'
+import { EmailService } from '../email/email.service'
+import { VorkasseProvider } from './providers/vorkasse.provider'
 import { ORDER_EVENTS, OrderStatusChangedEvent } from '../orders/events/order.events'
 
 // Map PaymentMethod enum → PaymentProvider
@@ -41,6 +44,9 @@ export class PaymentsService {
     private readonly eventEmitter: EventEmitter2,
     private readonly invoiceService: InvoiceService,
     @Inject(PAYMENT_PROVIDERS) providers: IPaymentProvider[],
+    // Optional: absent in unit tests that only provide the core deps, wired
+    // in production via EmailModule. Null-safe call at the vorkasse site below.
+    @Optional() private readonly emailService?: EmailService,
   ) {
     this.providerMap = new Map(providers.map((p) => [p.providerName, p]))
   }
@@ -282,6 +288,25 @@ export class PaymentsService {
       `[${correlationId}] Payment created: ${payment.id} | provider=${providerName} | method=${dto.method} | orderId=${order.id}`,
     )
 
+    // Vorkasse: fire-and-forget the bank-transfer instructions email.
+    // This is the ONLY place the customer receives IBAN/BIC/reference —
+    // the confirmation page shows the same data but is session-scoped,
+    // so if the customer closes the tab they have nothing to pay with.
+    // See 14.04.2026 incident ORD-20260414-000032 where a customer
+    // ordered via Vorkasse, got the standard order-confirmation email
+    // (no bank details), and then had no idea how to transfer.
+    //
+    // Wrapped in an IIFE so we don't block the payment response. Any
+    // failure is logged but never propagated — the order is fine and
+    // admin can resend via the dedicated endpoint below.
+    if (providerName === 'VORKASSE' && this.emailService) {
+      this.sendVorkasseInstructions(order.id, correlationId).catch((err) => {
+        this.logger.error(
+          `[${correlationId}] Vorkasse instructions email failed for order ${order.orderNumber}: ${(err as Error).message}`,
+        )
+      })
+    }
+
     return {
       paymentId: payment.id,
       providerPaymentId: intentResult.providerPaymentId,
@@ -289,6 +314,85 @@ export class PaymentsService {
       status: intentResult.status,
       redirectUrl: intentResult.redirectUrl,
     }
+  }
+
+  // ── VORKASSE INSTRUCTIONS EMAIL ────────────────────────────
+  //
+  // Loads fresh order + resolves recipient (registered user OR guest
+  // via order.notes.locale / guestFirstName), pulls the live bank
+  // details from VorkasseProvider, and queues the email through the
+  // standard EmailService. Extracted into its own method so the
+  // admin resend endpoint can call it too.
+  async sendVorkasseInstructions(orderId: string, correlationId = 'manual'): Promise<void> {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, deletedAt: null },
+      include: {
+        user: { select: { email: true, firstName: true, preferredLang: true } },
+      },
+    })
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`)
+    }
+
+    // Resolve recipient identity (same pattern as order-email.listener.ts)
+    let email: string | null = null
+    let firstName = 'Kunde'
+    let lang = 'de'
+    if (order.user?.email) {
+      email = order.user.email
+      firstName = order.user.firstName || firstName
+      lang = order.user.preferredLang ?? 'de'
+    } else if (order.guestEmail) {
+      email = order.guestEmail
+      try {
+        const notes = JSON.parse(order.notes ?? '{}')
+        firstName = notes.guestFirstName || firstName
+        lang = notes.locale || 'de'
+      } catch {}
+    }
+    if (!email) {
+      this.logger.warn(
+        `[${correlationId}] Cannot send Vorkasse instructions for ${order.orderNumber}: no recipient email`,
+      )
+      return
+    }
+
+    // Load live bank details from ShopSettings via the VorkasseProvider.
+    // We go through the providerMap so tests that don't wire VorkasseProvider
+    // still instantiate the service fine.
+    const vorkasseProvider = this.providerMap.get('VORKASSE') as VorkasseProvider | undefined
+    if (!vorkasseProvider?.getBankDetails) {
+      this.logger.error(
+        `[${correlationId}] Vorkasse provider not available — cannot send instructions for ${order.orderNumber}`,
+      )
+      return
+    }
+    const bank = await vorkasseProvider.getBankDetails()
+
+    // Compute payment-due date (createdAt + deadlineDays)
+    const dueDate = new Date(order.createdAt.getTime() + bank.paymentDeadlineDays * 24 * 60 * 60 * 1000)
+    const dateFmt = lang === 'ar' ? 'ar-EG-u-nu-latn' : lang === 'en' ? 'en-GB' : 'de-DE'
+    const dueDateStr = dueDate.toLocaleDateString(dateFmt, { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const orderDateStr = order.createdAt.toLocaleDateString(dateFmt, { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+    await this.emailService!.queueVorkasseInstructions(email, lang, {
+      firstName,
+      orderNumber: order.orderNumber,
+      orderDate: orderDateStr,
+      total: Number(order.totalAmount).toFixed(2),
+      currency: order.currency,
+      accountHolder: bank.accountHolder,
+      iban: bank.iban,
+      bic: bank.bic,
+      bankName: bank.bankName,
+      paymentDeadlineDays: bank.paymentDeadlineDays,
+      paymentDueDate: dueDateStr,
+      appUrl: process.env.APP_URL || 'https://malak-bekleidung.com',
+    })
+
+    this.logger.log(
+      `[${correlationId}] Vorkasse instructions email queued for ${email} (${order.orderNumber})`,
+    )
   }
 
   // ── CONFIRM VORKASSE PAYMENT (admin action) ────────────────

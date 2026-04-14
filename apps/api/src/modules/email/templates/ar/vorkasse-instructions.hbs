@@ -1,0 +1,99 @@
+<!-- Info Icon -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#fef3c7;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#d4a853;">&euro;</span>
+    </div>
+  </td></tr>
+</table>
+
+<h1 style="margin:0 0 8px;font-size:28px;color:#1a1a2e;text-align:center;font-weight:700;font-family:'Noto Sans Arabic',Georgia,serif;">تعليمات الدفع</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 28px;font-size:15px;">مرحباً <strong style="color:#1a1a2e;">{{firstName}}</strong>، يرجى تحويل المبلغ الإجمالي إلى حسابنا البنكي لنتمكن من معالجة طلبك.</p>
+
+<!-- Order Number Badge -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
+  <tr><td align="center">
+    <div style="display:inline-block;padding:12px 28px;background:#f5eed9;border:1px solid #dcc68a;border-radius:12px;">
+      <span style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;color:#1a1a2e;letter-spacing:1px;" dir="ltr">{{orderNumber}}</span>
+    </div>
+    <p style="margin:8px 0 0;color:#9ca3af;font-size:12px;">{{orderDate}}</p>
+  </td></tr>
+</table>
+
+<!-- Amount Highlight -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+  <tr><td align="center" style="padding:20px;background:#1a1a2e;border-radius:12px;">
+    <p style="margin:0 0 4px;color:#d4a853;font-size:11px;font-weight:700;letter-spacing:2px;">المبلغ المطلوب تحويله</p>
+    <p style="margin:0;color:#ffffff;font-size:32px;font-weight:700;font-family:Georgia,'Times New Roman',serif;" dir="ltr">&euro;{{total}}</p>
+  </td></tr>
+</table>
+
+<!-- Bank Details -->
+<p style="font-weight:700;font-size:14px;margin:0 0 12px;color:#1a1a2e;letter-spacing:0.5px;">بيانات البنك</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:12px;color:#6b7280;">صاحب الحساب</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;">{{accountHolder}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:12px;color:#6b7280;">رقم الحساب الدولي (IBAN)</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;font-family:'Courier New',monospace;letter-spacing:1px;" dir="ltr">{{iban}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:12px;color:#6b7280;">رمز BIC</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;font-family:'Courier New',monospace;letter-spacing:1px;" dir="ltr">{{bic}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #f0eeea;">
+      <p style="margin:0 0 2px;font-size:12px;color:#6b7280;">البنك</p>
+      <p style="margin:0;font-size:15px;font-weight:600;color:#1a1a2e;">{{bankName}}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:14px 16px;background:#f5eed9;border-radius:0 0 12px 12px;">
+      <p style="margin:0 0 2px;font-size:12px;color:#6b7280;font-weight:700;">مرجع الدفع &mdash; يجب ذكره!</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1a1a2e;font-family:'Courier New',monospace;letter-spacing:1px;" dir="ltr">{{orderNumber}}</p>
+    </td>
+  </tr>
+</table>
+
+<!-- Payment Deadline Warning -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fef3c7;border-radius:12px;border:1px solid #fcd34d;">
+  <tr><td style="padding:16px 20px;">
+    <p style="margin:0 0 4px;font-size:13px;color:#92400e;font-weight:700;">&#9888; مهلة الدفع</p>
+    <p style="margin:0;font-size:14px;color:#78350f;line-height:1.7;">يرجى تحويل المبلغ خلال <strong>{{paymentDeadlineDays}} أيام</strong> (حتى {{paymentDueDate}} كحد أقصى). إذا لم يتم استلام الدفعة في الوقت المحدد، سيتم إلغاء طلبك تلقائياً.</p>
+  </td></tr>
+</table>
+
+<!-- Process Info -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+  <tr><td style="padding:0;">
+    <p style="font-weight:700;font-size:14px;margin:0 0 10px;color:#1a1a2e;letter-spacing:0.5px;">الخطوات التالية</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      <tr><td style="padding:6px 0;font-size:14px;color:#4b5563;line-height:1.8;">
+        <strong style="color:#1a1a2e;">1.</strong> قم بتحويل المبلغ مع ذكر مرجع الدفع المذكور أعلاه.
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#4b5563;line-height:1.8;">
+        <strong style="color:#1a1a2e;">2.</strong> نقوم بالتحقق من استلام الدفعة (1&ndash;3 أيام عمل بعد التحويل).
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#4b5563;line-height:1.8;">
+        <strong style="color:#1a1a2e;">3.</strong> بمجرد وصول الدفعة، نقوم بشحن طلبك.
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+
+<!-- CTA Button -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:32px 0 16px;">
+  <tr><td align="center">
+    <a href="{{{appUrl}}}/ar/tracking?mode=order&orderNumber={{orderNumber}}" style="display:inline-block;background:#d4a853;color:#ffffff;font-weight:600;font-size:15px;padding:14px 48px;border-radius:8px;text-decoration:none;min-height:48px;line-height:20px;">عرض الطلب</a>
+  </td></tr>
+</table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">لأي استفسار بشأن الدفع، يمكنك التواصل مع خدمة العملاء في أي وقت.</p>

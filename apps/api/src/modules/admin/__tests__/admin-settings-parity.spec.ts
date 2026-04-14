@@ -43,12 +43,13 @@ describe('AdminController — settings GET/PATCH parity', () => {
       },
     }
 
-    // AdminController has 19 injected services; getSettings() only needs
+    // AdminController has 20 injected services; getSettings() only needs
     // this.prisma. Construct manually with null for everything else — no
     // method on the other services is ever touched by this endpoint.
     // If this breaks because getSettings() starts using another service,
-    // that's a signal the change needs reviewing.
-    const ctorArgs = Array(19).fill(null)
+    // that's a signal the change needs reviewing. New services MUST be
+    // appended at the end so `ctorArgs[9] = prisma` stays valid.
+    const ctorArgs = Array(20).fill(null)
     ctorArgs[9] = mockPrisma // prisma is the 10th positional argument
     controller = new (AdminController as any)(...ctorArgs)
   })
