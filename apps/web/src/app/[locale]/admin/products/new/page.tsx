@@ -65,6 +65,7 @@ export default function NewProductPage() {
   // Images — ONE unified gallery, colorName nullable
   const [images, setImages] = useState<ImageEntry[]>([])
   const [assigningImageId, setAssigningImageId] = useState<string | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   // Colors
   const [colors, setColors] = useState<ColorEntry[]>([])
@@ -253,9 +254,43 @@ export default function NewProductPage() {
           </div>
         )}
         <div className="p-6">
-          {/* Upload Zone */}
-          <label className="block border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-[#d4a853]/50 hover:bg-[#d4a853]/5 transition-all mb-4">
-            <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
+          {/* Upload Zone — click (via hidden input) OR drag & drop */}
+          <label
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (!isDragOver) setIsDragOver(true)
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDragOver(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              // Only clear when leaving the label itself (not its children)
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return
+              setIsDragOver(false)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setIsDragOver(false)
+              const dropped = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith('image/'))
+              if (dropped.length > 0) addImages(dropped)
+            }}
+            className={`block border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all mb-4 ${
+              isDragOver
+                ? 'border-[#d4a853] bg-[#d4a853]/10 scale-[1.01]'
+                : 'hover:border-[#d4a853]/50 hover:bg-[#d4a853]/5'
+            }`}
+          >
+            <Upload
+              className={`h-8 w-8 mx-auto mb-2 transition-colors ${
+                isDragOver ? 'text-[#d4a853]' : 'text-muted-foreground/40'
+              }`}
+            />
             <p className="text-sm text-muted-foreground">{t('wizard.uploadZone')}</p>
             <p className="text-xs text-muted-foreground/60 mt-1">{t('wizard.uploadHint')}</p>
             <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { if (e.target.files) addImages(e.target.files) }} />
