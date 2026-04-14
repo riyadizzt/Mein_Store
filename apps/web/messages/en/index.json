@@ -1,10 +1,10 @@
 {
   "metadata": {
-    "siteName": "Malak Store",
+    "siteName": "Malak Bekleidung",
     "description": "Fashion & Shoes — Your Omnichannel Fashion Store"
   },
   "home": {
-    "welcome": "Welcome to Malak Store",
+    "welcome": "Welcome to Malak Bekleidung",
     "subtitle": "Discover our latest collection for women, men and kids.",
     "cta": "Shop Now",
     "categories": "Categories",
@@ -507,11 +507,14 @@
       "products": "Products",
       "users": "Customers",
       "inventory": "Inventory",
+      "etiketten": "Labels",
+      "masterBoxes": "Master Boxes",
       "shippingZones": "Shipping Zones",
       "categories": "Categories",
       "sizing": "Size Charts",
       "auditLog": "Audit Log",
       "notifications": "Notifications",
+      "contactMessages": "Contact Messages",
       "finance": "Finance",
       "invoices": "Invoices",
       "coupons": "Coupons",
@@ -1175,6 +1178,7 @@
       "actions": "Actions",
       "noShipments": "No shipments",
       "downloadLabel": "Label",
+      "cancel": "Cancel",
       "search": "Order number, customer or tracking...",
       "allStatus": "All Status",
       "allCarriers": "All Carriers",

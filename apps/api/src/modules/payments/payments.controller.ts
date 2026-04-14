@@ -11,6 +11,7 @@ import {
   HttpStatus,
   ParseUUIDPipe,
   Headers,
+  Logger,
 } from '@nestjs/common'
 import { Response } from 'express'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
@@ -27,6 +28,8 @@ import { CreateRefundDto } from './dto/create-refund.dto'
 
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name)
+
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly invoiceService: InvoiceService,
@@ -89,24 +92,54 @@ export class PaymentsController {
 
     // Check SumUp checkout status via API
     const apiKey = process.env.SUMUP_API_KEY
-    if (!apiKey) return { paid: false, reason: 'SumUp not configured' }
+    if (!apiKey) {
+      this.logger.error(
+        `SUMUP_API_KEY missing — cannot verify SumUp payment for order ${orderId}. ` +
+        `Configure SUMUP_API_KEY in environment.`,
+      )
+      return { paid: false, reason: 'SumUp not configured' }
+    }
 
     try {
       const res = await fetch(`https://api.sumup.com/v0.1/checkouts/${payment.providerPaymentId}`, {
         headers: { 'Authorization': `Bearer ${apiKey}` },
       })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        this.logger.warn(
+          `SumUp verify returned HTTP ${res.status} for order ${orderId}: ${text.slice(0, 200)}`,
+        )
+        return { paid: false, reason: `SumUp API HTTP ${res.status}` }
+      }
       const data: any = await res.json()
 
       if (data.status === 'PAID') {
-        // Actually paid — now confirm
+        // Save SumUp transaction_id for refunds (different from checkout_id!)
+        const transactionId = data.transaction_id || data.transaction_code || ''
+        if (transactionId) {
+          await this.paymentsService.updateProviderRefundId(payment.id, transactionId)
+        }
         await this.paymentsService.markAsCaptured(orderId)
-        return { paid: true, status: data.status }
+        return { paid: true, status: data.status, transactionId }
       }
 
       return { paid: false, status: data.status ?? 'UNKNOWN' }
-    } catch (err: any) {
-      return { paid: false, reason: err.message }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.logger.error(`SumUp verify failed for order ${orderId}: ${msg}`)
+      return { paid: false, reason: msg }
     }
+  }
+
+  // ── Retry Payment (for pending/failed orders) ─────────
+  @Post(':orderId/retry')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async retryPayment(
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body('method') newMethod?: string,
+  ) {
+    return this.paymentsService.retryPayment(orderId, newMethod)
   }
 
   // ── PayPal: Capture after redirect ──────────────────────
@@ -125,16 +158,31 @@ export class PaymentsController {
     return { status: result.status }
   }
 
+  // ── Abort: cancel a pending order when the user backs out at the gateway.
+  // Called by the checkout page when it sees ?cancelled=<orderId> in the URL
+  // (e.g. PayPal "Abbrechen und zurück zu Malak Bekleidung"). This avoids
+  // leaving orphan pending_payment orders sitting around for the 30-min cron
+  // to clean up — the customer sees an immediate, clean state.
+  @Post(':orderId/abort')
+  @UseGuards(JwtOptionalGuard)
+  @HttpCode(HttpStatus.OK)
+  async abortPendingOrder(@Param('orderId', ParseUUIDPipe) orderId: string) {
+    return this.paymentsService.abortPendingOrder(orderId)
+  }
+
   // ── Public: Available payment methods ───────────────────
   @Get('methods')
   async getAvailableMethods() {
-    const vorkasseConfigured = await this.vorkasseProvider.isConfigured()
-    const sumupConfigured = this.sumupProvider.isConfigured()
-    const paypalConfigured = this.paypalProvider.isConfigured()
+    // Check admin toggles from ShopSettings
+    const settings = await this.paymentsService.getPaymentToggles()
+    const vorkasseConfigured = settings.vorkasse && await this.vorkasseProvider.isConfigured()
+    const sumupConfigured = settings.sumup && this.sumupProvider.isConfigured()
+    const paypalConfigured = settings.paypal && this.paypalProvider.isConfigured()
+    const klarnaConfigured = settings.klarna && !!process.env.KLARNA_USERNAME
 
     return {
-      stripe: true,
-      klarna: !!process.env.KLARNA_USERNAME,
+      stripe: settings.stripe,
+      klarna: klarnaConfigured,
       paypal: paypalConfigured,
       vorkasse: vorkasseConfigured,
       sumup: sumupConfigured,

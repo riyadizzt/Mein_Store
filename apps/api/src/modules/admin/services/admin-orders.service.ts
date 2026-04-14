@@ -232,6 +232,22 @@ export class AdminOrdersService {
       },
     })
 
+    // When marking as delivered → set shipment.deliveredAt + status
+    if (status === 'delivered') {
+      await this.prisma.shipment.updateMany({
+        where: { orderId, deliveredAt: null },
+        data: { deliveredAt: new Date(), status: 'delivered' },
+      })
+    }
+
+    // When marking as shipped → set shipment.shippedAt if missing
+    if (status === 'shipped') {
+      await this.prisma.shipment.updateMany({
+        where: { orderId, shippedAt: null },
+        data: { shippedAt: new Date() },
+      })
+    }
+
     await this.prisma.orderStatusHistory.create({
       data: {
         orderId,
@@ -295,8 +311,9 @@ export class AdminOrdersService {
         refunded = true
         await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'succeeded', refundError: null } })
         this.logger.log(`Refund processed for cancelled order ${order.orderNumber}`)
-      } catch (e: any) {
-        const errorMsg = e.message?.slice(0, 300) ?? 'Unknown error'
+      } catch (e: unknown) {
+        const rawMsg = e instanceof Error ? e.message : typeof e === 'string' ? e : JSON.stringify(e)
+        const errorMsg = (rawMsg ?? 'Unknown error').slice(0, 300)
         await this.prisma.order.update({ where: { id: orderId }, data: { refundStatus: 'failed', refundError: errorMsg } })
         this.logger.error(`Refund failed for ${order.orderNumber}: ${errorMsg}`)
         try {
@@ -306,7 +323,9 @@ export class AdminOrdersService {
             body: `Erstattung von €${Number(order.payment!.amount).toFixed(2)} fehlgeschlagen. Fehler: ${errorMsg.slice(0, 100)}`,
             entityType: 'order', entityId: orderId, channel: 'admin',
           })
-        } catch {}
+        } catch (notifyErr) {
+          this.logger.warn(`Failed to create refund-failure notification for ${order.orderNumber}: ${(notifyErr as Error).message}`)
+        }
       }
     } else {
       // No payment or not captured — no refund needed

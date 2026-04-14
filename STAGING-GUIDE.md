@@ -1,4 +1,4 @@
-# Staging Environment Guide — Malak Store
+# Staging Environment Guide — Malak Bekleidung
 
 ## Quick Start (Lokal)
 

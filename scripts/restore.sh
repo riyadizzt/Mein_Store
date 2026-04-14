@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================
-# Malak Store — PostgreSQL Restore Script
+# Malak Bekleidung — PostgreSQL Restore Script
 # Verwendung: ./scripts/restore.sh [backup-datei]
 #
 # ACHTUNG: Überschreibt die aktuelle Datenbank!

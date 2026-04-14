@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================
-# Malak Store — Production Smoke Test
+# Malak Bekleidung — Production Smoke Test
 # Nach JEDEM Deployment ausführen!
 #
 # Verwendung: ./scripts/smoke-test.sh [base-url]
@@ -36,7 +36,7 @@ check() {
 }
 
 echo "============================================"
-echo "  SMOKE TEST — Malak Store"
+echo "  SMOKE TEST — Malak Bekleidung"
 echo "  Web: ${WEB_URL}"
 echo "  API: ${API_URL}"
 echo "============================================"

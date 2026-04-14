@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useEffect } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
@@ -9,6 +10,7 @@ import { useCartStore } from '@/store/cart-store'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { Button } from '@/components/ui/button'
 import { CouponInput } from '@/components/coupon-input'
+import { VisaLogo, MastercardLogo, PayPalLogo, KlarnaLogo, SumUpLogo } from '@/components/ui/payment-logos'
 
 export default function CartPage() {
   const t = useTranslations('cart')
@@ -20,7 +22,7 @@ export default function CartPage() {
   useEffect(() => {
     if (items.length === 0) return
     const variantIds = items.map((i) => i.variantId)
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/products/stock-check`, {
+    fetch(`${API_BASE_URL}/api/v1/products/stock-check`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ variantIds }),
@@ -186,6 +188,20 @@ export default function CartPage() {
                   <span>{text}</span>
                 </div>
               ))}
+            </div>
+
+            {/* Payment methods accepted */}
+            <div className="mt-5 pt-5 border-t">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.15em] text-center mb-2.5">
+                {locale === 'ar' ? 'نقبل الدفع عبر' : locale === 'en' ? 'We accept' : 'Wir akzeptieren'}
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                <div className="h-8 px-1.5 rounded border bg-white flex items-center"><VisaLogo className="h-5" /></div>
+                <div className="h-8 px-1.5 rounded border bg-white flex items-center"><MastercardLogo className="h-5" /></div>
+                <div className="h-8 px-2.5 rounded border bg-white flex items-center"><PayPalLogo className="h-4" /></div>
+                <div className="h-8 px-1.5 rounded border bg-white flex items-center"><KlarnaLogo className="h-4" /></div>
+                <div className="h-8 px-1.5 rounded border bg-white flex items-center"><SumUpLogo className="h-4" /></div>
+              </div>
             </div>
           </div>
         </div>

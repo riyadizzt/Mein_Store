@@ -23,6 +23,6 @@ import { SHIPMENT_PROVIDERS } from './shipment-provider.interface'
       inject: [DHLProvider, DPDProvider],
     },
   ],
-  exports: [ShipmentsService],
+  exports: [ShipmentsService, DHLProvider],
 })
 export class ShipmentsModule {}

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/lib/env'
 import { create } from 'zustand'
 
 interface User {
@@ -31,7 +32,7 @@ interface AuthState {
   adminLogout: () => void
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = API_BASE_URL
 
 export const useAuthStore = create<AuthState>()((set) => ({
   // ── Customer ──

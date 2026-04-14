@@ -91,13 +91,15 @@ export class EmailService {
   // ── Convenience methods ──────────────────────────────────────
 
   async queueWelcome(to: string, lang: string, firstName: string): Promise<void> {
+    // Route is /[locale]/auth/login — same fix as reset-password URL.
+    const appUrl = this.config.get('APP_URL', 'https://malak-bekleidung.com')
     await this.enqueue({
       to,
       type: 'welcome',
       lang,
       data: {
         firstName,
-        loginUrl: `${this.config.get('APP_URL', 'https://malak-bekleidung.com')}/login`,
+        loginUrl: `${appUrl}/${lang}/auth/login`,
       },
     })
   }
@@ -129,7 +131,10 @@ export class EmailService {
       return false
     }
 
-    const resetUrl = `${this.config.get('APP_URL', 'https://malak-bekleidung.com')}/reset-password?token=${token}`
+    // Route is /[locale]/auth/reset-password — missing /auth/ prefix sent
+    // customers to a 404 and missing /{locale} broke i18n hydration.
+    const appUrl = this.config.get('APP_URL', 'https://malak-bekleidung.com')
+    const resetUrl = `${appUrl}/${lang}/auth/reset-password?token=${token}`
     await this.enqueue({
       to,
       type: 'password-reset',
@@ -196,7 +201,7 @@ export class EmailService {
     // Resolve from address
     const fromEnvKey = EMAIL_FROM_MAP[type] ?? 'EMAIL_FROM_NOREPLY'
     const fromEmail = this.config.get(fromEnvKey, 'noreply@malak-bekleidung.com')
-    const displayName = this.config.get('EMAIL_DISPLAY_NAME', 'Malak Shop')
+    const displayName = this.config.get('EMAIL_DISPLAY_NAME', 'Malak Bekleidung')
     const from = `${displayName} <${fromEmail}>`
 
     return { html, subject, from }

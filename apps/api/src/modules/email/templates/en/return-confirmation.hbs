@@ -55,7 +55,7 @@
 </table>
 {{/if}}
 
-<p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">Please return the items within <strong style="color:#1a1a2e;">14 days</strong>. Return shipping is <strong>free of charge</strong>.</p>
+<p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">Please return the items within <strong style="color:#1a1a2e;">14 days</strong>.{{#if sendLabel}} Return shipping is <strong>free of charge</strong>.{{else}} <strong>Return shipping costs are covered by you.</strong>{{/if}}</p>
 
 {{else if (eq status 'rejected')}}
 <!-- REJECTED -->

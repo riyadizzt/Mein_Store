@@ -7,18 +7,9 @@ import {
 } from './dto/address.dto'
 import { AddressNotFoundException } from './exceptions/address-not-found.exception'
 import { AddressLimitException } from './exceptions/address-limit.exception'
-import { AddressInUseException } from './exceptions/address-in-use.exception'
 import { BadRequestException } from '@nestjs/common'
 
 const MAX_ADDRESSES = 10
-
-const ACTIVE_ORDER_STATUSES = [
-  'pending',
-  'pending_payment',
-  'confirmed',
-  'processing',
-  'shipped',
-]
 
 @Injectable()
 export class AddressService {
@@ -154,15 +145,8 @@ export class AddressService {
   async softDelete(userId: string, addressId: string): Promise<void> {
     await this.findOne(userId, addressId) // guard
 
-    // Block deletion if address is used in an active order
-    const activeOrder = await this.prisma.order.findFirst({
-      where: {
-        shippingAddressId: addressId,
-        status: { in: ACTIVE_ORDER_STATUSES as any },
-        deletedAt: null,
-      },
-    })
-    if (activeOrder) throw new AddressInUseException()
+    // Unlink address from active orders (order keeps inline address snapshot)
+    // No longer block deletion — address data is already snapshotted on the order
 
     await this.prisma.address.update({
       where: { id: addressId },

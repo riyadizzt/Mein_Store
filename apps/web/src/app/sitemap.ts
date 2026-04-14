@@ -1,7 +1,8 @@
+import { API_BASE_URL } from '@/lib/env'
 import { MetadataRoute } from 'next'
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://malak-bekleidung.com'
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = API_BASE_URL
 const LOCALES = ['de', 'ar', 'en']
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

@@ -31,13 +31,14 @@ export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
     profile: Profile,
     done: (err: any, user?: any) => void,
   ): Promise<void> {
-    const { emails, name, photos } = profile
+    const { id, emails, name, photos } = profile
     const user = {
       email: emails?.[0]?.value,
       firstName: name?.givenName ?? '',
       lastName: name?.familyName ?? '',
       profileImageUrl: photos?.[0]?.value,
       provider: 'facebook',
+      providerAccountId: id,
     }
     done(null, user)
   }

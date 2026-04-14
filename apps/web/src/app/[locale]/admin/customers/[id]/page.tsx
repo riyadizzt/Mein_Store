@@ -35,7 +35,46 @@ const TAG_COLORS: Record<string, string> = {
   Großhandel: 'bg-purple-100 text-purple-800 border-purple-200',
 }
 const AVAILABLE_TAGS = ['VIP', 'Stammkunde', 'Problem', 'Newsletter', 'Großhandel']
-const LANG_LABELS: Record<string, string> = { de: 'Deutsch', en: 'English', ar: 'العربية' }
+// Lang label follows the ADMIN UI locale, not the customer's own language.
+// e.g. an Arabic-speaking admin viewing a German customer should see
+// "الألمانية", not "Deutsch".
+const LANG_LABELS: Record<string, Record<string, string>> = {
+  de: { de: 'Deutsch',   en: 'English', ar: 'Arabisch' },
+  en: { de: 'German',    en: 'English', ar: 'Arabic' },
+  ar: { de: 'الألمانية', en: 'الإنجليزية', ar: 'العربية' },
+}
+
+// Status + channel labels per admin UI language — used on the orders tab
+// so an Arabic admin does not see raw English enum values on German data.
+const ORDER_STATUS_LABELS: Record<string, Record<string, string>> = {
+  de: {
+    pending: 'Ausstehend', pending_payment: 'Wartet auf Zahlung',
+    confirmed: 'Bestätigt', processing: 'In Bearbeitung',
+    shipped: 'Versendet', delivered: 'Zugestellt',
+    cancelled: 'Storniert', refunded: 'Erstattet', returned: 'Retour',
+    disputed: 'Streitfall',
+  },
+  en: {
+    pending: 'Pending', pending_payment: 'Awaiting payment',
+    confirmed: 'Confirmed', processing: 'Processing',
+    shipped: 'Shipped', delivered: 'Delivered',
+    cancelled: 'Cancelled', refunded: 'Refunded', returned: 'Returned',
+    disputed: 'Disputed',
+  },
+  ar: {
+    pending: 'معلّق', pending_payment: 'بانتظار الدفع',
+    confirmed: 'مؤكد', processing: 'قيد المعالجة',
+    shipped: 'شُحن', delivered: 'تم التسليم',
+    cancelled: 'ملغي', refunded: 'مُسترد', returned: 'مُرتجع',
+    disputed: 'نزاع',
+  },
+}
+
+const CHANNEL_LABELS: Record<string, Record<string, string>> = {
+  de: { website: 'Website', mobile: 'Mobile', pos: 'POS', facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok' },
+  en: { website: 'Website', mobile: 'Mobile', pos: 'POS', facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok' },
+  ar: { website: 'الموقع', mobile: 'الجوال', pos: 'نقطة البيع', facebook: 'فيسبوك', instagram: 'إنستغرام', tiktok: 'تيك توك' },
+}
 const ACTIVITY_ICONS: Record<string, any> = {
   registered: User, order_placed: ShoppingBag, order_cancelled: XCircle,
   return_requested: RefreshCw, login: LogIn, blocked: Lock, unblocked: Unlock,
@@ -202,7 +241,7 @@ export default function CustomerDetailPage() {
             <div className="p-6 space-y-4">
               <InfoRow icon={Mail} label={t('users.email')} value={customer.email} />
               {customer.phone && <InfoRow icon={Phone} label={t('users.phone')} value={customer.phone} />}
-              <InfoRow icon={Globe} label={t('users.language')} value={LANG_LABELS[customer.preferredLang] ?? customer.preferredLang} />
+              <InfoRow icon={Globe} label={t('users.language')} value={LANG_LABELS[locale]?.[customer.preferredLang] ?? customer.preferredLang} />
               <InfoRow icon={Calendar} label={t('users.memberSince')} value={fmtDate(customer.createdAt)} />
               {customer.lastActivity && <InfoRow icon={Clock} label={t('users.lastActivity')} value={fmtDt(customer.lastActivity)} />}
             </div>
@@ -274,10 +313,10 @@ export default function CustomerDetailPage() {
               <tr key={o.id} className="border-b hover:bg-muted/20 transition-colors group" style={{ animationDelay: `${i * 25}ms`, animation: 'fadeIn 250ms ease-out both' }}>
                 <td className="px-5 py-3 font-mono text-xs font-semibold">{o.orderNumber}</td>
                 <td className="px-5 py-3 text-muted-foreground text-[13px]">{fmtDate(o.createdAt)}</td>
-                <td className="px-5 py-3 text-center"><span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase ${STATUS_COLORS[o.status] ?? 'bg-gray-100'}`}>{o.status}</span></td>
+                <td className="px-5 py-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${STATUS_COLORS[o.status] ?? 'bg-gray-100'}`}>{ORDER_STATUS_LABELS[locale]?.[o.status] ?? o.status}</span></td>
                 <td className="px-5 py-3 text-center text-muted-foreground">{o.itemsCount}</td>
                 <td className="px-5 py-3 text-end font-semibold text-[13px]">{fmtCur(o.totalAmount)}</td>
-                <td className="px-5 py-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted uppercase">{o.channel}</span></td>
+                <td className="px-5 py-3 text-center"><span className="px-3 py-1 rounded-full text-xs font-medium bg-muted">{CHANNEL_LABELS[locale]?.[o.channel] ?? o.channel}</span></td>
                 <td className="px-5 py-3"><Link href={`/${locale}/admin/orders/${o.id}`} className="text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all"><ChevronRight className="h-4 w-4 rtl:rotate-180" /></Link></td>
               </tr>))}</tbody></table></div>}</div>)}
 

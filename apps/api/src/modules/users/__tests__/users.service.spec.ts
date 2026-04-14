@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { ConflictException, BadRequestException, NotFoundException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import * as bcrypt from 'bcrypt'
 import { ProfileService } from '../profile.service'
 import { AddressService } from '../address.service'
@@ -7,11 +8,16 @@ import { WishlistService } from '../wishlist.service'
 import { SessionService } from '../session.service'
 import { GdprService } from '../gdpr.service'
 import { PrismaService } from '../../../prisma/prisma.service'
+import { StorageService } from '../../../common/services/storage.service'
+import { EmailService } from '../../email/email.service'
 import { AddressNotFoundException } from '../exceptions/address-not-found.exception'
 import { AddressLimitException } from '../exceptions/address-limit.exception'
-import { AddressInUseException } from '../exceptions/address-in-use.exception'
 import { InvalidPasswordException } from '../exceptions/invalid-password.exception'
 import { UserNotFoundException } from '../exceptions/user-not-found.exception'
+
+const mockStorage = { uploadAvatar: jest.fn().mockResolvedValue('https://cdn.example/avatar.webp') }
+const mockEmailService = { enqueue: jest.fn().mockResolvedValue(undefined) }
+const mockConfig = { get: jest.fn().mockReturnValue('http://localhost:3000') }
 
 // ── Mock Factories ────────────────────────────────────────────
 
@@ -108,7 +114,13 @@ describe('Users — ProfileService', () => {
     )
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ProfileService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ProfileService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: StorageService, useValue: mockStorage },
+        { provide: EmailService, useValue: mockEmailService },
+        { provide: ConfigService, useValue: mockConfig },
+      ],
     }).compile()
 
     profileService = module.get<ProfileService>(ProfileService)
@@ -265,12 +277,16 @@ describe('Users — AddressService', () => {
   })
 
   describe('softDelete', () => {
-    it('wirft AddressInUseException wenn Adresse in aktiver Bestellung', async () => {
+    it('soft-deleted Adresse auch wenn aktive Bestellung existiert (Order hat Adress-Snapshot)', async () => {
       mockPrisma.address.findFirst.mockResolvedValue(makeAddress())
       mockPrisma.order.findFirst.mockResolvedValue({ id: 'order1', status: 'confirmed' })
+      mockPrisma.address.update.mockResolvedValue({})
 
-      await expect(addressService.softDelete('user1', 'addr1')).rejects.toThrow(
-        AddressInUseException,
+      await expect(addressService.softDelete('user1', 'addr1')).resolves.toBeUndefined()
+      expect(mockPrisma.address.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
       )
     })
 

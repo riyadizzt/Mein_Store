@@ -44,6 +44,9 @@ export class ProductsController {
     @Query('sort') sort?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('colors') colors?: string,
+    @Query('sizes') sizes?: string,
+    @Query('inStock') inStock?: string,
   ) {
     // If search query is provided, delegate to full-text search
     if (q && q.trim().length >= 2) {
@@ -66,7 +69,17 @@ export class ProductsController {
       sort,
       page: page ? Number(page) : 1,
       limit: limit ? Math.min(Number(limit), 100) : 20,
+      colors: colors ? colors.split(',').map((c) => c.trim()).filter(Boolean) : undefined,
+      sizes: sizes ? sizes.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+      inStock: inStock === 'true' ? true : undefined,
     })
+  }
+
+  @Get('filter-options')
+  @ApiOperation({ summary: 'Verfügbare Filter-Optionen (Farben + Größen) für die Produktliste' })
+  @ApiQuery({ name: 'categoryId', required: false })
+  getFilterOptions(@Query('categoryId') categoryId?: string) {
+    return this.productsService.getFilterOptions(categoryId)
   }
 
   @Get('search')

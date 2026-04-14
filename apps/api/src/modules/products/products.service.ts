@@ -18,6 +18,53 @@ export interface ProductFilters {
   sort?: string
   page?: number
   limit?: number
+  // Variant-level filters: a product matches if AT LEAST ONE active variant matches.
+  colors?: string[]
+  sizes?: string[]
+  inStock?: boolean
+}
+
+// ── Size sort: numeric first (2,3,34,36...), then letter sizes in canonical order
+//                (XXS → XS → S → M → L → XL → XXL → 3XL → 4XL → ...), then alphabetical fallback.
+//
+// Why a custom comparator: alphabetical sort produces nonsense like "2,3,34,3XL,4XL,L,M,S,XS,XXL"
+// for a typical clothing shop that mixes baby ages, shoe sizes and adult letter sizes.
+const LETTER_SIZE_ORDER: Record<string, number> = {
+  XXXS: 0, '3XS': 0,
+  XXS: 1, '2XS': 1,
+  XS: 2,
+  S: 3,
+  M: 4,
+  L: 5,
+  XL: 6,
+  XXL: 7, '2XL': 7,
+  XXXL: 8, '3XL': 8,
+  XXXXL: 9, '4XL': 9,
+  '5XL': 10,
+  '6XL': 11,
+  '7XL': 12,
+}
+
+export function compareSizes(a: string, b: string): number {
+  const aTrim = a.trim()
+  const bTrim = b.trim()
+
+  // Pure-number sizes (e.g. "2", "34", "164") sort numerically and come first.
+  const aIsNum = /^\d+(\.\d+)?$/.test(aTrim)
+  const bIsNum = /^\d+(\.\d+)?$/.test(bTrim)
+  if (aIsNum && bIsNum) return parseFloat(aTrim) - parseFloat(bTrim)
+  if (aIsNum) return -1
+  if (bIsNum) return 1
+
+  // Letter sizes use the canonical clothing order.
+  const aRank = LETTER_SIZE_ORDER[aTrim.toUpperCase()]
+  const bRank = LETTER_SIZE_ORDER[bTrim.toUpperCase()]
+  if (aRank !== undefined && bRank !== undefined) return aRank - bRank
+  if (aRank !== undefined) return -1
+  if (bRank !== undefined) return 1
+
+  // Anything else (typos, custom labels, age ranges like "0-3M") → alphabetical fallback.
+  return aTrim.localeCompare(bTrim)
 }
 
 @Injectable()
@@ -104,6 +151,9 @@ export class ProductsService {
       sort,
       page = 1,
       limit = 20,
+      colors,
+      sizes,
+      inStock,
     } = filters
 
     const skip = (page - 1) * limit
@@ -132,6 +182,30 @@ export class ProductsService {
       where.basePrice = {}
       if (minPrice !== undefined) where.basePrice.gte = minPrice
       if (maxPrice !== undefined) where.basePrice.lte = maxPrice
+    }
+
+    // Variant-level filters: a product matches if at least one active variant matches.
+    // Color names are case-insensitive (stored as DE strings, but the URL might send any case).
+    const variantConditions: any = { isActive: true }
+    let hasVariantFilter = false
+    if (colors && colors.length > 0) {
+      variantConditions.color = { in: colors, mode: 'insensitive' }
+      hasVariantFilter = true
+    }
+    if (sizes && sizes.length > 0) {
+      variantConditions.size = { in: sizes, mode: 'insensitive' }
+      hasVariantFilter = true
+    }
+    if (inStock) {
+      variantConditions.inventory = {
+        some: {
+          quantityOnHand: { gt: 0 },
+        },
+      }
+      hasVariantFilter = true
+    }
+    if (hasVariantFilter) {
+      where.variants = { some: variantConditions }
     }
 
     const [items, total] = await Promise.all([
@@ -175,6 +249,55 @@ export class ProductsService {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+    }
+  }
+
+  /**
+   * Returns the distinct colors and sizes available across all active variants,
+   * optionally narrowed to a single category. Used by the storefront filter sidebar
+   * so customers only see options that actually have products.
+   */
+  async getFilterOptions(categoryId?: string): Promise<{
+    colors: { name: string; hex: string | null }[]
+    sizes: string[]
+  }> {
+    const where: any = {
+      isActive: true,
+      product: { isActive: true, deletedAt: null },
+    }
+    if (categoryId) {
+      // Match parent or child categories (same logic as findAll)
+      const childCats = await this.prisma.category.findMany({
+        where: { parentId: categoryId, isActive: true },
+        select: { id: true },
+      })
+      where.product.categoryId =
+        childCats.length > 0
+          ? { in: [categoryId, ...childCats.map((c) => c.id)] }
+          : categoryId
+    }
+
+    const variants = await this.prisma.productVariant.findMany({
+      where,
+      select: { color: true, colorHex: true, size: true },
+    })
+
+    // Deduplicate colors by name (case-insensitive), keep first hex seen
+    const colorMap = new Map<string, { name: string; hex: string | null }>()
+    const sizeSet = new Set<string>()
+    for (const v of variants) {
+      if (v.color) {
+        const key = v.color.toLowerCase()
+        if (!colorMap.has(key)) {
+          colorMap.set(key, { name: v.color, hex: v.colorHex ?? null })
+        }
+      }
+      if (v.size) sizeSet.add(v.size)
+    }
+
+    return {
+      colors: Array.from(colorMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      sizes: Array.from(sizeSet).sort(compareSizes),
     }
   }
 
@@ -420,6 +543,8 @@ export class ProductsService {
       taxRate: Number(product.taxRate),
       isFeatured: product.isFeatured,
       publishedAt: product.publishedAt,
+      excludeFromReturns: product.excludeFromReturns ?? false,
+      returnExclusionReason: product.returnExclusionReason ?? null,
       name: translation?.name ?? product.slug,
       description: translation?.description,
       sizeGuide: translation?.sizeGuide,

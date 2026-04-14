@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import * as bcrypt from 'bcrypt'
 import * as crypto from 'crypto'
 import { PrismaService } from '../../prisma/prisma.service'
 import { StorageService } from '../../common/services/storage.service'
+import { EmailService } from '../email/email.service'
+import { EMAIL_TYPES } from '../email/email.constants'
 import { UpdateProfileDto } from './dto/update-profile.dto'
 import { ChangePasswordDto } from './dto/change-password.dto'
 import { ChangeEmailDto } from './dto/change-email.dto'
@@ -17,6 +20,8 @@ export class ProfileService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly emailService: EmailService,
+    private readonly config: ConfigService,
   ) {}
 
   async findMe(userId: string) {
@@ -111,7 +116,7 @@ export class ProfileService {
   async requestEmailChange(userId: string, dto: ChangeEmailDto): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
-      select: { passwordHash: true, email: true },
+      select: { passwordHash: true, email: true, firstName: true, preferredLang: true },
     })
     if (!user) throw new UserNotFoundException(userId)
     if (!user.passwordHash) throw new InvalidPasswordException()
@@ -145,9 +150,28 @@ export class ProfileService {
       },
     })
 
-    // TODO: send verification email via Resend
-    // For now log token (dev only)
-    this.logger.debug(`Email change token for user ${userId}: ${token}`)
+    // Send verification email to the NEW address
+    const appUrl = this.config.get<string>('APP_URL') ?? 'http://localhost:3000'
+    const lang = (user.preferredLang as string) ?? 'de'
+    const expiresInLabel = lang === 'ar' ? '24 ساعة' : lang === 'en' ? '24 hours' : '24 Stunden'
+    try {
+      await this.emailService.enqueue({
+        to: dto.newEmail,
+        type: EMAIL_TYPES.EMAIL_CHANGE,
+        lang,
+        data: {
+          firstName: user.firstName ?? '',
+          confirmUrl: `${appUrl}/${lang}/account/confirm-email?token=${token}`,
+          expiresIn: expiresInLabel,
+        },
+      })
+    } catch (e) {
+      this.logger.error(
+        `Failed to enqueue email-change verification for user ${userId}: ${(e as Error).message}`,
+      )
+      // Don't leak failure to client — the DB record was created and the user can retry.
+    }
+    this.logger.log(`Email change requested for user ${userId} → ${dto.newEmail}`)
   }
 
   async confirmEmailChange(token: string): Promise<void> {

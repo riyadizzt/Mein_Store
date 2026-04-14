@@ -10,7 +10,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(config: ConfigService) {
     const clientID = config.get('GOOGLE_CLIENT_ID') || 'not-configured'
     const clientSecret = config.get('GOOGLE_CLIENT_SECRET') || 'not-configured'
-    const callbackURL = `${config.get('APP_URL', 'http://localhost:3001')}/api/v1/auth/google/callback`
+    const apiUrl = config.get('NEXT_PUBLIC_API_URL', '') || `http://localhost:${config.get('API_PORT', '3001')}`
+    const callbackURL = `${apiUrl}/api/v1/auth/google/callback`
 
     super({
       clientID,
@@ -30,13 +31,14 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     profile: Profile,
     done: VerifyCallback,
   ): Promise<void> {
-    const { emails, name, photos } = profile
+    const { id, emails, name, photos } = profile
     const user = {
       email: emails?.[0]?.value,
       firstName: name?.givenName ?? '',
       lastName: name?.familyName ?? '',
       profileImageUrl: photos?.[0]?.value,
       provider: 'google',
+      providerAccountId: id, // needed so auth.service can write OauthAccount row
     }
     done(null, user)
   }

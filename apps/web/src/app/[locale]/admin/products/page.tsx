@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, Fragment } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -119,7 +120,7 @@ export default function AdminProductsPage() {
   const resetFilters = () => { setCategoryId(''); setStatusFilter(''); setStockFilter(''); setChannelFilter(''); setPage(0) }
 
   const handleExport = async () => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/export`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/admin/products/export`, {
       headers: { Authorization: `Bearer ${(await import('@/store/auth-store')).useAuthStore.getState().accessToken}` },
     })
     const blob = await res.blob()

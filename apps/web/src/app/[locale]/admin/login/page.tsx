@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { Loader2, Shield, Eye, EyeOff, AlertCircle, Lock, ArrowLeft, Mail, CheckCircle2 } from 'lucide-react'
@@ -64,6 +64,18 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [roleError, setRoleError] = useState(false)
+  const [logoutReason, setLogoutReason] = useState<string | null>(null)
+
+  // Check if user was auto-logged out
+  useEffect(() => {
+    try {
+      const reason = sessionStorage.getItem('malak-admin-logout-reason')
+      if (reason) {
+        setLogoutReason(reason)
+        sessionStorage.removeItem('malak-admin-logout-reason')
+      }
+    } catch {}
+  }, [])
 
   // Forgot password state
   const [mode, setMode] = useState<'login' | 'forgot'>('login')
@@ -142,6 +154,15 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-sm">
         <div className="bg-background rounded-2xl p-8 shadow-2xl" style={{ animation: 'fadeSlideUp 400ms ease-out' }}>
 
+          {/* Auto-logout message */}
+          {logoutReason && (
+            <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800 text-center">
+              {logoutReason === 'inactivity'
+                ? (locale === 'ar' ? 'تم تسجيل خروجك تلقائياً بسبب عدم النشاط (30 دقيقة)' : 'Du wurdest aus Sicherheitsgründen automatisch ausgeloggt (30 Min. Inaktivität)')
+                : (locale === 'ar' ? 'انتهت صلاحية الجلسة (الحد الأقصى 8 ساعات). يرجى تسجيل الدخول مرة أخرى.' : 'Session abgelaufen (max. 8 Stunden). Bitte erneut anmelden.')}
+            </div>
+          )}
+
           {mode === 'login' ? (
             <>
               {/* Header */}
@@ -182,7 +203,7 @@ export default function AdminLoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
-                    placeholder="admin@malak-bekleidung.com"
+                    placeholder=""
                     className={`h-11 rounded-xl ${displayError ? 'border-red-300 focus-visible:ring-red-200' : ''}`}
                   />
                 </div>
@@ -293,7 +314,7 @@ export default function AdminLoginPage() {
                       onChange={(e) => setResetEmail(e.target.value)}
                       required
                       autoComplete="email"
-                      placeholder="admin@malak-bekleidung.com"
+                      placeholder=""
                       className="h-11 rounded-xl"
                     />
                   </div>

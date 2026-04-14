@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
@@ -153,7 +154,7 @@ export function CartDrawer({ locale }: { locale: string }) {
     if (!isDrawerOpen || items.length === 0) return
     const variantIds = items.map((i) => i.variantId)
     fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/products/stock-check`,
+      `${API_BASE_URL}/api/v1/products/stock-check`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

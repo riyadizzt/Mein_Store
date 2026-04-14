@@ -58,7 +58,7 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { cursor: point
     --muted-foreground: 240 3.8% 46.1%;
     --accent: 40 60% 58%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 75% 42%;
     --destructive-foreground: 0 0% 98%;
     --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
@@ -74,6 +74,14 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { cursor: point
 @layer base {
   * {
     @apply border-border;
+  }
+  /* Prevent horizontal overflow at narrow viewports.
+     The Bestseller / New Arrivals carousels use negative margins for full-bleed
+     scrolling — without this clip rule, narrow phones (or RTL layouts) would
+     show a horizontal scrollbar and white space on one side of the page. */
+  html, body {
+    overflow-x: clip;
+    max-width: 100%;
   }
   body {
     @apply bg-background text-foreground antialiased;

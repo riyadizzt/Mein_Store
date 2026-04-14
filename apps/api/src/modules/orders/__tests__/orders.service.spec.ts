@@ -17,13 +17,21 @@ const mockPrisma = {
   order: {
     create: jest.fn(),
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
     findMany: jest.fn(),
     update: jest.fn(),
   },
+  orderItem: { findMany: jest.fn() },
   orderStatusHistory: { create: jest.fn() },
   coupon: { findFirst: jest.fn() },
   couponUsage: { create: jest.fn() },
-  address: { findUnique: jest.fn(), findFirst: jest.fn() },
+  address: { findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({ id: 'addr-test' }) },
+  warehouse: { findFirst: jest.fn().mockResolvedValue({ id: 'wh1' }) },
+  inventory: {
+    findFirst: jest.fn().mockResolvedValue({ id: 'inv1', quantityOnHand: 100, quantityReserved: 0 }),
+    updateMany: jest.fn(),
+    aggregate: jest.fn().mockResolvedValue({ _sum: { quantityOnHand: 100, quantityReserved: 0 } }),
+  },
   idempotencyKey: { deleteMany: jest.fn() },
   $transaction: jest.fn().mockImplementation((fnOrArray) =>
     typeof fnOrArray === 'function'
@@ -117,12 +125,30 @@ describe('OrdersService', () => {
       mockEventEmitter.emitAsync.mockResolvedValue([['res1']])
 
       await service.create(
-        { items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 1 }], countryCode: 'DE' },
+        {
+          items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 1 }],
+          countryCode: 'DE',
+          shippingAddress: {
+            firstName: 'Test', lastName: 'User',
+            street: 'Teststr', houseNumber: '1',
+            postalCode: '10115', city: 'Berlin', country: 'DE',
+          },
+        } as any,
         'user1',
         'corr-id',
       )
 
       expect(mockPrisma.$queryRaw).toHaveBeenCalled()
+    })
+
+    it('wirft BadRequest wenn weder shippingAddressId noch shippingAddress gesetzt', async () => {
+      await expect(
+        service.create(
+          { items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 1 }] } as any,
+          'user1',
+          'corr-no-addr',
+        ),
+      ).rejects.toThrow(BadRequestException)
     })
   })
 
@@ -233,7 +259,15 @@ describe('OrdersService', () => {
 
       await expect(
         service.create(
-          { items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 1 }], countryCode: 'DE' },
+          {
+            items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 1 }],
+            countryCode: 'DE',
+            shippingAddress: {
+              firstName: 'Test', lastName: 'User',
+              street: 'Teststr', houseNumber: '1',
+              postalCode: '10115', city: 'Berlin', country: 'DE',
+            },
+          } as any,
           'user1',
           'corr',
         ),

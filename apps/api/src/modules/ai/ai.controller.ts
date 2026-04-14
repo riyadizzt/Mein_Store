@@ -232,11 +232,39 @@ ${(lowStock as any[]).map((s: any) => `- ${s.product_name} (${s.sku}): ${Number(
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.OK)
   async generateProductDescription(
-    @Body() body: { name: string; category?: string; color?: string; material?: string; target?: string },
+    @Body() body: { name: string; category?: string; color?: string; material?: string; target?: string; colors?: string[]; sizes?: string[]; price?: number; imageUrl?: string; productId?: string },
     @Req() req: any,
   ) {
     if (!body.name) throw new BadRequestException('Product name required')
     if (!(await this.ai.isEnabled('product_description'))) throw new ForbiddenException('Product description AI is disabled')
+
+    // If productId provided, load full product data
+    let extraContext = ''
+    let imageUrl = body.imageUrl
+    if (body.productId) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: body.productId },
+        include: {
+          translations: { select: { language: true, name: true } },
+          category: { include: { translations: { select: { language: true, name: true } } } },
+          variants: { where: { isActive: true }, select: { color: true, size: true, priceModifier: true } },
+          images: { select: { url: true, isPrimary: true, colorName: true }, orderBy: { sortOrder: 'asc' } },
+        },
+      })
+      if (product) {
+        const colors = [...new Set(product.variants.map((v) => v.color).filter(Boolean))]
+        const sizes = [...new Set(product.variants.map((v) => v.size).filter(Boolean))]
+        const catName = product.category?.translations?.find((t) => t.language === 'de')?.name ?? ''
+        if (!body.category && catName) body.category = catName
+        if (colors.length) extraContext += `\nVerfügbare Farben: ${colors.join(', ')}`
+        if (sizes.length) extraContext += `\nVerfügbare Größen: ${sizes.join(', ')}`
+        if (!imageUrl && product.images.length) imageUrl = product.images[0].url
+      }
+    }
+
+    if (body.colors?.length) extraContext += `\nFarben: ${body.colors.join(', ')}`
+    if (body.sizes?.length) extraContext += `\nGrößen: ${body.sizes.join(', ')}`
+    if (body.price) extraContext += `\nPreis: €${body.price.toFixed(2)}`
 
     const prompt = `Generiere eine professionelle Produktbeschreibung für einen Online-Modeshop.
 
@@ -244,31 +272,53 @@ Produkt: ${body.name}
 ${body.category ? `Kategorie: ${body.category}` : ''}
 ${body.color ? `Farbe: ${body.color}` : ''}
 ${body.material ? `Material: ${body.material}` : ''}
-${body.target ? `Zielgruppe: ${body.target}` : ''}
+${body.target ? `Zielgruppe: ${body.target}` : ''}${extraContext}
+${imageUrl ? `\n[IMAGE:${imageUrl}]\nAnalysiere das Produktbild genau: beschreibe Material, Schnitt, Stil, Kragen, Details die du siehst.` : ''}
 
-Generiere die Beschreibung in DREI Sprachen:
+Generiere die Beschreibung in DREI Sprachen. Regeln:
+- Schreibe ehrlich und realistisch — beschreibe NUR was du siehst oder weißt
+- KEINE Übertreibungen, KEINE Floskeln wie "Premium", "unverzichtbar", "zeitlos", "außergewöhnlich"
+- 2-3 kurze, konkrete Sätze pro Sprache
+- Beschreibe: Material, Passform, wofür geeignet, wie kombinierbar
 
-1. DEUTSCH: SEO-optimiert, professionell, im Stil von Zalando/About You. 2-3 Sätze.
-2. ARABISCH: Gleicher Inhalt auf Arabisch. Natürliche arabische Formulierung.
+1. DEUTSCH: Sachlich, natürlich, wie ein echter Verkäufer beschreiben würde.
+2. ARABISCH: Gleicher Inhalt auf Arabisch. Natürliche Formulierung.
 3. ENGLISCH: Gleicher Inhalt auf Englisch.
 
-Format:
+Format (GENAU so, jede auf eigener Zeile):
 DE: [deutsche Beschreibung]
 AR: [arabische Beschreibung]
-EN: [englische Beschreibung]`
+EN: [englische Beschreibung]
+META_TITLE_DE: [deutscher SEO-Titel, max 60 Zeichen]
+META_TITLE_AR: [arabischer SEO-Titel, max 60 Zeichen]
+META_TITLE_EN: [englischer SEO-Titel, max 60 Zeichen]
+META_DESC_DE: [deutsche SEO-Beschreibung, max 155 Zeichen]
+META_DESC_AR: [arabische SEO-Beschreibung, max 155 Zeichen]
+META_DESC_EN: [englische SEO-Beschreibung, max 155 Zeichen]`
 
     const response = await this.ai.adminChat([
-      { role: 'system', content: 'Du bist ein professioneller Copywriter für einen Premium-Modeshop.' },
+      { role: 'system', content: 'Du bist ein Produkttexter für einen Online-Modeshop. Schreibe ehrlich, realistisch und sachlich — KEINE Übertreibungen, KEINE Marketingfloskeln wie "Premium", "unverzichtbar", "außergewöhnlich". Beschreibe NUR was du wirklich siehst und weißt. Kurz und konkret. Keine Sternchen (**) im Text.' },
       { role: 'user', content: prompt },
     ], 800, req.user?.id, 'de')
 
-    // Parse the three descriptions
+    // Parse descriptions + SEO meta tags
     const text = response.content
     const de = text.match(/DE:\s*(.*?)(?=AR:|$)/s)?.[1]?.trim() ?? text
     const ar = text.match(/AR:\s*(.*?)(?=EN:|$)/s)?.[1]?.trim() ?? ''
-    const en = text.match(/EN:\s*(.*?)$/s)?.[1]?.trim() ?? ''
+    const en = text.match(/EN:\s*(.*?)(?=META_TITLE_DE:|$)/s)?.[1]?.trim() ?? ''
 
-    return { de, ar, en, raw: text, provider: response.provider }
+    const metaTitleDe = text.match(/META_TITLE_DE:\s*(.*?)(?=META_TITLE_AR:|$)/s)?.[1]?.trim() ?? ''
+    const metaTitleAr = text.match(/META_TITLE_AR:\s*(.*?)(?=META_TITLE_EN:|$)/s)?.[1]?.trim() ?? ''
+    const metaTitleEn = text.match(/META_TITLE_EN:\s*(.*?)(?=META_DESC_DE:|$)/s)?.[1]?.trim() ?? ''
+    const metaDescDe = text.match(/META_DESC_DE:\s*(.*?)(?=META_DESC_AR:|$)/s)?.[1]?.trim() ?? ''
+    const metaDescAr = text.match(/META_DESC_AR:\s*(.*?)(?=META_DESC_EN:|$)/s)?.[1]?.trim() ?? ''
+    const metaDescEn = text.match(/META_DESC_EN:\s*(.*?)$/s)?.[1]?.trim() ?? ''
+
+    return {
+      de, ar, en,
+      seo: { metaTitleDe, metaTitleAr, metaTitleEn, metaDescDe, metaDescAr, metaDescEn },
+      raw: text, provider: response.provider,
+    }
   }
 
   // ── Inventory Suggestions ───────────────────────────────────

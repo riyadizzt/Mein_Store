@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useRef } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
@@ -206,7 +207,7 @@ export default function NewProductPage() {
             formData.append('file', img.file)
             if (img.colorName) formData.append('colorName', img.colorName)
 
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/${productId}/images/upload`, {
+            const res = await fetch(`${API_BASE_URL}/api/v1/admin/products/${productId}/images/upload`, {
               method: 'POST',
               headers: { Authorization: `Bearer ${token}` },
               body: formData,

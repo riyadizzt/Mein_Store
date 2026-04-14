@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState } from 'react'
 import { Bell, Check, Loader2 } from 'lucide-react'
 
@@ -20,7 +21,7 @@ export function NotifyWhenAvailable({ productId, variantId, locale }: Props) {
     if (!email.includes('@')) return
     setStatus('loading')
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/newsletter/subscribe`, {
+      await fetch(`${API_BASE_URL}/api/v1/newsletter/subscribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, source: 'stock_notify', productId, variantId }),

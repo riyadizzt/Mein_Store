@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -16,6 +17,7 @@ import {
   ParseUUIDPipe,
   ParseBoolPipe,
 } from '@nestjs/common'
+import { Response } from 'express'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { memoryStorage } from 'multer'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
@@ -134,6 +136,14 @@ export class UsersController {
   @Get('orders/:id/invoice')
   getInvoice(@Req() req: any, @Param('id', ParseUUIDPipe) id: string) {
     return this.userOrdersService.getInvoiceUrl(req.user.id, id)
+  }
+
+  @Get('orders/:orderId/return-label')
+  async getReturnLabel(@Req() req: any, @Param('orderId', ParseUUIDPipe) orderId: string, @Query('type') type: string, @Res() res: Response) {
+    const buffer = await this.userOrdersService.getReturnLabelPdf(req.user.id, orderId, type ?? 'internal')
+    const filename = type === 'dhl' ? 'DHL-Ruecksendeetikett.pdf' : 'Retourenetikett.pdf'
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${filename}"`, 'Content-Length': buffer.length.toString() })
+    res.end(buffer)
   }
 
   // ── Wishlist ──────────────────────────────────────────────────

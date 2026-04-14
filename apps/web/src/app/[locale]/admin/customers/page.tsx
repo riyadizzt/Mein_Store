@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -22,6 +23,16 @@ const TAG_COLORS: Record<string, string> = {
   Problem: 'bg-red-100 text-red-800 border-red-200',
   Newsletter: 'bg-green-100 text-green-800 border-green-200',
   Großhandel: 'bg-purple-100 text-purple-800 border-purple-200',
+}
+
+// Language badge colors — intuitive per-market feel.
+//   DE → slate (German precision / neutral dark)
+//   EN → blue  (British / US convention)
+//   AR → emerald (green is the cultural/brand color across the Arab world)
+const LANG_COLORS: Record<string, string> = {
+  de: 'bg-slate-100 text-slate-700 border-slate-200',
+  en: 'bg-blue-100 text-blue-700 border-blue-200',
+  ar: 'bg-emerald-100 text-emerald-700 border-emerald-200',
 }
 
 const AVAILABLE_TAGS = ['VIP', 'Stammkunde', 'Problem', 'Newsletter', 'Großhandel']
@@ -159,7 +170,7 @@ export default function AdminCustomersPage() {
     if (filter) params.set('filter', filter)
     if (tagFilter) params.set('tag', tagFilter)
     if (search) params.set('search', search)
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/customers/export?${params}`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/admin/customers/export?${params}`, {
       headers: { Authorization: `Bearer ${(await import('@/store/auth-store')).useAuthStore.getState().accessToken}` },
     })
     const blob = await res.blob()
@@ -324,9 +335,9 @@ export default function AdminCustomersPage() {
                         <div>
                           <div className="font-semibold group-hover/link:text-primary transition-colors">{u.firstName} {u.lastName}</div>
                           <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                            {u.isGuest ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">{t('users.guest')}</span>
-                              : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">{t('users.filterRegistered')}</span>}
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground uppercase">{u.preferredLang}</span>
+                            {u.isGuest ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">{t('users.guest')}</span>
+                              : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-200">{t('users.filterRegistered')}</span>}
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${LANG_COLORS[u.preferredLang] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>{u.preferredLang}</span>
                             {(u.tags ?? []).map((tag: string) => (
                               <span key={tag} className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${TAG_COLORS[tag] ?? 'bg-gray-100 text-gray-700 border-gray-200'}`}>{tag}</span>
                             ))}

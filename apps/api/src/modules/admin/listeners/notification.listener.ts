@@ -34,6 +34,15 @@ interface PaymentFailedEvent {
   correlationId?: string
 }
 
+interface PaymentDisputedEvent {
+  paymentId: string
+  orderId: string
+  orderNumber: string
+  amount?: number
+  reason?: string
+  correlationId?: string
+}
+
 interface UserRegisteredEvent {
   userId: string
   email: string
@@ -97,6 +106,11 @@ const TRILINGUAL = {
     de: (orderNumber: string) => `Zahlung fehlgeschlagen für #${orderNumber}`,
     en: (orderNumber: string) => `Payment failed for #${orderNumber}`,
     ar: (orderNumber: string) => `فشل الدفع للطلب #${orderNumber}`,
+  },
+  payment_disputed: {
+    de: (orderNumber: string) => `⚠ Zahlung bestritten: #${orderNumber}`,
+    en: (orderNumber: string) => `⚠ Payment disputed: #${orderNumber}`,
+    ar: (orderNumber: string) => `⚠ نزاع على الدفع: #${orderNumber}`,
   },
   customer_registered: {
     de: (name: string) => `Neuer Kunde: ${name}`,
@@ -347,6 +361,32 @@ export class NotificationListener {
     } catch (error: any) {
       this.logger.error(
         `Failed to create notification for payment.failed: ${error.message}`,
+        error.stack,
+      )
+    }
+  }
+
+  @OnEvent('payment.disputed')
+  async handlePaymentDisputed(event: PaymentDisputedEvent) {
+    try {
+      await this.notificationService.createForAllAdmins({
+        type: 'payment_disputed',
+        title: t('payment_disputed', 'de', event.orderNumber),
+        body: `Zahlung${event.amount ? ` (\u20AC${event.amount.toFixed(2)})` : ''} für Bestellung #${event.orderNumber} wurde bestritten.${event.reason ? ` Grund: ${event.reason}` : ''} Bitte umgehend prüfen.`,
+        entityType: 'order',
+        entityId: event.orderId,
+        data: {
+          paymentId: event.paymentId,
+          orderId: event.orderId,
+          orderNumber: event.orderNumber,
+          amount: event.amount,
+          reason: event.reason,
+          correlationId: event.correlationId,
+        },
+      })
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to create notification for payment.disputed: ${error.message}`,
         error.stack,
       )
     }

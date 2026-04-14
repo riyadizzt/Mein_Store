@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useQuery } from '@tanstack/react-query'
 
 export interface Campaign {
@@ -54,7 +55,7 @@ export function useActiveCampaign() {
   const { data, isLoading } = useQuery<Campaign | null>({
     queryKey: ['active-campaign'],
     queryFn: async () => {
-      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API = API_BASE_URL
       const res = await fetch(`${API}/api/v1/campaigns/active`)
       if (!res.ok) return null
       const data = await res.json()

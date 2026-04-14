@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useRef, useEffect } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation } from '@tanstack/react-query'
@@ -25,7 +26,7 @@ export function AiChatWidget() {
     queryKey: ['ai-public-settings'],
     queryFn: async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/settings/public`)
+        const res = await fetch(`${API_BASE_URL}/api/v1/settings/public`)
         if (!res.ok) return {}
         return await res.json()
       } catch { return {} }
@@ -39,7 +40,7 @@ export function AiChatWidget() {
     mutationFn: async (message: string) => {
       // Send last 6 messages as history for context
       const history = messages.slice(-6).map((m) => ({ role: m.role, content: m.content }))
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/ai/customer-chat`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/ai/customer-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, lang: locale, history, context: typeof window !== 'undefined' ? window.location.pathname : '' }),

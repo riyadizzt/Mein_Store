@@ -1,8 +1,9 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useLocale } from 'next-intl'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = API_BASE_URL
 
 export function FacebookSignIn({ label }: { label?: string }) {
   const locale = useLocale()

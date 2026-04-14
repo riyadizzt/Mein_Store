@@ -1,4 +1,5 @@
 'use client'
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocale } from 'next-intl'
@@ -7,7 +8,7 @@ import Image from 'next/image'
 import {
   Check, Truck, Download, Ban, Loader2, ExternalLink, StickyNote,
   Package, CreditCard, MapPin, User, Clock, FileText,
-  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro, Building2
+  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro, Building2, Pencil
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
@@ -53,13 +54,14 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
 
   const [notes, setNotes] = useState('')
   const [statusNotes, setStatusNotes] = useState('')
-  const [trackingNumber, setTrackingNumber] = useState('')
-  const [trackingCarrier, setTrackingCarrier] = useState('')
+  // trackingNumber/carrier no longer needed — DHL auto-generates them
   const [partialCancelIds, setPartialCancelIds] = useState<Set<string>>(new Set())
   const [partialCancelReason, setPartialCancelReason] = useState('')
   const [showPartialCancel, setShowPartialCancel] = useState(false)
   const [copied, setCopied] = useState(false)
   const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null)
+  const [editAddr, setEditAddr] = useState(false)
+  const [addrForm, setAddrForm] = useState({ firstName: '', lastName: '', street: '', houseNumber: '', postalCode: '', city: '', country: '' })
 
   // ── Queries ────────────────────────────────────────────────
   const { data: order, isLoading } = useQuery({
@@ -108,7 +110,7 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
     const inv = order.invoices.find((i: any) => i.type === 'invoice') ?? order.invoices[0]
     try {
       const token = useAuthStore.getState().adminAccessToken
-      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API = API_BASE_URL
       const res = await fetch(`${API}/api/v1/admin/invoices/${inv.id}/download`, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) return
       const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a')
@@ -119,7 +121,7 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
   const downloadDeliveryNote = useCallback(async () => {
     try {
       const token = useAuthStore.getState().adminAccessToken
-      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API = API_BASE_URL
       const res = await fetch(`${API}/api/v1/admin/orders/${id}/delivery-note`, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) return
       const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a')
@@ -396,12 +398,47 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
             {/* Shipping Address */}
             {order.shippingAddress && (
               <div className="mt-4 pt-4 border-t">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2"><MapPin className="h-3.5 w-3.5" /> {t3('Lieferadresse', 'Shipping Address', 'عنوان الشحن')}</div>
-                <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
-                {order.shippingAddress.company && <p className="text-sm text-muted-foreground">{order.shippingAddress.company}</p>}
-                <p className="text-sm">{order.shippingAddress.street} {order.shippingAddress.houseNumber}</p>
-                <p className="text-sm">{order.shippingAddress.postalCode} {order.shippingAddress.city}</p>
-                <p className="text-sm text-muted-foreground">{order.shippingAddress.country}</p>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> {t3('Lieferadresse', 'Shipping Address', 'عنوان الشحن')}</div>
+                  {!editAddr && !['cancelled', 'refunded', 'shipped', 'delivered'].includes(order.status) && (
+                    <button onClick={() => { setEditAddr(true); setAddrForm({ firstName: order.shippingAddress.firstName ?? '', lastName: order.shippingAddress.lastName ?? '', street: order.shippingAddress.street ?? '', houseNumber: order.shippingAddress.houseNumber ?? '', postalCode: order.shippingAddress.postalCode ?? '', city: order.shippingAddress.city ?? '', country: order.shippingAddress.country ?? 'DE' }) }}
+                      className="text-xs text-[#d4a853] hover:underline flex items-center gap-1"><Pencil className="h-3 w-3" />{t3('Bearbeiten', 'Edit', 'تعديل')}</button>
+                  )}
+                </div>
+                {editAddr ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input value={addrForm.firstName} onChange={(e) => setAddrForm(p => ({ ...p, firstName: e.target.value }))} placeholder={t3('Vorname', 'First name', 'الاسم')} className="text-sm rounded-lg h-9" />
+                      <Input value={addrForm.lastName} onChange={(e) => setAddrForm(p => ({ ...p, lastName: e.target.value }))} placeholder={t3('Nachname', 'Last name', 'اللقب')} className="text-sm rounded-lg h-9" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input value={addrForm.street} onChange={(e) => setAddrForm(p => ({ ...p, street: e.target.value }))} placeholder={t3('Strasse', 'Street', 'الشارع')} className="text-sm rounded-lg h-9 col-span-2" />
+                      <Input value={addrForm.houseNumber} onChange={(e) => setAddrForm(p => ({ ...p, houseNumber: e.target.value }))} placeholder={t3('Nr.', 'No.', 'رقم')} className="text-sm rounded-lg h-9" dir="ltr" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Input value={addrForm.postalCode} onChange={(e) => setAddrForm(p => ({ ...p, postalCode: e.target.value }))} placeholder={t3('PLZ', 'Postal', 'رمز')} className="text-sm rounded-lg h-9" dir="ltr" />
+                      <Input value={addrForm.city} onChange={(e) => setAddrForm(p => ({ ...p, city: e.target.value }))} placeholder={t3('Stadt', 'City', 'المدينة')} className="text-sm rounded-lg h-9 col-span-2" />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button size="sm" className="flex-1 rounded-lg bg-[#d4a853] text-white hover:bg-[#c49b45] text-xs" onClick={async () => {
+                        try {
+                          await api.patch(`/admin/orders/${id}/shipping-address`, addrForm)
+                          queryClient.invalidateQueries({ queryKey: ['admin-order', id] })
+                          setEditAddr(false)
+                        } catch {}
+                      }}>{t3('Speichern', 'Save', 'حفظ')}</Button>
+                      <Button size="sm" variant="outline" className="flex-1 rounded-lg text-xs" onClick={() => setEditAddr(false)}>{t3('Abbrechen', 'Cancel', 'إلغاء')}</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
+                    {order.shippingAddress.company && <p className="text-sm text-muted-foreground">{order.shippingAddress.company}</p>}
+                    <p className="text-sm">{order.shippingAddress.street} {order.shippingAddress.houseNumber}</p>
+                    <p className="text-sm">{order.shippingAddress.postalCode} {order.shippingAddress.city}</p>
+                    <p className="text-sm text-muted-foreground">{order.shippingAddress.country}</p>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -411,7 +448,13 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
             <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"><Truck className="h-4 w-4" /> {t3('Versand', 'Shipping', 'الشحن')}</h3>
             {order.shipment ? (
               <div className="space-y-3">
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Versanddienstleister', 'Carrier', 'شركة الشحن')}</span><span className="font-semibold">{order.shipment.carrier ?? 'DHL'}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Versanddienstleister', 'Carrier', 'شركة الشحن')}</span><span className="font-semibold uppercase">{order.shipment.carrier ?? 'DHL'}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Status</span><span className="font-medium">{({
+                  pending: t3('Ausstehend', 'Pending', 'معلق'), label_created: t3('Label erstellt', 'Label Created', 'تم إنشاء البطاقة'),
+                  picked_up: t3('Abgeholt', 'Picked Up', 'تم الاستلام'), in_transit: t3('Unterwegs', 'In Transit', 'في الطريق'),
+                  out_for_delivery: t3('Wird zugestellt', 'Out for Delivery', 'قيد التسليم'), delivered: t3('Zugestellt', 'Delivered', 'تم التسليم'),
+                  failed_attempt: t3('Zustellung fehlgeschlagen', 'Delivery Failed', 'فشل التسليم'), returned_to_sender: t3('Zurück an Absender', 'Returned', 'أُعيد للمرسل'),
+                } as Record<string, string>)[order.shipment.status] ?? order.shipment.status}</span></div>
                 {order.shipment.trackingNumber && (
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">Tracking</span>
@@ -422,17 +465,30 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                 )}
                 {order.shipment.trackingUrl && (
                   <a href={order.shipment.trackingUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#d4a853] flex items-center gap-1 hover:underline">
-                    {t3('Sendungsverfolgung', 'Track Shipment', 'تتبع الشحنة')} <ExternalLink className="h-3 w-3" />
+                    {t3('Sendungsverfolgung bei DHL', 'Track on DHL', 'تتبع الشحنة في DHL')} <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
                 {order.shipment.estimatedDelivery && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Voraussichtlich', 'Estimated', 'المتوقع')}</span><span>{formatDate(order.shipment.estimatedDelivery, locale)}</span></div>}
+                {order.shipment.shippedAt && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Versendet am', 'Shipped at', 'تاريخ الشحن')}</span><span>{formatDate(order.shipment.shippedAt, locale)}</span></div>}
+                {order.shipment.deliveredAt && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Zugestellt am', 'Delivered at', 'تاريخ التسليم')}</span><span>{formatDate(order.shipment.deliveredAt, locale)}</span></div>}
                 <div className="flex gap-2 pt-2">
                   {order.shipment.labelUrl && (
-                    <a href={order.shipment.labelUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-                      <Button variant="outline" size="sm" className="w-full gap-1.5 rounded-xl text-xs"><Download className="h-3.5 w-3.5" />{t3('Versandlabel', 'Shipping Label', 'بطاقة الشحن')}</Button>
-                    </a>
+                    <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs" onClick={async () => {
+                      try {
+                        const token = useAuthStore.getState().adminAccessToken
+                        const API = API_BASE_URL
+                        const res = await fetch(`${API}${order.shipment.labelUrl}`, { headers: { Authorization: `Bearer ${token}` } })
+                        if (!res.ok) throw new Error('Download failed')
+                        const blob = await res.blob()
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url; a.download = `label-${order.shipment.trackingNumber ?? 'shipment'}.pdf`
+                        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+                      } catch {}
+                    }}>
+                      <Download className="h-3.5 w-3.5" />{t3('DHL-Label', 'DHL Label', 'بطاقة DHL')}
+                    </Button>
                   )}
-                  <Button variant="outline" size="sm" className="flex-1 gap-1.5 rounded-xl text-xs" onClick={downloadDeliveryNote}><FileText className="h-3.5 w-3.5" />{t3('Lieferschein', 'Delivery Note', 'إشعار التسليم')}</Button>
                 </div>
               </div>
             ) : (
@@ -446,24 +502,6 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                     currentWarehouseName={order.fulfillmentWarehouse?.name ?? null}
                     locale={locale}
                   />
-                )}
-                {!['cancelled', 'refunded', 'pending'].includes(order.status) && (
-                  <div className="space-y-2">
-                    <Button size="sm" className="w-full gap-2 rounded-xl bg-[#d4a853] hover:bg-[#c49843] text-white"
-                      onClick={async () => {
-                        const tracking = prompt(t3('Tracking-Nummer eingeben:', 'Enter tracking number:', 'أدخل رقم التتبع:'))
-                        if (tracking) {
-                          await api.patch(`/admin/orders/${id}/status`, { status: 'shipped', notes: `Tracking: ${tracking}` })
-                          queryClient.invalidateQueries({ queryKey: ['admin-order', id] })
-                        }
-                      }}>
-                      <Truck className="h-4 w-4" />
-                      {t3('Als versendet markieren', 'Mark as shipped', 'تحديد كمرسل')}
-                    </Button>
-                    <Button variant="outline" size="sm" className="w-full gap-2 rounded-xl text-xs" onClick={downloadDeliveryNote}>
-                      <FileText className="h-3.5 w-3.5" />{t3('Lieferschein drucken', 'Print delivery note', 'طباعة إشعار التسليم')}
-                    </Button>
-                  </div>
                 )}
               </div>
             )}
@@ -512,35 +550,103 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
           {!isCancelled && NEXT_STATUS[currentStatus] && (
             <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 300ms both' }}>
               <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">{t3('Aktion', 'Action', 'الإجراء')}</h3>
-              {/* Tracking number field when marking as shipped */}
-              {NEXT_STATUS[currentStatus] === 'shipped' && (
-                <div className="space-y-2 mb-3">
-                  <Input
-                    value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
-                    placeholder={t3('Sendungsnummer (z.B. DHL-123456)', 'Tracking Number (e.g. DHL-123456)', 'رقم التتبع (مثال: DHL-123456)')}
-                    className="rounded-xl text-sm" dir="ltr"
-                  />
-                  <Input
-                    value={trackingCarrier} onChange={(e) => setTrackingCarrier(e.target.value)}
-                    placeholder={t3('Versanddienstleister (z.B. DHL)', 'Carrier (e.g. DHL)', 'شركة الشحن (مثال: DHL)')}
-                    className="rounded-xl text-sm"
-                  />
+
+              {/* DHL Auto-Label creation when shipping */}
+              {NEXT_STATUS[currentStatus] === 'shipped' && !order.shipment && (() => {
+                // Address validation warnings
+                const addr = order.shippingAddress
+                const addrWarnings: string[] = []
+                if (addr) {
+                  if (!addr.street || addr.street.length < 3) addrWarnings.push(t3('Strasse fehlt oder zu kurz', 'Street missing or too short', 'الشارع مفقود أو قصير جداً'))
+                  if (!addr.houseNumber) addrWarnings.push(t3('Hausnummer fehlt', 'House number missing', 'رقم المنزل مفقود'))
+                  if (!addr.postalCode || (addr.country === 'DE' && !/^\d{5}$/.test(addr.postalCode))) addrWarnings.push(t3('PLZ ungueltig (5 Ziffern)', 'Invalid postal code (5 digits)', 'الرمز البريدي غير صالح (5 أرقام)'))
+                  if (!addr.city || addr.city.length < 2) addrWarnings.push(t3('Stadt fehlt oder zu kurz', 'City missing or too short', 'المدينة مفقودة أو قصيرة جداً'))
+                  if (!addr.firstName || !addr.lastName) addrWarnings.push(t3('Name unvollstaendig', 'Name incomplete', 'الاسم غير مكتمل'))
+                }
+                return (
+                <div className="mb-4 p-3 rounded-xl bg-[#d4a853]/5 border border-[#d4a853]/20 space-y-3">
+                  <p className="text-xs font-medium text-[#d4a853]">
+                    {t3('DHL Versandlabel wird automatisch erstellt', 'DHL shipping label will be created automatically', 'سيتم إنشاء بطاقة شحن DHL تلقائياً')}
+                  </p>
+                  {/* Address warnings */}
+                  {addrWarnings.length > 0 && (
+                    <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 space-y-1">
+                      <p className="font-semibold flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" /> {t3('Adress-Probleme', 'Address Issues', 'مشاكل في العنوان')}:</p>
+                      {addrWarnings.map((w, i) => <p key={i}>- {w}</p>)}
+                    </div>
+                  )}
+                  <Button
+                    className="w-full rounded-xl font-semibold gap-2 bg-[#d4a853] text-white hover:bg-[#c49b45]"
+                    disabled={statusMutation.isPending}
+                    onClick={async () => {
+                      // Step 0: Show address confirmation dialog
+                      const warnText = addrWarnings.length > 0 ? `\n\n⚠ ${addrWarnings.join('\n⚠ ')}` : ''
+                      const confirmed = await confirm({
+                        title: t3('Lieferadresse pruefen', 'Verify Shipping Address', 'تحقق من عنوان الشحن'),
+                        description: addr
+                          ? `${t3('Ist diese Adresse korrekt?', 'Is this address correct?', 'هل هذا العنوان صحيح؟')}\n\n${addr.firstName} ${addr.lastName}\n${addr.street} ${addr.houseNumber}\n${addr.postalCode} ${addr.city}\n${addr.country}${warnText}`
+                          : t3('Keine Lieferadresse vorhanden!', 'No shipping address found!', 'لا يوجد عنوان شحن!'),
+                      }).catch(() => false)
+                      if (!confirmed) return
+
+                      setOptimisticStatus('shipped')
+                      try {
+                        const { data: shipResult } = await api.post('/shipments', { orderId: id, carrier: 'dhl' })
+                        if (shipResult?.isManualMode) {
+                          statusMutation.mutate('shipped')
+                        } else {
+                          // Auto-download DHL label after creation
+                          if (shipResult?.labelUrl && shipResult?.trackingNumber) {
+                            try {
+                              const token = useAuthStore.getState().adminAccessToken
+                              const API = API_BASE_URL
+                              const labelRes = await fetch(`${API}${shipResult.labelUrl}`, { headers: { Authorization: `Bearer ${token}` } })
+                              if (labelRes.ok) {
+                                const blob = await labelRes.blob()
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = url; a.download = `label-${shipResult.trackingNumber}.pdf`
+                                document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+                              }
+                            } catch {}
+                          }
+                          queryClient.invalidateQueries({ queryKey: ['admin-order', id] })
+                        }
+                        setOptimisticStatus(null)
+                      } catch (err: any) {
+                        setOptimisticStatus(null)
+                        const msg = err?.response?.data?.message
+                        let errText = typeof msg === 'object' ? (msg[locale] ?? msg.ar ?? msg.de ?? msg.en) : (typeof msg === 'string' ? msg : '')
+                        if (!errText) errText = err?.response?.data?.error || err?.message || ''
+                        if (errText.includes('credentials') || errText.includes('Unauthorized')) {
+                          errText = t3('DHL-Zugangsdaten sind ungueltig. Bitte in den Einstellungen pruefen.', 'DHL credentials are invalid. Please check settings.', 'بيانات اعتماد DHL غير صالحة. يرجى التحقق من الإعدادات.')
+                        } else if (errText.includes('address') || errText.includes('Adresse')) {
+                          errText = t3('Die Lieferadresse konnte nicht verifiziert werden.', 'The shipping address could not be verified.', 'لا يمكن التحقق من عنوان الشحن.')
+                        }
+                        await confirm({
+                          title: t3('DHL-Fehler', 'DHL Error', 'خطأ DHL'),
+                          description: errText || t3('Unbekannter Fehler', 'Unknown error', 'خطأ غير معروف'),
+                        }).catch(() => {})
+                      }
+                    }}>
+                    {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+                    {t3('DHL-Label erstellen & versenden', 'Create DHL Label & Ship', 'إنشاء بطاقة DHL والشحن')}
+                  </Button>
                 </div>
+                )
+              })()}
+
+              {/* Regular status change for non-shipping transitions */}
+              {(NEXT_STATUS[currentStatus] !== 'shipped' || order.shipment) && (
+                <>
+                  <Input value={statusNotes} onChange={(e) => setStatusNotes(e.target.value)} placeholder={t3('Notizen (optional)', 'Notes (optional)', 'ملاحظات (اختياري)')} className="mb-3 rounded-xl text-sm" />
+                  <Button className={`w-full rounded-xl text-white font-semibold ${NEXT_BTN_COLORS[currentStatus] ?? ''}`} disabled={statusMutation.isPending}
+                    onClick={() => statusMutation.mutate(NEXT_STATUS[currentStatus])}>
+                    {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin ltr:mr-2 rtl:ml-2" /> : <Check className="h-4 w-4 ltr:mr-2 rtl:ml-2" />}
+                    {nextStatusLabel[currentStatus]}
+                  </Button>
+                </>
               )}
-              <Input value={statusNotes} onChange={(e) => setStatusNotes(e.target.value)} placeholder={t3('Notizen (optional)', 'Notes (optional)', 'ملاحظات (اختياري)')} className="mb-3 rounded-xl text-sm" />
-              <Button className={`w-full rounded-xl text-white font-semibold ${NEXT_BTN_COLORS[currentStatus] ?? ''}`} disabled={statusMutation.isPending}
-                onClick={async () => {
-                  // If shipping, create shipment record first
-                  if (NEXT_STATUS[currentStatus] === 'shipped' && trackingNumber) {
-                    try {
-                      await api.post('/shipments', { orderId: id, trackingNumber, carrier: trackingCarrier || 'DHL', trackingUrl: trackingNumber.startsWith('http') ? trackingNumber : undefined })
-                    } catch {}
-                  }
-                  statusMutation.mutate(NEXT_STATUS[currentStatus])
-                }}>
-                {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin ltr:mr-2 rtl:ml-2" /> : <Check className="h-4 w-4 ltr:mr-2 rtl:ml-2" />}
-                {nextStatusLabel[currentStatus]}
-              </Button>
             </div>
           )}
 

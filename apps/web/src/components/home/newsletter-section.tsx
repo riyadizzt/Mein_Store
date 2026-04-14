@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useRef } from 'react'
 import { useLocale } from 'next-intl'
 import { Mail, ArrowRight, Check } from 'lucide-react'
@@ -37,7 +38,7 @@ export function NewsletterSection() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !email.includes('@')) return
-    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const API = API_BASE_URL
     fetch(`${API}/api/v1/newsletter/subscribe`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim(), locale }),

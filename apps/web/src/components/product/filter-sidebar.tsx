@@ -5,7 +5,116 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useState, useRef } from 'react'
 import { SlidersHorizontal, X, ChevronDown, Check } from 'lucide-react'
 import { useCategories } from '@/hooks/use-categories'
+import { useProductFilterOptions } from '@/hooks/use-products'
 import { Button } from '@/components/ui/button'
+
+/* ── Color Swatch (premium look) ── */
+function ColorSwatch({ name, hex, checked, onChange }: { name: string; hex: string | null; checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      className="flex items-center gap-3 py-1.5 text-sm group transition-colors text-start w-full"
+      type="button"
+    >
+      <span
+        className={`relative h-6 w-6 rounded-full border transition-all duration-200 flex items-center justify-center ${
+          checked ? 'border-foreground ring-2 ring-foreground/15 ring-offset-1 ring-offset-background' : 'border-border group-hover:border-foreground/40'
+        }`}
+        style={{ backgroundColor: hex ?? '#e5e7eb' }}
+        aria-label={name}
+      >
+        {checked && (
+          <Check
+            className="h-3.5 w-3.5"
+            strokeWidth={3}
+            style={{ color: isLightColor(hex) ? '#000' : '#fff' }}
+          />
+        )}
+      </span>
+      <span className={`transition-colors ${checked ? 'text-foreground font-medium' : 'text-muted-foreground group-hover:text-foreground'}`}>
+        {name}
+      </span>
+    </button>
+  )
+}
+
+/* ── Helper: detect light colors so the checkmark stays visible on white/yellow ── */
+function isLightColor(hex: string | null): boolean {
+  if (!hex) return true
+  const cleaned = hex.replace('#', '')
+  if (cleaned.length !== 6) return false
+  const r = parseInt(cleaned.slice(0, 2), 16)
+  const g = parseInt(cleaned.slice(2, 4), 16)
+  const b = parseInt(cleaned.slice(4, 6), 16)
+  // Standard luminance formula
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.6
+}
+
+/* ── Size Pill ── */
+function SizePill({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      onClick={onChange}
+      type="button"
+      className={`min-w-[44px] h-10 px-3 rounded-lg border text-sm font-medium transition-all ${
+        checked
+          ? 'bg-foreground text-background border-foreground'
+          : 'border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+/* ── Show More / Show Less Toggle ──
+ * Long lists (e.g. 20+ colors) need a collapse so the sidebar stays usable.
+ * Default-collapsed to `defaultVisible`; "Mehr anzeigen (X)" reveals the rest.
+ * If any of the hidden items is currently selected, force-expand so the user
+ * can see and uncheck their own selection.
+ */
+function CollapsibleList<T>({
+  items,
+  defaultVisible = 8,
+  isItemActive,
+  renderItem,
+  moreLabel,
+  lessLabel,
+}: {
+  items: T[]
+  defaultVisible?: number
+  isItemActive?: (item: T) => boolean
+  renderItem: (item: T, index: number) => React.ReactNode
+  moreLabel: (hiddenCount: number) => string
+  lessLabel: string
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  // Auto-expand if any hidden item is selected — otherwise the user can't see/clear it.
+  const hasHiddenSelection =
+    !!isItemActive && items.slice(defaultVisible).some(isItemActive)
+  const isExpanded = expanded || hasHiddenSelection
+
+  const visible = isExpanded ? items : items.slice(0, defaultVisible)
+  const hiddenCount = items.length - defaultVisible
+  const showToggle = items.length > defaultVisible
+
+  return (
+    <>
+      {visible.map((item, i) => renderItem(item, i))}
+      {showToggle && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+        >
+          {isExpanded ? lessLabel : moreLabel(hiddenCount)}
+        </button>
+      )}
+    </>
+  )
+}
 
 /* ── Animated Accordion FilterGroup ── */
 function FilterGroup({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
@@ -111,8 +220,32 @@ export function FilterSidebar() {
   const activeMaxPrice = searchParams.get('maxPrice') ?? ''
   const activeInStock = searchParams.get('inStock') === 'true'
 
+  // Variant filters are stored as comma-separated lists in the URL.
+  const activeColorsRaw = searchParams.get('colors') ?? ''
+  const activeColors = activeColorsRaw ? activeColorsRaw.split(',').filter(Boolean) : []
+  const activeSizesRaw = searchParams.get('sizes') ?? ''
+  const activeSizes = activeSizesRaw ? activeSizesRaw.split(',').filter(Boolean) : []
+
   const departmentCategory = activeDepartment ? (categories ?? []).find((c: any) => c.slug === activeDepartment) : null
   const subcategories = (departmentCategory as any)?.children ?? []
+
+  // Resolve current category to an ID so the filter-options endpoint can narrow
+  // the available colors/sizes to what's actually in this department/category.
+  let currentCategoryId: string | undefined
+  if (activeCategory) {
+    if (departmentCategory) {
+      const sub = (departmentCategory as any).children?.find((c: any) => c.slug === activeCategory)
+      if (sub) currentCategoryId = sub.id
+    }
+    if (!currentCategoryId) {
+      const top = (categories ?? []).find((c: any) => c.slug === activeCategory)
+      if (top) currentCategoryId = top.id
+    }
+  } else if (departmentCategory) {
+    currentCategoryId = (departmentCategory as any).id
+  }
+
+  const { data: filterOptions } = useProductFilterOptions(currentCategoryId)
 
   const updateParams = useCallback(
     (key: string, value: string | null) => {
@@ -128,11 +261,30 @@ export function FilterSidebar() {
     [searchParams, router, locale],
   )
 
+  const toggleListParam = useCallback(
+    (key: string, value: string) => {
+      const current = (searchParams.get(key) ?? '').split(',').filter(Boolean)
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value]
+      updateParams(key, next.length > 0 ? next.join(',') : null)
+    },
+    [searchParams, updateParams],
+  )
+
   const clearAll = () => {
     router.push(`/${locale}/products`)
   }
 
-  const hasActiveFilters = activeCategory || activeMinPrice || activeMaxPrice || activeInStock || activeSort || activeDepartment
+  const hasActiveFilters =
+    activeCategory ||
+    activeMinPrice ||
+    activeMaxPrice ||
+    activeInStock ||
+    activeSort ||
+    activeDepartment ||
+    activeColors.length > 0 ||
+    activeSizes.length > 0
 
   const sortOptions = [
     { value: '', label: t('sort.popular') },
@@ -200,6 +352,75 @@ export function FilterSidebar() {
           </div>
         </FilterGroup>
       ) : null}
+
+      {/* Color */}
+      {filterOptions?.colors && filterOptions.colors.length > 0 && (
+        <FilterGroup
+          title={t.has?.('filter.color') ? t('filter.color') : (locale === 'ar' ? 'اللون' : locale === 'en' ? 'Color' : 'Farbe')}
+          defaultOpen={activeColors.length > 0}
+        >
+          <div className="space-y-0.5">
+            <CollapsibleList
+              items={filterOptions.colors}
+              defaultVisible={8}
+              isItemActive={(c) => activeColors.includes(c.name)}
+              renderItem={(c) => (
+                <ColorSwatch
+                  key={c.name}
+                  name={c.name}
+                  hex={c.hex}
+                  checked={activeColors.includes(c.name)}
+                  onChange={() => toggleListParam('colors', c.name)}
+                />
+              )}
+              moreLabel={(n) =>
+                locale === 'ar'
+                  ? `+${n} أكثر`
+                  : locale === 'en'
+                  ? `+${n} more`
+                  : `+${n} mehr anzeigen`
+              }
+              lessLabel={
+                locale === 'ar' ? 'عرض أقل' : locale === 'en' ? 'Show less' : 'Weniger anzeigen'
+              }
+            />
+          </div>
+        </FilterGroup>
+      )}
+
+      {/* Size */}
+      {filterOptions?.sizes && filterOptions.sizes.length > 0 && (
+        <FilterGroup
+          title={t.has?.('filter.size') ? t('filter.size') : (locale === 'ar' ? 'المقاس' : locale === 'en' ? 'Size' : 'Größe')}
+          defaultOpen={activeSizes.length > 0}
+        >
+          <div className="flex flex-wrap gap-2 pt-1">
+            <CollapsibleList
+              items={filterOptions.sizes}
+              defaultVisible={12}
+              isItemActive={(s) => activeSizes.includes(s)}
+              renderItem={(s) => (
+                <SizePill
+                  key={s}
+                  label={s}
+                  checked={activeSizes.includes(s)}
+                  onChange={() => toggleListParam('sizes', s)}
+                />
+              )}
+              moreLabel={(n) =>
+                locale === 'ar'
+                  ? `+${n} أكثر`
+                  : locale === 'en'
+                  ? `+${n} more`
+                  : `+${n} mehr anzeigen`
+              }
+              lessLabel={
+                locale === 'ar' ? 'عرض أقل' : locale === 'en' ? 'Show less' : 'Weniger anzeigen'
+              }
+            />
+          </div>
+        </FilterGroup>
+      )}
 
       {/* Price Range */}
       <FilterGroup title={t('filter.price')} defaultOpen={!!activeMinPrice || !!activeMaxPrice}>

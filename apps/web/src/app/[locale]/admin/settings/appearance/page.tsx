@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations, useLocale } from 'next-intl'
-import { Palette, Image as ImageIcon, Type, Check, Loader2 } from 'lucide-react'
+import { Palette, Image as ImageIcon, Type, Check, Loader2, LayoutGrid, ExternalLink } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,6 +53,7 @@ export default function AppearancePage() {
       instagramUrl: p?.social?.instagram ?? '',
       facebookUrl: p?.social?.facebook ?? '',
       tiktokUrl: p?.social?.tiktok ?? '',
+      homepage_design: p?.homepage_design ?? 'A',
     })
   }, [settings])
 
@@ -81,6 +82,112 @@ export default function AppearancePage() {
       </div>
 
       <div className="space-y-6">
+        {/* Homepage Design Selector */}
+        <div className="bg-background border rounded-xl p-6">
+          <h2 className="text-lg font-semibold flex items-center gap-2 mb-2">
+            <LayoutGrid className="h-5 w-5" />
+            {t3('Homepage-Design', 'تصميم الصفحة الرئيسية')}
+          </h2>
+          <p className="text-xs text-muted-foreground mb-5">
+            {t3(
+              'Wähle den Stil der Startseite. Änderungen sind sofort live.',
+              'اختر تصميم الصفحة الرئيسية. التغييرات تُطبَّق فوراً.',
+            )}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              {
+                key: 'A',
+                title: t3('Editorial Premium', 'فاخر تحريري'),
+                desc: t3('Großzügig, asymmetrisch, viel Atemraum. Wie Zalando/COS.', 'فسيح، غير متناسق، يوحي بالأناقة. مثل Zalando/COS.'),
+                gradient: 'from-amber-50 via-white to-amber-50',
+                accent: '#d4a853',
+              },
+              {
+                key: 'B',
+                title: t3('Minimal High-End', 'بسيط راقٍ'),
+                desc: t3('95% Weiß, kein Hero, sehr viel Weißraum. Wie Arket/Jil Sander.', '95% أبيض، بدون بانر، فراغ كبير. مثل Arket.'),
+                gradient: 'from-white via-gray-50 to-white',
+                accent: '#0f1419',
+              },
+              {
+                key: 'C',
+                title: t3('Dark Luxury', 'فخامة داكنة'),
+                desc: t3('Komplett dark, Gold-Akzente. Wie Saint Laurent/Rains.', 'داكن بالكامل مع لمسات ذهبية. مثل Saint Laurent.'),
+                gradient: 'from-[#0a0a14] via-[#1a1a2e] to-[#0a0a14]',
+                accent: '#d4a853',
+                dark: true,
+              },
+            ].map((opt) => {
+              const selected = (form.homepage_design ?? 'A') === opt.key
+              const previewUrl = `/${locale}/?preview=${opt.key}`
+              return (
+                <div
+                  key={opt.key}
+                  className={`relative rounded-xl border-2 p-4 transition-all ${
+                    selected
+                      ? 'border-[#d4a853] shadow-md'
+                      : 'border-border hover:border-[#d4a853]/40'
+                  }`}
+                >
+                  {/* Clickable area to select */}
+                  <button
+                    type="button"
+                    onClick={() => u('homepage_design', opt.key)}
+                    className="block w-full text-start"
+                  >
+                    {/* Mini preview */}
+                    <div
+                      className={`h-20 rounded-lg mb-3 bg-gradient-to-br ${opt.gradient} relative overflow-hidden border ${
+                        opt.dark ? 'border-white/10' : 'border-black/5'
+                      }`}
+                    >
+                      <div className="absolute inset-0 flex flex-col justify-end p-2 gap-1">
+                        <div
+                          className="h-1.5 w-2/3 rounded"
+                          style={{ background: opt.accent, opacity: opt.dark ? 1 : 0.85 }}
+                        />
+                        <div
+                          className="h-1 w-1/3 rounded"
+                          style={{ background: opt.dark ? 'rgba(255,255,255,0.5)' : 'rgba(15,20,25,0.4)' }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-mono font-bold text-[#d4a853]">{opt.key}</span>
+                      {selected && (
+                        <div className="h-5 w-5 rounded-full bg-[#d4a853] flex items-center justify-center">
+                          <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                        </div>
+                      )}
+                    </div>
+                    <h3 className="text-sm font-bold mb-1">{opt.title}</h3>
+                    <p className="text-[11px] text-muted-foreground leading-snug mb-3">{opt.desc}</p>
+                  </button>
+
+                  {/* Preview link — opens in new tab without saving */}
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#d4a853] hover:text-[#c49943] transition-colors mt-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t3('Live-Vorschau', 'معاينة مباشرة')}
+                  </a>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-4 italic">
+            {t3(
+              'Standard: A. Alle Shop-Funktionen (Warenkorb, Suche, Kategorien, Bestseller, Kampagnen) funktionieren in jedem Design.',
+              'الافتراضي: A. جميع وظائف المتجر (السلة، البحث، الفئات، الأكثر مبيعاً، الحملات) تعمل في كل تصميم.',
+            )}
+          </p>
+        </div>
+
         {/* Brand */}
         <div className="bg-background border rounded-xl p-6">
           <h2 className="text-lg font-semibold flex items-center gap-2 mb-4"><Type className="h-5 w-5" />{t3('Marke', 'العلامة التجارية')}</h2>

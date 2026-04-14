@@ -1,9 +1,10 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store/auth-store'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = API_BASE_URL
 
 /**
  * AuthProvider — restores BOTH sessions (admin + customer) independently.

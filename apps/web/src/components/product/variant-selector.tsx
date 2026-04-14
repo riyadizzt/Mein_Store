@@ -2,6 +2,7 @@
 
 import { useTranslations, useLocale } from 'next-intl'
 import { translateColor } from '@/lib/locale-utils'
+import { compareSizes } from '@/lib/sizes'
 
 interface Variant {
   id: string
@@ -37,11 +38,7 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
       .map((v) => [v.color, { color: v.color!, hex: v.colorHex }]),
   ).values()]
 
-  const sizes = [...new Set(variants.filter((v) => v.size).map((v) => v.size!))].sort((a, b) => {
-    const na = parseFloat(a) || 0
-    const nb = parseFloat(b) || 0
-    return na - nb || a.localeCompare(b)
-  })
+  const sizes = [...new Set(variants.filter((v) => v.size).map((v) => v.size!))].sort(compareSizes)
 
   const selected = variants.find((v) => v.id === selectedVariantId)
   const selectedColor = selected?.color
@@ -56,23 +53,24 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
     )
   }
 
-  // For COLOR circles: if a size is selected, check this color+size combo; otherwise check any size
-  const isColorAvailable = (color: string) => {
-    if (selectedSize) {
-      const v = findVariant(color, selectedSize)
-      return v ? getStock(v) > 0 : false
-    }
-    return variants.some((v) => v.color === color && v.isActive && getStock(v) > 0)
-  }
+  // A color/size is "available" if ANY active variant with that color/size has stock,
+  // independent of the currently selected counterpart. Click handlers below auto-switch
+  // to a matching variant. Otherwise sizes that exist in other colors get falsely greyed.
+  const isColorAvailable = (color: string) =>
+    variants.some((v) => v.color === color && v.isActive && getStock(v) > 0)
+  const isSizeAvailable = (size: string) =>
+    variants.some((v) => v.size === size && v.isActive && getStock(v) > 0)
 
-  // For SIZE buttons: if a color is selected, check this color+size combo; otherwise check any color
-  const isSizeAvailable = (size: string) => {
-    if (selectedColor) {
-      const v = findVariant(selectedColor, size)
-      return v ? getStock(v) > 0 : false
-    }
-    return variants.some((v) => v.size === size && v.isActive && getStock(v) > 0)
-  }
+  // Prefer stocked variants in click handlers, otherwise picking a color can land on
+  // a 0-stock variant when an in-stock one exists for the same color.
+  const findStockedVariant = (color?: string, size?: string) =>
+    variants.find(
+      (v) =>
+        (color ? v.color === color : true) &&
+        (size ? v.size === size : true) &&
+        v.isActive &&
+        getStock(v) > 0,
+    )
 
   return (
     <div className="space-y-5">
@@ -91,7 +89,11 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
                 <button
                   key={color}
                   onClick={() => {
-                    const v = findVariant(color, selectedSize) ?? findVariant(color)
+                    const v =
+                      findStockedVariant(color, selectedSize) ??
+                      findStockedVariant(color) ??
+                      findVariant(color, selectedSize) ??
+                      findVariant(color)
                     if (v) onSelect(v.id)
                   }}
                   disabled={!available}
@@ -134,7 +136,11 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
                 <button
                   key={size}
                   onClick={() => {
-                    const v = findVariant(selectedColor, size) ?? findVariant(undefined, size)
+                    const v =
+                      findStockedVariant(selectedColor, size) ??
+                      findStockedVariant(undefined, size) ??
+                      findVariant(selectedColor, size) ??
+                      findVariant(undefined, size)
                     if (v) onSelect(v.id)
                   }}
                   disabled={!available}

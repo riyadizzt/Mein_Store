@@ -18,6 +18,7 @@ import {
   Ip,
   Res,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { memoryStorage } from 'multer'
@@ -45,6 +46,7 @@ import { TranslationService } from '../../common/services/translation.service'
 import { CampaignService } from './services/campaign.service'
 import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
+import { ShipmentsService } from '../shipments/shipments.service'
 import { Response } from 'express'
 
 @Controller('admin')
@@ -70,6 +72,7 @@ export class AdminController {
     private readonly suppliers: AdminSuppliersService,
     private readonly translation: TranslationService,
     private readonly campaigns: CampaignService,
+    private readonly shipmentsService: ShipmentsService,
   ) {}
 
   // ── Dashboard ─────────────────────────────────────────────
@@ -227,6 +230,23 @@ export class AdminController {
     @Ip() ip: string,
   ) {
     return this.orders.updateStatus(id, status, notes, req.user.id, ip)
+  }
+
+  @Patch('orders/:id/shipping-address')
+  @RequirePermission(PERMISSIONS.ORDERS_EDIT)
+  async updateShippingAddress(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { firstName?: string; lastName?: string; street?: string; houseNumber?: string; postalCode?: string; city?: string; country?: string },
+  ) {
+    const order = await this.prisma.order.findFirst({ where: { id, deletedAt: null }, select: { shippingAddressId: true, status: true } })
+    if (!order) throw new NotFoundException('Order not found')
+    if (['shipped', 'delivered', 'cancelled', 'refunded'].includes(order.status)) {
+      throw new BadRequestException('Cannot edit address after shipping')
+    }
+    if (order.shippingAddressId) {
+      await this.prisma.address.update({ where: { id: order.shippingAddressId }, data: body })
+    }
+    return { success: true }
   }
 
   @Post('orders/:id/cancel')
@@ -786,10 +806,11 @@ export class AdminController {
   getInventoryGrouped(
     @Query('warehouseId') warehouseId?: string, @Query('search') search?: string,
     @Query('parentCategoryId') parentCategoryId?: string, @Query('status') status?: string,
+    @Query('locationId') locationId?: string,
     @Query('limit') limit?: string, @Query('offset') offset?: string,
   ) {
     return this.inventory.findAllGrouped({
-      warehouseId, search, parentCategoryId, status,
+      warehouseId, search, parentCategoryId, status, locationId,
       limit: limit ? +limit : 50, offset: offset ? +offset : 0,
     })
   }
@@ -812,6 +833,12 @@ export class AdminController {
   @Get('inventory/barcode/:code')
   @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   lookupBarcode(@Param('code') code: string) { return this.inventory.lookupBarcode(code) }
+
+  @Get('inventory/return-preview/:code')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
+  async previewReturnScan(@Param('code') code: string) {
+    return this.inventory.previewReturnScan(code)
+  }
 
   @Post('inventory/return-scan/:code')
   @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
@@ -1083,8 +1110,8 @@ export class AdminController {
   @Post('returns/:id/approve')
   @RequirePermission(PERMISSIONS.RETURNS_APPROVE)
   @HttpCode(HttpStatus.OK)
-  approveReturn(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
-    return this.returns.approve(id, req.user.id, ip)
+  approveReturn(@Param('id', ParseUUIDPipe) id: string, @Body('sendLabel') sendLabel: boolean, @Req() req: any, @Ip() ip: string) {
+    return this.returns.approve(id, req.user.id, ip, sendLabel ?? false)
   }
 
   @Post('returns/:id/reject')
@@ -1097,7 +1124,18 @@ export class AdminController {
   @Post('returns/:id/received')
   @RequirePermission(PERMISSIONS.RETURNS_EDIT)
   @HttpCode(HttpStatus.OK)
-  markReturnReceived(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+  markReturnReceived(@Param('id', ParseUUIDPipe) id: string, @Body('source') source: string, @Req() req: any, @Ip() ip: string) {
+    if (source !== 'scanner') {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'ScannerRequired',
+        message: {
+          de: 'Retouren können nur per Scanner als eingegangen markiert werden.',
+          en: 'Returns can only be marked as received via barcode scanner.',
+          ar: 'لا يمكن تحديد المرتجعات كمستلمة إلا عبر ماسح الباركود.',
+        },
+      })
+    }
     return this.returns.markReceived(id, req.user.id, ip)
   }
 
@@ -1113,6 +1151,13 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   processReturnRefund(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
     return this.returns.processRefund(id, req.user.id, ip)
+  }
+
+  @Post('returns/:id/send-label')
+  @RequirePermission(PERMISSIONS.RETURNS_APPROVE)
+  @HttpCode(HttpStatus.OK)
+  sendReturnLabel(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.returns.sendDhlLabel(id, req.user.id, ip)
   }
 
   @Get('returns/:id/label')
@@ -1137,13 +1182,13 @@ export class AdminController {
     if (status) where.status = status
     if (carrier) where.carrier = carrier
     if (search) {
+      const s = search.trim()
       where.OR = [
-        { trackingNumber: { contains: search, mode: 'insensitive' } },
-        { order: { orderNumber: { contains: search, mode: 'insensitive' } } },
-        { order: { user: { OR: [
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
-        ] } } },
+        { trackingNumber: { contains: s, mode: 'insensitive' } },
+        { order: { orderNumber: { contains: s, mode: 'insensitive' } } },
+        { order: { user: { firstName: { contains: s, mode: 'insensitive' } } } },
+        { order: { user: { lastName: { contains: s, mode: 'insensitive' } } } },
+        { order: { guestEmail: { contains: s, mode: 'insensitive' } } },
       ]
     }
     return this.prisma.shipment.findMany({
@@ -1257,6 +1302,8 @@ export class AdminController {
       where: {
         status: { in: ['confirmed', 'processing'] },
         shipment: null,
+        deletedAt: null,
+        shippingAddress: { isNot: null },
       },
       select: { id: true, orderNumber: true },
       take: 50,
@@ -1265,24 +1312,56 @@ export class AdminController {
     const results = []
     for (const order of readyOrders) {
       try {
-        const shipment = await this.prisma.shipment.create({
-          data: { orderId: order.id, carrier: 'dhl', status: 'pending' },
+        // Use ShipmentsService to create real DHL labels
+        const result = await this.shipmentsService.createShipment(
+          { orderId: order.id, carrier: 'dhl' as any },
+          req.user.id,
+          `batch-${Date.now()}`,
+        )
+        results.push({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          shipmentId: result.shipmentId,
+          trackingNumber: result.trackingNumber,
+          status: result.isManualMode ? 'manual' : 'shipped',
         })
-        await this.prisma.order.update({ where: { id: order.id }, data: { status: 'processing' as any } })
-        results.push({ orderId: order.id, orderNumber: order.orderNumber, shipmentId: shipment.id, status: 'created' })
-      } catch {
-        results.push({ orderId: order.id, orderNumber: order.orderNumber, status: 'error' })
+      } catch (err: any) {
+        results.push({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          status: 'error',
+          error: err?.response?.message?.de ?? err?.message ?? 'Unknown error',
+        })
       }
     }
+
+    const shipped = results.filter((r) => r.status === 'shipped').length
 
     await this.audit.log({
       adminId: req.user.id, action: 'SHIPMENTS_BATCH_CREATED',
       entityType: 'shipment', entityId: 'batch',
-      changes: { after: { count: results.filter((r) => r.status === 'created').length } },
+      changes: { after: { total: readyOrders.length, shipped, errors: results.filter((r) => r.status === 'error').length } },
       ipAddress: ip,
     })
 
-    return { total: readyOrders.length, created: results.filter((r) => r.status === 'created').length, results }
+    return { total: readyOrders.length, created: shipped, errors: results.filter((r) => r.status === 'error').length, results }
+  }
+
+  @Post('shipments/:orderId/cancel')
+  @RequirePermission(PERMISSIONS.SHIPPING_STATUS)
+  @HttpCode(HttpStatus.OK)
+  async cancelShipment(
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    await this.shipmentsService.cancelShipment(orderId, `admin-cancel-${Date.now()}`)
+    await this.audit.log({
+      adminId: req.user.id, action: 'SHIPMENT_CANCELLED',
+      entityType: 'shipment', entityId: orderId,
+      changes: {}, ipAddress: ip,
+    })
+    return { success: true }
   }
 
   // ── Settings ──────────────────────────────────────────
@@ -1377,9 +1456,11 @@ export class AdminController {
       'welcomePopupEnabled', 'welcomeDiscountPercent',
       // Returns
       'returnsEnabled',
+      // Address Autocomplete
+      'addressAutocompleteEnabled',
       // Notifications
       'notif_email_new_order', 'notif_email_low_stock', 'notif_sound_enabled',
-      'notif_daily_summary', 'notif_daily_summary_email',
+      'notif_daily_summary', 'notif_daily_summary_email', 'notif_email_auto_cancel',
       // Footer
       'instagramUrl', 'facebookUrl', 'tiktokUrl',
       // Legal pages (stored as HTML)
@@ -1414,6 +1495,8 @@ export class AdminController {
       'vorkasse_bank_name', 'vorkasse_deadline_days', 'vorkasse_reminder_days', 'vorkasse_cancel_days',
       // SumUp
       'sumup_enabled', 'sumup_merchant_code',
+      // Homepage Design
+      'homepage_design',
     ]
     const entries = Object.entries(body).filter(([k]) => allowed.includes(k))
 

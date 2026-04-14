@@ -64,8 +64,12 @@ export class PayPalProvider implements IPaymentProvider {
 
     const token = await this.getAccessToken()
     const amountEur = (input.amount / 100).toFixed(2)
-    const returnUrl = `${this.config.get('NEXT_PUBLIC_APP_URL', 'http://localhost:3000')}/checkout/confirmation`
-    const cancelUrl = `${this.config.get('NEXT_PUBLIC_APP_URL', 'http://localhost:3000')}/checkout`
+    const appUrl = this.config.get('NEXT_PUBLIC_APP_URL', 'http://localhost:3000')
+    const returnUrl = `${appUrl}/checkout/confirmation`
+    // Pass the orderId so the checkout page can call POST /payments/:id/abort to
+    // cancel the pending order on cancel-return — otherwise the order lingers in
+    // pending_payment until the 30-minute cron picks it up.
+    const cancelUrl = `${appUrl}/checkout?cancelled=${input.orderId}`
 
     const res = await fetch(`${this.apiUrl}/v2/checkout/orders`, {
       method: 'POST',

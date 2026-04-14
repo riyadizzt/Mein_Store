@@ -1,8 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-
-const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY || ''
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface AddressResult {
   street: string
@@ -20,70 +18,175 @@ interface AddressAutocompleteProps {
   className?: string
 }
 
+interface PhotonFeature {
+  properties: {
+    name?: string
+    housenumber?: string
+    street?: string
+    postcode?: string
+    city?: string
+    state?: string
+    country?: string
+    countrycode?: string
+    type?: string
+  }
+}
+
 /**
- * Address Autocomplete — uses Google Places API if key is configured.
- * Falls back to a normal input if no API key is set.
+ * Address Autocomplete — uses Photon API (by Komoot, based on OpenStreetMap).
+ * Completely free, no API key needed, no Google dependency.
+ * Optimized for DE/AT/CH/NL/BE addresses.
  */
 export function AddressAutocomplete({ placeholder, value, onChange, onSelect, className }: AddressAutocompleteProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  const [suggestions, setSuggestions] = useState<PhotonFeature[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const onSelectRef = useRef(onSelect)
+  onSelectRef.current = onSelect
 
-  // Load Google Places script
+  // Close dropdown on outside click
   useEffect(() => {
-    if (!GOOGLE_API_KEY || typeof window === 'undefined') return
-    if ((window as any).google?.maps?.places) { setLoaded(true); return }
-
-    const existing = document.querySelector('script[src*="maps.googleapis.com"]')
-    if (existing) { setLoaded(true); return }
-
-    const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places`
-    script.async = true
-    script.onload = () => setLoaded(true)
-    document.head.appendChild(script)
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Initialize autocomplete
-  useEffect(() => {
-    if (!loaded || !inputRef.current || autocompleteRef.current) return
+  // Fetch suggestions from Photon API
+  const fetchSuggestions = useCallback(async (query: string) => {
+    if (query.length < 3) {
+      setSuggestions([])
+      return
+    }
 
-    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-      types: ['address'],
-      componentRestrictions: { country: ['de', 'at', 'ch', 'nl', 'be', 'lu', 'fr', 'pl'] },
-      fields: ['address_components'],
-    })
-
-    autocomplete.addListener('place_changed', () => {
-      const place = autocomplete.getPlace()
-      if (!place.address_components) return
-
-      const get = (type: string) =>
-        place.address_components?.find((c) => c.types.includes(type))?.long_name ?? ''
-      const getShort = (type: string) =>
-        place.address_components?.find((c) => c.types.includes(type))?.short_name ?? ''
-
-      onSelect({
-        street: get('route'),
-        houseNumber: get('street_number'),
-        postalCode: get('postal_code'),
-        city: get('locality') || get('sublocality') || get('administrative_area_level_2'),
-        country: getShort('country'),
+    try {
+      // Single query without restrictive osm_tag — let Photon return all address types
+      const params = new URLSearchParams({
+        q: query,
+        limit: '10',
+        lang: 'de',
+        lat: '52.52',   // Berlin (center of main market)
+        lon: '13.405',
+        bbox: '5.87,47.27,15.04,55.06',  // Germany bounding box (also covers AT/CH/NL/BE)
       })
-    })
 
-    autocompleteRef.current = autocomplete
-  }, [loaded, onSelect])
+      const res = await fetch(`https://photon.komoot.io/api/?${params}`)
+      const data = await res.json()
+
+      const allFeatures: PhotonFeature[] = data?.features ?? []
+
+      // Filter: only European countries, must have street or name, skip POIs without street
+      const filtered = allFeatures
+        .filter(f => {
+          const cc = f.properties.countrycode?.toUpperCase()
+          const hasAddress = f.properties.street || (f.properties.name && f.properties.postcode)
+          return ['DE', 'AT', 'CH', 'NL', 'BE', 'LU', 'FR', 'PL'].includes(cc ?? '') && hasAddress
+        })
+        .slice(0, 6)
+
+      // Deduplicate by street+city+postcode
+      const seen = new Set<string>()
+      const unique = filtered.filter(f => {
+        const key = `${f.properties.street ?? f.properties.name}-${f.properties.city}-${f.properties.postcode}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+      setSuggestions(unique)
+      setShowDropdown(unique.length > 0)
+      setActiveIndex(-1)
+    } catch {
+      setSuggestions([])
+    }
+  }, [])
+
+  const handleChange = (val: string) => {
+    onChange(val)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => fetchSuggestions(val), 300)
+  }
+
+  const handleSelect = (feature: PhotonFeature) => {
+    const p = feature.properties
+    const street = p.street ?? p.name ?? ''
+    const houseNumber = p.housenumber ?? ''
+    const postalCode = p.postcode ?? ''
+    const city = p.city ?? p.state ?? ''
+    const country = (p.countrycode ?? 'DE').toUpperCase()
+
+    onChange(street + (houseNumber ? ` ${houseNumber}` : ''))
+    setShowDropdown(false)
+    setSuggestions([])
+
+    onSelectRef.current({ street, houseNumber, postalCode, city, country })
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown || suggestions.length === 0) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex(prev => Math.min(prev + 1, suggestions.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter' && activeIndex >= 0) {
+      e.preventDefault()
+      handleSelect(suggestions[activeIndex])
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false)
+    }
+  }
+
+  const formatSuggestion = (f: PhotonFeature) => {
+    const p = f.properties
+    const street = p.street ?? p.name ?? ''
+    const nr = p.housenumber ? ` ${p.housenumber}` : ''
+    const city = p.city ?? p.state ?? ''
+    const plz = p.postcode ?? ''
+    return { main: `${street}${nr}`, sub: `${plz} ${city}`.trim() }
+  }
 
   return (
-    <input
-      ref={inputRef}
-      type="text"
-      placeholder={placeholder}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={className}
-      autoComplete="street-address"
-    />
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => { if (suggestions.length > 0) setShowDropdown(true) }}
+        onKeyDown={handleKeyDown}
+        className={className}
+        autoComplete="off"
+      />
+      {showDropdown && suggestions.length > 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border rounded-xl shadow-lg overflow-hidden" dir="ltr">
+          {suggestions.map((f, i) => {
+            const { main, sub } = formatSuggestion(f)
+            return (
+              <button
+                key={i}
+                type="button"
+                className={`w-full text-start px-3 py-2.5 text-sm transition-colors flex items-center justify-between ${
+                  i === activeIndex ? 'bg-[#d4a853]/10' : 'hover:bg-muted/50'
+                }`}
+                onMouseDown={() => handleSelect(f)}
+                onMouseEnter={() => setActiveIndex(i)}
+              >
+                <span className="font-medium">{main}</span>
+                <span className="text-xs text-muted-foreground">{sub}</span>
+              </button>
+            )
+          })}
+          <div className="px-3 py-1 text-[10px] text-muted-foreground/50 text-end border-t">OpenStreetMap</div>
+        </div>
+      )}
+    </div>
   )
 }

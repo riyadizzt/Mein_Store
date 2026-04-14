@@ -35,7 +35,7 @@ test.describe('i18n — English', () => {
 test.describe('i18n — العربية (RTL)', () => {
   test('AR: Homepage mit arabischen Texten + RTL', async ({ page }) => {
     await page.goto('/ar')
-    await expect(page.locator('text=مرحباً بكم في متجر ملاك')).toBeVisible()
+    await expect(page.locator('text=مرحباً بكم في ملبوسات ملك')).toBeVisible()
     await expect(page.locator('text=الرئيسية')).toBeVisible()
 
     // RTL check: html dir attribute

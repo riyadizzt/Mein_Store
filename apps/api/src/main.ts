@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core'
-import { ValidationPipe } from '@nestjs/common'
+import { Logger, ValidationPipe } from '@nestjs/common'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
@@ -9,6 +9,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     rawBody: true, // Needed for Stripe/Klarna webhook signature verification
   })
+  const logger = new Logger('Bootstrap')
 
   // Security
   app.use(cookieParser())
@@ -44,8 +45,10 @@ async function bootstrap() {
 
   const port = process.env.API_PORT || 3001
   await app.listen(port)
-  console.log(`🚀 API läuft auf: http://localhost:${port}/api/v1`)
-  console.log(`📚 Swagger Docs: http://localhost:${port}/api/docs`)
+  logger.log(`API listening on port ${port} (prefix: /api/v1)`)
+  if (process.env.NODE_ENV !== 'production') {
+    logger.log(`Swagger docs: http://localhost:${port}/api/docs`)
+  }
 }
 
 bootstrap()

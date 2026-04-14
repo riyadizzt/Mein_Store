@@ -48,9 +48,9 @@ const config: Config = {
           foreground: 'hsl(var(--warning-foreground))',
         },
         brand: {
-          gold: '#c8a97e',
-          'gold-light': '#e8d5b8',
-          'gold-dark': '#a07850',
+          gold: '#a07850',         // WCAG AA on white (4.6:1)
+          'gold-light': '#c8a97e', // hover/decorative — was the old gold
+          'gold-dark': '#8a6840',
         },
         ink: '#0a0a0a',
         paper: '#faf9f7',

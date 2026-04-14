@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -10,10 +11,11 @@ import { useConfirm } from '@/components/ui/confirm-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  RotateCcw, Search, Package, X, Check,
+  RotateCcw, Search, Package, X, Check, Truck,
   Download, Eye, TrendingDown, BarChart3, Euro, AlertTriangle,
 } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/locale-utils'
+import { PayPalLogo, KlarnaLogo, SumUpLogo, StripeLogo } from '@/components/ui/payment-logos'
 
 // ── Status & Reason maps ────────────────────────────────────
 const STATUS_KEYS = ['requested', 'label_sent', 'in_transit', 'received', 'inspected', 'refunded', 'rejected'] as const
@@ -105,18 +107,13 @@ export default function AdminReturnsPage() {
   }
 
   const approveMut = useMutation({
-    mutationFn: () => api.post(`/admin/returns/${selectedId}/approve`),
+    mutationFn: (sendLabel: boolean = false) => api.post(`/admin/returns/${selectedId}/approve`, { sendLabel }),
     onSuccess: invalidate,
   })
 
   const rejectMut = useMutation({
     mutationFn: (reason: string) => api.post(`/admin/returns/${selectedId}/reject`, { reason }),
     onSuccess: () => { invalidate(); setRejectReason('') },
-  })
-
-  const receivedMut = useMutation({
-    mutationFn: () => api.post(`/admin/returns/${selectedId}/received`),
-    onSuccess: invalidate,
   })
 
   const inspectMut = useMutation({
@@ -139,18 +136,24 @@ export default function AdminReturnsPage() {
 
   const closeDetail = () => setSelectedId(null)
 
-  const handleApprove = async () => {
+  const handleApprove = async (sendLabel: boolean) => {
     const ok = await confirmDialog({
-      title: t3('Retoure genehmigen', 'Approve Return', '\u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0644\u0649 \u0627\u0644\u0645\u0631\u062a\u062c\u0639'),
-      description: t3(
-        'Retoure genehmigen und R\u00fccksendeetikett erstellen?',
-        'Approve return and create return label?',
-        '\u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629 \u0639\u0644\u0649 \u0627\u0644\u0645\u0631\u062a\u062c\u0639 \u0648\u0625\u0646\u0634\u0627\u0621 \u0645\u0644\u0635\u0642 \u0627\u0644\u0625\u0631\u062c\u0627\u0639\u061f',
-      ),
-      confirmLabel: t3('Genehmigen', 'Approve', '\u0645\u0648\u0627\u0641\u0642\u0629'),
-      cancelLabel: t3('Abbrechen', 'Cancel', '\u0625\u0644\u063a\u0627\u0621'),
+      title: t3('Retoure genehmigen', 'Approve Return', 'الموافقة على المرتجع'),
+      description: sendLabel
+        ? t3(
+          'Retoure genehmigen und Rücksendeetikett per E-Mail an den Kunden senden? (Kosten trägt der Shop)',
+          'Approve return and send return shipping label to customer by email? (Shop pays shipping)',
+          'الموافقة على المرتجع وإرسال ملصق الشحن للعميل عبر البريد الإلكتروني؟ (المتجر يتحمل التكاليف)',
+        )
+        : t3(
+          'Retoure genehmigen? Der Kunde trägt die Rücksendekosten selbst.',
+          'Approve return? Customer pays return shipping costs.',
+          'الموافقة على المرتجع؟ العميل يتحمل تكاليف الشحن.',
+        ),
+      confirmLabel: t3('Genehmigen', 'Approve', 'موافقة'),
+      cancelLabel: t3('Abbrechen', 'Cancel', 'إلغاء'),
     })
-    if (ok) approveMut.mutate()
+    if (ok) approveMut.mutate(sendLabel)
   }
 
   const handleReject = async () => {
@@ -170,7 +173,10 @@ export default function AdminReturnsPage() {
   }
 
   const handleRefund = async () => {
-    const amount = detail?.refundAmount ? formatCurrency(Number(detail.refundAmount), locale) : ''
+    const rawAmt = Number(detail?.refundAmount ?? 0) > 0
+      ? Number(detail.refundAmount)
+      : (detail?.returnItems ?? []).reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
+    const amount = rawAmt > 0 ? formatCurrency(rawAmt, locale) : ''
     const ok = await confirmDialog({
       title: t3('Erstattung ausl\u00f6sen', 'Issue Refund', '\u0625\u0635\u062f\u0627\u0631 \u0627\u0633\u062a\u0631\u062f\u0627\u062f'),
       description: t3(
@@ -191,7 +197,7 @@ export default function AdminReturnsPage() {
   }
 
   const handleDownloadLabel = async (id: string) => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const API_URL = API_BASE_URL
     const token = useAuthStore.getState().adminAccessToken
     const res = await fetch(`${API_URL}/api/v1/admin/returns/${id}/label`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -219,11 +225,13 @@ export default function AdminReturnsPage() {
   const topReasonLabel = topReason ? reasonLabel(topReason.reason) : '—'
 
   // ── Timeline ───────────────────────────────────────────────
-  const TIMELINE_STEPS: ReturnStatus[] = ['requested', 'label_sent', 'in_transit', 'received', 'inspected', 'refunded']
+  const TIMELINE_STEPS: ReturnStatus[] = ['requested', 'in_transit', 'received', 'inspected', 'refunded']
 
   const getStepIndex = (status: string) => {
     if (status === 'rejected') return -1
-    return TIMELINE_STEPS.indexOf(status as ReturnStatus)
+    // Map old label_sent status to in_transit
+    const mapped = status === 'label_sent' ? 'in_transit' : status
+    return TIMELINE_STEPS.indexOf(mapped as ReturnStatus)
   }
 
   // ── Render ─────────────────────────────────────────────────
@@ -335,7 +343,7 @@ export default function AdminReturnsPage() {
                       <p className="text-sm text-muted-foreground">{ret.order?.user?.email}</p>
                     </div>
                     <div className="px-4 py-4">
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted">{reasonLabel(ret.reason)}</span>
+                      <span className="px-2.5 py-1 rounded-full text-sm font-medium bg-muted">{reasonLabel(ret.reason)}</span>
                     </div>
                     <div className="px-4 py-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
@@ -343,7 +351,12 @@ export default function AdminReturnsPage() {
                         {statusLabel(ret.status)}
                       </span>
                     </div>
-                    <div className="px-4 py-4 text-center text-sm font-medium">{ret.refundAmount ? formatCurrency(Number(ret.refundAmount), locale) : '—'}</div>
+                    <div className="px-4 py-4 text-center text-sm font-medium">{(() => {
+                      const amt = Number(ret.refundAmount ?? 0) > 0
+                        ? Number(ret.refundAmount)
+                        : (ret.returnItems ?? []).reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
+                      return amt > 0 ? formatCurrency(amt, locale) : '—'
+                    })()}</div>
                     <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
                   </div>
                 ))
@@ -419,6 +432,18 @@ export default function AdminReturnsPage() {
                   <div className="flex justify-between"><span className="text-muted-foreground">{t3('Bestell-Nr', 'Order No', '\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628')}</span><span className="font-mono font-medium">{detail.order?.orderNumber}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">{t3('Bestellwert', 'Order Total', '\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0637\u0644\u0628')}</span><span className="font-medium">{formatCurrency(Number(detail.order?.totalAmount ?? 0), locale)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">{t3('Grund', 'Reason', '\u0627\u0644\u0633\u0628\u0628')}</span><span>{reasonLabel(detail.reason)}</span></div>
+                  {detail.order?.payment && (
+                    <div className="flex justify-between items-center"><span className="text-muted-foreground">{t3('Zahlungsmethode', 'Payment Method', 'طريقة الدفع')}</span><span>{(() => {
+                      const m = (detail.order.payment.method ?? '').toLowerCase()
+                      const p = (detail.order.payment.provider ?? '').toLowerCase()
+                      if (m === 'card' || p === 'stripe') return <StripeLogo className="h-5" />
+                      if (m === 'paypal' || p === 'paypal') return <PayPalLogo className="h-5" />
+                      if (m === 'klarna' || p === 'klarna') return <KlarnaLogo className="h-5" />
+                      if (m === 'sumup' || p === 'sumup') return <SumUpLogo className="h-5" />
+                      if (m === 'vorkasse') return <span className="text-sm font-medium">{locale === 'ar' ? 'تحويل بنكي' : 'Vorkasse'}</span>
+                      return <span className="text-sm font-medium">{p ?? m ?? '—'}</span>
+                    })()}</span></div>
+                  )}
                 </div>
 
                 {/* Items */}
@@ -428,10 +453,19 @@ export default function AdminReturnsPage() {
                     {t3('Artikel', 'Items', '\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a')}
                   </h4>
                   <div className="space-y-2">
-                    {(detail.returnItems ?? detail.order?.items ?? []).map((item: any) => (
-                      <div key={item.id} className="flex items-center justify-between text-sm bg-muted/20 rounded-lg px-3 py-2">
-                        <div className="flex-1">
-                          <p className="font-medium">{item.snapshotName ?? item.name ?? '—'}</p>
+                    {(detail.returnItems ?? detail.order?.items ?? []).map((item: any, idx: number) => {
+                      // Find matching order item for inspect (returnItems JSON has no DB id)
+                      const orderItem = detail.order?.items?.find((oi: any) => (oi.variantId || oi.variant?.id) === item.variantId) ?? item
+                      const inspectKey = orderItem.id ?? item.variantId ?? `item-${idx}`
+                      return (
+                      <div key={inspectKey} className="flex items-center justify-between text-sm bg-muted/20 rounded-lg px-3 py-2">
+                        {(item.imageUrl || item.variant?.product?.images?.[0]?.url) && (
+                          <div className="h-10 w-10 rounded-lg overflow-hidden bg-muted flex-shrink-0 ltr:mr-3 rtl:ml-3">
+                            <img src={item.imageUrl || item.variant?.product?.images?.[0]?.url} alt="" className="h-full w-full object-cover" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{item.snapshotName ?? item.name ?? '—'}</p>
                           <p className="text-xs text-muted-foreground">{item.snapshotSku ?? item.sku ?? ''}</p>
                         </div>
                         <div className="text-end text-xs">
@@ -442,21 +476,22 @@ export default function AdminReturnsPage() {
                         {detail.status === 'received' && (
                           <div className="flex gap-1 ltr:ml-3 rtl:mr-3">
                             <button
-                              onClick={() => setInspectItems((p) => ({ ...p, [item.id]: 'ok' }))}
-                              className={`p-1.5 rounded-lg text-xs transition-colors ${inspectItems[item.id] === 'ok' ? 'bg-green-100 text-green-700' : 'bg-muted/40 text-muted-foreground hover:bg-green-50'}`}
+                              onClick={() => setInspectItems((p) => ({ ...p, [inspectKey]: 'ok' }))}
+                              className={`p-1.5 rounded-lg text-xs transition-colors ${inspectItems[inspectKey] === 'ok' ? 'bg-green-100 text-green-700' : 'bg-muted/40 text-muted-foreground hover:bg-green-50'}`}
                             >
                               <Check className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              onClick={() => setInspectItems((p) => ({ ...p, [item.id]: 'damaged' }))}
-                              className={`p-1.5 rounded-lg text-xs transition-colors ${inspectItems[item.id] === 'damaged' ? 'bg-red-100 text-red-700' : 'bg-muted/40 text-muted-foreground hover:bg-red-50'}`}
+                              onClick={() => setInspectItems((p) => ({ ...p, [inspectKey]: 'damaged' }))}
+                              className={`p-1.5 rounded-lg text-xs transition-colors ${inspectItems[inspectKey] === 'damaged' ? 'bg-red-100 text-red-700' : 'bg-muted/40 text-muted-foreground hover:bg-red-50'}`}
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         )}
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -471,13 +506,13 @@ export default function AdminReturnsPage() {
                       return (
                         <div key={step} className="flex items-center gap-1 flex-1">
                           <div className={`flex flex-col items-center flex-1`}>
-                            <div className={`h-2.5 w-2.5 rounded-full transition-colors ${isCurrent ? `${STATUS_DOT[step]} ring-2 ring-offset-1 ring-current` : isActive ? STATUS_DOT[step] : 'bg-muted'}`} />
-                            <span className={`text-[9px] mt-1 text-center leading-tight ${isActive ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                            <div className={`h-4 w-4 rounded-full transition-colors ${isCurrent ? `${STATUS_DOT[step]} ring-2 ring-offset-2 ring-current shadow-sm` : isActive ? STATUS_DOT[step] : 'bg-muted'}`} />
+                            <span className={`text-xs mt-1.5 text-center leading-tight ${isCurrent ? 'text-foreground font-bold' : isActive ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                               {statusLabel(step)}
                             </span>
                           </div>
                           {i < arr.length - 1 && (
-                            <div className={`h-0.5 flex-1 rounded-full -mt-3 ${i < currentIdx ? 'bg-[#d4a853]' : 'bg-muted'}`} />
+                            <div className={`h-0.5 flex-1 rounded-full -mt-4 ${i < currentIdx ? 'bg-[#d4a853]' : 'bg-muted'}`} />
                           )}
                         </div>
                       )
@@ -490,9 +525,16 @@ export default function AdminReturnsPage() {
                   {/* requested → approve / reject */}
                   {detail.status === 'requested' && (
                     <>
-                      <Button className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white" onClick={handleApprove} disabled={approveMut.isPending}>
-                        <Check className="h-4 w-4" />{t3('Genehmigen', 'Approve', '\u0645\u0648\u0627\u0641\u0642\u0629')}
-                      </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white text-xs py-5" onClick={() => handleApprove(false)} disabled={approveMut.isPending}>
+                          <Check className="h-4 w-4" />
+                          <span className="leading-tight">{t3('Genehmigen\n(Kunde zahlt Versand)', 'Approve\n(Customer pays)', 'موافقة\n(العميل يدفع الشحن)')}</span>
+                        </Button>
+                        <Button className="w-full gap-2 bg-[#d4a853] hover:bg-[#c49943] text-white text-xs py-5" onClick={() => handleApprove(true)} disabled={approveMut.isPending}>
+                          <Truck className="h-4 w-4" />
+                          <span className="leading-tight">{t3('Genehmigen +\nLabel senden', 'Approve +\nSend Label', 'موافقة +\nإرسال ملصق الشحن')}</span>
+                        </Button>
+                      </div>
                       <div className="space-y-2">
                         <Input
                           placeholder={t3('Ablehnungsgrund (Pflicht)', 'Rejection reason (required)', '\u0633\u0628\u0628 \u0627\u0644\u0631\u0641\u0636 (\u0645\u0637\u0644\u0648\u0628)')}
@@ -506,18 +548,53 @@ export default function AdminReturnsPage() {
                     </>
                   )}
 
-                  {/* label_sent → mark received */}
-                  {detail.status === 'label_sent' && (
-                    <Button className="w-full gap-2" onClick={() => receivedMut.mutate()} disabled={receivedMut.isPending}>
-                      <Package className="h-4 w-4" />{t3('Als eingetroffen markieren', 'Mark as received', '\u062a\u062d\u062f\u064a\u062f \u0643\u0645\u0633\u062a\u0644\u0645')}
-                    </Button>
-                  )}
+                  {/* label_sent / in_transit → package on the way, wait for scan */}
+                  {(detail.status === 'label_sent' || detail.status === 'in_transit') && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 px-4 py-3 bg-purple-50 border border-purple-200 rounded-xl text-purple-800 text-sm">
+                        <Truck className="h-5 w-5 flex-shrink-0" />
+                        <p>{t3(
+                          'Paket ist unterwegs. Bei Ankunft im Lager den Retouren-Barcode scannen.',
+                          'Package is in transit. Scan the return barcode when it arrives at the warehouse.',
+                          'الطرد في الطريق. قم بمسح باركود الإرجاع عند وصوله إلى المستودع.'
+                        )}</p>
+                      </div>
 
-                  {/* in_transit → mark received */}
-                  {detail.status === 'in_transit' && (
-                    <Button className="w-full gap-2" onClick={() => receivedMut.mutate()} disabled={receivedMut.isPending}>
-                      <Package className="h-4 w-4" />{t3('Als eingetroffen markieren', 'Mark as received', '\u062a\u062d\u062f\u064a\u062f \u0643\u0645\u0633\u062a\u0644\u0645')}
-                    </Button>
+                      {/* Shipping cost info + send label option */}
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 rounded-xl text-sm">
+                        <span className="text-muted-foreground">
+                          {detail.adminNotes === 'shop_pays_shipping'
+                            ? t3('Versandkosten: Shop trägt Kosten', 'Shipping: Shop pays', 'الشحن: المتجر يتحمل التكاليف')
+                            : detail.adminNotes === 'customer_pays_shipping'
+                              ? t3('Versandkosten: Kunde trägt Kosten', 'Shipping: Customer pays', 'الشحن: العميل يتحمل التكاليف')
+                              : t3('Versandkosten: Nicht festgelegt', 'Shipping: Not set', 'الشحن: غير محدد')}
+                        </span>
+                        {detail.adminNotes !== 'shop_pays_shipping' && (
+                          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 bg-[#d4a853]/10 border-[#d4a853]/30 text-[#d4a853] hover:bg-[#d4a853]/20"
+                            onClick={async () => {
+                              const ok = await confirmDialog({
+                                title: t3('DHL-Label nachsenden', 'Send DHL Label', 'إرسال ملصق DHL'),
+                                description: t3(
+                                  'DHL-Rücksendeetikett erstellen und per E-Mail an den Kunden senden? (Shop trägt Versandkosten)',
+                                  'Create DHL return label and send to customer by email? (Shop pays shipping)',
+                                  'إنشاء ملصق إرجاع DHL وإرساله للعميل عبر البريد الإلكتروني؟ (المتجر يتحمل التكاليف)',
+                                ),
+                                confirmLabel: t3('Label senden', 'Send Label', 'إرسال الملصق'),
+                                cancelLabel: t3('Abbrechen', 'Cancel', 'إلغاء'),
+                              })
+                              if (ok) {
+                                try {
+                                  await api.post(`/admin/returns/${detail.id}/send-label`)
+                                  invalidate()
+                                } catch { /* handled by toast */ }
+                              }
+                            }}>
+                            <Truck className="h-3.5 w-3.5" />
+                            {t3('Label senden', 'Send Label', 'إرسال ملصق')}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   )}
 
                   {/* received → inspect */}
@@ -528,7 +605,11 @@ export default function AdminReturnsPage() {
                   )}
 
                   {/* inspected → 1-CLICK REFUND (gold, prominent) */}
-                  {detail.status === 'inspected' && (
+                  {detail.status === 'inspected' && (() => {
+                    const amt = Number(detail.refundAmount ?? 0) > 0
+                      ? Number(detail.refundAmount)
+                      : (detail.returnItems ?? []).reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
+                    return (
                     <Button
                       className="w-full gap-2 text-lg py-6 font-bold bg-[#d4a853] hover:bg-[#c49943] text-white shadow-lg"
                       onClick={handleRefund}
@@ -536,9 +617,10 @@ export default function AdminReturnsPage() {
                     >
                       <Euro className="h-5 w-5" />
                       {t3('Erstattung ausl\u00f6sen', 'Issue Refund', '\u0625\u0635\u062f\u0627\u0631 \u0627\u0633\u062a\u0631\u062f\u0627\u062f')}
-                      {detail.refundAmount && <span className="text-sm font-normal opacity-80">({formatCurrency(Number(detail.refundAmount), locale)})</span>}
+                      {amt > 0 && <span className="text-sm font-normal opacity-80">({formatCurrency(amt, locale)})</span>}
                     </Button>
-                  )}
+                    )
+                  })()}
 
                   {/* refunded → show info */}
                   {detail.status === 'refunded' && (

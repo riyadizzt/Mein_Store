@@ -73,14 +73,53 @@ export class AuthService {
       data: { emailVerifyToken: verifyToken, emailVerifyExpires: new Date(Date.now() + 24 * 60 * 60 * 1000) }, // 24h
     })
 
-    // Queue verification email (non-blocking)
+    // Queue verification email (non-blocking).
+    // Path-based URL (not ?token=...) so email click-trackers (Resend,
+    // Gmail, Outlook Safe Links) cannot strip the token. Path segments
+    // survive every tracker; query strings can get re-encoded or dropped.
     const lang = user.preferredLang ?? 'de'
-    const verifyUrl = `${this.config.get('FRONTEND_URL') ?? 'http://localhost:3000'}/${lang}/auth/verify-email?token=${verifyToken}`
+    const verifyUrl = `${this.config.get('FRONTEND_URL') ?? 'http://localhost:3000'}/${lang}/auth/verify-email/${verifyToken}`
     await this.emailService.queueEmailVerification(user.email, lang, user.firstName, verifyUrl).catch(() => {})
 
     this.logger.log(`Email verification link for ${user.email}: ${verifyUrl}`)
 
     return this.generateTokens(user.id, user.email, user.role)
+  }
+
+  /**
+   * Claim a stub guest account via the invite-token flow.
+   * The user row already exists (passwordHash=null). We set the password,
+   * mark the account as verified+active, and issue a login session.
+   *
+   * The caller (auth.controller.ts POST /create-account) is responsible for
+   * verifying the invite token against the matching order before calling.
+   */
+  async claimGuestAccount(
+    userId: string,
+    password: string,
+    patch?: { firstName?: string; lastName?: string },
+  ): Promise<AuthTokens> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new BadRequestException('Benutzer nicht gefunden')
+    if (user.passwordHash) {
+      throw new ConflictException('Konto bereits aktiviert — bitte einloggen')
+    }
+
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS)
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        isVerified: true,
+        isActive: true,
+        firstName: patch?.firstName?.trim() || user.firstName,
+        lastName: patch?.lastName?.trim() || user.lastName,
+        lastLoginAt: new Date(),
+      },
+    })
+
+    this.logger.log(`Guest account claimed: ${updated.email} → ${updated.id}`)
+    return this.generateTokens(updated.id, updated.email, updated.role)
   }
 
   async login(
@@ -92,12 +131,36 @@ export class AuthService {
       where: { email: dto.email.toLowerCase(), deletedAt: null },
     })
 
-    // Sicherheit: Gleiche Fehlermeldung, egal ob User existiert oder nicht
-    if (!user || !user.passwordHash) {
+    // Sicherheit: Gleiche Fehlermeldung wenn User nicht existiert
+    // (keine Email-Enumeration ermöglichen).
+    if (!user) {
       throw new UnauthorizedException('E-Mail oder Passwort falsch')
     }
 
-    // Kontosperrung prüfen
+    // Admin-Blockade zuerst prüfen — vor allen anderen Checks, damit auch
+    // OAuth-User (Google/Facebook) ohne passwordHash die korrekte Block-
+    // Nachricht sehen. Ohne diese Reihenfolge fallen passwordless User
+    // in den 401-Pfad unten und sehen nur "E-Mail oder Passwort falsch".
+    if (user.isBlocked) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'AccountBlocked',
+        message: {
+          de: 'Dein Konto wurde vom Kundenservice gesperrt. Bitte kontaktiere uns für weitere Informationen.',
+          en: 'Your account has been blocked by customer service. Please contact us for more information.',
+          ar: 'تم حظر حسابك من قبل خدمة العملاء. يرجى التواصل معنا للمزيد من المعلومات.',
+        },
+      })
+    }
+
+    // Passwordless accounts (OAuth stub, Google/Facebook) können sich nicht
+    // per Passwort einloggen — nur via Social-Login-Button. Gleiche Meldung
+    // wie falsches Passwort, um nicht zu verraten welches Konto OAuth ist.
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('E-Mail oder Passwort falsch')
+    }
+
+    // Kontosperrung prüfen (temporäre Auto-Lock nach zu vielen Fehlversuchen)
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000)
       throw new ForbiddenException(
@@ -267,7 +330,7 @@ export class AuthService {
     })
 
     const lang = user.preferredLang ?? 'de'
-    const verifyUrl = `${this.config.get('FRONTEND_URL') ?? 'http://localhost:3000'}/${lang}/auth/verify-email?token=${verifyToken}`
+    const verifyUrl = `${this.config.get('FRONTEND_URL') ?? 'http://localhost:3000'}/${lang}/auth/verify-email/${verifyToken}`
     await this.emailService.queueEmailVerification(user.email, lang, user.firstName, verifyUrl).catch(() => {})
     this.logger.log(`Resent verification for ${user.email}: ${verifyUrl}`)
   }
@@ -347,14 +410,17 @@ export class AuthService {
     role: string,
     meta?: { ipAddress?: string; userAgent?: string; deviceName?: string },
   ): Promise<AuthTokens> {
+    const isAdmin = ['admin', 'super_admin', 'warehouse_staff'].includes(role)
     const payload = { sub: userId, email, role }
 
+    // Admin: shorter access token (15 min same), shorter refresh token (8h vs 7d)
     const accessToken = this.jwt.sign(payload)
 
     // Refresh Token erstellen und in DB speichern
     const rawRefreshToken = crypto.randomBytes(64).toString('hex')
     const refreshTokenHash = this.hashToken(rawRefreshToken)
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    const refreshDuration = isAdmin ? 8 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000 // Admin: 8h, Customer: 7d
+    const expiresAt = new Date(Date.now() + refreshDuration)
 
     await this.prisma.refreshToken.create({
       data: {
@@ -382,6 +448,7 @@ export class AuthService {
     firstName: string
     lastName: string
     profileImageUrl?: string
+    providerAccountId?: string
   }): Promise<{ accessToken: string; refreshToken: string }> {
     // Find or create user
     let user = await this.prisma.user.findUnique({
@@ -413,8 +480,40 @@ export class AuthService {
       this.logger.log(`New Google user created: ${user.email}`)
     }
 
+    // Ensure the OauthAccount link exists so the admin dashboard knows this
+    // is a Google login and not a passwordless guest. Idempotent upsert on
+    // the unique [provider, providerAccountId] constraint.
+    if (googleUser.providerAccountId) {
+      await this.prisma.oauthAccount.upsert({
+        where: {
+          provider_providerAccountId: {
+            provider: 'google',
+            providerAccountId: googleUser.providerAccountId,
+          },
+        },
+        create: {
+          userId: user.id,
+          provider: 'google',
+          providerAccountId: googleUser.providerAccountId,
+        },
+        update: {}, // nothing to change on re-login
+      }).catch((e) => {
+        this.logger.warn(`OauthAccount upsert failed for ${user!.email}: ${(e as Error).message}`)
+      })
+    }
+
+    // Same structured error as /auth/login so the OAuth-callback can detect
+    // a block specifically and redirect to the friendly message screen.
     if (user.isBlocked) {
-      throw new UnauthorizedException('Account blocked')
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'AccountBlocked',
+        message: {
+          de: 'Dein Konto wurde vom Kundenservice gesperrt. Bitte kontaktiere uns für weitere Informationen.',
+          en: 'Your account has been blocked by customer service. Please contact us for more information.',
+          ar: 'تم حظر حسابك من قبل خدمة العملاء. يرجى التواصل معنا للمزيد من المعلومات.',
+        },
+      })
     }
 
     // Generate tokens
@@ -447,6 +546,7 @@ export class AuthService {
     lastName: string
     profileImageUrl?: string
     provider?: string
+    providerAccountId?: string
   }): Promise<{ accessToken: string; refreshToken: string }> {
     if (!socialUser.email) {
       throw new UnauthorizedException('E-Mail wird benötigt für die Anmeldung')
@@ -480,8 +580,40 @@ export class AuthService {
       this.logger.log(`New ${socialUser.provider ?? 'social'} user created: ${user.email}`)
     }
 
+    // Mirror googleLogin: upsert OauthAccount so admin isGuest detection
+    // correctly identifies this as a social login, not a stub guest.
+    if (socialUser.provider && socialUser.providerAccountId) {
+      await this.prisma.oauthAccount.upsert({
+        where: {
+          provider_providerAccountId: {
+            provider: socialUser.provider,
+            providerAccountId: socialUser.providerAccountId,
+          },
+        },
+        create: {
+          userId: user.id,
+          provider: socialUser.provider,
+          providerAccountId: socialUser.providerAccountId,
+        },
+        update: {},
+      }).catch((e) => {
+        this.logger.warn(`OauthAccount upsert failed for ${user!.email}: ${(e as Error).message}`)
+      })
+    }
+
+    // Same structured error as login() and googleLogin() — keeps the OAuth
+    // callback handler able to detect a block and redirect to the friendly
+    // screen instead of the generic "Login fehlgeschlagen".
     if (user.isBlocked) {
-      throw new UnauthorizedException('Account blocked')
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'AccountBlocked',
+        message: {
+          de: 'Dein Konto wurde vom Kundenservice gesperrt. Bitte kontaktiere uns für weitere Informationen.',
+          en: 'Your account has been blocked by customer service. Please contact us for more information.',
+          ar: 'تم حظر حسابك من قبل خدمة العملاء. يرجى التواصل معنا للمزيد من المعلومات.',
+        },
+      })
     }
 
     const accessToken = this.jwt.sign(

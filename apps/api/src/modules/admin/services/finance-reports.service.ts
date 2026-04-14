@@ -72,7 +72,10 @@ export class FinanceReportsService {
     const lastWeekSameDay = new Date(target)
     lastWeekSameDay.setUTCDate(lastWeekSameDay.getUTCDate() - 7)
 
-    const [todaySales, yesterdaySales, lastWeekSameDaySales, byPaymentMethod, hourlyBreakdown, topProducts, byChannel] =
+    const dayStart = new Date(target); dayStart.setUTCHours(0, 0, 0, 0)
+    const dayEnd = new Date(target); dayEnd.setUTCHours(23, 59, 59, 999)
+
+    const [todaySales, yesterdaySales, lastWeekSameDaySales, byPaymentMethod, hourlyBreakdown, topProducts, byChannel, todayRefunds] =
       await Promise.all([
         this.aggregateSalesForDay(target),
         this.aggregateSalesForDay(yesterday),
@@ -81,6 +84,7 @@ export class FinanceReportsService {
         this.getHourlyBreakdown(target),
         this.getTopProductsForDay(target),
         this.getChannelBreakdownForDay(target),
+        this.aggregateRefunds(dayStart, dayEnd),
       ])
 
     return {
@@ -88,6 +92,12 @@ export class FinanceReportsService {
       todaySales,
       yesterdaySales,
       lastWeekSameDaySales,
+      refunds: {
+        total: todayRefunds.totalRefunded.toFixed(2),
+        count: todayRefunds.refundCount,
+        byChannel: todayRefunds.refundsByChannel,
+      },
+      netRevenue: (Number(todaySales.gross) - todayRefunds.totalRefunded).toFixed(2),
       byPaymentMethod,
       hourlyBreakdown,
       topProducts,
@@ -120,6 +130,35 @@ export class FinanceReportsService {
       orderCount: count,
       avgOrderValue: count > 0 ? (gross / count).toFixed(2) : '0.00',
     }
+  }
+
+  /** Aggregate refunds for a date range — used by all finance reports */
+  private async aggregateRefunds(start: Date, end: Date): Promise<{ totalRefunded: number; refundCount: number; refundsByChannel: Record<string, number> }> {
+    const refunds = await this.prisma.refund.findMany({
+      where: {
+        createdAt: { gte: start, lte: end },
+        status: 'PROCESSED',
+      },
+      select: {
+        amount: true,
+        payment: {
+          select: {
+            order: { select: { channel: true } },
+          },
+        },
+      },
+    })
+
+    let totalRefunded = 0
+    const refundsByChannel: Record<string, number> = {}
+    for (const r of refunds) {
+      const amt = Number(r.amount)
+      totalRefunded += amt
+      const ch = r.payment?.order?.channel ?? 'website'
+      refundsByChannel[ch] = (refundsByChannel[ch] ?? 0) + amt
+    }
+
+    return { totalRefunded, refundCount: refunds.length, refundsByChannel }
   }
 
   private async getPaymentBreakdownForDay(
@@ -253,7 +292,7 @@ export class FinanceReportsService {
       Date.UTC(year - 1, month, 0, 23, 59, 59, 999),
     )
 
-    const [currentMonth, previousMonth, sameMonthLastYear, refundsTotal, dailyBreakdown, byChannel] =
+    const [currentMonth, previousMonth, sameMonthLastYear, refundsTotal, dailyBreakdown, byChannel, refundDetails] =
       await Promise.all([
         this.aggregateSalesForRange(currentStart, currentEnd),
         this.aggregateSalesForRange(prevStart, prevEnd),
@@ -261,6 +300,7 @@ export class FinanceReportsService {
         this.getRefundsTotalForRange(currentStart, currentEnd),
         this.getDailyBreakdownForMonth(year, month),
         this.getChannelBreakdownForRange(currentStart, currentEnd),
+        this.aggregateRefunds(currentStart, currentEnd),
       ])
 
     const grossNum = Number(currentMonth.gross)
@@ -286,6 +326,8 @@ export class FinanceReportsService {
         ).toFixed(2),
       },
       refundsTotal: refundsTotal.toFixed(2),
+      refundCount: refundDetails.refundCount,
+      refundsByChannel: refundDetails.refundsByChannel,
       netRevenue: netRevenue.toFixed(2),
       dailyBreakdown,
       byChannel,
@@ -470,13 +512,28 @@ export class FinanceReportsService {
       grossAmount: Number(Number(r.gross_amount).toFixed(2)),
     }))
 
-    const totalTax = vatLines.reduce((sum, l) => sum + l.taxAmount, 0)
+    const totalTaxSales = vatLines.reduce((sum, l) => sum + l.taxAmount, 0)
+
+    // Refunds: calculate VAT on refunded amounts (assume 19% standard rate)
+    const refundData = await this.aggregateRefunds(start, end)
+    const refundGross = refundData.totalRefunded
+    const refundNet = refundGross / 1.19
+    const refundVat = refundGross - refundNet
+
+    const netTax = totalTaxSales - refundVat
 
     return {
       dateFrom,
       dateTo,
       vatLines,
-      totalTax: Number(totalTax.toFixed(2)),
+      totalTaxSales: Number(totalTaxSales.toFixed(2)),
+      refunds: {
+        grossAmount: Number(refundGross.toFixed(2)),
+        netAmount: Number(refundNet.toFixed(2)),
+        vatAmount: Number(refundVat.toFixed(2)),
+        count: refundData.refundCount,
+      },
+      totalTax: Number(netTax.toFixed(2)), // MwSt-Schuld = Verkäufe - Erstattungen
     }
   }
 

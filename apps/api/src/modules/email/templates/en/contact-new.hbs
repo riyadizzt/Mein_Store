@@ -1,0 +1,34 @@
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr><td align="center" style="padding:0 0 20px;">
+    <div style="width:72px;height:72px;border-radius:50%;background:#eff6ff;display:inline-block;text-align:center;line-height:72px;">
+      <span style="font-size:36px;color:#2563eb;">&#9993;</span>
+    </div>
+  </td></tr>
+</table>
+
+<h1 style="margin:0 0 8px;font-size:26px;color:#1a1a2e;text-align:center;font-weight:700;font-family:Georgia,'Times New Roman',serif;">New Contact Request</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 24px;font-size:14px;">Received on {{createdAt}} &middot; Language: {{locale}}</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf9f7;border-radius:12px;border:1px solid #f0eeea;">
+  <tr><td style="padding:20px;">
+    <p style="margin:0 0 4px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:1px;">From</p>
+    <p style="margin:0 0 14px;font-size:15px;color:#1a1a2e;font-weight:600;">{{name}}</p>
+    <p style="margin:0 0 4px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Email</p>
+    <p style="margin:0 0 14px;font-size:14px;color:#1a1a2e;" dir="ltr"><a href="mailto:{{{email}}}" style="color:#d4a853;text-decoration:none;">{{email}}</a></p>
+    <p style="margin:0 0 4px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Subject</p>
+    <p style="margin:0;font-size:15px;color:#1a1a2e;font-weight:600;">{{subject}}</p>
+  </td></tr>
+</table>
+
+<p style="margin:0 0 8px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Message</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;">
+  <tr><td style="padding:20px;">
+    <p style="margin:0;font-size:14px;color:#2d2d2d;line-height:1.7;white-space:pre-line;">{{message}}</p>
+  </td></tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr><td align="center">
+  <a href="{{{adminUrl}}}" style="display:inline-block;background:#1a1a2e;color:#ffffff;font-weight:600;font-size:14px;padding:12px 32px;border-radius:8px;text-decoration:none;">Open in admin panel</a>
+</td></tr></table>
+
+<p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">Reply directly: just hit reply &mdash; the Reply-To address is {{email}}.</p>

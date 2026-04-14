@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,6 +14,11 @@ import { useConfirm } from '@/components/ui/confirm-modal'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { AddColorModal, AddSizeModal, VariantMatrix } from '@/components/admin/add-variant-modals'
 import { PrintLabelButton } from '@/components/admin/label-printer'
+import { HaengetikettenButton } from '@/components/admin/haengetikett/HaengetikettenModal'
+import { FotoEtikettButton } from '@/components/admin/foto-etikett/FotoEtikettModal'
+import { BatchFotoEtikettButton } from '@/components/admin/foto-etikett/BatchFotoEtikettButton'
+import { AiDescriptionButton } from '@/components/admin/ai-description-button'
+import { BatchHaengetikettenButton } from '@/components/admin/haengetikett/BatchHaengetikettenButton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -106,7 +112,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
       const formData = new FormData()
       formData.append('file', file)
       if (colorName) formData.append('colorName', colorName)
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/${id}/images/upload`, {
+      await fetch(`${API_BASE_URL}/api/v1/admin/products/${id}/images/upload`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
       })
     }
@@ -117,7 +123,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   const handleDeleteImage = async (imageId: string) => {
     const store = (await import('@/store/auth-store')).useAuthStore.getState()
     const token = store.adminAccessToken || store.accessToken
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/admin/products/images/${imageId}`, {
+    await fetch(`${API_BASE_URL}/api/v1/admin/products/images/${imageId}`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
     })
     qc.invalidateQueries({ queryKey: ['admin-product', id] })
@@ -248,6 +254,21 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
             <label className="text-sm font-medium mb-1.5 block">{t('wizard.description')}</label>
             <textarea value={translations[activeLang]?.description ?? ''} onChange={(e) => setTranslations((p) => ({ ...p, [activeLang]: { ...p[activeLang], description: e.target.value } }))}
               className="w-full h-28 px-4 py-3 rounded-xl border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20" dir={activeLang === 'ar' ? 'rtl' : 'ltr'} />
+            <div className="mt-2">
+              <AiDescriptionButton
+                productId={id}
+                productName={translations.de?.name || translations.en?.name || ''}
+                category={product.category?.translations?.find((t: any) => t.language === 'de')?.name}
+                onApply={(desc) => {
+                  setTranslations((p) => ({
+                    ...p,
+                    de: { ...p.de, description: desc.de, metaTitle: desc.seo?.metaTitleDe || p.de.metaTitle, metaDesc: desc.seo?.metaDescDe || p.de.metaDesc },
+                    ar: { ...p.ar, description: desc.ar, metaTitle: desc.seo?.metaTitleAr || p.ar.metaTitle, metaDesc: desc.seo?.metaDescAr || p.ar.metaDesc },
+                    en: { ...p.en, description: desc.en, metaTitle: desc.seo?.metaTitleEn || p.en.metaTitle, metaDesc: desc.seo?.metaDescEn || p.en.metaDesc },
+                  }))
+                }}
+              />
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.basePrice')}</label><Input type="number" min={0} step={0.01} value={basePrice || ''} onChange={(e) => setBasePrice(+e.target.value)} className="rounded-xl" /></div>
@@ -392,8 +413,19 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
 
       {/* ══════════ VARIANTEN-DETAILS ══════════ */}
       <section className="bg-background border rounded-2xl overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b bg-muted/20 font-semibold text-sm">
-          {locale === 'ar' ? 'تفاصيل المتغيرات' : 'Varianten-Details'} ({product.variants?.length ?? 0})
+        <div className="px-6 py-4 border-b bg-muted/20 font-semibold text-sm flex items-center justify-between">
+          <span>{locale === 'ar' ? 'تفاصيل المتغيرات' : 'Varianten-Details'} ({product.variants?.length ?? 0})</span>
+          {(() => {
+            const catName = (product.category?.translations?.find((t: any) => t.language === 'de')?.name ?? '').toLowerCase()
+            const stripe: 'herren' | 'damen' | 'kinder' | 'unisex' = catName.includes('herren') || catName.includes('männer') || catName.includes('jungen') ? 'herren' : catName.includes('damen') || catName.includes('frauen') || catName.includes('mädchen') ? 'damen' : catName.includes('kinder') || catName.includes('baby') ? 'kinder' : 'unisex'
+            const batchItems = (product.variants ?? []).map((v: any) => {
+              const colorImg = productImages.find((img: any) => img.colorName?.toLowerCase() === (v.color ?? '').toLowerCase())
+              const primaryImg = productImages.find((img: any) => img.isPrimary)
+              return { productName: getProductName(product.translations, 'de'), color: v.color ?? '', colorHex: v.colorHex ?? '#999', size: v.size ?? '', sku: v.sku, price: (salePrice ?? basePrice) + Number(v.priceModifier ?? 0), imageUrl: colorImg?.url ?? primaryImg?.url ?? productImages[0]?.url ?? null, categoryStripe: stripe, qty: 1 }
+            })
+            const hangTagItems = (product.variants ?? []).map((v: any) => ({ productName: getProductName(product.translations, 'de'), color: v.color ?? '', size: v.size ?? '', sku: v.sku, price: (salePrice ?? basePrice) + Number(v.priceModifier ?? 0), qty: 1 }))
+            return batchItems.length > 0 ? <div className="flex gap-2"><BatchHaengetikettenButton items={hangTagItems} /><BatchFotoEtikettButton items={batchItems} /></div> : null
+          })()}
         </div>
         <div className="divide-y">
           {/* Column headers */}
@@ -447,6 +479,15 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                         />
                       </div>
                       <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: customerPrice, stock }} productName={getProductName(product.translations, 'de')} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
+                      <HaengetikettenButton variant={{ sku: v.sku, color: v.color ?? '', size: v.size ?? '', price: customerPrice }} productName={getProductName(product.translations, 'de')} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
+                      {(() => {
+                        const colorImg = productImages.find((img: any) => img.colorName?.toLowerCase() === (v.color ?? '').toLowerCase())
+                        const primaryImg = productImages.find((img: any) => img.isPrimary)
+                        const imgUrl = colorImg?.url ?? primaryImg?.url ?? productImages[0]?.url ?? null
+                        const catName = (product.category?.translations?.find((t: any) => t.language === 'de')?.name ?? '').toLowerCase()
+                        const stripe: 'herren' | 'damen' | 'kinder' | 'unisex' = catName.includes('herren') || catName.includes('männer') || catName.includes('jungen') ? 'herren' : catName.includes('damen') || catName.includes('frauen') || catName.includes('mädchen') ? 'damen' : catName.includes('kinder') || catName.includes('baby') ? 'kinder' : 'unisex'
+                        return <FotoEtikettButton variant={{ sku: v.sku, color: v.color ?? '', colorHex: v.colorHex ?? '#999', size: v.size ?? '', price: customerPrice, imageUrl: imgUrl }} productName={getProductName(product.translations, 'de')} categoryStripe={stripe} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
+                      })()}
                       <button onClick={async () => { const ok = await confirmDialog({ title: t('inventory.deleteVariant'), description: t('inventory.deleteVariantConfirm'), variant: 'danger', confirmLabel: t('categories.delete'), cancelLabel: t('categories.cancel') }); if (ok) deleteMut.mutate(v.id) }} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   )

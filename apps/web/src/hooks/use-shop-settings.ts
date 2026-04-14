@@ -25,6 +25,7 @@ export interface ShopSettings {
   stripeEnabled?: boolean
   klarnaEnabled?: boolean
   paypalEnabled?: boolean
+  homepage_design?: 'A' | 'B' | 'C'
 }
 
 export function useShopSettings() {

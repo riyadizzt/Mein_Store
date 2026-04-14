@@ -20,6 +20,7 @@ import { useActiveCampaign } from '@/hooks/use-campaign'
 import { NotifyWhenAvailable } from '@/components/product/notify-when-available'
 
 import { PremiumGallery } from '@/components/product/premium/premium-gallery'
+import { compareSizes } from '@/lib/sizes'
 import { PremiumTabs } from '@/components/product/premium/premium-tabs'
 import { PremiumTrustBar } from '@/components/product/premium/premium-trust-bar'
 import { PremiumRecentlyViewed, saveRecentlyViewed } from '@/components/product/premium/premium-recently-viewed'
@@ -102,6 +103,19 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
     )
   }, [product, selectedVariantId])
 
+  // ── Color override: when a user clicks a NEW color, we keep them on that color
+  //    but force them to RE-PICK a size (Zalando-style). Cleared once they pick.
+  const [colorOverride, setColorOverride] = useState<string | null>(null)
+
+  // Reset the override whenever the URL points to a different variant — keeps the
+  // store-link semantics intact (e.g. shared link with ?variant=…).
+  useEffect(() => { setColorOverride(null) }, [selectedVariantId])
+
+  // Effective color = override (if user is actively switching) or the currently selected variant's color.
+  // Effective size  = empty when an override is active, so the dropdown shows "Bitte Größe wählen".
+  const effectiveColor: string | undefined = colorOverride ?? selectedVariant?.color
+  const effectiveSize: string | undefined = colorOverride ? undefined : selectedVariant?.size
+
   // ── Dynamic pricing ──
   const modifier = Number(selectedVariant?.priceModifier ?? 0)
   const basePrice = Math.max(0, serverBase + modifier)
@@ -110,15 +124,23 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   const discountPercent = hasDiscount && basePrice > 0 ? Math.round((1 - price / basePrice) * 100) : 0
 
   // ── Stock ──
-  const available = getStock(selectedVariant)
-  const selectedColor = selectedVariant?.color
-  const selectedSize = selectedVariant?.size
+  // When an override is active the user has not yet picked a size, so available stock is 0
+  // (which disables the cart button and forces them to choose).
+  const available = colorOverride ? 0 : getStock(selectedVariant)
+  const selectedColor = effectiveColor
+  const selectedSize = effectiveSize
 
-  // ── Images filtered by color ──
+  // ── Images: ALWAYS show all photos, but reorder so the selected color comes first.
+  //          When the color changes, PremiumGallery is remounted via `key={selectedColor}`
+  //          which jumps the user to the first matching image automatically.
   const allImages = product.images ?? []
-  const colorImages = selectedColor ? allImages.filter((img: any) => img.colorName === selectedColor) : []
-  const generalImages = allImages.filter((img: any) => !img.colorName)
-  const displayImages = colorImages.length > 0 ? [...colorImages, ...generalImages] : allImages
+  const displayImages = (() => {
+    if (!selectedColor) return allImages
+    const matching = allImages.filter((img: any) => img.colorName === selectedColor)
+    if (matching.length === 0) return allImages
+    const others = allImages.filter((img: any) => img.colorName !== selectedColor)
+    return [...matching, ...others]
+  })()
   const images = displayImages.map((img: any) => ({ url: img.url, altText: img.altText ?? undefined }))
 
   // ── Variant extraction ──
@@ -128,22 +150,38 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
     if (!colorMap.has(v.color)) colorMap.set(v.color, { color: v.color, hex: v.colorHex ?? '' })
   }
   const colors = [...colorMap.values()]
-  const sizes: string[] = [...new Set<string>(variants.filter((v: any) => v.size).map((v: any) => v.size! as string))].sort((a, b) => {
-    const na = parseFloat(a) || 0; const nb = parseFloat(b) || 0
-    return na - nb || a.localeCompare(b)
-  })
+  const sizes: string[] = [
+    ...new Set<string>(variants.filter((v: any) => v.size).map((v: any) => v.size! as string)),
+  ].sort(compareSizes)
 
   const findVariant = (color?: string, size?: string) =>
     variants.find((v: any) => (color ? v.color === color : true) && (size ? v.size === size : true) && v.isActive)
 
-  const isColorAvailable = (color: string) => {
-    if (selectedSize) { const v = findVariant(color, selectedSize); return v ? getStock(v) > 0 : false }
-    return variants.some((v: any) => v.color === color && v.isActive && getStock(v) > 0)
-  }
-  const isSizeAvailable = (size: string) => {
-    if (selectedColor) { const v = findVariant(selectedColor, size); return v ? getStock(v) > 0 : false }
-    return variants.some((v: any) => v.size === size && v.isActive && getStock(v) > 0)
-  }
+  // Same as findVariant but only returns variants that actually have stock.
+  // Used by click handlers so we never auto-select an out-of-stock variant when
+  // an in-stock one exists for the same color or size.
+  const findStockedVariant = (color?: string, size?: string) =>
+    variants.find(
+      (v: any) =>
+        (color ? v.color === color : true) &&
+        (size ? v.size === size : true) &&
+        v.isActive &&
+        getStock(v) > 0,
+    )
+
+  // Color is available if ANY active variant of that color has stock.
+  const isColorAvailable = (color: string) =>
+    variants.some((v: any) => v.color === color && v.isActive && getStock(v) > 0)
+
+  // Sizes shown in the dropdown — only those that exist (with stock) for the current color.
+  // If no color is selected (single-color products / fallback), show every available size.
+  const availableSizesForCurrentColor: string[] = (() => {
+    const filtered = variants.filter((v: any) => {
+      if (!v.isActive || getStock(v) <= 0 || !v.size) return false
+      return selectedColor ? v.color === selectedColor : true
+    })
+    return [...new Set<string>(filtered.map((v: any) => v.size as string))].sort(compareSizes)
+  })()
 
   const handleVariantSelect = useCallback((variantId: string) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -310,13 +348,15 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       {/* ═══════════════ MAIN GRID ═══════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] lg:gap-12 xl:gap-16">
 
-        {/* ─── LEFT: Gallery (55%) ─── */}
-        <div className="order-2 lg:order-1 max-h-[700px] lg:max-h-none">
-          <PremiumGallery images={images} productName={name} isRTL={isRTL} />
+        {/* ─── LEFT: Gallery (55%) — appears FIRST on mobile (order-1) and on desktop ─── */}
+        <div className="order-1 max-h-[700px] lg:max-h-none">
+          {/* key forces remount on color change so the gallery jumps to the first
+              image of the newly-selected color (which we put first in `images` above) */}
+          <PremiumGallery key={selectedColor ?? 'all'} images={images} productName={name} isRTL={isRTL} />
         </div>
 
-        {/* ─── RIGHT: Product Info (45%) ─── */}
-        <div className="order-1 lg:order-2 lg:sticky lg:top-16 lg:self-start pt-6 lg:pt-0">
+        {/* ─── RIGHT: Product Info (45%) — comes after the gallery on mobile ─── */}
+        <div className="order-2 lg:sticky lg:top-16 lg:self-start pt-6 lg:pt-0">
 
           {/* Category */}
           {categoryName && (
@@ -348,34 +388,37 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
             {t('priceIncludesVat', { rate: Number(product.taxRate).toFixed(0) })}
           </p>
 
-          {/* Stock indicator */}
-          <div className="mt-5 mb-10">
-            {available > 5 && (
-              <span className={`text-[#16a34a] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
-                {t('inStock')}
-              </span>
-            )}
-            {showLowStock && (
-              <div>
-                <span className={`font-medium ${available <= 2 ? 'text-[#dc2626]' : 'text-[#b45309]'} ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
-                  {t('lowStock', { count: available })}
+          {/* Stock indicator — hidden during color-override (user is mid-pick) so we
+              don't show a misleading "Out of stock" while they haven't chosen a size yet. */}
+          {!colorOverride && (
+            <div className="mt-5 mb-10">
+              {available > 5 && (
+                <span className={`text-[#16a34a] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                  {t('inStock')}
                 </span>
-                <div className="h-[3px] bg-[#f5f5f5] rounded-full overflow-hidden mt-2">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(available / 5) * 100}%` }}
-                    transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
-                    className={`h-full rounded-full ${available <= 2 ? 'bg-[#dc2626]' : 'bg-[#d97706]'}`}
-                  />
+              )}
+              {showLowStock && (
+                <div>
+                  <span className={`font-medium ${available <= 2 ? 'text-[#dc2626]' : 'text-[#b45309]'} ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                    {t('lowStock', { count: available })}
+                  </span>
+                  <div className="h-[3px] bg-[#f5f5f5] rounded-full overflow-hidden mt-2">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(available / 5) * 100}%` }}
+                      transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
+                      className={`h-full rounded-full ${available <= 2 ? 'bg-[#dc2626]' : 'bg-[#d97706]'}`}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-            {available <= 0 && (
-              <span className={`text-[#dc2626] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
-                {t('outOfStock')}
-              </span>
-            )}
-          </div>
+              )}
+              {available <= 0 && (
+                <span className={`text-[#dc2626] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                  {t('outOfStock')}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Campaign Countdown (urgency - alternative) */}
           {showCampaign && countdown && (
@@ -405,7 +448,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           {variants.length > 1 && (
             <div className="border-t border-[#e5e5e5] pt-8 pb-2 space-y-8">
 
-              {/* Color Selector */}
+              {/* Color Selector — premium round circles */}
               {colors.length > 0 && (
                 <div>
                   <label className={`text-[#0f1419]/60 mb-4 block ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
@@ -420,8 +463,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                           key={color}
                           onClick={() => {
                             if (!avail) return
-                            const v = findVariant(color, selectedSize) ?? findVariant(color)
-                            if (v) handleVariantSelect(v.id)
+                            // Same color → no-op.
+                            if (color === effectiveColor) return
+                            // Different color → just remember the choice. The size dropdown
+                            // resets to "Bitte Größe wählen" so the user actively picks a
+                            // size that exists in the new color (Zalando pattern).
+                            setColorOverride(color)
                           }}
                           disabled={!avail}
                           title={avail ? translateColor(color, locale) : `${translateColor(color, locale)} — ${t('outOfStock')}`}
@@ -446,44 +493,72 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 </div>
               )}
 
-              {/* Size Selector */}
+              {/* Size Selector — Zalando-style dropdown */}
               {sizes.length > 0 && (
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <label className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
-                      {t('size')}{selectedSize ? ` — ${selectedSize}` : ''}
+                  <div className="flex items-center justify-between mb-3">
+                    <label htmlFor="size-select" className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+                      {t('size')}
                     </label>
                     <button onClick={() => setSizeGuideOpen(true)} className={`underline underline-offset-4 decoration-[#0f1419]/20 text-[#0f1419]/50 hover:text-[#0f1419]/70 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
                       {t('sizeGuide')}
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-2.5">
-                    {sizes.map((size) => {
-                      const avail = isSizeAvailable(size)
-                      const sel = selectedSize === size
-                      return (
-                        <button
-                          key={size}
-                          onClick={() => {
-                            if (!avail) return
-                            const v = findVariant(selectedColor, size) ?? findVariant(undefined, size)
-                            if (v) handleVariantSelect(v.id)
-                          }}
-                          disabled={!avail}
-                          title={avail ? `${t('size')} ${size}` : `${t('size')} ${size} — ${t('outOfStock')}`}
-                          className={`h-11 min-w-[2.75rem] px-4 text-[13px] tracking-wide transition-all duration-200 border ${
-                            sel
-                              ? 'border-[#d4a853] bg-[#d4a853]/10 text-[#d4a853] font-semibold ring-1 ring-[#d4a853]'
-                              : avail
-                                ? 'border-[#e0e0e0] text-[#0f1419]/70 hover:border-[#0f1419]/40'
-                                : 'border-[#f0f0f0] bg-[#f8f8f8] text-[#0f1419]/25 line-through cursor-not-allowed'
-                          }`}
-                        >
+                  <div className="relative">
+                    <select
+                      id="size-select"
+                      value={effectiveSize ?? ''}
+                      onChange={(e) => {
+                        const newSize = e.target.value
+                        if (!newSize) return
+                        // Resolve to the actual variant for the current effective color + new size.
+                        // The dropdown only ever offers in-stock sizes, so the lookup should succeed.
+                        const v =
+                          findStockedVariant(effectiveColor, newSize) ??
+                          findStockedVariant(undefined, newSize) ??
+                          findVariant(effectiveColor, newSize) ??
+                          findVariant(undefined, newSize)
+                        if (v) {
+                          // Clear the override so subsequent renders read color/size from the URL again.
+                          setColorOverride(null)
+                          handleVariantSelect(v.id)
+                        }
+                      }}
+                      disabled={availableSizesForCurrentColor.length === 0}
+                      className={`w-full h-12 ${isRTL ? 'pr-4 pl-12' : 'pl-4 pr-12'} text-[14px] bg-white border border-[#0f1419]/20 hover:border-[#0f1419]/50 focus:border-[#0f1419] focus:outline-none transition-colors appearance-none cursor-pointer ${
+                        !selectedSize ? 'text-[#0f1419]/50' : 'text-[#0f1419]'
+                      }`}
+                    >
+                      <option value="" disabled>
+                        {locale === 'ar'
+                          ? 'اختر مقاسًا'
+                          : locale === 'en'
+                          ? 'Please select a size'
+                          : 'Bitte Größe wählen'}
+                      </option>
+                      {availableSizesForCurrentColor.map((size) => (
+                        <option key={size} value={size}>
                           {size}
-                        </button>
-                      )
-                    })}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Chevron */}
+                    <svg
+                      className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-[#0f1419]/50 pointer-events-none ${isRTL ? 'left-4' : 'right-4'}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
+                  {availableSizesForCurrentColor.length === 0 && (
+                    <p className="mt-2 text-[12px] text-[#c43d3d]">
+                      {locale === 'ar'
+                        ? 'لا توجد مقاسات متوفرة لهذا اللون'
+                        : locale === 'en'
+                        ? 'No sizes available in this color'
+                        : 'Keine Größen in dieser Farbe verfügbar'}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -526,34 +601,60 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
             {/* CTA Row: Add to Cart + Wishlist */}
             <div className="flex items-stretch gap-3">
-              <motion.button
-                whileTap={!cartDisabled && available > 0 ? { scale: 0.98 } : undefined}
-                onClick={handleAddToCart}
-                disabled={available <= 0 || cartDisabled}
-                className={`flex-1 h-14 flex items-center justify-center gap-2.5 font-semibold transition-all duration-300 ${
-                  isRTL ? 'text-[15px]' : 'text-[14px] tracking-[0.1em] uppercase'
-                } ${
-                  added
-                    ? 'bg-[#1a7a3a] text-white'
-                    : available <= 0
-                      ? 'bg-[#f5f5f5] text-[#0f1419]/25 cursor-not-allowed'
-                      : 'bg-[#d4a853] text-white hover:bg-[#c49b45]'
-                }`}
-              >
-                <AnimatePresence mode="wait">
-                  {added ? (
-                    <motion.span key="ok" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} className="flex items-center gap-2">
-                      <Check className="h-5 w-5" strokeWidth={2} />{t('added')}
-                    </motion.span>
-                  ) : available <= 0 ? (
-                    <span>{t('outOfStock')}</span>
-                  ) : (
-                    <motion.span key="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5">
-                      <ShoppingBag className="h-5 w-5" strokeWidth={1.5} />{t('addToCart')}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </motion.button>
+              {(() => {
+                // Three CTA states:
+                //   needsSize → user picked a color but no size yet → "Bitte Größe wählen"
+                //   outOfStock → variant is real but stock <= 0 → "Ausverkauft"
+                //   ok → in stock → "In den Warenkorb"
+                const needsSize = !!effectiveColor && !effectiveSize
+                const outOfStock = !needsSize && available <= 0
+                const buttonLabel = needsSize
+                  ? (locale === 'ar' ? 'اختر مقاسًا' : locale === 'en' ? 'Please select a size' : 'Bitte Größe wählen')
+                  : t('outOfStock')
+                return (
+                  <motion.button
+                    whileTap={!cartDisabled && available > 0 ? { scale: 0.98 } : undefined}
+                    onClick={handleAddToCart}
+                    disabled={available <= 0 || cartDisabled || needsSize}
+                    className={`flex-1 h-14 flex items-center justify-center gap-2.5 font-semibold transition-all duration-300 ${
+                      isRTL ? 'text-[15px]' : 'text-[14px] tracking-[0.1em] uppercase'
+                    } ${
+                      added
+                        ? 'bg-[#1a7a3a] text-white'
+                        : needsSize
+                          ? 'bg-[#1a1a2e]/90 text-white cursor-pointer hover:bg-[#1a1a2e]'
+                          : outOfStock
+                            ? 'bg-[#f5f5f5] text-[#0f1419]/25 cursor-not-allowed'
+                            : 'bg-[#d4a853] text-white hover:bg-[#c49b45]'
+                    }`}
+                    onClickCapture={(e) => {
+                      // If they need to pick a size, scroll the dropdown into focus.
+                      if (needsSize) {
+                        e.preventDefault()
+                        const el = document.getElementById('size-select')
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                          ;(el as HTMLSelectElement).focus()
+                        }
+                      }
+                    }}
+                  >
+                    <AnimatePresence mode="wait">
+                      {added ? (
+                        <motion.span key="ok" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} className="flex items-center gap-2">
+                          <Check className="h-5 w-5" strokeWidth={2} />{t('added')}
+                        </motion.span>
+                      ) : needsSize || outOfStock ? (
+                        <span>{buttonLabel}</span>
+                      ) : (
+                        <motion.span key="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5">
+                          <ShoppingBag className="h-5 w-5" strokeWidth={1.5} />{t('addToCart')}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                )
+              })()}
 
               {/* Wishlist */}
               <motion.button
@@ -568,8 +669,9 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               </motion.button>
             </div>
 
-            {/* Notify when back in stock */}
-            {available <= 0 && selectedVariant && (
+            {/* Notify when back in stock — only when the user has actually landed on a
+                concrete out-of-stock variant, NOT during a "pick-a-size" intermediate state. */}
+            {!colorOverride && available <= 0 && selectedVariant && (
               <div className="pt-2">
                 <NotifyWhenAvailable productId={product.id} variantId={selectedVariant.id} locale={locale} />
               </div>

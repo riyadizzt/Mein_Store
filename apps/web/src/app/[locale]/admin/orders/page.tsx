@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -11,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { ChannelIcon, CHANNEL_CONFIG } from '@/components/admin/channel-icon'
+import { StripeLogo, PayPalLogo, KlarnaLogo, SumUpLogo } from '@/components/ui/payment-logos'
 
 function getOrderLocale(order: any): string {
   if (order.user?.preferredLang) return order.user.preferredLang
@@ -64,7 +66,7 @@ export default function AdminOrdersPage() {
   })
 
   const handleExportCsv = async () => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const API_URL = API_BASE_URL
     const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
     const res = await fetch(`${API_URL}/api/v1/admin/orders/export/csv`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -172,7 +174,16 @@ export default function AdminOrdersPage() {
                       <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
                     </div>
                     <div className="px-4 py-4 text-center text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
-                    <div className="px-4 py-4 text-sm text-muted-foreground">{order.payment?.provider ?? '—'}</div>
+                    <div className="px-4 py-4 text-sm text-muted-foreground flex items-center justify-center">{(() => {
+                      const p = (order.payment?.provider ?? '').toLowerCase()
+                      const m = (order.payment?.method ?? '').toLowerCase()
+                      if (p === 'stripe' || m === 'card') return <StripeLogo className="h-5" />
+                      if (p === 'paypal' || m === 'paypal') return <PayPalLogo className="h-5" />
+                      if (p === 'klarna' || m === 'klarna') return <KlarnaLogo className="h-5" />
+                      if (p === 'sumup' || m === 'sumup') return <SumUpLogo className="h-5" />
+                      if (m === 'vorkasse' || p === 'vorkasse') return <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted">Vorkasse</span>
+                      return <span>{order.payment?.provider ?? '—'}</span>
+                    })()}</div>
                   </div>
                 )
               })

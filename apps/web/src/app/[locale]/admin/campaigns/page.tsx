@@ -184,6 +184,7 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
     announcementEnabled: true, announcementTextDe: '', announcementTextEn: '', announcementTextAr: '',
     announcementBgColor: '#d4a853', announcementTextColor: '#ffffff',
     popupEnabled: false, popupTrigger: 'delay_5s', popupOncePerVisitor: true,
+    popupImageUrl: '', popupTextDe: '', popupTextEn: '', popupTextAr: '', popupCouponCode: '',
     saleBadgeEnabled: true, saleBadgeColor: 'red',
   })
 
@@ -360,6 +361,74 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
             <Input value={form.announcementTextDe} onChange={(e) => updateForm('announcementTextDe', e.target.value)} placeholder="Text DE" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" />
             <Input value={form.announcementTextEn} onChange={(e) => updateForm('announcementTextEn', e.target.value)} placeholder="Text EN" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" />
             <Input value={form.announcementTextAr} onChange={(e) => updateForm('announcementTextAr', e.target.value)} placeholder="النص AR" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" dir="rtl" />
+          </div>
+        )}
+      </div>
+
+      {/* Popup */}
+      <div className="bg-white/[0.02] rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-white/80">{t3(locale, 'Popup', 'النافذة المنبثقة')}</h4>
+          <label className="flex items-center gap-2 text-xs text-white/50">
+            <input type="checkbox" checked={form.popupEnabled} onChange={(e) => updateForm('popupEnabled', e.target.checked)} className="rounded" />
+            {t3(locale, 'Aktiviert', 'مُفعّل')}
+          </label>
+        </div>
+        {form.popupEnabled && (
+          <div className="space-y-3">
+            {/* Image URL */}
+            <div>
+              <label className="text-xs text-white/40 mb-1.5 block">{t3(locale, 'Bild-URL (optional)', 'رابط الصورة (اختياري)')}</label>
+              <Input
+                value={form.popupImageUrl ?? ''}
+                onChange={(e) => updateForm('popupImageUrl', e.target.value)}
+                placeholder="https://..."
+                className="bg-white/[0.05] border-white/[0.08] text-white text-sm"
+              />
+            </div>
+
+            {/* Texts in 3 languages */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Input value={form.popupTextDe ?? ''} onChange={(e) => updateForm('popupTextDe', e.target.value)} placeholder="Text DE" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" />
+              <Input value={form.popupTextEn ?? ''} onChange={(e) => updateForm('popupTextEn', e.target.value)} placeholder="Text EN" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" />
+              <Input value={form.popupTextAr ?? ''} onChange={(e) => updateForm('popupTextAr', e.target.value)} placeholder="النص AR" className="bg-white/[0.05] border-white/[0.08] text-white text-sm" dir="rtl" />
+            </div>
+
+            {/* Coupon Code + Trigger + Once-per-visitor */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-white/40 mb-1.5 block">{t3(locale, 'Gutschein-Code (optional)', 'رمز القسيمة (اختياري)')}</label>
+                <Input
+                  value={form.popupCouponCode ?? ''}
+                  onChange={(e) => updateForm('popupCouponCode', e.target.value.toUpperCase())}
+                  placeholder="z.B. WELCOME10"
+                  className="bg-white/[0.05] border-white/[0.08] text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1.5 block">{t3(locale, 'Trigger', 'المشغل')}</label>
+                <select
+                  value={form.popupTrigger}
+                  onChange={(e) => updateForm('popupTrigger', e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg bg-white/[0.05] border border-white/[0.08] text-white text-sm"
+                >
+                  <option value="immediate">{t3(locale, 'Sofort', 'فوراً')}</option>
+                  <option value="delay_5s">{t3(locale, 'Nach 5 Sekunden', 'بعد 5 ثوانٍ')}</option>
+                  <option value="delay_10s">{t3(locale, 'Nach 10 Sekunden', 'بعد 10 ثوانٍ')}</option>
+                  <option value="exit_intent">{t3(locale, 'Beim Verlassen (Exit Intent)', 'عند الخروج')}</option>
+                </select>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-white/60">
+              <input
+                type="checkbox"
+                checked={form.popupOncePerVisitor}
+                onChange={(e) => updateForm('popupOncePerVisitor', e.target.checked)}
+                className="rounded"
+              />
+              {t3(locale, 'Nur einmal pro Besucher anzeigen', 'إظهارها مرة واحدة فقط لكل زائر')}
+            </label>
           </div>
         )}
       </div>

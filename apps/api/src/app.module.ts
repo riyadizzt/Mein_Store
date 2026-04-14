@@ -20,11 +20,14 @@ import { WmsModule } from './modules/wms/wms.module'
 import { AdminModule } from './modules/admin/admin.module'
 import { FeedsModule } from './modules/feeds/feeds.module'
 import { AiModule } from './modules/ai/ai.module'
+import { WhatsappModule } from './modules/whatsapp/whatsapp.module'
+import { MasterBoxModule } from './modules/master-box/master-box.module'
 import { MaintenanceModule } from './modules/maintenance/maintenance.module'
 import { SizingModule } from './modules/sizing/sizing.module'
 import { ReviewsModule } from './modules/reviews/reviews.module'
 import { EmailModule } from './modules/email/email.module'
 import { StorageModule } from './common/services/storage.module'
+import { ContactModule } from './modules/contact/contact.module'
 
 @Module({
   imports: [
@@ -80,10 +83,13 @@ import { StorageModule } from './common/services/storage.module'
     AdminModule,
     FeedsModule,
     AiModule,
+    WhatsappModule,
+    MasterBoxModule,
     MaintenanceModule,
     SizingModule,
     ReviewsModule,
     EmailModule,
+    ContactModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -1,4 +1,4 @@
-# Production Checklist — Malak Store
+# Production Checklist — Malak Bekleidung
 
 ## Vor dem Go-Live JEDE Checkbox abhaken
 

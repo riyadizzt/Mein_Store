@@ -210,6 +210,24 @@ export class ReservationService {
     const quantityBefore = inventory.quantityOnHand
     const quantityAfter = inventory.quantityOnHand - reservation.quantity
 
+    // Hard guard against negative stock — if this triggers, an upstream component
+    // has corrupted the on-hand count (e.g. duplicate confirm, parallel adjustment).
+    // Block the write rather than silently going negative.
+    if (quantityAfter < 0 || inventory.quantityReserved < reservation.quantity) {
+      this.logger.error(
+        `confirm() would produce negative stock for variantId=${reservation.variantId} warehouseId=${reservation.warehouseId}: ` +
+        `onHand=${inventory.quantityOnHand} reserved=${inventory.quantityReserved} confirming=${reservation.quantity}`,
+      )
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'StockUnderflow',
+        message: 'Bestätigung würde negativen Lagerbestand erzeugen — abgebrochen',
+        onHand: inventory.quantityOnHand,
+        reserved: inventory.quantityReserved,
+        requested: reservation.quantity,
+      })
+    }
+
     await this.prisma.$transaction([
       // Physisch abziehen + Reservierung aufheben
       this.prisma.inventory.update({

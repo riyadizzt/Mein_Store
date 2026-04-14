@@ -63,6 +63,113 @@ export class OrdersService {
     private readonly shippingCalculator: ShippingCalculator,
   ) {}
 
+  // ── REUSE: find an existing pending order for the same cart ──
+  //
+  // Why this exists: when a customer clicks "Bestellen" with payment method A,
+  // gets redirected to the gateway, comes back, and tries again with method B,
+  // we should NOT create a second order. We reuse the existing pending one and
+  // let payments.service swap the payment intent in place. Otherwise:
+  //   - duplicate orders show up in the admin
+  //   - stock is reserved twice (silently!)
+  //   - customer's account is cluttered with abandoned orders
+  //
+  // STRICT match: only reuse if EVERYTHING matches — items, address, coupon,
+  // user, freshness. Anything different = new order (correct behaviour).
+  // Any payment that's already authorized/captured = treat as final, never reuse.
+  private readonly REUSE_WINDOW_MINUTES = 15
+
+  private async findReusableOrder(
+    dto: CreateOrderDto,
+    userId: string | null,
+  ): Promise<{ id: string; orderNumber: string } | null> {
+    // No identity → cannot match (anonymous orders without guest email are rare)
+    const guestEmail = dto.guestEmail?.toLowerCase()
+    if (!userId && !guestEmail) return null
+
+    const cutoff = new Date()
+    cutoff.setMinutes(cutoff.getMinutes() - this.REUSE_WINDOW_MINUTES)
+
+    const candidates = await this.prisma.order.findMany({
+      where: {
+        deletedAt: null,
+        status: { in: ['pending', 'pending_payment'] },
+        createdAt: { gte: cutoff },
+        ...(userId ? { userId } : { guestEmail }),
+      },
+      include: {
+        items: { select: { variantId: true, quantity: true } },
+        payment: { select: { status: true } },
+        shippingAddress: {
+          select: {
+            firstName: true, lastName: true, street: true, houseNumber: true,
+            postalCode: true, city: true, country: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5, // Defensive cap — should be 1 in practice
+    })
+
+    if (candidates.length === 0) return null
+
+    // ── Build a normalized fingerprint for the incoming cart ──
+    const incomingItems = [...dto.items]
+      .map((i) => `${i.variantId}:${i.quantity}`)
+      .sort()
+      .join('|')
+    const incomingCoupon = dto.couponCode ?? null
+    const incomingAddrId = dto.shippingAddressId ?? null
+    const incomingAddrFields = dto.shippingAddress
+      ? [
+          dto.shippingAddress.firstName, dto.shippingAddress.lastName,
+          dto.shippingAddress.street, dto.shippingAddress.houseNumber,
+          dto.shippingAddress.postalCode, dto.shippingAddress.city,
+          dto.shippingAddress.country,
+        ].join('|')
+      : null
+
+    for (const order of candidates) {
+      // Skip if payment already authorized/captured — money is in flight, hands off
+      if (order.payment && ['authorized', 'captured'].includes(order.payment.status)) {
+        continue
+      }
+
+      // Items must match exactly (count + ids + quantities)
+      const orderItems = order.items
+        .filter((i) => i.variantId)
+        .map((i) => `${i.variantId}:${i.quantity}`)
+        .sort()
+        .join('|')
+      if (orderItems !== incomingItems) continue
+
+      // Coupon must match
+      if ((order.couponCode ?? null) !== incomingCoupon) continue
+
+      // Address must match (either same saved-address id, or same inline fields)
+      if (incomingAddrId) {
+        if (order.shippingAddressId !== incomingAddrId) continue
+      } else if (incomingAddrFields) {
+        const a = order.shippingAddress
+        if (!a) continue
+        const orderAddrFields = [
+          a.firstName, a.lastName, a.street, a.houseNumber,
+          a.postalCode, a.city, a.country,
+        ].join('|')
+        if (orderAddrFields !== incomingAddrFields) continue
+      } else {
+        // Incoming has neither id nor inline → skip reuse to be safe
+        continue
+      }
+
+      this.logger.log(
+        `[reuse] Reusing pending order ${order.orderNumber} (id=${order.id.slice(0, 8)}) for ${userId ?? guestEmail}`,
+      )
+      return { id: order.id, orderNumber: order.orderNumber }
+    }
+
+    return null
+  }
+
   // ── CREATE ────────────────────────────────────────────────────
 
   async create(
@@ -74,7 +181,7 @@ export class OrdersService {
     const endpoint = 'POST:/orders'
     const requestHash = this.idempotencyService.hashBody({ ...dto, userId })
 
-    // 1. Idempotency-Check
+    // 1. Idempotency-Check (highest priority — exact retry)
     if (idempotencyKey) {
       const cached = await this.idempotencyService.get(idempotencyKey, endpoint, requestHash)
       if (cached) {
@@ -84,6 +191,52 @@ export class OrdersService {
         throw new DuplicateOrderException(idempotencyKey)
       }
       await this.idempotencyService.reserve(idempotencyKey, endpoint, requestHash, userId ?? undefined)
+    }
+
+    // 1a. Hard guard: orders MUST have a shipping address. The DTO marks both
+    //     shippingAddressId and shippingAddress as optional, so the validator
+    //     does not catch this — a direct API call with neither field would
+    //     silently create an order with no billing info, producing garbage
+    //     invoices and broken DHL labels. 32 historical testdata invoices
+    //     already had this problem; this defensive check stops the next one.
+    if (!dto.shippingAddressId && !dto.shippingAddress) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'ShippingAddressRequired',
+        message: {
+          de: 'Eine Lieferadresse ist erforderlich.',
+          en: 'A shipping address is required.',
+          ar: 'عنوان التوصيل مطلوب.',
+        },
+      })
+    }
+
+    // 1b. Reuse-Check: same cart, same address, same user, fresh pending order?
+    //     Returns the EXISTING order so the caller can issue a new payment intent
+    //     against it instead of creating a duplicate.
+    try {
+      const reusable = await this.findReusableOrder(dto, userId)
+      if (reusable) {
+        // Cache the idempotency key to the existing order so the next retry sees it too
+        if (idempotencyKey) {
+          const fullOrder = await this.prisma.order.findUnique({
+            where: { id: reusable.id },
+            include: { items: true },
+          })
+          if (fullOrder) {
+            await this.idempotencyService.save(idempotencyKey, endpoint, requestHash, fullOrder, 200, userId ?? undefined)
+            return fullOrder
+          }
+        }
+        const fullOrder = await this.prisma.order.findUnique({
+          where: { id: reusable.id },
+          include: { items: true },
+        })
+        if (fullOrder) return fullOrder
+      }
+    } catch (reuseErr: any) {
+      // Reuse failures must NEVER block order creation. Log and fall through.
+      this.logger.warn(`[${correlationId}] Reuse check failed (falling back to new order): ${reuseErr?.message ?? reuseErr}`)
     }
 
     try {
@@ -275,17 +428,51 @@ export class OrdersService {
       const orderNumber = await this.generateOrderNumber()
 
       // 8. Auto-create guest customer if no userId
+      //
+      // Real customer name comes from the shipping address form (which is
+      // mandatory). dto.guestFirstName is almost never sent by the frontend,
+      // so using it as the primary source left stub users with empty names —
+      // then status emails greeted customers with "Hallo ". Fallback chain:
+      //   1. explicit dto.guestFirstName (legacy API callers)
+      //   2. shipping address firstName (the actual customer)
+      //   3. email local-part (last resort, e.g. "john@mail.de" → "john")
       let resolvedUserId = userId
       if (!resolvedUserId && dto.guestEmail) {
-        const existing = await this.prisma.user.findUnique({ where: { email: dto.guestEmail.toLowerCase() } })
+        const addrFirst = dto.shippingAddress?.firstName?.trim()
+        const addrLast = dto.shippingAddress?.lastName?.trim()
+        const emailLocal = dto.guestEmail.split('@')[0] ?? ''
+        const firstName = dto.guestFirstName?.trim() || addrFirst || emailLocal || 'Gast'
+        const lastName = dto.guestLastName?.trim() || addrLast || ''
+
+        const existing = await this.prisma.user.findUnique({
+          where: { email: dto.guestEmail.toLowerCase() },
+        })
         if (existing) {
           resolvedUserId = existing.id
+          // Backfill: if the existing stub has empty/weaker names but this
+          // checkout has fresh address data, update it. Don't touch REAL
+          // users (passwordHash set) — their name is their canonical choice.
+          if (!existing.passwordHash && addrFirst && addrLast) {
+            const weak =
+              !existing.firstName?.trim() ||
+              !existing.lastName?.trim() ||
+              existing.firstName.length < 2
+            if (weak) {
+              await this.prisma.user.update({
+                where: { id: existing.id },
+                data: { firstName: addrFirst, lastName: addrLast },
+              })
+              this.logger.log(
+                `[${correlationId}] Stub user ${existing.email} name backfilled from shipping address`,
+              )
+            }
+          }
         } else {
           const guest = await this.prisma.user.create({
             data: {
               email: dto.guestEmail.toLowerCase(),
-              firstName: dto.guestFirstName ?? '',
-              lastName: dto.guestLastName ?? '',
+              firstName,
+              lastName,
               role: 'customer',
               preferredLang: (dto.locale ?? 'de') as any,
               isActive: true,
@@ -294,7 +481,7 @@ export class OrdersService {
             },
           })
           resolvedUserId = guest.id
-          this.logger.log(`[${correlationId}] Guest customer created: ${guest.email} → ${guest.id}`)
+          this.logger.log(`[${correlationId}] Guest customer created: ${guest.email} → ${guest.id} (name=${firstName} ${lastName})`)
         }
       }
 

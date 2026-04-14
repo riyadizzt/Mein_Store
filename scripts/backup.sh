@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================
-# Malak Store — PostgreSQL Backup Script
+# Malak Bekleidung — PostgreSQL Backup Script
 # Täglicher Cron: 0 3 * * * /path/to/scripts/backup.sh
 # Aufbewahrung: 30 Tage
 # =============================================================

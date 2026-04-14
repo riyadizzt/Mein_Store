@@ -88,6 +88,25 @@ function ConfirmationContent() {
   const clearCart = useCartStore((s) => s.clearCart)
   useEffect(() => { clearCart() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // PayPal/Klarna: Capture payment after redirect back
+  const [captured, setCaptured] = useState(false)
+  useEffect(() => {
+    if (captured) return
+    const orderId = searchParams.get('orderId') || sessionStorage.getItem('malak-paypal-orderId')
+    const paymentMethod = searchParams.get('method') || sessionStorage.getItem('malak-payment-method')
+    // Clean up sessionStorage
+    sessionStorage.removeItem('malak-paypal-orderId')
+    sessionStorage.removeItem('malak-payment-method')
+    if (!orderId) return
+    setCaptured(true)
+    // Only capture for redirect-based methods (PayPal, Klarna)
+    if (paymentMethod === 'paypal') {
+      api.post(`/payments/${orderId}/capture-paypal`).catch(() => {})
+    }
+    // Vorkasse: mark as captured handled by admin, no auto-capture needed
+    // Stripe/SumUp: already captured via webhook/verify
+  }, [searchParams, captured])
+
   // Track Purchase pixel events once order data is available
   const [pixelFired, setPixelFired] = useState(false)
 
@@ -97,11 +116,26 @@ function ConfirmationContent() {
     try {
       const raw = sessionStorage.getItem('malak-last-order')
       if (raw) {
-        setSavedOrder(JSON.parse(raw))
-        sessionStorage.removeItem('malak-last-order') // One-time read
+        const parsed = JSON.parse(raw)
+        setSavedOrder(parsed)
+        sessionStorage.removeItem('malak-last-order')
       }
     } catch {}
-  }, [])
+    // If method=vorkasse from URL but no bankDetails, fetch them
+    const method = searchParams.get('method')
+    if (method === 'vorkasse') {
+      api.get('/payments/methods').then(({ data }) => {
+        if (data?.vorkasseBankDetails) {
+          setSavedOrder((prev: any) => ({
+            ...prev,
+            paymentMethod: 'vorkasse',
+            bankDetails: data.vorkasseBankDetails,
+            orderNumber: prev?.orderNumber || searchParams.get('order'),
+          }))
+        }
+      }).catch(() => {})
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Optionally fetch full order from API (for logged-in users)
   const { data: fetchedOrder } = useQuery({
@@ -263,7 +297,7 @@ function ConfirmationContent() {
                 )}
                 <div className="flex justify-between pt-2 border-t font-semibold">
                   <span>{locale === 'ar' ? 'المبلغ' : 'Betrag'}:</span>
-                  <span>€{Number(savedOrder.totalAmount).toFixed(2)}</span>
+                  <span>&euro;{Number(savedOrder.totalAmount || order?.totalAmount || 0).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -363,8 +397,13 @@ function ConfirmationContent() {
                 <h3 className="font-semibold text-sm">{t('paymentInfo')}</h3>
               </div>
               <div className="text-sm text-muted-foreground space-y-1 ltr:ml-10 rtl:mr-10">
-                <p>{t('paymentMethod')}: <span className="font-medium text-foreground">{order?.payment?.method ?? t('cardPayment')}</span></p>
-                <p className="flex items-center gap-1 text-green-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" />{t('paid')}</p>
+                <p>{t('paymentMethod')}: <span className="font-medium text-foreground">{
+                  ({ vorkasse: locale === 'ar' ? 'تحويل بنكي' : 'Vorkasse', paypal: 'PayPal', sumup: 'SumUp', stripe_card: locale === 'ar' ? 'بطاقة ائتمان' : 'Kreditkarte' } as Record<string, string>)[savedOrder?.paymentMethod ?? order?.payment?.method ?? ''] ?? t('cardPayment')
+                }</span></p>
+                {(savedOrder?.paymentMethod === 'vorkasse' || order?.payment?.method === 'vorkasse')
+                  ? <p className="flex items-center gap-1 text-amber-600 font-medium"><Clock className="h-3.5 w-3.5" />{locale === 'ar' ? 'بانتظار التحويل البنكي' : locale === 'en' ? 'Awaiting bank transfer' : 'Überweisung ausstehend'}</p>
+                  : <p className="flex items-center gap-1 text-green-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" />{t('paid')}</p>
+                }
               </div>
             </div>
           </div>

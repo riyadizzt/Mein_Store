@@ -1,10 +1,11 @@
+import { API_BASE_URL } from '@/lib/env'
 import { notFound } from 'next/navigation'
 // Old PDP backup: product-client.tsx (untouched)
 import Link from 'next/link'
 import { ProductClientPremium } from './product-client-premium'
 import { generateProductOGTags } from '@/components/product-og-tags'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = API_BASE_URL
 
 async function getProduct(slug: string, lang: string) {
   const res = await fetch(`${API_URL}/api/v1/products/${slug}?lang=${lang}`, {
@@ -81,19 +82,26 @@ export default async function ProductDetailPage({
       {/* Premium PDP Layout */}
       <div className="mx-auto max-w-[1536px] px-4 sm:px-8 lg:px-12 pt-4 pb-8">
 
-        {/* Minimal Breadcrumbs */}
+        {/* Minimal Breadcrumbs — Home > Category > Product */}
         <nav className="flex items-center gap-2.5 text-sm text-[#0f1419]/40 mb-8 lg:mb-12" aria-label="Breadcrumb">
           <Link href={`/${locale}`} className="hover:text-[#0f1419]/70 transition-colors">
-            {locale === 'ar' ? 'الرئيسية' : 'Home'}
+            {locale === 'ar' ? 'الرئيسية' : locale === 'en' ? 'Home' : 'Startseite'}
           </Link>
           <span className="text-[#0f1419]/20">/</span>
-          {categoryName && (
+          {categoryName && product.category?.slug && (
             <>
-              <span className="hover:text-[#0f1419]/70 transition-colors">{categoryName}</span>
+              <Link
+                href={`/${locale}/products?category=${product.category.slug}`}
+                className="hover:text-[#0f1419]/70 transition-colors"
+              >
+                {categoryName}
+              </Link>
               <span className="text-[#0f1419]/20">/</span>
             </>
           )}
-          <span className="text-[#0f1419]/60 truncate max-w-[250px]">{name}</span>
+          <span className="text-[#0f1419]/60 truncate max-w-[250px]" aria-current="page">
+            {name}
+          </span>
         </nav>
 
         {/* Product */}

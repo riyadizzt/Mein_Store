@@ -72,7 +72,7 @@ export class InventoryService {
     return {
       variantId: variant.id,
       sku: variant.sku,
-      productName: variant.product.translations[0]?.name ?? variant.sku,
+      productName: variant.product.translations?.[0]?.name ?? variant.sku,
       color: variant.color,
       size: variant.size,
       warehouses: variant.inventory.map((i) => ({
@@ -139,7 +139,7 @@ export class InventoryService {
         id: i.id,
         sku: i.variant.sku,
         variantId: i.variant.id,
-        productName: i.variant.product.translations[0]?.name ?? i.variant.product.slug,
+        productName: i.variant.product.translations?.[0]?.name ?? i.variant.product.slug,
         color: i.variant.color,
         size: i.variant.size,
         warehouse: i.warehouse,

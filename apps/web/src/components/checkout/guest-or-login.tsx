@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { User, ArrowRight } from 'lucide-react'
@@ -18,11 +18,14 @@ export function GuestOrLogin({ locale }: { locale: string }) {
   const [emailError, setEmailError] = useState('')
 
   // If already logged in, skip this step
-  if (isAuthenticated) {
-    setGuest(false)
-    setStep('address')
-    return null
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      setGuest(false)
+      setStep('address')
+    }
+  }, [isAuthenticated, setGuest, setStep])
+
+  if (isAuthenticated) return null
 
   const handleGuest = () => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -59,7 +62,7 @@ export function GuestOrLogin({ locale }: { locale: string }) {
             </div>
             <Button onClick={handleGuest} className="w-full gap-2">
               {tCheckout('guest.continueAsGuest')}
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-4 w-4 rtl:rotate-180" />
             </Button>
           </div>
         </div>
@@ -85,7 +88,7 @@ export function GuestOrLogin({ locale }: { locale: string }) {
           <Link href={`/${locale}/auth/login?redirect=checkout`}>
             <Button variant="outline" className="w-full gap-2">
               {t('loginButton')}
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-4 w-4 rtl:rotate-180" />
             </Button>
           </Link>
         </div>

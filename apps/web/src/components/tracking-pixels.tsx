@@ -1,12 +1,13 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import Script from 'next/script'
 import { useQuery } from '@tanstack/react-query'
 import { useConsentStore } from '@/store/consent-store'
 
 async function getPixelIds(): Promise<{ metaPixelId: string; tiktokPixelId: string }> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/settings/public`)
+    const res = await fetch(`${API_BASE_URL}/api/v1/settings/public`)
     if (!res.ok) return { metaPixelId: '', tiktokPixelId: '' }
     const data = await res.json()
     return {

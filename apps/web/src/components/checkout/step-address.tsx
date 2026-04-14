@@ -7,8 +7,11 @@ import { useCheckoutStore, type CheckoutAddress } from '@/store/checkout-store'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, MapPin, Plus } from 'lucide-react'
+import { ArrowRight, MapPin, Plus, Loader2, AlertTriangle } from 'lucide-react'
+import { useLocale } from 'next-intl'
 import { FloatInput, FloatSelect } from './float-input'
+import { AddressAutocomplete } from '@/components/ui/address-autocomplete'
+import { validateAddressOffline, getCityForPLZ } from '@/lib/plz-validation'
 
 const COUNTRIES = [
   { value: 'DE', label: 'Deutschland' },
@@ -25,13 +28,25 @@ export function StepAddress() {
   const t = useTranslations('checkout')
   const tErr = useTranslations('checkout.errors')
   const tAuth = useTranslations('auth')
+  const locale = useLocale()
   const { isAuthenticated } = useAuthStore()
   const {
     shippingAddress, billingSameAsShipping,
     setShippingAddress, setBillingAddress, setBillingSameAsShipping, setSavedAddressId, setStep,
   } = useCheckoutStore()
 
+  // Check if address autocomplete is enabled
+  const { data: shopSettings } = useQuery({
+    queryKey: ['public-settings-autocomplete'],
+    queryFn: async () => { const { data } = await api.get('/settings/public'); return data },
+    staleTime: 60000,
+  })
+  const autocompleteEnabled = shopSettings?.addressAutocompleteEnabled === 'true'
+
   const [showForm, setShowForm] = useState(!isAuthenticated)
+  const [validating, setValidating] = useState(false)
+  const [addrWarning, setAddrWarning] = useState<string | null>(null)
+  const [bypassWarning, setBypassWarning] = useState(false)
   const [form, setForm] = useState<CheckoutAddress>(
     shippingAddress ?? {
       firstName: '', lastName: '', street: '', houseNumber: '',
@@ -84,17 +99,73 @@ export function StepAddress() {
     return Object.keys(e).length === 0
   }
 
-  const handleContinue = () => {
-    if (!validate()) return
+  const proceedToShipping = () => {
     setShippingAddress(form)
-    setSavedAddressId(null)  // Neue Adresse → keine gespeicherte ID
+    setSavedAddressId(null)
     if (billingSameAsShipping) setBillingAddress(null)
     setStep('shipping')
   }
 
+  const handleContinue = async () => {
+    if (!validate()) return
+
+    // Step 1: Offline PLZ + field validation
+    const offline = validateAddressOffline(form)
+    if (!offline.valid && !bypassWarning) {
+      let msg = offline.warnings.map(w => w.message[locale as 'de' | 'en' | 'ar'] ?? w.message.de).join('\n')
+      if (offline.suggestion?.city) {
+        msg += `\n\n${locale === 'ar' ? `هل تقصد: \u200E${offline.suggestion.city}\u200F؟` : locale === 'en' ? `Did you mean: ${offline.suggestion.city}?` : `Meinten Sie: ${offline.suggestion.city}?`}`
+      }
+      setAddrWarning(msg)
+      return
+    }
+
+    // Step 2: DHL API validation (if basic checks pass)
+    setValidating(true)
+    try {
+      const { data } = await api.post('/address/validate', {
+        street: form.street,
+        houseNumber: form.houseNumber,
+        postalCode: form.postalCode,
+        city: form.city,
+        country: form.country,
+      })
+      setValidating(false)
+
+      if (!data.valid && !bypassWarning) {
+        const dhlMsg = locale === 'ar'
+          ? 'لم يتم التعرف على هذا العنوان. يرجى التحقق من المدخلات.'
+          : locale === 'en'
+          ? 'This address was not recognized. Please check your input.'
+          : 'Diese Adresse wurde nicht erkannt. Bitte überprüfen Sie Ihre Eingabe.'
+        setAddrWarning(dhlMsg)
+        return
+      }
+    } catch {
+      // DHL API not available — proceed anyway (basic validation already passed)
+      setValidating(false)
+    }
+
+    // All checks passed → proceed
+    setAddrWarning(null)
+    setBypassWarning(false)
+    proceedToShipping()
+  }
+
   const updateField = (field: keyof CheckoutAddress, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }))
+    setForm((prev) => {
+      const next = { ...prev, [field]: value }
+      // Auto-fill city when PLZ is complete (5 digits for DE)
+      if (field === 'postalCode' && /^\d{5}$/.test(value) && next.country === 'DE') {
+        const city = getCityForPLZ(value)
+        if (city && (!next.city || next.city.length < 2)) {
+          next.city = city
+        }
+      }
+      return next
+    })
     if (errors[field]) setErrors((prev) => { const { [field]: _, ...rest } = prev; return rest })
+    if (addrWarning) { setAddrWarning(null); setBypassWarning(false) }
   }
 
   return (
@@ -140,7 +211,7 @@ export function StepAddress() {
         <div className="space-y-4">
           {hasSavedAddresses && (
             <button onClick={() => setShowForm(false)} className="text-sm text-primary hover:underline mb-2">
-              ← {t('address.backToSaved')}
+              &larr; {t('address.backToSaved')}
             </button>
           )}
 
@@ -171,13 +242,36 @@ export function StepAddress() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
-              <FloatInput
-                label={t('address.street')}
-                value={form.street}
-                error={errors.street}
-                onChange={(v) => updateField('street', v)}
-                autoComplete="address-line1"
-              />
+              {autocompleteEnabled ? (
+                <>
+                  <AddressAutocomplete
+                    placeholder={t('address.street')}
+                    value={form.street}
+                    onChange={(v) => updateField('street', v)}
+                    onSelect={(addr) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        street: addr.street,
+                        houseNumber: addr.houseNumber || prev.houseNumber,
+                        postalCode: addr.postalCode || prev.postalCode,
+                        city: addr.city || prev.city,
+                        country: addr.country || prev.country,
+                      }))
+                      setErrors({})
+                    }}
+                    className="h-12 w-full rounded-xl border border-input bg-background px-4 text-base transition-colors focus:outline-none focus:ring-2 focus:ring-[#d4a853]/30 focus:border-[#d4a853]"
+                  />
+                  {errors.street && <p className="text-xs text-red-600 mt-1">{errors.street}</p>}
+                </>
+              ) : (
+                <FloatInput
+                  label={t('address.street')}
+                  value={form.street}
+                  error={errors.street}
+                  onChange={(v) => updateField('street', v)}
+                  autoComplete="address-line1"
+                />
+              )}
             </div>
             <FloatInput
               label={t('address.houseNumber')}
@@ -231,13 +325,32 @@ export function StepAddress() {
             {t('address.billingSameAsShipping')}
           </label>
 
+          {/* Address validation warning */}
+          {addrWarning && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="whitespace-pre-line">{addrWarning}</p>
+              </div>
+              <button
+                onClick={() => { setBypassWarning(true); setAddrWarning(null); proceedToShipping() }}
+                className="text-xs text-amber-700 underline underline-offset-2 hover:text-amber-900"
+              >
+                {locale === 'ar' ? 'أنا متأكد أن العنوان صحيح — متابعة' : locale === 'en' ? 'I confirm this address is correct — continue' : 'Ich bin sicher, die Adresse ist korrekt — weiter'}
+              </button>
+            </div>
+          )}
+
           <Button
             onClick={handleContinue}
+            disabled={validating}
             className="w-full gap-2 mt-4 bg-accent text-accent-foreground h-12 rounded-xl hover:bg-accent/90 btn-press"
             size="lg"
           >
-            {t('address.continueToShipping')}
-            <ArrowRight className="h-4 w-4" />
+            {validating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4 rtl:rotate-180" />}
+            {validating
+              ? (locale === 'ar' ? 'جاري التحقق من العنوان...' : locale === 'en' ? 'Verifying address...' : 'Adresse wird geprüft...')
+              : t('address.continueToShipping')}
           </Button>
         </div>
       )}

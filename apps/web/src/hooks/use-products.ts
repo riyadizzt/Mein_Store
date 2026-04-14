@@ -38,6 +38,27 @@ interface ProductsQueryParams {
   inStock?: boolean
   search?: string
   limit?: number
+  // Comma-separated lists, sent verbatim to the backend.
+  colors?: string
+  sizes?: string
+}
+
+export interface ProductFilterOptions {
+  colors: { name: string; hex: string | null }[]
+  sizes: string[]
+}
+
+export function useProductFilterOptions(categoryId?: string) {
+  return useQuery<ProductFilterOptions>({
+    queryKey: ['products', 'filter-options', categoryId],
+    queryFn: async () => {
+      const { data } = await api.get('/products/filter-options', {
+        params: categoryId ? { categoryId } : undefined,
+      })
+      return data ?? { colors: [], sizes: [] }
+    },
+    staleTime: 5 * 60 * 1000,
+  })
 }
 
 export function useProducts(params: ProductsQueryParams = {}) {

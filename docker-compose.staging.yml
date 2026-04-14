@@ -1,4 +1,4 @@
-## Malak Store — Local Staging Environment
+## Malak Bekleidung — Local Staging Environment
 ## Spiegelt Production 1:1 (Postgres + Redis + API + Web)
 ##
 ## Starten: docker compose -f docker-compose.staging.yml up -d

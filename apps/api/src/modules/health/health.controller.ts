@@ -68,6 +68,10 @@ export class PublicSettingsController {
       cookie_banner_enabled: s.cookie_banner_enabled !== 'false' ? 'true' : 'false',
       // Returns
       returnsEnabled: s.returnsEnabled !== 'false' ? 'true' : 'false',
+      // Address Autocomplete
+      addressAutocompleteEnabled: s.addressAutocompleteEnabled === 'true' ? 'true' : 'false',
+      // Homepage Design (A=Editorial Premium, B=Minimal High-End, C=Dark Luxury)
+      homepage_design: ['A', 'B', 'C'].includes(s.homepage_design) ? s.homepage_design : 'A',
     }
   }
 }

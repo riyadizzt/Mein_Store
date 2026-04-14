@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/lib/env'
 import posthog from 'posthog-js'
 import { useConsentStore } from '@/store/consent-store'
 
@@ -21,7 +22,7 @@ export async function initPostHog() {
 
   if (!key) {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/settings/public`)
+      const res = await fetch(`${API_BASE_URL}/api/v1/settings/public`)
       if (res.ok) {
         const data = await res.json()
         key = data?.posthog_key ?? ''

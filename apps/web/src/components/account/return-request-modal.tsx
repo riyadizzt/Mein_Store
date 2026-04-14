@@ -46,15 +46,18 @@ export function ReturnRequestModal({ open, onClose, orderId, orderNumber, items,
   const t = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 
   const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [returnQty, setReturnQty] = useState<Record<string, number>>({})
   const [reasons, setReasons] = useState<Record<string, string>>({})
   const [notes, setNotes] = useState<Record<string, string>>({})
 
-  const toggleItem = (id: string) => {
+  const toggleItem = (id: string, maxQty: number) => {
     setSelected((s) => ({ ...s, [id]: !s[id] }))
     if (!reasons[id]) setReasons((r) => ({ ...r, [id]: 'wrong_size' }))
+    if (!returnQty[id]) setReturnQty((q) => ({ ...q, [id]: maxQty }))
   }
 
-  const selectedCount = Object.values(selected).filter(Boolean).length
+  const selectedItems = items.filter((i) => selected[i.id])
+  const selectedCount = selectedItems.reduce((sum, i) => sum + (returnQty[i.id] ?? i.quantity), 0)
 
   const returnMut = useMutation({
     mutationFn: async () => {
@@ -62,6 +65,7 @@ export function ReturnRequestModal({ open, onClose, orderId, orderNumber, items,
         .filter((item) => selected[item.id])
         .map((item) => ({
           variantId: item.variantId,
+          quantity: returnQty[item.id] ?? item.quantity,
           reason: reasons[item.id] || 'wrong_size',
           notes: notes[item.id] || undefined,
         }))
@@ -135,7 +139,7 @@ export function ReturnRequestModal({ open, onClose, orderId, orderNumber, items,
               <div key={item.id} className={`border rounded-xl p-3 transition-all ${isSelected ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'hover:border-muted-foreground/20'}`}>
                 {/* Item Row */}
                 <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={!!isSelected} onChange={() => toggleItem(item.id)}
+                  <input type="checkbox" checked={!!isSelected} onChange={() => toggleItem(item.id, item.quantity)}
                     className="rounded mt-1 h-4 w-4 accent-primary" />
                   <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden flex-shrink-0">
                     {item.imageUrl && <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="w-full h-full object-cover" />}
@@ -144,8 +148,21 @@ export function ReturnRequestModal({ open, onClose, orderId, orderNumber, items,
                     <p className="text-sm font-medium truncate">{item.name}</p>
                     <p className="text-xs text-muted-foreground">{item.color}{item.size ? ` / ${item.size}` : ''} × {item.quantity}</p>
                   </div>
-                  <span className="text-sm font-semibold flex-shrink-0">&euro;{item.unitPrice.toFixed(2)}</span>
+                  <span className="text-sm font-semibold flex-shrink-0">&euro;{(item.unitPrice * (returnQty[item.id] ?? item.quantity)).toFixed(2)}</span>
                 </label>
+
+                {/* Quantity selector — only when selected AND quantity > 1 */}
+                {isSelected && item.quantity > 1 && (
+                  <div className="mt-2 ltr:ml-7 rtl:mr-7 flex items-center gap-2" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                    <span className="text-xs text-muted-foreground">{t('Menge:', 'Qty:', 'الكمية:')}</span>
+                    <button type="button" onClick={(e) => { e.preventDefault(); setReturnQty((q) => ({ ...q, [item.id]: Math.max(1, (q[item.id] ?? item.quantity) - 1) })) }}
+                      className="h-7 w-7 rounded-lg border flex items-center justify-center text-sm hover:bg-muted transition-colors">-</button>
+                    <span className="text-sm font-semibold w-8 text-center" dir="ltr">{returnQty[item.id] ?? item.quantity}</span>
+                    <button type="button" onClick={(e) => { e.preventDefault(); setReturnQty((q) => ({ ...q, [item.id]: Math.min(item.quantity, (q[item.id] ?? item.quantity) + 1) })) }}
+                      className="h-7 w-7 rounded-lg border flex items-center justify-center text-sm hover:bg-muted transition-colors">+</button>
+                    <span className="text-xs text-muted-foreground">/ {item.quantity}</span>
+                  </div>
+                )}
 
                 {/* Reason Dropdown (visible when selected) */}
                 {isSelected && (

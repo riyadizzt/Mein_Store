@@ -25,7 +25,7 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#faf8f5;border-radius:12px;border:1px solid #f0ede8;"><tr><td style="padding:18px;text-align:center;">
 <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tracking Number</div>
 <div style="font-size:18px;font-weight:700;font-family:monospace;color:#1a1a2e;letter-spacing:1px;margin-bottom:12px;">{{trackingNumber}}</div>
-{{#if trackingUrl}}<a href="{{trackingUrl}}" style="display:inline-block;background-color:#d4a853;color:#ffffff;font-weight:600;font-size:12px;padding:10px 28px;border-radius:50px;text-decoration:none;text-transform:uppercase;letter-spacing:1px;">Track Shipment</a>{{/if}}
+{{#if trackingUrl}}<a href="{{{trackingUrl}}}" style="display:inline-block;background-color:#d4a853;color:#ffffff;font-weight:600;font-size:12px;padding:10px 28px;border-radius:50px;text-decoration:none;text-transform:uppercase;letter-spacing:1px;">Track Shipment</a>{{/if}}
 </td></tr></table>
 {{/if}}
 
@@ -51,5 +51,14 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;"><tr><td align="center">
 <a href="{{appUrl}}/en/tracking?mode=order&orderNumber={{orderNumber}}" style="display:inline-block;background-color:#1a1a2e;color:#ffffff;font-weight:600;font-size:12px;padding:12px 36px;border-radius:50px;text-decoration:none;text-transform:uppercase;letter-spacing:1px;">Track Order</a>
 </td></tr></table>
+
+{{#if returnEligible}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;background:#faf8f5;border-radius:10px;">
+<tr><td style="padding:16px;text-align:center;">
+<div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Returns</div>
+<div style="font-size:12px;color:#1a1a2e;margin-bottom:10px;">You have 14 days to withdraw from this order.</div>
+<a href="{{{returnUrl}}}" style="display:inline-block;background:#ffffff;color:#1a1a2e;font-weight:600;font-size:12px;padding:10px 28px;border-radius:50px;text-decoration:none;border:1.5px solid #1a1a2e;text-transform:uppercase;letter-spacing:1px;">Request Return</a>
+</td></tr></table>
+{{/if}}
 
 <p style="color:#9ca3af;font-size:11px;text-align:center;">Questions? <a href="{{appUrl}}/en/contact" style="color:#d4a853;">Contact support</a></p>

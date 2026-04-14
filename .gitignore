@@ -9,13 +9,20 @@ dist/
 .expo/
 out/
 
-# Environment files — NIEMALS committen!
+# Environment files — NIEMALS committen! (Secrets inside)
+# Blanket rule catches every variant in every subfolder.
 .env
+.env.*
+!.env.example
+!.env.*.example
+# Explicit belt-and-suspenders for historical names
 .env.local
-.env.*.local
-.env.production
 .env.staging
+.env.production
 .env.production.template
+apps/*/.env
+apps/*/.env.*
+!apps/*/.env.example
 
 # Turbo
 .turbo
@@ -52,3 +59,10 @@ coverage/
 
 # Sentry
 .sentryclirc
+
+# Shipping labels (generated PDFs) — local artifacts, keep everywhere
+storage/labels/
+apps/api/storage/labels/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

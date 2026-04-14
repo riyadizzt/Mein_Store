@@ -86,7 +86,17 @@ export function HeroSection({ locale }: { locale: string }) {
       {heroImage ? (
         <>
           <div ref={imageWrap} className="absolute inset-0 scale-[1.15]">
-            <Image src={heroImage} alt={heading} fill priority sizes="100vw" className="object-cover" />
+            <Image
+              src={heroImage}
+              alt={heading}
+              fill
+              priority
+              fetchPriority="high"
+              sizes="100vw"
+              quality={85}
+              className="object-cover"
+              placeholder="empty"
+            />
           </div>
           <div
             className="absolute inset-0"

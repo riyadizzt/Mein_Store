@@ -52,6 +52,6 @@ import { CampaignService } from './services/campaign.service'
     CampaignService,
     PermissionGuard,
   ],
-  exports: [AuditService, AdminMarketingService, NotificationService],
+  exports: [AuditService, AdminMarketingService, NotificationService, AdminReturnsService, AdminInventoryService],
 })
 export class AdminModule {}

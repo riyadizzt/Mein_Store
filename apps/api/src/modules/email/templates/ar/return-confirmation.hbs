@@ -55,7 +55,7 @@
 </table>
 {{/if}}
 
-<p style="font-size:14px;color:#6b7280;line-height:1.9;margin:0 0 20px;text-align:right;">يرجى إرسال المنتج خلال <strong style="color:#1a1a2e;">14 يوماً</strong>. الإرجاع <strong>مجاني</strong>.</p>
+<p style="font-size:14px;color:#6b7280;line-height:1.9;margin:0 0 20px;text-align:right;">يرجى إرسال المنتج خلال <strong style="color:#1a1a2e;">14 يوماً</strong>.{{#if sendLabel}} الإرجاع <strong>مجاني</strong>.{{else}} <strong>تكاليف الشحن على عاتق العميل.</strong>{{/if}}</p>
 
 {{else if (eq status 'rejected')}}
 <!-- REJECTED -->

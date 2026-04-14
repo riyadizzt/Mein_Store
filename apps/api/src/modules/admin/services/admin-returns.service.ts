@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { PrismaService } from '../../../prisma/prisma.service'
@@ -10,6 +12,7 @@ import { PaymentsService } from '../../payments/payments.service'
 import { NotificationService } from './notification.service'
 import { AuditService } from './audit.service'
 import { EmailService } from '../../email/email.service'
+import { DHLProvider } from '../../shipments/providers/dhl.provider'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit')
@@ -50,7 +53,7 @@ interface ReturnItemJson {
 //
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  requested: ['label_sent', 'rejected'],
+  requested: ['in_transit', 'label_sent', 'rejected'],
   label_sent: ['in_transit', 'received'],
   in_transit: ['received'],
   received: ['inspected'],
@@ -68,6 +71,7 @@ export class AdminReturnsService {
     private readonly audit: AuditService,
     private readonly emailService: EmailService,
     private readonly eventEmitter: EventEmitter2,
+    @Inject(forwardRef(() => DHLProvider)) private readonly dhlProvider: DHLProvider,
   ) {}
 
   // ── 1. findAll ─────────────────────────────────────────────
@@ -110,7 +114,7 @@ export class AdminReturnsService {
                   quantity: true,
                   unitPrice: true,
                   totalPrice: true,
-                  variant: { select: { id: true, color: true, size: true } },
+                  variant: { select: { id: true, color: true, size: true, product: { select: { images: { select: { url: true }, take: 1 } } } } },
                 },
               },
               user: { select: { firstName: true, lastName: true, email: true } },
@@ -150,6 +154,7 @@ export class AdminReturnsService {
             items: {
               select: {
                 id: true,
+                variantId: true,
                 snapshotName: true,
                 snapshotSku: true,
                 quantity: true,
@@ -221,7 +226,7 @@ export class AdminReturnsService {
 
   // ── 4. approve ─────────────────────────────────────────────
 
-  async approve(id: string, adminId: string, ip: string) {
+  async approve(id: string, adminId: string, ip: string, sendLabel: boolean = false) {
     const ret = await this.prisma.return.findUnique({
       where: { id },
       include: {
@@ -229,7 +234,8 @@ export class AdminReturnsService {
           select: {
             id: true,
             orderNumber: true,
-            user: { select: { email: true, firstName: true, preferredLang: true } },
+            user: { select: { email: true, firstName: true, lastName: true, preferredLang: true } },
+            shippingAddress: { select: { firstName: true, lastName: true, street: true, houseNumber: true, postalCode: true, city: true, country: true } },
           },
         },
       },
@@ -247,7 +253,7 @@ export class AdminReturnsService {
       })
     }
 
-    this.validateTransition(ret.status, 'label_sent')
+    this.validateTransition(ret.status, 'in_transit')
 
     // Assign return number if not yet set
     const returnNumber = ret.returnNumber ?? await this.generateReturnNumber()
@@ -255,27 +261,80 @@ export class AdminReturnsService {
     const updated = await this.prisma.return.update({
       where: { id },
       data: {
-        status: 'label_sent',
+        status: 'in_transit',
         returnNumber,
         approvedAt: new Date(),
         approvedBy: adminId,
+        adminNotes: sendLabel ? 'shop_pays_shipping' : 'customer_pays_shipping',
       },
     })
 
     // Side effects — wrapped in try/catch to not block the main flow
     try {
       this.eventEmitter.emit('return.status_changed', {
-        returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'label_sent', adminId,
+        returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'in_transit', adminId,
       })
     } catch (e: any) { this.logger.error(`Event emit failed: ${e.message}`) }
+
+    // Generate DHL return shipping label if shop pays, otherwise internal barcode label
+    let labelPdfBuffer: Buffer | null = null
+    let dhlTrackingNumber: string | null = null
+    if (sendLabel) {
+      try {
+        const addr = ret.order.shippingAddress
+        const userName = `${ret.order.user?.firstName ?? ''} ${ret.order.user?.lastName ?? ''}`.trim() || 'Kunde'
+        const result = await this.dhlProvider.createReturnLabel({
+          orderId: ret.orderId,
+          originalTrackingNumber: ret.returnTrackingNumber ?? '',
+          senderName: addr ? `${addr.firstName} ${addr.lastName}` : userName,
+          street: addr?.street ?? '',
+          houseNumber: addr?.houseNumber ?? '',
+          postalCode: addr?.postalCode ?? '',
+          city: addr?.city ?? '',
+          country: addr?.country ?? 'DE',
+          weight: 1000,
+        })
+        labelPdfBuffer = result.returnLabelPdf
+        dhlTrackingNumber = result.returnTrackingNumber
+        // Store DHL tracking number + QR code on return
+        await this.prisma.return.update({
+          where: { id },
+          data: {
+            returnTrackingNumber: dhlTrackingNumber,
+            returnLabelUrl: result.qrCodeBase64 ? `qr:${result.qrCodeBase64}` : undefined,
+          },
+        })
+        this.logger.log(`DHL return label created for ${returnNumber}: ${dhlTrackingNumber}${result.qrCodeBase64 ? ' +QR' : ''}`)
+      } catch (e: any) {
+        this.logger.error(`DHL return label failed: ${e.message}`)
+        // Fallback: generate internal label
+        try {
+          labelPdfBuffer = await this.generateReturnLabel(id)
+          this.logger.log(`Fallback: internal label generated for ${returnNumber}`)
+        } catch (e2: any) { this.logger.error(`Internal label also failed: ${e2.message}`) }
+      }
+    }
 
     try {
       const customerEmail = ret.order.user?.email
       const lang = ret.order.user?.preferredLang ?? 'de'
       if (customerEmail) {
+        const emailData: any = {
+          firstName: ret.order.user?.firstName ?? '',
+          returnNumber,
+          orderNumber: ret.order.orderNumber,
+          status: 'approved',
+          returnAddress: await this.getReturnAddress(),
+          message: this.getStatusMessage('label_sent', lang),
+          sendLabel,
+        }
+        const attachments = labelPdfBuffer
+          ? [{ filename: `Ruecksendeetikett-${returnNumber}.pdf`, contentBase64: labelPdfBuffer.toString('base64'), contentType: 'application/pdf' }]
+          : undefined
         await this.emailService.enqueue({
           to: customerEmail, type: 'return-confirmation' as any, lang,
-          data: { firstName: ret.order.user?.firstName ?? '', returnNumber, orderNumber: ret.order.orderNumber, status: 'approved', returnAddress: await this.getReturnAddress(), message: this.getStatusMessage('label_sent', lang) },
+          data: emailData,
+          attachments,
         })
       }
     } catch (e: any) { this.logger.error(`Email failed: ${e.message}`) }
@@ -467,9 +526,30 @@ export class AdminReturnsService {
 
     this.validateTransition(ret.status, 'inspected')
 
-    // Build a map of order items by ID for quick lookup
+    if (!items || items.length === 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'NoItems',
+        message: {
+          de: 'Keine Artikel zur Prüfung angegeben.',
+          en: 'No items provided for inspection.',
+          ar: 'لم يتم تحديد أي عناصر للفحص.',
+        },
+      })
+    }
+
+    // Build maps of order items by ID AND variantId for flexible lookup
     const orderItemMap = new Map(
       ret.order.items.map((item) => [item.id, item]),
+    )
+    const orderItemByVariantMap = new Map(
+      ret.order.items.filter((item) => item.variantId).map((item) => [item.variantId!, item]),
+    )
+
+    // Parse returnItems JSON to get return quantities
+    const returnItems = (ret.returnItems as any[] | null) ?? []
+    const returnQtyMap = new Map(
+      returnItems.map((ri: any) => [ri.variantId, ri.quantity ?? 1]),
     )
 
     let refundAmount = 0
@@ -482,7 +562,8 @@ export class AdminReturnsService {
 
     // Process each item
     for (const input of items) {
-      const orderItem = orderItemMap.get(input.itemId)
+      // Try to find order item by ID first, then by variantId
+      const orderItem = orderItemMap.get(input.itemId) ?? orderItemByVariantMap.get(input.itemId)
       if (!orderItem) {
         throw new BadRequestException({
           statusCode: 400,
@@ -495,7 +576,9 @@ export class AdminReturnsService {
         })
       }
 
-      const itemTotal = Number(orderItem.unitPrice) * orderItem.quantity
+      // Use return quantity (partial return) if available, otherwise full order quantity
+      const returnQty = (orderItem.variantId ? returnQtyMap.get(orderItem.variantId) : null) ?? orderItem.quantity
+      const itemTotal = Number(orderItem.unitPrice) * returnQty
 
       if (input.condition === 'ok') {
         // Restock: increment quantityOnHand + create InventoryMovement
@@ -504,7 +587,7 @@ export class AdminReturnsService {
         if (orderItem.variantId) {
           await this.restockItem(
             orderItem.variantId,
-            orderItem.quantity,
+            returnQty,
             ret.orderId,
             ret.returnNumber ?? id,
           )
@@ -521,7 +604,7 @@ export class AdminReturnsService {
         if (orderItem.variantId) {
           await this.createDamagedMovement(
             orderItem.variantId,
-            orderItem.quantity,
+            returnQty,
             ret.orderId,
             ret.returnNumber ?? id,
           )
@@ -636,8 +719,17 @@ export class AdminReturnsService {
       })
     }
 
-    // Calculate amount in cents
-    const refundAmountEur = Number(ret.refundAmount ?? 0)
+    // Calculate amount — recalculate from returnItems if refundAmount is 0
+    let refundAmountEur = Number(ret.refundAmount ?? 0)
+    if (refundAmountEur <= 0) {
+      const returnItems = (ret.returnItems as any[] | null) ?? []
+      refundAmountEur = returnItems.reduce((sum: number, ri: any) => sum + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
+      // Persist the recalculated amount
+      if (refundAmountEur > 0) {
+        await this.prisma.return.update({ where: { id }, data: { refundAmount: refundAmountEur } })
+      }
+    }
+
     if (refundAmountEur <= 0) {
       throw new BadRequestException({
         statusCode: 400,
@@ -833,7 +925,76 @@ export class AdminReturnsService {
     }
   }
 
-  // ── 10. generateReturnLabel ────────────────────────────────
+  // ── 10a. sendDhlLabel (nachträglich DHL Label senden) ─────
+
+  async sendDhlLabel(id: string, adminId: string, ip: string) {
+    const ret = await this.prisma.return.findUnique({
+      where: { id },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            user: { select: { email: true, firstName: true, lastName: true, preferredLang: true } },
+            shippingAddress: { select: { firstName: true, lastName: true, street: true, houseNumber: true, postalCode: true, city: true, country: true } },
+          },
+        },
+      },
+    })
+    if (!ret) throw new NotFoundException({ message: { de: 'Retoure nicht gefunden.', en: 'Return not found.', ar: 'المرتجع غير موجود.' } })
+
+    const addr = ret.order.shippingAddress
+    const userName = `${ret.order.user?.firstName ?? ''} ${ret.order.user?.lastName ?? ''}`.trim() || 'Kunde'
+
+    let labelPdfBuffer: Buffer | null = null
+    let dhlTrackingNumber: string | null = null
+
+    try {
+      const result = await this.dhlProvider.createReturnLabel({
+        orderId: ret.orderId,
+        originalTrackingNumber: ret.returnTrackingNumber ?? '',
+        senderName: addr ? `${addr.firstName} ${addr.lastName}` : userName,
+        street: addr?.street ?? '',
+        houseNumber: addr?.houseNumber ?? '',
+        postalCode: addr?.postalCode ?? '',
+        city: addr?.city ?? '',
+        country: addr?.country ?? 'DE',
+        weight: 1000,
+      })
+      labelPdfBuffer = result.returnLabelPdf
+      dhlTrackingNumber = result.returnTrackingNumber
+    } catch (e: any) {
+      this.logger.error(`DHL return label failed: ${e.message}`)
+      throw new BadRequestException({
+        message: { de: `DHL-Label konnte nicht erstellt werden: ${e.message}`, en: `DHL label creation failed: ${e.message}`, ar: `فشل إنشاء ملصق DHL: ${e.message}` },
+      })
+    }
+
+    // Update return
+    await this.prisma.return.update({
+      where: { id },
+      data: { adminNotes: 'shop_pays_shipping', returnTrackingNumber: dhlTrackingNumber },
+    })
+
+    // Send label to customer
+    const customerEmail = ret.order.user?.email
+    const lang = ret.order.user?.preferredLang ?? 'de'
+    if (customerEmail && labelPdfBuffer) {
+      try {
+        await this.emailService.enqueue({
+          to: customerEmail, type: 'return-confirmation' as any, lang,
+          data: { firstName: ret.order.user?.firstName ?? '', returnNumber: ret.returnNumber ?? id.slice(0, 8), orderNumber: ret.order.orderNumber, status: 'label_sent', sendLabel: true, message: this.getStatusMessage('label_sent', lang) },
+          attachments: [{ filename: `Ruecksendeetikett-${ret.returnNumber}.pdf`, contentBase64: labelPdfBuffer.toString('base64'), contentType: 'application/pdf' }],
+        })
+      } catch (e: any) { this.logger.error(`Email: ${e.message}`) }
+    }
+
+    try { await this.audit.log({ adminId, action: 'RETURN_LABEL_SENT', entityType: 'return', entityId: id, changes: { after: { dhlTrackingNumber, adminNotes: 'shop_pays_shipping' } }, ipAddress: ip }) } catch {}
+
+    return { success: true, dhlTrackingNumber }
+  }
+
+  // ── 10b. generateReturnLabel ────────────────────────────────
 
   async generateReturnLabel(id: string): Promise<Buffer> {
     const ret = await this.prisma.return.findUnique({
@@ -871,6 +1032,21 @@ export class AdminReturnsService {
     const returnAddress = await this.getReturnAddress()
     const returnNumber = ret.returnNumber ?? id.slice(0, 8)
 
+    // Generate barcode image before creating PDF
+    let barcodeBuffer: Buffer | null = null
+    try {
+      const bwipjs = require('bwip-js')
+      barcodeBuffer = await bwipjs.toBuffer({
+        bcid: 'code128',
+        text: returnNumber,
+        scale: 3,
+        height: 12,
+        includetext: true,
+        textxalign: 'center',
+        textsize: 10,
+      })
+    } catch { /* fallback to text barcode */ }
+
     return new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ size: 'A4', margin: 50 })
       const chunks: Buffer[] = []
@@ -884,23 +1060,25 @@ export class AdminReturnsService {
 
       doc.moveTo(50, 80).lineTo(545, 80).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
 
-      // ── Return Number (large, scannable) ────────────
+      // ── Return Number + Barcode ────────────────────
       doc.fontSize(14).font('Helvetica-Bold').fillColor('#1a1a2e')
-        .text('Retourennummer:', 50, 100)
-      doc.fontSize(24).font('Helvetica-Bold').fillColor('#dc2626')
-        .text(returnNumber, 50, 120)
+        .text('Retourennummer / Return Number:', 50, 100)
 
-      // Barcode representation (Code39-style text barcode)
-      doc.fontSize(28).font('Courier-Bold').fillColor('#000000')
-        .text(`*${returnNumber}*`, 50, 160, { characterSpacing: 2 })
+      // Barcode (Code128 — includes number as text below)
+      if (barcodeBuffer) {
+        doc.image(barcodeBuffer, 50, 125, { width: 280, height: 70 })
+      } else {
+        doc.fontSize(28).font('Courier-Bold').fillColor('#000000')
+          .text(`*${returnNumber}*`, 50, 160, { characterSpacing: 2 })
+      }
 
-      doc.moveTo(50, 200).lineTo(545, 200).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+      doc.moveTo(50, 235).lineTo(545, 235).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
 
       // ── Return-To Address ───────────────────────────
       doc.fontSize(10).font('Helvetica-Bold').fillColor('#4b5563')
-        .text('Rücksendung an / Return to:', 50, 215)
+        .text('Rücksendung an / Return to:', 50, 250)
       doc.fontSize(11).font('Helvetica').fillColor('#1a1a2e')
-        .text(returnAddress, 50, 232, { width: 250, lineGap: 3 })
+        .text(returnAddress, 50, 267, { width: 250, lineGap: 3 })
 
       // ── Customer ────────────────────────────────────
       const customerName = ret.order.user
@@ -908,21 +1086,21 @@ export class AdminReturnsService {
         : 'Kunde'
 
       doc.fontSize(10).font('Helvetica-Bold').fillColor('#4b5563')
-        .text('Absender / From:', 320, 215)
+        .text('Absender / From:', 320, 250)
       doc.fontSize(11).font('Helvetica').fillColor('#1a1a2e')
-        .text(customerName, 320, 232)
+        .text(customerName, 320, 267)
 
       // ── Order Reference ─────────────────────────────
       doc.fontSize(10).font('Helvetica').fillColor('#4b5563')
-        .text(`Bestellnummer: ${ret.order.orderNumber}`, 320, 260)
+        .text(`Bestellnummer: ${ret.order.orderNumber}`, 320, 285)
 
-      doc.moveTo(50, 300).lineTo(545, 300).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+      doc.moveTo(50, 320).lineTo(545, 320).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
 
       // ── Items List ──────────────────────────────────
       doc.fontSize(12).font('Helvetica-Bold').fillColor('#1a1a2e')
-        .text('Retoure-Artikel / Items to Return:', 50, 315)
+        .text('Retoure-Artikel / Items to Return:', 50, 335)
 
-      let y = 340
+      let y = 360
       // Table header
       doc.rect(50, y - 4, 495, 18).fill('#f3f4f6')
       doc.font('Helvetica-Bold').fontSize(8).fillColor('#4b5563')
@@ -948,7 +1126,7 @@ export class AdminReturnsService {
         y += 16
       }
 
-      if (returnItems && Array.isArray(returnItems)) {
+      if (returnItems && Array.isArray(returnItems) && returnItems.length > 0) {
         returnItems.forEach((item, i) => renderItem(item.name ?? '—', item.sku ?? '—', item.quantity, i))
       } else {
         ret.order.items.forEach((item, i) => renderItem(item.snapshotName, item.snapshotSku, item.quantity, i))

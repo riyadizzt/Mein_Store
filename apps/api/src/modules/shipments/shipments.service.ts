@@ -5,14 +5,16 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
-import { Cron, CronExpression } from '@nestjs/schedule'
+import { Cron } from '@nestjs/schedule'
 import { PrismaService } from '../../prisma/prisma.service'
 import { IShipmentProvider, SHIPMENT_PROVIDERS } from './shipment-provider.interface'
 import { KlarnaProvider } from '../payments/providers/klarna.provider'
 import { PaymentsService } from '../payments/payments.service'
 import { EmailService } from '../email/email.service'
+import { DHLProvider } from './providers/dhl.provider'
 import { CreateShipmentDto } from './dto/create-shipment.dto'
 import { CreateReturnRequestDto } from './dto/return-request.dto'
 import { ORDER_EVENTS, OrderStatusChangedEvent } from '../orders/events/order.events'
@@ -30,6 +32,7 @@ export class ShipmentsService {
     private readonly klarnaProvider: KlarnaProvider,
     private readonly paymentsService: PaymentsService,
     private readonly emailService: EmailService,
+    private readonly dhlProvider: DHLProvider,
     @Inject(SHIPMENT_PROVIDERS) providers: IShipmentProvider[],
   ) {
     this.providerMap = new Map(providers.map((p) => [p.providerName, p]))
@@ -47,7 +50,7 @@ export class ShipmentsService {
         items: {
           include: { variant: { select: { weightGrams: true } } },
         },
-        user: { select: { email: true, firstName: true, preferredLang: true } },
+        user: { select: { id: true, email: true, firstName: true, preferredLang: true } },
       },
     })
 
@@ -69,7 +72,7 @@ export class ShipmentsService {
         statusCode: 400,
         error: 'InvalidOrderState',
         message: {
-          de: `Versand nicht möglich für Status: ${order.status}`,
+          de: `Versand nicht moeglich fuer Status: ${order.status}`,
           en: `Shipment not possible for status: ${order.status}`,
           ar: `لا يمكن الشحن للحالة: ${order.status}`,
         },
@@ -124,7 +127,8 @@ export class ShipmentsService {
       trackingNumber = result.trackingNumber
       trackingUrl = result.trackingUrl
       providerShipmentId = result.providerShipmentId
-      labelUrl = `/api/v1/shipments/${result.trackingNumber}/label.pdf`
+      // Label URL points to our API endpoint that serves the stored PDF
+      labelUrl = `/api/v1/shipments/labels/${result.trackingNumber}`
     } catch (err: any) {
       if (err?.response?.isManualMode) {
         // DHL API not configured — create shipment record for manual label upload
@@ -145,6 +149,7 @@ export class ShipmentsService {
         trackingNumber,
         trackingUrl,
         labelUrl,
+        shippedAt: isManualMode ? undefined : new Date(),
       },
     })
 
@@ -171,7 +176,9 @@ export class ShipmentsService {
         toStatus: newStatus as any,
         source: 'admin',
         referenceId: shipment.id,
-        notes: isManualMode ? 'Manuelles Label benötigt' : undefined,
+        notes: isManualMode
+          ? 'Manuelles Label benoetigt'
+          : `DHL Label erstellt: ${trackingNumber}`,
         createdBy: performedBy,
       },
     })
@@ -192,12 +199,15 @@ export class ShipmentsService {
       }
     }
 
-    // Emit status changed event → email (only if actually shipped)
+    // Emit status changed event → triggers shipping confirmation email
     if (!isManualMode) {
       this.eventEmitter.emit(
         ORDER_EVENTS.STATUS_CHANGED,
         new OrderStatusChangedEvent(order.id, order.status, 'shipped', 'admin', correlationId),
       )
+
+      // Shipping email is handled by order-email.listener via STATUS_CHANGED event
+      // The listener sends order-status email with tracking info when status becomes 'shipped'
     }
 
     this.logger.log(
@@ -212,9 +222,9 @@ export class ShipmentsService {
       isManualMode,
       addressWarnings: addressWarnings.length > 0 ? addressWarnings : undefined,
       message: isManualMode
-        ? 'Sendung erstellt — bitte Label manuell im DHL Geschäftskundenportal erstellen und hier hochladen.'
+        ? 'Sendung erstellt — bitte Label manuell im DHL Geschaeftskundenportal erstellen und hier hochladen.'
         : addressWarnings.length > 0
-        ? 'Sendung erstellt — Adresse konnte nicht von DHL verifiziert werden. Bitte prüfen.'
+        ? 'Sendung erstellt — Adresse konnte nicht von DHL verifiziert werden. Bitte pruefen.'
         : undefined,
     }
   }
@@ -234,8 +244,10 @@ export class ShipmentsService {
     if (!shipment) return
 
     const statusMap: Record<string, { shipment: string; order: string }> = {
+      'pre-transit': { shipment: 'label_created', order: 'shipped' },
       'transit': { shipment: 'in_transit', order: 'shipped' },
       'in-transit': { shipment: 'in_transit', order: 'shipped' },
+      'out-for-delivery': { shipment: 'out_for_delivery', order: 'shipped' },
       'delivered': { shipment: 'delivered', order: 'delivered' },
       'failure': { shipment: 'failed_attempt', order: 'shipped' },
       'returned': { shipment: 'returned_to_sender', order: 'returned' },
@@ -286,11 +298,119 @@ export class ShipmentsService {
     }
 
     this.logger.log(
-      `[${correlationId}] Tracking update: ${trackingNumber} → ${mapped.shipment} | order=${shipment.order.orderNumber}`,
+      `[${correlationId}] Tracking update: ${trackingNumber} -> ${mapped.shipment} | order=${shipment.order.orderNumber}`,
     )
   }
 
   // ── RETURN REQUEST (14-Tage Widerruf) ─────────────────────
+
+  // Shared include used by both the logged-in and the public token flow.
+  // Private helper so the two entry points cannot drift apart.
+  private readonly RETURN_ORDER_INCLUDE = {
+    shipment: true,
+    returns: { where: { status: { not: 'refunded' as any } } },
+    shippingAddress: true,
+    items: { select: { variantId: true, snapshotName: true, snapshotSku: true, quantity: true, unitPrice: true } },
+    user: { select: { email: true, firstName: true, preferredLang: true } },
+  } as const
+
+  /**
+   * Public entry point — authenticated by a one-time token stored in
+   * order.notes.confirmationToken. Used by the guest-return page so
+   * customers without an account (stub users) can still exercise their
+   * 14-day withdrawal right under §355 BGB.
+   */
+  async createReturnRequestByToken(
+    orderId: string,
+    dto: CreateReturnRequestDto,
+    token: string,
+    correlationId: string,
+  ) {
+    if (!token) throw this.notFound('Token')
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, deletedAt: null },
+      include: this.RETURN_ORDER_INCLUDE,
+    })
+    if (!order) throw this.notFound('Order')
+
+    // Validate token against notes.confirmationToken (set in handlePaymentSuccess)
+    let notes: any = {}
+    try { notes = JSON.parse(order.notes ?? '{}') } catch {}
+    if (!notes.confirmationToken || notes.confirmationToken !== token) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: 'InvalidReturnToken',
+        message: {
+          de: 'Ungueltiger Retouren-Link.',
+          en: 'Invalid return link.',
+          ar: 'رابط الإرجاع غير صالح.',
+        },
+      })
+    }
+
+    return this.processReturnRequest(order, dto, correlationId)
+  }
+
+  /**
+   * Read-only endpoint for the public return page. Returns just enough
+   * data to pre-fill the form (items, deadline, delivery date) without
+   * leaking sensitive fields.
+   */
+  async getReturnPreFillByToken(orderId: string, token: string) {
+    if (!token) throw this.notFound('Token')
+    const order: any = await this.prisma.order.findFirst({
+      where: { id: orderId, deletedAt: null },
+      include: {
+        shipment: { select: { deliveredAt: true, status: true } },
+        items: {
+          select: {
+            variantId: true,
+            snapshotName: true,
+            snapshotSku: true,
+            quantity: true,
+            unitPrice: true,
+            variant: { select: { color: true, size: true, product: { select: { images: { where: { isPrimary: true }, select: { url: true }, take: 1 } } } } },
+          },
+        },
+        returns: { select: { status: true } },
+      },
+    })
+    if (!order) throw this.notFound('Order')
+
+    let notes: any = {}
+    try { notes = JSON.parse(order.notes ?? '{}') } catch {}
+    if (!notes.confirmationToken || notes.confirmationToken !== token) {
+      throw new UnauthorizedException('Invalid return link')
+    }
+
+    const deliveredAt = order.shipment?.deliveredAt ?? null
+    const deadline = deliveredAt
+      ? new Date(deliveredAt.getTime() + WITHDRAWAL_DAYS * 24 * 60 * 60 * 1000)
+      : null
+    const daysLeft = deadline ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / (24 * 60 * 60 * 1000))) : 0
+    const hasActiveReturn = order.returns.some((r: any) => r.status !== 'refunded' && r.status !== 'rejected')
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      deliveredAt: deliveredAt?.toISOString() ?? null,
+      deadline: deadline?.toISOString() ?? null,
+      daysLeft,
+      canReturn: order.status === 'delivered' && !hasActiveReturn && daysLeft > 0,
+      hasActiveReturn,
+      items: order.items.map((it: any) => ({
+        variantId: it.variantId,
+        name: it.snapshotName,
+        sku: it.snapshotSku,
+        color: it.variant?.color,
+        size: it.variant?.size,
+        quantity: it.quantity,
+        unitPrice: Number(it.unitPrice),
+        imageUrl: it.variant?.product?.images?.[0]?.url ?? null,
+      })),
+    }
+  }
 
   async createReturnRequest(
     orderId: string,
@@ -300,15 +420,14 @@ export class ShipmentsService {
   ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, userId, deletedAt: null },
-      include: {
-        shipment: true,
-        returns: { where: { status: { not: 'refunded' } } },
-        shippingAddress: true,
-        user: { select: { email: true, firstName: true, preferredLang: true } },
-      },
+      include: this.RETURN_ORDER_INCLUDE,
     })
 
     if (!order) throw this.notFound('Order')
+    return this.processReturnRequest(order, dto, correlationId)
+  }
+
+  private async processReturnRequest(order: any, dto: CreateReturnRequestDto, correlationId: string) {
     if (!order.shipment) throw this.notFound('Shipment')
 
     // Guard: only delivered orders
@@ -317,7 +436,7 @@ export class ShipmentsService {
         statusCode: 400,
         error: 'OrderNotDelivered',
         message: {
-          de: 'Rücksendung nur für zugestellte Bestellungen möglich.',
+          de: 'Ruecksendung nur fuer zugestellte Bestellungen moeglich.',
           en: 'Returns are only possible for delivered orders.',
           ar: 'الإرجاع ممكن فقط للطلبات المسلمة.',
         },
@@ -330,7 +449,7 @@ export class ShipmentsService {
         statusCode: 409,
         error: 'ReturnAlreadyExists',
         message: {
-          de: 'Es gibt bereits eine aktive Rücksendung für diese Bestellung.',
+          de: 'Es gibt bereits eine aktive Ruecksendung fuer diese Bestellung.',
           en: 'A return request already exists for this order.',
           ar: 'يوجد طلب إرجاع نشط بالفعل لهذا الطلب.',
         },
@@ -347,7 +466,7 @@ export class ShipmentsService {
         statusCode: 400,
         error: 'WithdrawalExpired',
         message: {
-          de: `Die 14-tägige Widerrufsfrist ist am ${deadline.toLocaleDateString('de-DE')} abgelaufen.`,
+          de: `Die 14-taegige Widerrufsfrist ist am ${deadline.toLocaleDateString('de-DE')} abgelaufen.`,
           en: `The 14-day withdrawal period expired on ${deadline.toLocaleDateString('en-GB')}.`,
           ar: `انتهت فترة الانسحاب البالغة 14 يومًا في ${deadline.toLocaleDateString('ar')}.`,
         },
@@ -355,46 +474,47 @@ export class ShipmentsService {
     }
 
     // Generate return label via carrier
-    let returnTrackingNumber: string | undefined
-    let returnLabelUrl: string | undefined
+    // Return always starts as 'requested' — admin decides shipping cost + label in approve step
 
-    const provider = this.providerMap.get(order.shipment.carrier)
-    if (provider && order.shippingAddress) {
-      try {
-        const returnResult = await provider.createReturnLabel({
-          originalTrackingNumber: order.shipment.trackingNumber!,
-          senderName: `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`,
-          street: order.shippingAddress.street,
-          houseNumber: order.shippingAddress.houseNumber,
-          postalCode: order.shippingAddress.postalCode,
-          city: order.shippingAddress.city,
-          country: order.shippingAddress.country,
-          weight: 1000, // default 1kg for returns
-          orderId: order.id,
-        })
-        returnTrackingNumber = returnResult.returnTrackingNumber
-        returnLabelUrl = `/api/v1/returns/${returnResult.returnTrackingNumber}/label.pdf`
-      } catch (err) {
-        this.logger.error(`Return label generation failed for order ${orderId}`, err)
+    // Generate return number (RET-YYYY-NNNNN)
+    const year = new Date().getFullYear()
+    const lastReturn = await this.prisma.return.findFirst({ orderBy: { createdAt: 'desc' }, select: { returnNumber: true } })
+    const lastSeq = lastReturn?.returnNumber ? parseInt(lastReturn.returnNumber.split('-').pop() ?? '0') : 0
+    const returnNumber = `RET-${year}-${String(lastSeq + 1).padStart(5, '0')}`
+
+    // Build returnItems JSON with quantities
+    const returnItemsJson = dto.items?.map(i => {
+      const orderItem = order.items.find((oi: any) => oi.variantId === i.variantId)
+      return {
+        variantId: i.variantId,
+        name: orderItem?.snapshotName ?? '',
+        sku: orderItem?.snapshotSku ?? '',
+        quantity: i.quantity ?? orderItem?.quantity ?? 1,
+        maxQuantity: orderItem?.quantity ?? 1,
+        unitPrice: orderItem ? Number(orderItem.unitPrice) : 0,
+        reason: i.reason,
       }
-    }
+    }) ?? []
 
     const returnRequest = await this.prisma.return.create({
       data: {
-        orderId,
+        returnNumber,
+        orderId: order.id,
         shipmentId: order.shipment.id,
         reason: dto.reason,
-        status: returnLabelUrl ? 'label_sent' : 'requested',
+        status: 'requested',
         notes: dto.notes,
-        returnTrackingNumber,
-        returnLabelUrl,
         deadline,
+        returnItems: returnItemsJson.length > 0 ? returnItemsJson : undefined,
+        refundAmount: returnItemsJson.length > 0
+          ? returnItemsJson.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)
+          : undefined,
       },
     })
 
     // Update order status
     await this.prisma.order.update({
-      where: { id: orderId },
+      where: { id: order.id },
       data: { status: 'returned' },
     })
 
@@ -408,7 +528,6 @@ export class ShipmentsService {
         data: {
           firstName: order.user.firstName,
           orderNumber: order.orderNumber,
-          returnLabelUrl,
         },
       }).catch(() => {})
     }
@@ -416,7 +535,7 @@ export class ShipmentsService {
     // Emit event for admin notifications
     this.eventEmitter.emit('return.submitted', {
       returnId: returnRequest.id,
-      orderId,
+      orderId: order.id,
       orderNumber: order.orderNumber,
       reason: dto.reason,
       itemCount: dto.items?.length ?? 0,
@@ -429,8 +548,7 @@ export class ShipmentsService {
     return {
       returnId: returnRequest.id,
       status: returnRequest.status,
-      returnTrackingNumber,
-      returnLabelUrl,
+      returnNumber: returnRequest.returnNumber,
       deadline: deadline.toISOString(),
     }
   }
@@ -474,13 +592,11 @@ export class ShipmentsService {
           },
         })
 
-        this.logger.log(`[${correlationId}] Return ${returnId} → refund processed`)
+        this.logger.log(`[${correlationId}] Return ${returnId} -> refund processed`)
       } catch (err) {
         this.logger.error(`[${correlationId}] Auto-refund failed for return ${returnId}`, err)
       }
     }
-
-    // TODO: Restock inventory (emit event to InventoryModule)
 
     return this.prisma.return.findFirst({ where: { id: returnId } })
   }
@@ -523,10 +639,10 @@ export class ShipmentsService {
     this.logger.log(`[${correlationId}] Shipment cancelled: ${shipment.id}`)
   }
 
-  // ── DHL Tracking Polling (Cron) ────────────────────────────
-  // Safety net: polls DHL for shipments stuck in transit
+  // ── DHL Tracking Polling (Cron: every 2 hours) ────────────
+  // Polls DHL Tracking API for active shipments and updates status
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron('0 */2 * * *') // Every 2 hours
   async pollTrackingUpdates(): Promise<void> {
     const activeShipments = await this.prisma.shipment.findMany({
       where: {
@@ -534,17 +650,57 @@ export class ShipmentsService {
         status: { in: ['label_created', 'picked_up', 'in_transit', 'out_for_delivery'] },
         trackingNumber: { not: null },
       },
-      select: { trackingNumber: true },
+      select: { trackingNumber: true, id: true },
       take: 50,
+      orderBy: { updatedAt: 'asc' }, // oldest-updated first
     })
 
     if (activeShipments.length === 0) return
 
     this.logger.log(`Polling DHL tracking for ${activeShipments.length} shipment(s)`)
 
-    // TODO: Implement DHL Tracking API polling
-    // For each tracking number → GET /track/shipments?trackingNumber={tn}
-    // Parse status → call updateTrackingStatus()
+    for (const shipment of activeShipments) {
+      if (!shipment.trackingNumber) continue
+
+      try {
+        const result = await this.dhlProvider.getTrackingStatus(shipment.trackingNumber)
+        if (!result) continue
+
+        // Map DHL status codes to our internal statuses
+        const dhlStatusMap: Record<string, string> = {
+          'pre-transit': 'pre-transit',
+          'transit': 'transit',
+          'delivered': 'delivered',
+          'failure': 'failure',
+          'returned': 'returned',
+          'unknown': '',
+        }
+
+        const mappedStatus = dhlStatusMap[result.status.toLowerCase()] ?? ''
+        if (mappedStatus) {
+          await this.updateTrackingStatus(
+            shipment.trackingNumber,
+            mappedStatus,
+            `cron-poll-${shipment.id}`,
+          )
+        }
+
+        // Update estimated delivery if available
+        if (result.estimatedDelivery) {
+          await this.prisma.shipment.update({
+            where: { id: shipment.id },
+            data: { estimatedDelivery: new Date(result.estimatedDelivery) },
+          }).catch(() => {})
+        }
+      } catch (err) {
+        this.logger.warn(`Tracking poll failed for ${shipment.trackingNumber}: ${err}`)
+      }
+
+      // Rate limit: 200ms between requests to avoid DHL API throttling
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+
+    this.logger.log(`DHL tracking poll completed for ${activeShipments.length} shipment(s)`)
   }
 
   // ── MANUAL LABEL UPLOAD ─────────────────────────────────
@@ -552,19 +708,23 @@ export class ShipmentsService {
   async uploadManualLabel(
     shipmentId: string,
     trackingNumber: string,
-    _file: Express.Multer.File, // TODO: upload to Cloudinary
+    _file: Express.Multer.File,
     performedBy: string,
     correlationId: string,
   ) {
     const shipment = await this.prisma.shipment.findFirst({
       where: { id: shipmentId },
-      include: { order: { select: { id: true, orderNumber: true, status: true } } },
+      include: {
+        order: {
+          select: { id: true, orderNumber: true, status: true },
+          include: { user: { select: { email: true, firstName: true, preferredLang: true } } } as any,
+        },
+      },
     })
 
     if (!shipment) throw this.notFound('Shipment')
 
-    // TODO: Upload PDF to Cloudinary and get URL
-    const labelUrl = `/api/v1/shipments/${trackingNumber}/label.pdf`
+    const labelUrl = `/api/v1/shipments/labels/${trackingNumber}`
     const trackingUrl = `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${trackingNumber}`
 
     const updated = await this.prisma.shipment.update({
@@ -614,6 +774,16 @@ export class ShipmentsService {
       labelUrl,
       status: updated.status,
     }
+  }
+
+  // ── GET LABEL PDF ─────────────────────────────────────────
+
+  getLabelPdfPath(trackingNumber: string): string | null {
+    return this.dhlProvider.getLabelPath(trackingNumber)
+  }
+
+  getReturnLabelPdfPath(trackingNumber: string): string | null {
+    return this.dhlProvider.getReturnLabelPath(trackingNumber)
   }
 
   // ── Helpers ────────────────────────────────────────────────

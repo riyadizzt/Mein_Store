@@ -1,61 +1,41 @@
-import { useTranslations } from 'next-intl'
-import { HeroWithCampaign } from '@/components/home/hero-with-campaign'
-import { TrustSignals } from '@/components/layout/trust-signals'
-import { CategoryShowcase } from '@/components/home/category-showcase'
-import { FeaturedProducts } from '@/components/home/featured-products'
-import { EditorialBanner } from '@/components/home/editorial-banner'
-import { NewsletterSection } from '@/components/home/newsletter-section'
+import { API_BASE_URL } from '@/lib/env'
+import { HomeLayoutA } from '@/components/home/layouts/home-layout-a'
+import { HomeLayoutB } from '@/components/home/layouts/home-layout-b'
+import { HomeLayoutC } from '@/components/home/layouts/home-layout-c'
 
-export const revalidate = 60
+// Page is dynamic (searchParams + admin-controlled design). bf-cache loss is accepted —
+// applies only to homepage; product/account/cart pages still bf-cache normally.
+export const dynamic = 'force-dynamic'
 
-function SectionDivider() {
-  return <div className="mx-auto max-w-xs h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+type DesignKey = 'A' | 'B' | 'C'
+
+async function getHomepageDesign(): Promise<DesignKey> {
+  try {
+    const apiBase = API_BASE_URL
+    const res = await fetch(`${apiBase}/api/v1/settings/public`, { cache: 'no-store' })
+    if (!res.ok) return 'A'
+    const data = await res.json()
+    const d = data?.homepage_design
+    return d === 'B' || d === 'C' ? d : 'A'
+  } catch {
+    return 'A'
+  }
 }
 
-export default function HomePage({
+export default async function HomePage({
   params: { locale },
+  searchParams,
 }: {
   params: { locale: string }
+  searchParams: { preview?: string }
 }) {
-  const t = useTranslations('home')
+  // ── Preview override (admin-only feature, just a query param) ──
+  const previewParam = searchParams?.preview
+  const isValidPreview = previewParam === 'A' || previewParam === 'B' || previewParam === 'C'
 
-  return (
-    <>
-      {/* 1. Hero — full viewport, immersive */}
-      <HeroWithCampaign locale={locale} />
+  const design: DesignKey = isValidPreview ? (previewParam as DesignKey) : await getHomepageDesign()
 
-      {/* 2. Trust signals */}
-      <TrustSignals />
-
-      {/* 3. Categories */}
-      <CategoryShowcase />
-
-      <SectionDivider />
-
-      {/* 4. Bestsellers */}
-      <FeaturedProducts
-        title={t('bestsellers')}
-        eyebrow={locale === 'ar' ? 'الأكثر مبيعاً' : locale === 'en' ? 'Most Popular' : 'Am beliebtesten'}
-        sort="bestseller"
-        locale={locale}
-      />
-
-      {/* 5. Editorial */}
-      <EditorialBanner locale={locale} />
-
-      {/* 6. New Arrivals */}
-      <FeaturedProducts
-        title={t('newArrivals')}
-        eyebrow={locale === 'ar' ? 'وصل حديثاً' : locale === 'en' ? 'Just Arrived' : 'Neu eingetroffen'}
-        sort="newest"
-        locale={locale}
-        bgClass="bg-paper"
-      />
-
-      <SectionDivider />
-
-      {/* 7. Newsletter */}
-      <NewsletterSection />
-    </>
-  )
+  if (design === 'B') return <HomeLayoutB locale={locale} />
+  if (design === 'C') return <HomeLayoutC locale={locale} />
+  return <HomeLayoutA locale={locale} />
 }

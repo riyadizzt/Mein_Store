@@ -17,6 +17,9 @@ interface PremiumGalleryProps {
 }
 
 export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryProps) {
+  const safeImages = images ?? []
+  const total = safeImages.length
+
   const [active, setActive] = useState(0)
   const [direction, setDirection] = useState(0) // -1 = prev, 1 = next
   const [lightbox, setLightbox] = useState(false)
@@ -30,8 +33,16 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
   const isDragging = useRef(false)
   const hasDragged = useRef(false)
 
-  const total = images.length
-  const img = images[active]
+  // Reset active index whenever the image list changes to a shorter list
+  // (e.g. user picks a color variant that has fewer images). Without this,
+  // active can point past the end of the array → img is undefined → crash.
+  useEffect(() => {
+    if (active >= total && total > 0) setActive(0)
+  }, [total, active])
+
+  // Clamp to valid range for THIS render so we never crash even before the effect runs.
+  const safeActive = total > 0 ? Math.min(active, total - 1) : 0
+  const img = safeImages[safeActive]
 
   const go = useCallback((i: number) => {
     if (i === active || i < 0 || i >= total) return
@@ -147,7 +158,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
     exit: (dir: number) => ({ x: dir > 0 ? '-30%' : '30%', opacity: 0 }),
   }
 
-  if (images.length === 0) {
+  if (total === 0 || !img) {
     return (
       <div className="aspect-[4/5] bg-[#f5f5f5] flex items-center justify-center">
         <span className="text-7xl font-display font-light text-[#e5e5e5] select-none">
@@ -175,7 +186,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           tabIndex={0}
-          aria-label={`${productName} — ${active + 1} / ${total}`}
+          aria-label={`${productName} — ${safeActive + 1} / ${total}`}
           onKeyDown={(e) => {
             if (e.key === 'ArrowLeft') { isRTL ? next() : prev() }
             if (e.key === 'ArrowRight') { isRTL ? prev() : next() }
@@ -184,7 +195,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
         >
           <AnimatePresence mode="popLayout" initial={false} custom={direction}>
             <motion.div
-              key={active}
+              key={safeActive}
               custom={direction}
               variants={slideVariants}
               initial="enter"
@@ -194,10 +205,10 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
               className="absolute inset-0"
             >
               <Image
-                src={img!.url}
-                alt={img!.altText ?? `${productName} ${active + 1}`}
+                src={img.url}
+                alt={img.altText ?? `${productName} ${safeActive + 1}`}
                 fill
-                priority={active === 0}
+                priority={safeActive === 0}
                 sizes="(max-width: 1024px) 100vw, 60vw"
                 className="object-cover will-change-transform pointer-events-none"
                 style={{
@@ -218,7 +229,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
               <button
                 onClick={(e) => { e.stopPropagation(); isRTL ? next() : prev() }}
                 className={`absolute left-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center text-[#0f1419]/50 hover:text-[#0f1419] hover:bg-white transition-all shadow-sm ${
-                  active === 0 ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
+                  safeActive === 0 ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
                 }`}
                 aria-label="Previous"
               >
@@ -227,7 +238,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
               <button
                 onClick={(e) => { e.stopPropagation(); isRTL ? prev() : next() }}
                 className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 h-10 w-10 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center text-[#0f1419]/50 hover:text-[#0f1419] hover:bg-white transition-all shadow-sm ${
-                  active === total - 1 ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
+                  safeActive === total - 1 ? 'opacity-0 pointer-events-none' : 'opacity-0 group-hover:opacity-100'
                 }`}
                 aria-label="Next"
               >
@@ -240,7 +251,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
           {total > 1 && (
             <div className="absolute bottom-4 inset-x-0 flex justify-center pointer-events-none">
               <span className="text-[11px] tracking-[0.2em] text-white/60 bg-black/15 backdrop-blur-sm px-3 py-1">
-                {active + 1} / {total}
+                {safeActive + 1} / {total}
               </span>
             </div>
           )}
@@ -249,13 +260,13 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
         {/* ─── Thumbnails (desktop) ─── */}
         {total > 1 && (
           <div className="hidden lg:flex gap-2.5 overflow-x-auto scrollbar-hide pb-1 mt-3">
-            {images.map((im, i) => (
+            {safeImages.map((im, i) => (
               <button
                 key={i}
                 onClick={() => go(i)}
                 aria-label={`${productName} ${i + 1}`}
                 className={`relative flex-shrink-0 w-20 h-[100px] overflow-hidden transition-all duration-200 ${
-                  i === active ? 'opacity-100 ring-2 ring-[#d4a853] ring-offset-1' : 'opacity-40 hover:opacity-70'
+                  i === safeActive ? 'opacity-100 ring-2 ring-[#d4a853] ring-offset-1' : 'opacity-40 hover:opacity-70'
                 }`}
               >
                 <Image src={im.url} alt="" fill sizes="80px" className="object-cover" loading="lazy" />
@@ -267,12 +278,12 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
         {/* ─── Dot indicators (mobile) ─── */}
         {total > 1 && (
           <div className="flex lg:hidden justify-center gap-2 pt-2">
-            {images.map((_, i) => (
+            {safeImages.map((_, i) => (
               <button
                 key={i}
                 onClick={() => go(i)}
                 className={`rounded-full transition-all duration-300 ${
-                  i === active
+                  i === safeActive
                     ? 'w-2.5 h-2.5 bg-[#0f1419]'
                     : 'w-2 h-2 bg-[#0f1419]/20'
                 }`}
@@ -305,7 +316,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
             {/* Counter */}
             {total > 1 && (
               <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 text-sm tracking-[0.15em] text-[#0f1419]/40 select-none">
-                {active + 1} / {total}
+                {safeActive + 1} / {total}
               </div>
             )}
 
@@ -314,7 +325,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
               <>
                 <button
                   onClick={(e) => { e.stopPropagation(); isRTL ? next() : prev() }}
-                  disabled={active === 0}
+                  disabled={safeActive === 0}
                   className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-[#f5f5f5] flex items-center justify-center text-[#0f1419]/40 hover:text-[#0f1419] hover:bg-[#e8e8e8] transition-all disabled:opacity-0"
                   aria-label="Previous"
                 >
@@ -322,7 +333,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); isRTL ? prev() : next() }}
-                  disabled={active === total - 1}
+                  disabled={safeActive === total - 1}
                   className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-10 h-12 w-12 rounded-full bg-[#f5f5f5] flex items-center justify-center text-[#0f1419]/40 hover:text-[#0f1419] hover:bg-[#e8e8e8] transition-all disabled:opacity-0"
                   aria-label="Next"
                 >
@@ -345,9 +356,9 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
                 onMouseMove={handleLightboxMove}
               >
                 <Image
-                  key={active}
-                  src={images[active]!.url}
-                  alt={images[active]!.altText ?? `${productName} ${active + 1}`}
+                  key={safeActive}
+                  src={img.url}
+                  alt={img.altText ?? `${productName} ${safeActive + 1}`}
                   width={1200}
                   height={1500}
                   className="max-h-[85vh] w-auto object-contain select-none will-change-transform"
@@ -365,12 +376,12 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
             {/* Lightbox dots */}
             {total > 1 && (
               <div className="absolute bottom-6 inset-x-0 flex justify-center gap-2 z-10">
-                {images.map((_, i) => (
+                {safeImages.map((_, i) => (
                   <button
                     key={i}
                     onClick={() => go(i)}
                     className={`rounded-full transition-all duration-300 ${
-                      i === active ? 'w-2.5 h-2.5 bg-[#0f1419]' : 'w-2 h-2 bg-[#0f1419]/20 hover:bg-[#0f1419]/40'
+                      i === safeActive ? 'w-2.5 h-2.5 bg-[#0f1419]' : 'w-2 h-2 bg-[#0f1419]/20 hover:bg-[#0f1419]/40'
                     }`}
                     aria-label={`${i + 1}`}
                   />

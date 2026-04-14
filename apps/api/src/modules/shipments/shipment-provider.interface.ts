@@ -32,6 +32,7 @@ export interface CreateReturnLabelInput {
 export interface ReturnLabelResult {
   returnTrackingNumber: string
   returnLabelPdf: Buffer
+  qrCodeBase64?: string // QR code for DHL Mobile Retoure (customer shows at Paketshop)
 }
 
 export interface IShipmentProvider {

@@ -85,6 +85,10 @@ export class AdminUsersService {
           lockedUntil: true, loginAttempts: true,
           preferredLang: true, passwordHash: true, profileImageUrl: true,
           tags: true, createdAt: true, lastLoginAt: true,
+          // OAuth users have no password but are NOT guests — check the
+          // oauth_accounts relation so Google/Apple signups get the right
+          // badge in the admin list.
+          oauthAccounts: { select: { provider: true }, take: 1 },
           _count: { select: { orders: true, wishlistItems: true, reviews: true } },
         },
         orderBy: needPostSort ? undefined : orderBy,
@@ -104,18 +108,29 @@ export class AdminUsersService {
     const revenueMap = new Map<string, number>()
     for (const r of revenues) { if (r.userId) revenueMap.set(r.userId, Number(r._sum.totalAmount ?? 0)) }
 
-    let result = users.map((u) => ({
-      id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName,
-      phone: u.phone, role: u.role, isActive: u.isActive, isBlocked: u.isBlocked,
-      lockedUntil: u.lockedUntil, loginAttempts: u.loginAttempts,
-      isVerified: u.isVerified, preferredLang: u.preferredLang,
-      isGuest: !u.passwordHash, profileImageUrl: u.profileImageUrl,
-      tags: (u.tags as string[]) ?? [],
-      createdAt: u.createdAt, lastLoginAt: u.lastLoginAt,
-      ordersCount: u._count.orders, wishlistCount: u._count.wishlistItems,
-      reviewsCount: u._count.reviews,
-      totalRevenue: revenueMap.get(u.id) ?? 0,
-    }))
+    let result = users.map((u) => {
+      const oauthProvider = u.oauthAccounts?.[0]?.provider ?? null
+      // True guest = stub-user from guest checkout.
+      //  Signal 1: explicit OAuth link exists → not a guest
+      //  Signal 2: no password AND already verified → legacy Google/Apple
+      //            signup before we started writing OauthAccount rows.
+      //            orders.service.ts creates stub users with isVerified=false,
+      //            so isVerified=true + no password is a strong OAuth signal.
+      const isLegacyOauth = !u.passwordHash && u.isVerified && !oauthProvider
+      const isGuest = !u.passwordHash && !oauthProvider && !isLegacyOauth
+      return {
+        id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName,
+        phone: u.phone, role: u.role, isActive: u.isActive, isBlocked: u.isBlocked,
+        lockedUntil: u.lockedUntil, loginAttempts: u.loginAttempts,
+        isVerified: u.isVerified, preferredLang: u.preferredLang,
+        isGuest, authProvider: oauthProvider, profileImageUrl: u.profileImageUrl,
+        tags: (u.tags as string[]) ?? [],
+        createdAt: u.createdAt, lastLoginAt: u.lastLoginAt,
+        ordersCount: u._count.orders, wishlistCount: u._count.wishlistItems,
+        reviewsCount: u._count.reviews,
+        totalRevenue: revenueMap.get(u.id) ?? 0,
+      }
+    })
 
     // Post-fetch filters
     if (query.filter === 'guest') result = result.filter((u) => u.isGuest)
@@ -163,6 +178,7 @@ export class AdminUsersService {
           },
         },
         customerNotes: { orderBy: { createdAt: 'desc' } },
+        oauthAccounts: { select: { provider: true } },
         _count: { select: { orders: true, reviews: true, wishlistItems: true } },
       },
     })
@@ -190,7 +206,11 @@ export class AdminUsersService {
       id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName,
       phone: user.phone, preferredLang: user.preferredLang, role: user.role,
       isActive: user.isActive, isBlocked: user.isBlocked, isVerified: user.isVerified,
-      isGuest: !user.passwordHash, profileImageUrl: user.profileImageUrl,
+      // Same 3-signal logic as the list view — respect OAuth link if present,
+      // treat verified+passwordless users as legacy social logins.
+      isGuest: !user.passwordHash && (user.oauthAccounts?.length ?? 0) === 0 && !user.isVerified,
+      authProvider: user.oauthAccounts?.[0]?.provider ?? null,
+      profileImageUrl: user.profileImageUrl,
       tags: (user.tags as string[]) ?? [],
       blockReason: user.blockReason, blockedAt: user.blockedAt,
       createdAt: user.createdAt, lastLoginAt: user.lastLoginAt, lastActivity,

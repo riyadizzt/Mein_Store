@@ -40,7 +40,9 @@ export class SumUpProvider implements IPaymentProvider {
     }
 
     const amountEur = input.amount / 100 // Convert cents to EUR
-    const checkoutRef = input.metadata?.orderNumber ?? `ORD-${input.orderId.slice(0, 8)}`
+    const isRetry = input.metadata?.retry === 'true'
+    const baseRef = input.metadata?.orderNumber ?? `ORD-${input.orderId.slice(0, 8)}`
+    const checkoutRef = isRetry ? `${baseRef}-R${Date.now().toString(36).slice(-4)}` : baseRef
     const returnUrl = `${this.config.get('NEXT_PUBLIC_APP_URL', 'http://localhost:3000')}/checkout/confirmation`
 
     const response = await fetch(`${this.apiUrl}/v0.1/checkouts`, {
@@ -80,29 +82,33 @@ export class SumUpProvider implements IPaymentProvider {
   async refund(input: RefundInput): Promise<RefundResult> {
     if (!this.apiKey) throw new Error('SumUp not configured')
 
-    const response = await fetch(`${this.apiUrl}/v0.1/me/refund/${input.providerPaymentId}`, {
+    const transactionId = input.providerPaymentId
+    this.logger.log(`SumUp refund: transaction=${transactionId}, amount=${input.amount / 100} EUR`)
+
+    const response = await fetch(`${this.apiUrl}/v0.1/me/refund/${transactionId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        amount: input.amount / 100,
+        amount: input.amount / 100, // SumUp expects EUR, not cents
       }),
     })
 
     if (!response.ok) {
       const err = await response.text()
-      this.logger.error(`SumUp refund failed: ${err}`)
+      this.logger.error(`SumUp refund failed for transaction ${transactionId}: ${response.status} ${err}`)
       return {
-        providerRefundId: `SUMUP-REFUND-FAILED`,
+        providerRefundId: `SUMUP-REFUND-FAILED-${transactionId}`,
         status: 'failed',
         amount: input.amount,
       }
     }
 
+    this.logger.log(`SumUp refund succeeded: transaction=${transactionId}`)
     return {
-      providerRefundId: `SUMUP-REFUND-${crypto.randomUUID().slice(0, 8)}`,
+      providerRefundId: `SUMUP-REFUND-${transactionId}`,
       status: 'succeeded',
       amount: input.amount,
     }

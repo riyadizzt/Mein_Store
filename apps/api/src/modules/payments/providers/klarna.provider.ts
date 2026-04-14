@@ -201,8 +201,9 @@ export class KlarnaProvider implements IPaymentProvider {
         eventId: body.event_id ?? crypto.randomUUID(),
         payload: body,
       }
-    } catch (err) {
-      this.logger.error('Klarna webhook verification error', err)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.logger.error(`Klarna webhook verification error: ${msg}`)
       return { isValid: false, eventType: '', eventId: '', payload: {} }
     }
   }

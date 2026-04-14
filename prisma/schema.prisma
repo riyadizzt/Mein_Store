@@ -798,6 +798,11 @@ model Payment {
   amount               Decimal         @db.Decimal(10, 2)
   currency             String          @default("EUR")
   providerPaymentId    String?         @map("provider_payment_id")
+  // Old provider payment IDs from previous method-switch attempts.
+  // Webhook handlers fall back to this when the direct lookup misses, so a
+  // late-arriving success on an abandoned intent still reaches the right
+  // payment row instead of silently dropping captured money.
+  previousProviderPaymentIds String[]  @default([]) @map("previous_provider_payment_ids")
   providerClientSecret String?         @map("provider_client_secret")
   idempotencyKey       String?         @unique @map("idempotency_key")
   failureReason        String?         @map("failure_reason")
@@ -1273,6 +1278,32 @@ model AbandonedCart {
 }
 
 // ─────────────────────────────────────────────────────────────
+// CONTACT MESSAGES — inbound public contact-form submissions
+// ─────────────────────────────────────────────────────────────
+// Each row is one form submission from /contact. Admins can review,
+// reply, and mark as handled. Rate-limited per IP at the service layer.
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  locale    String   @default("de")             // de | en | ar
+  status    String   @default("new")            // new | read | replied | spam
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  readAt    DateTime? @map("read_at")
+  readBy    String?   @map("read_by")           // admin user id
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("contact_messages")
+}
+
+// ─────────────────────────────────────────────────────────────
 // NOTIFICATIONS
 // ─────────────────────────────────────────────────────────────
 
@@ -1628,4 +1659,73 @@ model CustomerMeasurement {
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("customer_measurements")
+}
+
+// ─────────────────────────────────────────────────────────────
+// WHATSAPP CHAT
+// ─────────────────────────────────────────────────────────────
+
+model WhatsappMessage {
+  id              String   @id @default(uuid())
+  phoneNumber     String   @map("phone_number")
+  direction       String   // 'inbound' | 'outbound'
+  message         String   @db.Text
+  language        String?  @default("de") // detected language
+  messageId       String?  @map("message_id") // Meta message ID
+  productLinks    Json?    @map("product_links") // [{name, url, price}]
+  aiProvider      String?  @map("ai_provider")
+  tokensUsed      Int?     @map("tokens_used")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([phoneNumber, createdAt])
+  @@map("whatsapp_messages")
+}
+
+// ─────────────────────────────────────────────────────────────
+// MASTER BOX (Saisonale Karton-Lagerung — Metadaten-Overlay auf InventoryLocation)
+// Keine FK-Constraints auf bestehende Tabellen — locationId ist nur eine String-Referenz.
+// Wenn komplett gelöscht → bestehende InventoryLocation bleibt funktionsfähig.
+// ─────────────────────────────────────────────────────────────
+
+model BoxManifest {
+  id              String   @id @default(uuid())
+  boxNumber       String   @unique @map("box_number") // BOX-2026-W-001
+  name            String   // "Winterkollektion 2026 — Karton 1"
+  season          String   // winter | summer | spring | autumn
+  year            Int
+  locationId      String   @map("location_id") // InventoryLocation.id — NO FK, string reference only
+  warehouseId     String   @map("warehouse_id") // Warehouse.id — NO FK, string reference only
+  status          String   @default("packing") // packing | sealed | opened
+  notes           String?  @db.Text
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([boxNumber])
+  @@index([warehouseId])
+  @@index([year, season])
+  @@map("box_manifests")
+}
+
+model BoxSequence {
+  yearSeasonKey String @id @map("year_season_key") // 2026-W
+  seq           Int    @default(1)
+
+  @@map("box_sequences")
+}
+
+// Box contents — own quantity counter, independent of Inventory.quantityOnHand
+// No FK constraints — pure string references.
+model BoxItem {
+  id        String   @id @default(uuid())
+  boxId     String   @map("box_id") // BoxManifest.id — no FK
+  variantId String   @map("variant_id") // ProductVariant.id — no FK
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([boxId, variantId])
+  @@index([boxId])
+  @@index([variantId])
+  @@map("box_items")
 }

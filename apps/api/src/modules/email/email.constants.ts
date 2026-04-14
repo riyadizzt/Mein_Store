@@ -11,6 +11,9 @@ export const EMAIL_TYPES = {
   RETURN_CONFIRMATION: 'return-confirmation',
   GUEST_INVITE: 'guest-invite',
   INVOICE: 'invoice',
+  // Contact form — admin notification + customer auto-reply
+  CONTACT_NEW: 'contact-new',
+  CONTACT_RECEIVED: 'contact-received',
 } as const
 
 export type EmailType = (typeof EMAIL_TYPES)[keyof typeof EMAIL_TYPES]
@@ -68,6 +71,16 @@ export const EMAIL_SUBJECTS: Record<EmailType, Record<string, string>> = {
     en: 'Your invoice for Order #{orderNumber}',
     ar: '#{orderNumber} فاتورتك للطلب رقم',
   },
+  [EMAIL_TYPES.CONTACT_NEW]: {
+    de: 'Neue Kontaktanfrage: #{subject}',
+    en: 'New contact request: #{subject}',
+    ar: 'طلب تواصل جديد: #{subject}',
+  },
+  [EMAIL_TYPES.CONTACT_RECEIVED]: {
+    de: 'Wir haben deine Nachricht erhalten',
+    en: 'We received your message',
+    ar: 'لقد استلمنا رسالتك',
+  },
 }
 
 // ── From address mapping ───────────────────────────────────────
@@ -83,4 +96,6 @@ export const EMAIL_FROM_MAP: Record<EmailType, string> = {
   [EMAIL_TYPES.RETURN_CONFIRMATION]: 'EMAIL_FROM_SUPPORT',
   [EMAIL_TYPES.GUEST_INVITE]: 'EMAIL_FROM_NOREPLY',
   [EMAIL_TYPES.INVOICE]: 'EMAIL_FROM_ORDERS',
+  [EMAIL_TYPES.CONTACT_NEW]: 'EMAIL_FROM_SUPPORT',
+  [EMAIL_TYPES.CONTACT_RECEIVED]: 'EMAIL_FROM_SUPPORT',
 }

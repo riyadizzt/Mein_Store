@@ -252,9 +252,13 @@ export default function AdminEmailsPage() {
                         <div className="w-16 h-1 bg-gray-600 dark:bg-gray-500 rounded-full" />
                       </div>
                     )}
-                    <div className="bg-white overflow-y-auto" style={{ maxHeight: viewMode === 'mobile' ? '600px' : '800px' }}
+                    <iframe
+                      title="Email preview"
+                      sandbox=""
+                      srcDoc={preview.html}
                       dir={previewLang === 'ar' ? 'rtl' : 'ltr'}
-                      dangerouslySetInnerHTML={{ __html: preview.html }}
+                      className="bg-white w-full block"
+                      style={{ height: viewMode === 'mobile' ? '600px' : '800px', border: 'none' }}
                     />
                   </div>
                 ) : (

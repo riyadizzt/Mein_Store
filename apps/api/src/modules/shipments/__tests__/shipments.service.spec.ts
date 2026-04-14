@@ -7,6 +7,7 @@ import { SHIPMENT_PROVIDERS } from '../shipment-provider.interface'
 import { KlarnaProvider } from '../../payments/providers/klarna.provider'
 import { PaymentsService } from '../../payments/payments.service'
 import { EmailService } from '../../email/email.service'
+import { DHLProvider } from '../providers/dhl.provider'
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ describe('ShipmentsService', () => {
         { provide: KlarnaProvider, useValue: mockKlarnaProvider },
         { provide: PaymentsService, useValue: mockPaymentsService },
         { provide: EmailService, useValue: mockEmailService },
+        { provide: DHLProvider, useValue: mockDhlProvider },
         { provide: SHIPMENT_PROVIDERS, useValue: [mockDhlProvider] },
       ],
     }).compile()
@@ -212,7 +214,7 @@ describe('ShipmentsService', () => {
         }),
       )
       mockPrisma.return.create.mockResolvedValue({
-        id: 'ret1', status: 'label_sent', returnTrackingNumber: '00340434161094099999',
+        id: 'ret1', status: 'requested', returnTrackingNumber: null,
       })
       mockPrisma.order.update.mockResolvedValue({})
 
@@ -223,8 +225,8 @@ describe('ShipmentsService', () => {
         'corr1',
       )
 
-      expect(result.returnTrackingNumber).toBe('00340434161094099999')
-      expect(mockDhlProvider.createReturnLabel).toHaveBeenCalled()
+      expect(result.status).toBe('requested')
+      // DHL label is no longer created during return request — admin decides in approve step
     })
 
     it('wirft BadRequestException wenn 14-Tage abgelaufen', async () => {

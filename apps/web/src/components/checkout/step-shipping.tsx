@@ -136,7 +136,7 @@ export function StepShipping() {
 
       <div className="flex gap-3 mt-6">
         <Button variant="outline" onClick={() => setStep('address')} className="gap-2">
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           {tCommon('back')}
         </Button>
         <Button
@@ -146,7 +146,7 @@ export function StepShipping() {
           size="lg"
         >
           {t('shippingStep.continueToPayment')}
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4 rtl:rotate-180" />
         </Button>
       </div>
     </div>

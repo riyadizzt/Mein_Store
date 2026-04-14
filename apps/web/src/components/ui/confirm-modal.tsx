@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useCallback, createContext, useContext, ReactNode } from 'react'
+import { useLocale } from 'next-intl'
 import { AlertTriangle, Trash2, X, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+
+const t3 = (locale: string, d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -74,6 +77,8 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 function StandardModal({ options, onConfirm, onCancel }: {
   options: ConfirmOptions; onConfirm: () => void; onCancel: () => void
 }) {
+  let locale = 'de'
+  try { locale = useLocale() } catch {}
   const isDanger = options.variant === 'danger'
 
   return (
@@ -89,7 +94,7 @@ function StandardModal({ options, onConfirm, onCancel }: {
             {isDanger ? <ShieldAlert className="h-5 w-5 text-red-600" /> : <AlertTriangle className="h-5 w-5 text-orange-600" />}
           </div>
           <h3 className="text-lg font-bold">{options.title}</h3>
-          <p className="text-sm text-muted-foreground mt-1">{options.description}</p>
+          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">{options.description}</p>
         </div>
 
         <div className="flex gap-3">
@@ -97,10 +102,10 @@ function StandardModal({ options, onConfirm, onCancel }: {
             className={`flex-1 rounded-xl ${isDanger ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
             onClick={onConfirm}
           >
-            {options.confirmLabel ?? 'Bestätigen'}
+            {options.confirmLabel ?? t3(locale, 'Bestätigen', 'Confirm', 'تأكيد')}
           </Button>
           <Button variant="outline" className="flex-1 rounded-xl" onClick={onCancel}>
-            {options.cancelLabel ?? 'Abbrechen'}
+            {options.cancelLabel ?? t3(locale, 'Abbrechen', 'Cancel', 'إلغاء')}
           </Button>
         </div>
       </div>
@@ -117,6 +122,8 @@ function StandardModal({ options, onConfirm, onCancel }: {
 function DestructiveModal({ options, onConfirm, onCancel }: {
   options: ConfirmOptions; onConfirm: () => void; onCancel: () => void
 }) {
+  let locale = 'de'
+  try { locale = useLocale() } catch {}
   const [typed, setTyped] = useState('')
   const canConfirm = options.typeToConfirm ? typed === options.typeToConfirm : true
 
@@ -154,10 +161,10 @@ function DestructiveModal({ options, onConfirm, onCancel }: {
             disabled={!canConfirm}
             onClick={onConfirm}
           >
-            {options.confirmLabel ?? 'Endgültig löschen'}
+            {options.confirmLabel ?? t3(locale, 'Endgültig löschen', 'Delete permanently', 'حذف نهائي')}
           </Button>
           <Button variant="outline" className="flex-1 rounded-xl" onClick={onCancel}>
-            {options.cancelLabel ?? 'Abbrechen'}
+            {options.cancelLabel ?? t3(locale, 'Abbrechen', 'Cancel', 'إلغاء')}
           </Button>
         </div>
       </div>

@@ -223,11 +223,11 @@ export function Header({ locale }: { locale: string }) {
               <button
                 className="relative p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 onClick={openDrawer}
-                aria-label={t('cart')}
+                aria-label={mounted && itemCount > 0 ? `${t('cart')} (${itemCount})` : t('cart')}
               >
-                <ShoppingBag className="h-5 w-5" />
+                <ShoppingBag className="h-5 w-5" aria-hidden="true" />
                 {mounted && itemCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-5 w-5 rounded-full bg-accent text-accent-foreground text-[11px] font-medium flex items-center justify-center animate-bounce-in">
+                  <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 h-5 w-5 rounded-full bg-accent text-accent-foreground text-[11px] font-medium flex items-center justify-center animate-bounce-in">
                     {itemCount > 99 ? '99+' : itemCount}
                   </span>
                 )}

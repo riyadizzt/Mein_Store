@@ -194,6 +194,7 @@ export class AdminInventoryService {
     search?: string
     parentCategoryId?: string
     status?: string
+    locationId?: string
     limit?: number
     offset?: number
   }) {
@@ -214,11 +215,14 @@ export class AdminInventoryService {
       where.categoryId = { in: [query.parentCategoryId, ...subcats.map((c) => c.id)] }
     }
 
-    const whFilter = query.warehouseId ? { warehouseId: query.warehouseId } : {}
+    // Inventory filter applied to both the product-level "has inventory" check AND the nested inventory select
+    const whFilter: any = {}
+    if (query.warehouseId) whFilter.warehouseId = query.warehouseId
+    if (query.locationId) whFilter.locationId = query.locationId
 
-    // If warehouse filter, only load products that HAVE inventory in this warehouse
-    if (query.warehouseId) {
-      where.variants = { some: { inventory: { some: { warehouseId: query.warehouseId } } } }
+    // Only load products that HAVE matching inventory (warehouse + location)
+    if (query.warehouseId || query.locationId) {
+      where.variants = { some: { inventory: { some: whFilter } } }
     }
 
     const [products, total] = await Promise.all([
@@ -284,9 +288,11 @@ export class AdminInventoryService {
       }
     })
 
-    // If warehouse filter active, hide products with no inventory in that warehouse
-    if (query.warehouseId) {
-      result = result.filter((p) => p.variants.some((v: any) => v.inventory.length > 0))
+    // If warehouse or location filter active, hide products with no matching inventory
+    if (query.warehouseId || query.locationId) {
+      result = result
+        .map((p) => ({ ...p, variants: p.variants.filter((v: any) => v.inventory.length > 0) }))
+        .filter((p) => p.variants.length > 0)
     }
 
     // Post-filter by stock status
@@ -294,7 +300,7 @@ export class AdminInventoryService {
     else if (query.status === 'low') result = result.filter((p) => p.status === 'low' || p.status === 'out_of_stock')
     else if (query.status === 'in_stock') result = result.filter((p) => p.status === 'in_stock')
 
-    const filteredTotal = (query.warehouseId || query.status) ? result.length : total
+    const filteredTotal = (query.warehouseId || query.locationId || query.status) ? result.length : total
     return { data: result, meta: { total: filteredTotal, limit, offset } }
   }
 
@@ -334,6 +340,46 @@ export class AdminInventoryService {
   // ── BARCODE LOOKUP ─────────────────────────────────────────
 
   // ── Scan Return Barcode → auto-restock all items ──────────
+  /** Preview return items WITHOUT processing — for scanner confirmation step */
+  async previewReturnScan(returnNumber: string) {
+    const ret = await this.prisma.return.findFirst({
+      where: { returnNumber },
+      include: {
+        order: {
+          select: {
+            orderNumber: true,
+            items: { select: { variantId: true, snapshotName: true, snapshotSku: true, quantity: true, unitPrice: true, variant: { select: { color: true, size: true, product: { select: { images: { select: { url: true }, take: 1 } } } } } } },
+          },
+        },
+      },
+    })
+
+    if (!ret) {
+      throw new NotFoundException({ message: { de: `Retoure "${returnNumber}" nicht gefunden.`, en: `Return "${returnNumber}" not found.`, ar: `لم يتم العثور على المرتجع "${returnNumber}".` } })
+    }
+
+    if (['received', 'inspected', 'refunded', 'rejected'].includes(ret.status)) {
+      return { alreadyProcessed: true, returnNumber, status: ret.status }
+    }
+
+    const returnItems = ret.returnItems as any[] | null
+    const items = (returnItems?.length ? returnItems : ret.order.items).map((item: any) => {
+      const orderItem = ret.order.items.find((oi: any) => oi.variantId === (item.variantId ?? item.variantId))
+      return {
+        variantId: item.variantId ?? orderItem?.variantId,
+        sku: item.sku ?? item.snapshotSku ?? orderItem?.snapshotSku,
+        name: item.name ?? item.snapshotName ?? orderItem?.snapshotName,
+        quantity: item.quantity ?? orderItem?.quantity ?? 1,
+        unitPrice: item.unitPrice ?? Number(orderItem?.unitPrice ?? 0),
+        color: orderItem?.variant?.color ?? '',
+        size: orderItem?.variant?.size ?? '',
+        imageUrl: orderItem?.variant?.product?.images?.[0]?.url ?? null,
+      }
+    })
+
+    return { preview: true, returnNumber, orderNumber: ret.order.orderNumber, status: ret.status, items }
+  }
+
   async processReturnScan(returnNumber: string, adminId: string) {
     const ret = await this.prisma.return.findFirst({
       where: { returnNumber },
@@ -388,7 +434,13 @@ export class AdminInventoryService {
             notes: `Return scan: ${returnNumber}`, createdBy: adminId,
           },
         })
-        restocked.push({ sku: item.sku ?? item.snapshotSku, name: item.name ?? item.snapshotName, quantity: qty })
+        restocked.push({
+          sku: item.sku ?? item.snapshotSku,
+          name: item.name ?? item.snapshotName,
+          quantity: qty,
+          unitPrice: item.unitPrice ?? 0,
+          variantId,
+        })
       }
     }
 
@@ -484,10 +536,13 @@ export class AdminInventoryService {
   // ── STOCK INTAKE (Wareneingang) ────────────────────────────
 
   async intake(items: { inventoryId: string; quantity: number }[], reason: string, adminId: string, ipAddress: string) {
+    if (!items || !Array.isArray(items)) return { processed: 0, items: [] }
+
     const type = reason === 'return' ? 'return_received' : 'purchase_received'
     const results: any[] = []
 
     for (const item of items) {
+      if (!item.quantity || item.quantity <= 0 || item.quantity > 10000) continue
       const inv = await this.prisma.inventory.findUnique({ where: { id: item.inventoryId } })
       if (!inv) continue
 
@@ -565,33 +620,46 @@ export class AdminInventoryService {
   // ── STOCK OUTPUT (Warenausgang) ────────────────────────────
 
   async output(inventoryId: string, quantity: number, reason: string, adminId: string, ipAddress: string) {
-    const inv = await this.prisma.inventory.findUnique({ where: { id: inventoryId } })
-    if (!inv) throw new NotFoundException('Inventory not found')
-
-    const avail = inv.quantityOnHand - inv.quantityReserved
-    if (quantity > avail) {
-      throw new BadRequestException({ statusCode: 400, error: 'InsufficientStock',
-        message: { de: `Nur ${avail} verfügbar.`, en: `Only ${avail} available.`, ar: `فقط ${avail} متاح.` } })
+    if (!quantity || quantity <= 0) {
+      throw new BadRequestException({ statusCode: 400, error: 'InvalidQuantity',
+        message: { de: 'Menge muss größer als 0 sein.', en: 'Quantity must be greater than 0.', ar: 'الكمية يجب أن تكون أكبر من 0.' } })
     }
 
-    const newQty = inv.quantityOnHand - quantity
     const typeMap: Record<string, string> = { sale: 'sale_pos', damaged: 'damaged', loss: 'damaged', gift: 'damaged', sample: 'damaged' }
-    await this.prisma.$transaction([
-      this.prisma.inventory.update({ where: { id: inventoryId }, data: { quantityOnHand: newQty } }),
-      this.prisma.inventoryMovement.create({
+
+    // Atomic: check + update in one transaction to prevent race conditions
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Lock the row to prevent concurrent reads
+      await tx.$executeRawUnsafe(`SELECT 1 FROM inventory WHERE id = '${inventoryId}' FOR UPDATE`)
+
+      const inv = await tx.inventory.findUnique({ where: { id: inventoryId } })
+      if (!inv) throw new NotFoundException('Inventory not found')
+
+      const avail = inv.quantityOnHand - inv.quantityReserved
+      if (quantity > avail) {
+        throw new BadRequestException({ statusCode: 400, error: 'InsufficientStock',
+          message: { de: `Nur ${avail} verfügbar.`, en: `Only ${avail} available.`, ar: `فقط ${avail} متاح.` } })
+      }
+
+      const newQty = inv.quantityOnHand - quantity
+
+      await tx.inventory.update({ where: { id: inventoryId }, data: { quantityOnHand: newQty } })
+      await tx.inventoryMovement.create({
         data: {
           variantId: inv.variantId, warehouseId: inv.warehouseId,
           type: (typeMap[reason] ?? 'sale_pos') as any, quantity: -quantity,
           quantityBefore: inv.quantityOnHand, quantityAfter: newQty,
           notes: reason, createdBy: adminId,
         },
-      }),
-    ])
+      })
 
-    const warning = newQty <= 0 ? 'last_item' : newQty <= inv.reorderPoint ? 'reorder' : null
+      return { before: inv.quantityOnHand, after: newQty, reorderPoint: inv.reorderPoint }
+    })
+
+    const warning = result.after <= 0 ? 'last_item' : result.after <= result.reorderPoint ? 'reorder' : null
     await this.audit.log({ adminId, action: 'INVENTORY_OUTPUT', entityType: 'inventory', entityId: inventoryId,
-      changes: { after: { quantity: -quantity, reason, newQty } }, ipAddress })
-    return { inventoryId, before: inv.quantityOnHand, after: newQty, removed: quantity, warning }
+      changes: { after: { quantity: -quantity, reason, newQty: result.after } }, ipAddress })
+    return { inventoryId, before: result.before, after: result.after, removed: quantity, warning }
   }
 
   // ── TRANSFER ───────────────────────────────────────────────

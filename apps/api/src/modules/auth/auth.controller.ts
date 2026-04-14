@@ -13,22 +13,26 @@ import {
   Res,
   NotFoundException,
   Logger,
+  UseFilters,
 } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { Request, Response } from 'express'
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { AuthService } from './auth.service'
+import { AuthTokens } from '@omnichannel/types'
 import { RegisterDto } from './dto/register.dto'
 import { LoginDto } from './dto/login.dto'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { PrismaService } from '../../prisma/prisma.service'
+import { OAuthRedirectFilter } from './guards/google-oauth.guard'
 
 // ── Separate cookies for Admin vs Customer ──────────────────
 const ADMIN_COOKIE = 'malak_admin_rt'
 const CUSTOMER_COOKIE = 'malak_customer_rt'
-const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000 // 30 days
+const ADMIN_COOKIE_MAX_AGE = 8 * 60 * 60 * 1000 // 8 hours (Admin security)
+const CUSTOMER_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000 // 30 days (Customer convenience)
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -47,7 +51,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: COOKIE_MAX_AGE,
+      maxAge: ADMIN_COOKIE_MAX_AGE, // 8 hours — admin security
       path: '/',
     })
   }
@@ -57,7 +61,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: COOKIE_MAX_AGE,
+      maxAge: CUSTOMER_COOKIE_MAX_AGE, // 30 days — customer convenience
       path: '/',
     })
   }
@@ -320,14 +324,21 @@ export class AuthController {
 
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
+  @UseFilters(OAuthRedirectFilter)
   async googleCallback(@Req() req: any, @Res() res: Response) {
-    const googleUser = req.user
-    const result = await this.authService.googleLogin(googleUser)
     const frontendUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    this.setCustomerCookie(res, result.refreshToken)
-    res.redirect(
-      `${frontendUrl}/auth/google/callback?accessToken=${result.accessToken}`,
-    )
+    try {
+      const result = await this.authService.googleLogin(req.user)
+      this.setCustomerCookie(res, result.refreshToken)
+      res.redirect(`${frontendUrl}/auth/google/callback?accessToken=${result.accessToken}`)
+    } catch (err: any) {
+      // Detect the structured AccountBlocked error so the login page can
+      // render the friendly block screen with a support CTA.
+      const body = err?.response ?? err?.getResponse?.() ?? null
+      const errorCode = (typeof body === 'object' ? body?.error : null) ?? null
+      const reason = errorCode === 'AccountBlocked' ? 'account_blocked' : 'google_failed'
+      res.redirect(`${frontendUrl}/auth/login?error=${reason}`)
+    }
   }
 
   // ── Facebook OAuth ──────────────────────────────────────────
@@ -341,32 +352,71 @@ export class AuthController {
 
   @Get('facebook/callback')
   @UseGuards(AuthGuard('facebook'))
+  @UseFilters(OAuthRedirectFilter)
   async facebookCallback(@Req() req: any, @Res() res: Response) {
-    const fbUser = req.user
-    const result = await this.authService.socialLogin(fbUser)
     const frontendUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    this.setCustomerCookie(res, result.refreshToken)
-    res.redirect(
-      `${frontendUrl}/auth/facebook/callback?accessToken=${result.accessToken}`,
-    )
+    try {
+      const result = await this.authService.socialLogin(req.user)
+      this.setCustomerCookie(res, result.refreshToken)
+      res.redirect(`${frontendUrl}/auth/facebook/callback?accessToken=${result.accessToken}`)
+    } catch (err: any) {
+      const body = err?.response ?? err?.getResponse?.() ?? null
+      const errorCode = (typeof body === 'object' ? body?.error : null) ?? null
+      const reason = errorCode === 'AccountBlocked' ? 'account_blocked' : 'facebook_failed'
+      res.redirect(`${frontendUrl}/auth/login?error=${reason}`)
+    }
   }
 
   // ── Guest Account Creation via Token ────────────────────────
+  //
+  // Two account shapes reach this endpoint:
+  //   1. STUB-USER (the actual live pattern): orders.service.ts created a
+  //      User row with passwordHash=null and linked it via order.userId.
+  //      order.guestEmail is always null in this case.
+  //   2. PURE GUEST (historical): order.userId=null, order.guestEmail=set.
+  //
+  // The old implementation only handled case 2 — throwing "No email found"
+  // for every real stub-user invite. Both flows must work here.
+
+  private async findOrderByInviteToken(token: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        notes: true,
+        guestEmail: true,
+        userId: true,
+        user: { select: { id: true, email: true, firstName: true, lastName: true, passwordHash: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    })
+    for (const o of orders) {
+      try {
+        const n = JSON.parse(o.notes ?? '{}')
+        if (n.inviteToken === token) return { order: o, notes: n }
+      } catch {}
+    }
+    return null
+  }
 
   @Get('create-account')
   @HttpCode(HttpStatus.OK)
   async getGuestInvite(@Query('token') token: string) {
     if (!token) throw new NotFoundException('Token required')
-    const orders = await this.prisma.order.findMany({
-      where: { deletedAt: null }, select: { id: true, notes: true, guestEmail: true },
-      orderBy: { createdAt: 'desc' }, take: 100,
-    })
-    const match = orders.find((o: any) => {
-      try { const n = JSON.parse(o.notes ?? '{}'); return n.inviteToken === token } catch { return false }
-    })
+    const match = await this.findOrderByInviteToken(token)
     if (!match) throw new NotFoundException('Invalid or expired token')
-    const notes = JSON.parse(match.notes ?? '{}')
-    return { email: match.guestEmail ?? '', firstName: notes.guestFirstName ?? '', lastName: notes.guestLastName ?? '' }
+
+    const { order, notes } = match
+    // Prefer the stub user's data, fall back to guestEmail/notes for pure guests
+    const email = order.user?.email ?? order.guestEmail ?? ''
+    const firstName = order.user?.firstName ?? notes.guestFirstName ?? ''
+    const lastName = order.user?.lastName ?? notes.guestLastName ?? ''
+    const alreadyClaimed = !!order.user?.passwordHash
+
+    if (!email) throw new NotFoundException('No email associated with this invite')
+
+    return { email, firstName, lastName, alreadyClaimed }
   }
 
   @Post('create-account')
@@ -374,41 +424,55 @@ export class AuthController {
   async createGuestAccount(
     @Body('token') token: string,
     @Body('password') password: string,
+    @Body('firstName') firstName: string | undefined,
+    @Body('lastName') lastName: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
     if (!token || !password) throw new NotFoundException('Token and password required')
-    const orders = await this.prisma.order.findMany({
-      where: { deletedAt: null }, select: { id: true, notes: true, guestEmail: true },
-      orderBy: { createdAt: 'desc' }, take: 100,
-    })
-    const match = orders.find((o: any) => {
-      try { return JSON.parse(o.notes ?? '{}').inviteToken === token } catch { return false }
-    })
+    const match = await this.findOrderByInviteToken(token)
     if (!match) throw new NotFoundException('Invalid or expired token')
 
-    const notes = JSON.parse(match.notes ?? '{}')
-    const email = match.guestEmail
-    if (!email) throw new NotFoundException('No email found')
+    const { order, notes } = match
 
-    const result = await this.authService.register({
-      email, password,
-      firstName: notes.guestFirstName || 'Guest',
-      lastName: notes.guestLastName || '-',
-      gdprConsent: true,
-    })
+    let result: AuthTokens
+    let claimedUserId: string
 
-    const newUser = await this.prisma.user.findUnique({ where: { email }, select: { id: true } })
-    if (newUser) {
+    if (order.user && order.userId) {
+      // CASE 1 — stub user already exists, just claim it
+      if (order.user.passwordHash) {
+        throw new NotFoundException('Konto bereits aktiviert — bitte einloggen')
+      }
+      result = await this.authService.claimGuestAccount(order.userId, password, { firstName, lastName })
+      claimedUserId = order.userId
+    } else {
+      // CASE 2 — pure guest fallback (no user row linked to order)
+      const email = order.guestEmail
+      if (!email) throw new NotFoundException('No email associated with this invite')
+
+      result = await this.authService.register({
+        email,
+        password,
+        firstName: firstName?.trim() || notes.guestFirstName || 'Guest',
+        lastName: lastName?.trim() || notes.guestLastName || '-',
+        gdprConsent: true,
+      })
+      const newUser = await this.prisma.user.findUnique({ where: { email }, select: { id: true } })
+      if (!newUser) throw new NotFoundException('User creation failed')
+      claimedUserId = newUser.id
+
+      // Link any other orphan orders with the same guestEmail to the new user
       await this.prisma.order.updateMany({
         where: { guestEmail: { equals: email, mode: 'insensitive' }, userId: null },
         data: { userId: newUser.id },
       })
     }
 
+    // Remove the invite token so it cannot be reused
     delete notes.inviteToken
-    await this.prisma.order.update({ where: { id: match.id }, data: { notes: JSON.stringify(notes) } })
+    await this.prisma.order.update({ where: { id: order.id }, data: { notes: JSON.stringify(notes) } })
 
     this.setCustomerCookie(res, result.refreshToken)
+    this.logger.log(`Guest invite claimed via token: user=${claimedUserId} order=${order.id}`)
     return { accessToken: result.accessToken, tokenType: 'customer' }
   }
 }

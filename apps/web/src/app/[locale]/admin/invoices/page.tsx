@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
@@ -36,7 +37,7 @@ const L: Record<string, Record<string, string>> = {
 const t = (k: string, loc: string) => L[k]?.[loc] ?? L[k]?.de ?? k
 
 const LIMIT = 50
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API = API_BASE_URL
 
 export default function AdminInvoicesPage() {
   const locale = useLocale()

@@ -94,8 +94,8 @@ export default function RegisterPage() {
 
           {/* Social Login */}
           <div className="space-y-3">
-            <GoogleSignIn label={`Google ${t('registerButton')}`} />
-            <FacebookSignIn label={`Facebook ${t('registerButton')}`} />
+            <GoogleSignIn label={locale === 'ar' ? 'إنشاء الحساب من خلال Google' : locale === 'en' ? 'Sign up with Google' : 'Mit Google registrieren'} />
+            <FacebookSignIn label={locale === 'ar' ? 'إنشاء الحساب من خلال Facebook' : locale === 'en' ? 'Sign up with Facebook' : 'Mit Facebook registrieren'} />
           </div>
 
           {/* Divider */}
@@ -172,7 +172,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={register.isPending}
-              className="w-full h-13 rounded-xl bg-[#d4a853] text-white text-base font-semibold hover:bg-[#c49b45] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full h-14 rounded-xl bg-[#d4a853] text-white text-lg font-semibold hover:bg-[#c49b45] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {register.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {t('registerButton')}

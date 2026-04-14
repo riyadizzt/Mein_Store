@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/lib/env'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { NextIntlClientProvider } from 'next-intl'
@@ -32,6 +33,11 @@ export async function generateMetadata({
   return {
     title: { template: `%s | ${t('siteName')}`, default: t('siteName') },
     description: t('description'),
+    icons: {
+      icon: [
+        { url: '/favicon.svg', type: 'image/svg+xml' },
+      ],
+    },
   }
 }
 
@@ -59,7 +65,7 @@ export default async function LocaleLayout({
       <head>
         <link rel="dns-prefetch" href="https://images.unsplash.com" />
         <link rel="dns-prefetch" href="https://placehold.co" />
-        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'} />
+        <link rel="preconnect" href={API_BASE_URL} />
       </head>
       <body className={`${outfit.className} ${fontClass} ${playfair.variable} antialiased`}>
         <NextIntlClientProvider messages={messages}>

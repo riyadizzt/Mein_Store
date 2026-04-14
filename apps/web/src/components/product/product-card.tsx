@@ -105,7 +105,6 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       prefetch={false}
-      aria-label={name}
     >
       {/* Image Container */}
       <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-muted shadow-card transition-all duration-300 group-hover:shadow-card-hover group-hover:-translate-y-1">

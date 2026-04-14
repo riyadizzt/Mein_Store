@@ -6,8 +6,15 @@ import {
   ConflictException,
 } from '@nestjs/common'
 import { PaymentsService } from '../payments.service'
+import { InvoiceService } from '../invoice.service'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { PAYMENT_PROVIDERS, IPaymentProvider } from '../payment-provider.interface'
+
+const mockInvoiceService = {
+  generateAndStoreInvoice: jest.fn().mockResolvedValue({ invoice: { id: 'inv1' }, pdfBuffer: Buffer.alloc(0) }),
+  generateAndStoreCreditNote: jest.fn().mockResolvedValue({ invoice: { id: 'gs1' }, pdfBuffer: Buffer.alloc(0) }),
+  getOrGenerateInvoice: jest.fn().mockResolvedValue(Buffer.alloc(0)),
+}
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -110,6 +117,7 @@ describe('PaymentsService', () => {
         PaymentsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: EventEmitter2, useValue: mockEventEmitter },
+        { provide: InvoiceService, useValue: mockInvoiceService },
         { provide: PAYMENT_PROVIDERS, useValue: [mockStripeProvider] },
       ],
     }).compile()
@@ -203,7 +211,9 @@ describe('PaymentsService', () => {
       )
       // Order confirmed
       expect(mockPrisma.order.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: 'confirmed' } }),
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'confirmed' }),
+        }),
       )
       // Inventory event emitted
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(

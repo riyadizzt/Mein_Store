@@ -1,10 +1,10 @@
 {
   "metadata": {
-    "siteName": "متجر ملاك",
+    "siteName": "ملبوسات ملك",
     "description": "أزياء وأحذية — متجرك الشامل للأزياء"
   },
   "home": {
-    "welcome": "مرحباً بكم في متجر ملاك",
+    "welcome": "مرحباً بكم في ملبوسات ملك",
     "subtitle": "اكتشف أحدث مجموعاتنا للسيدات والرجال والأطفال.",
     "cta": "تسوّق الآن",
     "categories": "الأقسام",
@@ -507,11 +507,14 @@
       "products": "المنتجات",
       "users": "العملاء",
       "inventory": "المخزون",
+      "etiketten": "الملصقات",
+      "masterBoxes": "الكراتين الرئيسية",
       "shippingZones": "مناطق الشحن",
       "categories": "الأقسام",
       "sizing": "جداول المقاسات",
       "auditLog": "سجل التدقيق",
       "notifications": "الإشعارات",
+      "contactMessages": "رسائل التواصل",
       "finance": "المالية",
       "invoices": "الفواتير",
       "coupons": "القسائم",
@@ -1175,6 +1178,7 @@
       "actions": "الإجراءات",
       "noShipments": "لا توجد شحنات",
       "downloadLabel": "الملصق",
+      "cancel": "إلغاء الشحن",
       "search": "رقم الطلب أو العميل أو التتبع...",
       "allStatus": "جميع الحالات",
       "allCarriers": "جميع شركات الشحن",

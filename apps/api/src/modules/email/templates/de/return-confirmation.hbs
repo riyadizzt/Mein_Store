@@ -55,7 +55,7 @@
 </table>
 {{/if}}
 
-<p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">Bitte sende die Ware innerhalb von <strong style="color:#1a1a2e;">14 Tagen</strong> zur&uuml;ck. Die R&uuml;cksendung ist f&uuml;r dich <strong>kostenlos</strong>.</p>
+<p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">Bitte sende die Ware innerhalb von <strong style="color:#1a1a2e;">14 Tagen</strong> zur&uuml;ck.{{#if sendLabel}} Die R&uuml;cksendung ist f&uuml;r dich <strong>kostenlos</strong>.{{else}} <strong>Die R&uuml;cksendekosten tr&auml;gst du selbst.</strong>{{/if}}</p>
 
 {{else if (eq status 'rejected')}}
 <!-- REJECTED: Reason -->

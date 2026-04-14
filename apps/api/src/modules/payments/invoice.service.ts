@@ -184,12 +184,27 @@ export class InvoiceService implements OnModuleInit {
   async getOrGenerateInvoice(orderId: string, userId: string): Promise<Buffer> {
     const order = await this.fetchOrderForInvoice(orderId, userId)
 
+    // Block invoice generation for unpaid orders (Vorkasse pending, etc.)
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } })
+    const paidStatuses = ['captured', 'refunded', 'partially_refunded']
+    if (payment && !paidStatuses.includes(payment.status)) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'InvoiceNotAvailable',
+        message: {
+          de: 'Rechnung erst nach Zahlungseingang verfuegbar.',
+          en: 'Invoice only available after payment.',
+          ar: 'الفاتورة متاحة فقط بعد استلام الدفع.',
+        },
+      })
+    }
+
     const existing = order.invoices.find((i: any) => i.type === 'INVOICE' && i.storagePath)
     if (existing?.storagePath) {
       return this.storage.downloadInvoicePdf(existing.storagePath)
     }
 
-    // Generate if not exists
+    // Generate if not exists (only for paid orders)
     const { pdfBuffer } = await this.generateAndStoreInvoice(orderId)
     return pdfBuffer
   }
@@ -213,13 +228,21 @@ export class InvoiceService implements OnModuleInit {
     const originalInvoice = order.invoices.find((i: any) => i.type === 'INVOICE')
     const originalInvoiceNumber = originalInvoice?.invoiceNumber ?? 'N/A'
 
+    // Try to find return items for this order (for detailed credit note)
+    const returnReq = await this.prisma.return.findFirst({
+      where: { orderId },
+      orderBy: { createdAt: 'desc' },
+      select: { returnItems: true },
+    })
+    const returnItems = (returnReq?.returnItems as any[]) ?? []
+
     const creditNoteNumber = await this.generateInvoiceNumber('GS')
     const netAmount = -(refundAmount / 1.19)
     const taxAmount = -(refundAmount - refundAmount / 1.19)
     const grossAmount = -refundAmount
 
     // Generate PDF
-    const pdfBuffer = await this.buildCreditNotePdf(order, creditNoteNumber, originalInvoiceNumber, refundAmount)
+    const pdfBuffer = await this.buildCreditNotePdf(order, creditNoteNumber, originalInvoiceNumber, refundAmount, returnItems)
 
     // Upload
     const { path, signedUrl } = await this.storage.uploadInvoicePdf(creditNoteNumber, pdfBuffer)
@@ -255,10 +278,16 @@ export class InvoiceService implements OnModuleInit {
   private resolveAddress(order: any): { firstName: string; lastName: string; street?: string; houseNumber?: string; postalCode?: string; city?: string; country?: string } | null {
     if (order.shippingAddress) return order.shippingAddress
     if (order.shippingAddressSnapshot) {
-      const snap = typeof order.shippingAddressSnapshot === 'string'
-        ? JSON.parse(order.shippingAddressSnapshot)
-        : order.shippingAddressSnapshot
-      return snap
+      try {
+        const snap = typeof order.shippingAddressSnapshot === 'string'
+          ? JSON.parse(order.shippingAddressSnapshot)
+          : order.shippingAddressSnapshot
+        return snap
+      } catch (e) {
+        this.logger.warn(
+          `Failed to parse shippingAddressSnapshot for order ${order.orderNumber}: ${(e as Error).message}`,
+        )
+      }
     }
     if (order.user?.firstName) {
       return { firstName: order.user.firstName, lastName: order.user.lastName ?? '' }
@@ -267,7 +296,11 @@ export class InvoiceService implements OnModuleInit {
     try {
       const notes = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes
       if (notes?.guestFirstName) return { firstName: notes.guestFirstName, lastName: notes.guestLastName ?? '' }
-    } catch { /* ignore */ }
+    } catch (e) {
+      this.logger.warn(
+        `Failed to parse order.notes for address fallback on order ${order.orderNumber}: ${(e as Error).message}`,
+      )
+    }
     return null
   }
 
@@ -306,12 +339,11 @@ export class InvoiceService implements OnModuleInit {
       // Gold separator line
       doc.moveTo(50, 95).lineTo(545, 95).lineWidth(2).strokeColor(GOLD).stroke()
 
-      // Company legal line below gold
-      doc.fontSize(6.5).font('Helvetica').fillColor('#9ca3af')
-      doc.text(
-        `USt-IdNr.: ${co.vatId}${co.register ? ' | ' + co.register : ''}${co.ceo ? ' | GF: ' + co.ceo : ''}`,
-        50, 101,
-      )
+      // Company legal line below gold (only show if data exists)
+      const invoiceLegalParts = [co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.register || '', co.ceo ? `Inh. ${co.ceo}` : ''].filter(Boolean)
+      if (invoiceLegalParts.length > 0) {
+        doc.fontSize(6.5).font('Helvetica').fillColor('#9ca3af').text(invoiceLegalParts.join(' | '), 50, 101)
+      }
 
       // ── CUSTOMER ADDRESS (left, elegant box) ───────
       const addrBoxY = 125
@@ -354,6 +386,19 @@ export class InvoiceService implements OnModuleInit {
         doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(label, rx, dy)
         doc.font('Helvetica-Bold').fontSize(8.5).fillColor(DARK).text(value, rx + 110, dy, { width: 95, align: 'right' })
       })
+
+      // ── SHIPPING ADDRESS (right, if different from billing) ──
+      const shipAddr = order.shippingAddress
+      if (shipAddr && (shipAddr.street !== addr?.street || shipAddr.city !== addr?.city)) {
+        doc.roundedRect(310, addrBoxY, 235, 80, 4).lineWidth(0.5).strokeColor('#e0e0e0').stroke()
+        doc.fontSize(7).font('Helvetica').fillColor(MUTED).text('Lieferadresse', 322, addrBoxY + 10)
+        doc.fontSize(9.5).font('Helvetica-Bold').fillColor(DARK)
+        doc.text(`${shipAddr.firstName} ${shipAddr.lastName}`, 322, addrBoxY + 24)
+        doc.font('Helvetica').fontSize(9).fillColor('#333333')
+        if (shipAddr.street) doc.text(`${shipAddr.street}${shipAddr.houseNumber ? ' ' + shipAddr.houseNumber : ''}`, 322, addrBoxY + 38)
+        if (shipAddr.postalCode) doc.text(`${shipAddr.postalCode} ${shipAddr.city ?? ''}`, 322, addrBoxY + 50)
+        if (shipAddr.country) doc.text(shipAddr.country === 'DE' ? 'Deutschland' : shipAddr.country, 322, addrBoxY + 62)
+      }
 
       // ── ITEMS TABLE ────────────────────────────────
       let y = 225
@@ -418,11 +463,9 @@ export class InvoiceService implements OnModuleInit {
       doc.fillColor(DARK).text(`${subtotal.toFixed(2)} €`, totValX, y, { width: valW, align: 'right' })
       y += 16
 
-      if (shipping > 0) {
-        doc.fillColor(MUTED).text('Versandkosten', totX, y, { width: totW, align: 'right' })
-        doc.fillColor(DARK).text(`${shipping.toFixed(2)} €`, totValX, y, { width: valW, align: 'right' })
-        y += 16
-      }
+      doc.fillColor(MUTED).text('Versandkosten', totX, y, { width: totW, align: 'right' })
+      doc.fillColor(DARK).text(shipping > 0 ? `${shipping.toFixed(2)} €` : 'Kostenlos', totValX, y, { width: valW, align: 'right' })
+      y += 16
 
       if (discount > 0) {
         doc.fillColor('#16a34a').text('Rabatt', totX, y, { width: totW, align: 'right' })
@@ -471,7 +514,7 @@ export class InvoiceService implements OnModuleInit {
       doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(1).strokeColor(GOLD).stroke()
       doc.font('Helvetica').fontSize(6.5).fillColor('#9ca3af')
       doc.text(
-        `${co.name} | ${co.address}${co.ceo ? ' | GF: ' + co.ceo : ''}${co.register ? ' | ' + co.register : ''} | USt-IdNr.: ${co.vatId}${co.bankIban ? ' | IBAN: ' + co.bankIban : ''}`,
+        [co.name, co.address, co.ceo ? `Inh. ${co.ceo}` : '', co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.bankIban ? `IBAN: ${co.bankIban}` : ''].filter(Boolean).join(' | '),
         50, footerY + 8, { align: 'center', width: 495 },
       )
 
@@ -481,7 +524,7 @@ export class InvoiceService implements OnModuleInit {
 
   // ── PDF: Credit Note / Gutschrift (Premium Design — Red Accent) ──
 
-  private async buildCreditNotePdf(order: any, creditNoteNumber: string, originalInvoiceNumber: string, refundAmount: number): Promise<Buffer> {
+  private async buildCreditNotePdf(order: any, creditNoteNumber: string, originalInvoiceNumber: string, refundAmount: number, returnItems: any[] = []): Promise<Buffer> {
     const co = await this.refreshCompanyData()
     const RED = '#dc2626'
     const DARK = '#1a1a2e'
@@ -502,6 +545,7 @@ export class InvoiceService implements OnModuleInit {
       doc.fontSize(14).font('Helvetica-Bold').fillColor(DARK).text(co.name, logoRight, 42)
       doc.fontSize(7.5).font('Helvetica').fillColor(MUTED)
       doc.text(co.address, logoRight, 60)
+      if (co.phone || co.email) doc.text(`${co.phone ? 'Tel. ' + co.phone : ''}${co.phone && co.email ? ' | ' : ''}${co.email}`, logoRight, 71)
 
       // "GUTSCHRIFT" — red accent
       doc.fontSize(26).font('Helvetica-Bold').fillColor(RED)
@@ -510,8 +554,11 @@ export class InvoiceService implements OnModuleInit {
       // Red separator line
       doc.moveTo(50, 95).lineTo(545, 95).lineWidth(2).strokeColor(RED).stroke()
 
-      doc.fontSize(6.5).font('Helvetica').fillColor('#9ca3af')
-      doc.text(`USt-IdNr.: ${co.vatId}${co.register ? ' | ' + co.register : ''}`, 50, 101)
+      // Legal line (only show if data exists)
+      const legalParts = [co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.register || '', co.ceo ? `Inh. ${co.ceo}` : ''].filter(Boolean)
+      if (legalParts.length > 0) {
+        doc.fontSize(6.5).font('Helvetica').fillColor('#9ca3af').text(legalParts.join(' | '), 50, 101)
+      }
 
       // ── CUSTOMER ADDRESS ───────────────────────────
       const addrBoxY = 125
@@ -542,8 +589,34 @@ export class InvoiceService implements OnModuleInit {
         doc.font('Helvetica-Bold').fontSize(8.5).fillColor(DARK).text(value, rx + 110, dy0 + i * dg, { width: 95, align: 'right' })
       })
 
-      // ── AMOUNT SECTION ─────────────────────────────
+      // ── RETURNED ITEMS TABLE (if available) ────────
       let y = 220
+
+      if (returnItems.length > 0) {
+        doc.rect(50, y - 5, 495, 20).fill(DARK)
+        doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#ffffff')
+        doc.text('POS', 58, y, { width: 22 })
+        doc.text('ARTIKEL', 82, y, { width: 200 })
+        doc.text('MENGE', 285, y, { width: 40, align: 'center' })
+        doc.text('EINZELPREIS', 330, y, { width: 75, align: 'right' })
+        doc.text('GESAMT', 410, y, { width: 133, align: 'right' })
+        y += 22
+
+        returnItems.forEach((item: any, i: number) => {
+          if (i % 2 === 0) doc.rect(50, y - 3, 495, 18).fill('#fef2f2')
+          doc.fillColor(DARK).font('Helvetica').fontSize(8.5)
+          doc.text(`${i + 1}`, 58, y, { width: 22 })
+          doc.text(item.name ?? '—', 82, y, { width: 200 })
+          doc.text(`${item.quantity ?? 1}`, 285, y, { width: 40, align: 'center' })
+          doc.text(`${Number(item.unitPrice ?? 0).toFixed(2)} €`, 330, y, { width: 75, align: 'right' })
+          const lineTotal = (item.quantity ?? 1) * Number(item.unitPrice ?? 0)
+          doc.font('Helvetica-Bold').text(`-${lineTotal.toFixed(2)} €`, 410, y, { width: 133, align: 'right' })
+          y += 18
+        })
+        y += 8
+      }
+
+      // ── AMOUNT SECTION ─────────────────────────────
       // Refund calculation (UNCHANGED)
       const netRefund = refundAmount / 1.19
       const taxRefund = refundAmount - netRefund
@@ -582,10 +655,8 @@ export class InvoiceService implements OnModuleInit {
       const footerY = 770
       doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(1).strokeColor(RED).stroke()
       doc.font('Helvetica').fontSize(6.5).fillColor('#9ca3af')
-      doc.text(
-        `${co.name} | ${co.address}${co.ceo ? ' | GF: ' + co.ceo : ''}${co.register ? ' | ' + co.register : ''} | USt-IdNr.: ${co.vatId}${co.bankIban ? ' | IBAN: ' + co.bankIban : ''}`,
-        50, footerY + 8, { align: 'center', width: 495 },
-      )
+      const footParts = [co.name, co.address, co.ceo ? `Inh. ${co.ceo}` : '', co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.bankIban ? `IBAN: ${co.bankIban}` : ''].filter(Boolean)
+      doc.text(footParts.join(' | '), 50, footerY + 8, { align: 'center', width: 495 })
 
       doc.end()
     })

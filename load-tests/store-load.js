@@ -1,5 +1,5 @@
 /**
- * k6 Load Test — Malak Store (Staging)
+ * k6 Load Test — Malak Bekleidung (Staging)
  *
  * Installation: brew install k6
  * Ausführen:    k6 run load-tests/store-load.js

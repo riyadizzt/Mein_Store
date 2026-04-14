@@ -1,10 +1,18 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { API_BASE_URL } from '@/lib/env'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import Image from 'next/image'
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
-import { ArrowLeft, Loader2, CreditCard, Lock, Shield, Building2 } from 'lucide-react'
+import {
+  Elements,
+  CardNumberElement,
+  CardExpiryElement,
+  CardCvcElement,
+  useStripe,
+  useElements,
+} from '@stripe/react-stripe-js'
+import { ArrowLeft, Loader2, CreditCard, Lock, Shield, Building2, ChevronDown, MapPin } from 'lucide-react'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { useCartStore } from '@/store/cart-store'
 import { CouponInput } from '@/components/coupon-input'
@@ -13,6 +21,7 @@ import { useShopSettings } from '@/hooks/use-shop-settings'
 import { getStripe } from '@/lib/stripe'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { VisaLogo, MastercardLogo, PayPalLogo, KlarnaLogo, SumUpLogo } from '@/components/ui/payment-logos'
 
 export function StepPayment() {
   const locale = useLocale()
@@ -99,7 +108,62 @@ function StepPaymentInner() {
 
   const vorkasseEnabled = !!vorkasseData?.enabled
   const [activeTab, setActiveTabRaw] = useState<'card' | 'klarna' | 'vorkasse' | 'sumup' | 'paypal'>('card')
-  const setActiveTab = (tab: typeof activeTab) => { setActiveTabRaw(tab); if (tab !== 'sumup') setSumupMounted(false) }
+  const setActiveTab = (tab: typeof activeTab) => {
+    setActiveTabRaw(tab)
+    if (tab !== 'sumup') setSumupMounted(false)
+    // Clear any stale error from a previous method — e.g. "card number
+    // incomplete" from an aborted Stripe attempt should not linger when the
+    // customer switches to Vorkasse. Makes the new method feel like a fresh
+    // attempt.
+    setError(null)
+  }
+
+  // Mobile-only collapsible state for the order summary. Defaults to collapsed
+  // (just like Shopify / Stripe Checkout) so the payment form stays in view.
+  const [mobileSummaryOpen, setMobileSummaryOpen] = useState(false)
+
+  // SumUp is the only payment flow where the customer sits on a mounted widget
+  // in the SAME tab with a pending order created. If they close the tab now,
+  // the order is orphaned as pending_payment until the cron sweeps it. We
+  // fire a keepalive abort on pagehide/beforeunload so the order cancels
+  // immediately. Cleared on successful verify / method switch / unmount.
+  const pendingSumupOrderIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const fireAbort = () => {
+      const orderId = pendingSumupOrderIdRef.current
+      if (!orderId) return
+      // keepalive: request survives the tab unload; body is empty — the
+      // endpoint only needs the orderId in the URL. Safe against abuse
+      // because abortPendingOrder() guards on order state (no-op if paid).
+      try {
+        fetch(`${API_BASE_URL}/api/v1/payments/${orderId}/abort`, {
+          method: 'POST',
+          keepalive: true,
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(() => {})
+      } catch {
+        // keepalive not supported → silently give up; cron will clean up.
+      }
+      pendingSumupOrderIdRef.current = null
+    }
+    window.addEventListener('pagehide', fireAbort)
+    window.addEventListener('beforeunload', fireAbort)
+    return () => {
+      // Soft-navigation cleanup: fire on component unmount too, so clicking
+      // the logo or hitting the back button also aborts a stuck SumUp widget.
+      fireAbort()
+      window.removeEventListener('pagehide', fireAbort)
+      window.removeEventListener('beforeunload', fireAbort)
+    }
+  }, [])
+
+  // Any switch away from SumUp means the customer is continuing the order
+  // with a different method — do NOT abort, the order stays valid.
+  useEffect(() => {
+    if (!sumupMounted) pendingSumupOrderIdRef.current = null
+  }, [sumupMounted])
 
   const handlePlaceOrder = useCallback(async () => {
     if (!termsAccepted || isProcessing) return
@@ -109,7 +173,9 @@ function StepPaymentInner() {
       if (!stripe || !elements) return
     }
 
-    const cardElement = activeTab === 'card' ? elements?.getElement(CardElement) : null
+    // Stripe needs ONE of the card-group elements as the payment_method.card argument —
+    // it auto-collects the values of the sibling expiry + CVC elements internally.
+    const cardElement = activeTab === 'card' ? elements?.getElement(CardNumberElement) : null
     if (activeTab === 'card' && !cardElement) return
 
     setProcessing(true)
@@ -193,6 +259,11 @@ function StepPaymentInner() {
           return
         }
 
+        // Arm the beforeunload abort hook BEFORE mounting — from here until
+        // the customer pays successfully or switches method, a tab close
+        // must abort the order to avoid orphan pending_payment rows.
+        pendingSumupOrderIdRef.current = order.id
+
         // Mount the widget — user enters card details and pays INSIDE the widget
         // We do NOT navigate anywhere until onResponse('success') fires
         SumUpCard.mount({
@@ -207,12 +278,15 @@ function StepPaymentInner() {
               // Verify with SumUp API that checkout is actually PAID
               try {
                 const verifyRes = await fetch(
-                  `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/verify-sumup`,
+                  `${API_BASE_URL}/api/v1/payments/${order.id}/verify-sumup`,
                   { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' },
                 )
                 const verifyData = await verifyRes.json().catch(() => ({}))
 
                 if (verifyRes.ok && verifyData.paid) {
+                  // Disarm the abort hook BEFORE navigating away — the order
+                  // is confirmed, the pagehide event must NOT cancel it.
+                  pendingSumupOrderIdRef.current = null
                   try {
                     sessionStorage.setItem('malak-last-order', JSON.stringify({
                       orderNumber: order.orderNumber, orderId: order.id,
@@ -223,7 +297,11 @@ function StepPaymentInner() {
                   } catch {}
                   window.location.replace(`/${locale}/checkout/confirmation?order=${order.orderNumber}`)
                 } else {
-                  // Backend says not captured — payment actually failed
+                  // Backend says not captured — payment actually failed.
+                  // Keep the ref armed: the customer may retry or close the
+                  // tab, and we still want the order aborted in the latter
+                  // case. If they retry with another method, the switch
+                  // handler disarms it then.
                   setError(
                     locale === 'ar' ? 'لم يتم إتمام الدفع. يرجى المحاولة مرة أخرى.'
                     : 'Zahlung nicht abgeschlossen. Bitte erneut versuchen.'
@@ -261,6 +339,11 @@ function StepPaymentInner() {
             orderNumber: order.orderNumber, orderId: order.id,
             totalAmount: order.totalAmount, paymentMethod: activeTab,
           }))
+          // PayPal: save orderId for capture after redirect back
+          if (activeTab === 'paypal') {
+            sessionStorage.setItem('malak-paypal-orderId', order.id)
+            sessionStorage.setItem('malak-payment-method', 'paypal')
+          }
         } catch {}
         window.location.href = payment.redirectUrl
         return
@@ -269,7 +352,7 @@ function StepPaymentInner() {
       // Confirm payment on backend (fire-and-forget) + navigate
       const goToConfirmation = () => {
         // 1. Confirm payment (don't await — we don't need the response)
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/payments/${order.id}/confirm`, {
+        fetch(`${API_BASE_URL}/api/v1/payments/${order.id}/confirm`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         }).catch(() => {})
 
@@ -341,12 +424,124 @@ function StepPaymentInner() {
     }
   }, [termsAccepted, isProcessing, stripe, elements, activeTab, items, shippingAddress, guestEmail, locale]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reusable order-summary content (used twice: mobile collapsible + desktop sticky)
+  const addressLabel =
+    locale === 'ar' ? 'عنوان التوصيل' : locale === 'en' ? 'Shipping address' : 'Lieferadresse'
+  const editLabel =
+    locale === 'ar' ? 'تعديل' : locale === 'en' ? 'Edit' : 'Bearbeiten'
+
+  const orderSummaryContent = (
+    <>
+      {/* Shipping address block — Zalando-style recap above the items */}
+      {shippingAddress && (shippingAddress.street || shippingAddress.city) && (
+        <div className="pb-4 border-b">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5" />
+              {addressLabel}
+            </div>
+            <button
+              type="button"
+              onClick={() => setStep('address')}
+              className="text-xs font-medium underline underline-offset-2 text-foreground/80 hover:text-foreground transition-colors"
+            >
+              {editLabel}
+            </button>
+          </div>
+          <div className="text-xs leading-relaxed text-foreground/90" dir="ltr">
+            <div className="font-medium">
+              {shippingAddress.firstName} {shippingAddress.lastName}
+            </div>
+            {shippingAddress.company && <div>{shippingAddress.company}</div>}
+            <div>
+              {shippingAddress.street} {shippingAddress.houseNumber}
+            </div>
+            {shippingAddress.addressLine2 && <div>{shippingAddress.addressLine2}</div>}
+            <div>
+              {shippingAddress.postalCode} {shippingAddress.city}
+            </div>
+            <div className="text-muted-foreground">
+              {shippingAddress.country === 'DE'
+                ? locale === 'ar'
+                  ? 'ألمانيا'
+                  : locale === 'en'
+                    ? 'Germany'
+                    : 'Deutschland'
+                : shippingAddress.country}
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="space-y-3 max-h-60 overflow-y-auto">
+        {items.map((item) => (
+          <div key={item.variantId} className="flex gap-3">
+            <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
+              {item.imageUrl && <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="w-full h-full object-cover" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">{item.names?.[locale] ?? item.name}</p>
+              <p className="text-[10px] text-muted-foreground">{item.color}{item.color && item.size ? ' / ' : ''}{item.size} x {item.quantity}</p>
+            </div>
+            <span className="text-xs font-medium">&euro;{(item.unitPrice * item.quantity).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="border-t pt-3 space-y-1.5 text-sm">
+        <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{cartSubtotal.toFixed(2)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>{shippingCost === 0 ? t('shippingStep.free') : `€${shippingCost.toFixed(2)}`}</span></div>
+        {useCheckoutStore.getState().discountAmount > 0 && (
+          <div className="flex justify-between text-green-600 text-xs font-medium">
+            <span>{locale === 'ar' ? 'خصم' : locale === 'en' ? 'Discount' : 'Rabatt'} ({useCheckoutStore.getState().couponCode})</span>
+            <span>-&euro;{useCheckoutStore.getState().discountAmount.toFixed(2)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{totalAmount.toFixed(2)}</span></div>
+        <p className="text-[11px] text-muted-foreground text-end">
+          {locale === 'ar'
+            ? `شامل ${(totalAmount - (totalAmount / 1.19)).toFixed(2)}€ ضريبة القيمة المضافة`
+            : locale === 'en'
+              ? `Incl. €${(totalAmount - (totalAmount / 1.19)).toFixed(2)} VAT`
+              : `Inkl. ${(totalAmount - (totalAmount / 1.19)).toFixed(2)} € MwSt.`}
+        </p>
+        <div className="pt-3 border-t">
+          <CouponInput subtotal={cartSubtotal} />
+        </div>
+      </div>
+    </>
+  )
+
   return (
-    <div className="max-w-2xl mx-auto py-6">
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-8">
+    <div className="max-w-3xl mx-auto py-6">
+      {/* Mobile-only collapsible Order Summary — appears ABOVE payment methods */}
+      <div className="lg:hidden mb-4 border rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setMobileSummaryOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors"
+          aria-expanded={mobileSummaryOpen}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            {t('orderSummary')}
+            <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${mobileSummaryOpen ? 'rotate-180' : ''}`} />
+          </span>
+          <span className="text-base font-bold">&euro;{totalAmount.toFixed(2)}</span>
+        </button>
+        <div
+          className="grid transition-[grid-template-rows] duration-300 ease-out"
+          style={{ gridTemplateRows: mobileSummaryOpen ? '1fr' : '0fr' }}
+        >
+          <div className="overflow-hidden">
+            <div className="p-4 space-y-4">
+              {orderSummaryContent}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
         {/* Left: Payment */}
-        <div className="lg:col-span-3 space-y-6">
-          <h2 className="text-xl font-bold">{t('payment.title')}</h2>
+        <div className="space-y-6">
+          <h2 className="text-2xl font-bold">{t('payment.title')}</h2>
 
           {error && (
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive animate-fade-up" role="alert">
@@ -354,92 +549,137 @@ function StepPaymentInner() {
             </div>
           )}
 
-          {/* Payment method tabs */}
-          {(klarnaEnabled || vorkasseEnabled || sumupEnabled || paypalEnabled) && (
-            <div className="flex border rounded-xl overflow-hidden" role="tablist">
-              <button
-                role="tab"
-                aria-selected={activeTab === 'card'}
-                onClick={() => setActiveTab('card')}
-                className={`flex-1 py-3.5 px-4 text-sm font-medium border-e transition-all duration-200 ${
-                  activeTab === 'card' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
-                }`}
-              >
-                <CreditCard className="h-4 w-4 mx-auto mb-1" />
-                {t('paymentMethods.card')}
-              </button>
-              {klarnaEnabled && (
-                <button
-                  role="tab"
-                  aria-selected={activeTab === 'klarna'}
-                  onClick={() => setActiveTab('klarna')}
-                  className={`flex-1 py-3.5 px-4 text-sm font-medium border-e transition-all duration-200 ${
-                    activeTab === 'klarna' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
-                  }`}
-                >
-                  Klarna
-                </button>
-              )}
-              {paypalEnabled && (
-                <button
-                  role="tab"
-                  aria-selected={activeTab === 'paypal'}
-                  onClick={() => setActiveTab('paypal')}
-                  className={`flex-1 py-3.5 px-4 text-sm font-medium border-e transition-all duration-200 ${
-                    activeTab === 'paypal' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
-                  }`}
-                >
-                  <svg className="h-4 w-4 mx-auto mb-1" viewBox="0 0 24 24" fill="currentColor"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/></svg>
-                  PayPal
-                </button>
-              )}
-              {vorkasseEnabled && (
-                <button
-                  role="tab"
-                  aria-selected={activeTab === 'vorkasse'}
-                  onClick={() => setActiveTab('vorkasse')}
-                  className={`flex-1 py-3.5 px-4 text-sm font-medium transition-all duration-200 ${
-                    activeTab === 'vorkasse' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
-                  }`}
-                >
-                  <Building2 className="h-4 w-4 mx-auto mb-1" />
-                  {locale === 'ar' ? 'تحويل بنكي' : locale === 'en' ? 'Bank Transfer' : 'Vorkasse'}
-                </button>
-              )}
-              {sumupEnabled && (
-                <button
-                  role="tab"
-                  aria-selected={activeTab === 'sumup'}
-                  onClick={() => setActiveTab('sumup')}
-                  className={`flex-1 py-3.5 px-4 text-sm font-medium border-s transition-all duration-200 ${
-                    activeTab === 'sumup' ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/80'
-                  }`}
-                >
-                  <CreditCard className="h-4 w-4 mx-auto mb-1" />
-                  SumUp
-                </button>
-              )}
-            </div>
-          )}
+          {/* Payment methods — Zalando-style radio rows */}
+          <div className="border rounded-2xl overflow-hidden divide-y">
+            {/* Kreditkarte */}
+            <label className={`flex items-center gap-4 px-5 py-5 cursor-pointer transition-all duration-200 ${activeTab === 'card' ? 'bg-[#d4a853]/5 border-s-[3px] border-s-[#d4a853]' : 'hover:bg-muted/30'}`} onClick={() => setActiveTab('card')}>
+              <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${activeTab === 'card' ? 'border-[#d4a853] scale-110' : 'border-muted-foreground/30'}`}>
+                {activeTab === 'card' && <div className="h-3 w-3 rounded-full bg-[#d4a853] animate-[scale-in_150ms_ease-out]" />}
+              </div>
+              <span className="font-semibold text-base flex-1">{t('paymentMethods.card')}</span>
+              <div className="flex items-center gap-2">
+                <VisaLogo /><MastercardLogo />
+              </div>
+            </label>
 
-          {/* Card Form — ALWAYS visible when card tab active */}
-          {activeTab === 'card' && (
-            <div className="p-5 border rounded-xl bg-background transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/20">
-              <CardElement
-                options={{
-                  style: {
-                    base: {
-                      fontSize: '16px',
-                      color: '#1a1a2e',
-                      fontFamily: 'Inter, system-ui, sans-serif',
-                      '::placeholder': { color: '#9ca3af' },
-                    },
-                  },
-                  hidePostalCode: true,
-                }}
-              />
-            </div>
-          )}
+            {/* PayPal */}
+            {paypalEnabled && (
+              <label className={`flex items-center gap-4 px-5 py-5 cursor-pointer transition-all duration-200 ${activeTab === 'paypal' ? 'bg-[#d4a853]/5 border-s-[3px] border-s-[#d4a853]' : 'hover:bg-muted/30'}`} onClick={() => setActiveTab('paypal')}>
+                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${activeTab === 'paypal' ? 'border-[#d4a853] scale-110' : 'border-muted-foreground/30'}`}>
+                  {activeTab === 'paypal' && <div className="h-3 w-3 rounded-full bg-[#d4a853] animate-[scale-in_150ms_ease-out]" />}
+                </div>
+                <span className="font-semibold text-base flex-1">PayPal</span>
+                <PayPalLogo />
+              </label>
+            )}
+
+            {/* SumUp */}
+            {sumupEnabled && (
+              <label className={`flex items-center gap-4 px-5 py-5 cursor-pointer transition-all duration-200 ${activeTab === 'sumup' ? 'bg-[#d4a853]/5 border-s-[3px] border-s-[#d4a853]' : 'hover:bg-muted/30'}`} onClick={() => setActiveTab('sumup')}>
+                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${activeTab === 'sumup' ? 'border-[#d4a853] scale-110' : 'border-muted-foreground/30'}`}>
+                  {activeTab === 'sumup' && <div className="h-3 w-3 rounded-full bg-[#d4a853] animate-[scale-in_150ms_ease-out]" />}
+                </div>
+                <span className="font-semibold text-base flex-1">SumUp</span>
+                <SumUpLogo />
+              </label>
+            )}
+
+            {/* Vorkasse */}
+            {vorkasseEnabled && (
+              <>
+                <label className={`flex items-center gap-4 px-5 py-5 cursor-pointer transition-all duration-200 ${activeTab === 'vorkasse' ? 'bg-[#d4a853]/5 border-s-[3px] border-s-[#d4a853]' : 'hover:bg-muted/30'}`} onClick={() => setActiveTab('vorkasse')}>
+                  <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${activeTab === 'vorkasse' ? 'border-[#d4a853] scale-110' : 'border-muted-foreground/30'}`}>
+                    {activeTab === 'vorkasse' && <div className="h-3 w-3 rounded-full bg-[#d4a853] animate-[scale-in_150ms_ease-out]" />}
+                  </div>
+                  <span className="font-semibold text-base flex-1">{locale === 'ar' ? 'تحويل بنكي (الدفع المسبق)' : locale === 'en' ? 'Bank Transfer (Prepayment)' : 'Vorkasse (Überweisung)'}</span>
+                  <div className="h-7 w-7 rounded-md bg-amber-100 flex items-center justify-center"><Building2 className="h-4 w-4 text-amber-700" /></div>
+                </label>
+                {activeTab === 'vorkasse' && (
+                  <div className="px-5 py-4 bg-[#d4a853]/5 text-sm text-muted-foreground leading-relaxed ltr:pl-14 rtl:pr-14 border-s-[3px] border-s-[#d4a853]">
+                    {locale === 'ar'
+                      ? 'بعد تأكيد الطلب، سنرسل لك معلومات التحويل البنكي عبر البريد الإلكتروني. نحتفظ بالمنتجات لمدة 7 أيام. كلما وصل التحويل أسرع، كلما تم شحن طلبك أسرع.'
+                      : locale === 'en'
+                      ? 'After placing your order, we will send you the bank transfer details by email. We reserve your items for 7 days. The sooner we receive your payment, the sooner your order will be shipped.'
+                      : 'Nach Bestellabschluss senden wir dir die Überweisungsdaten per E-Mail. Wir reservieren die Artikel 7 Tage. Je eher die Zahlung eingeht, desto schneller wird verschickt.'}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Klarna */}
+            {klarnaEnabled && (
+              <label className={`flex items-center gap-4 px-5 py-5 cursor-pointer transition-all duration-200 ${activeTab === 'klarna' ? 'bg-[#d4a853]/5 border-s-[3px] border-s-[#d4a853]' : 'hover:bg-muted/30'}`} onClick={() => setActiveTab('klarna')}>
+                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${activeTab === 'klarna' ? 'border-[#d4a853] scale-110' : 'border-muted-foreground/30'}`}>
+                  {activeTab === 'klarna' && <div className="h-3 w-3 rounded-full bg-[#d4a853] animate-[scale-in_150ms_ease-out]" />}
+                </div>
+                <span className="font-semibold text-base flex-1">Klarna</span>
+                <KlarnaLogo />
+              </label>
+            )}
+          </div>
+          <style>{`@keyframes scale-in { from { transform: scale(0) } to { transform: scale(1) } }`}</style>
+
+          {/* Card Form — separate elements for clarity on mobile */}
+          {activeTab === 'card' && (() => {
+            const stripeFieldStyle = {
+              style: {
+                base: {
+                  fontSize: '16px',
+                  color: '#1a1a2e',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  '::placeholder': { color: '#9ca3af' },
+                },
+                invalid: { color: '#dc2626' },
+              },
+            }
+            const labelDeEnAr = {
+              cardNumber: locale === 'ar' ? 'رقم البطاقة' : locale === 'en' ? 'Card number' : 'Kartennummer',
+              expiry:     locale === 'ar' ? 'تاريخ الانتهاء' : locale === 'en' ? 'Expiry (MM/YY)' : 'Gültig bis (MM/JJ)',
+              cvc:        locale === 'ar' ? 'رمز الأمان' : locale === 'en' ? 'Security code' : 'Prüfnummer',
+            }
+            // Stripe Elements are iframes — dir="rtl" on the document body
+            // does NOT reach their internal cursor. In Arabic mode this caused
+            // the placeholder to sit on the right but the cursor to start on
+            // the left, making every card field feel broken. The universal
+            // convention for card data (Shopify, Zalando, Amazon, Stripe's own
+            // Checkout): force the INPUT content to LTR while keeping the
+            // label in the surrounding RTL flow. Credit card numbers, CVCs,
+            // and MM/YY are Latin digits by definition — there is no arabic
+            // rendering of "4242 4242 4242 4242".
+            const ltrField = 'px-4 py-3.5 border rounded-xl bg-background transition-all focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40'
+            return (
+              <div className="space-y-3">
+                {/* Card Number — full width */}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    {labelDeEnAr.cardNumber}
+                  </label>
+                  <div dir="ltr" className={ltrField}>
+                    <CardNumberElement options={{ ...stripeFieldStyle, showIcon: true }} />
+                  </div>
+                </div>
+                {/* Expiry + CVC — side by side */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      {labelDeEnAr.expiry}
+                    </label>
+                    <div dir="ltr" className={ltrField}>
+                      <CardExpiryElement options={stripeFieldStyle} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      {labelDeEnAr.cvc}
+                    </label>
+                    <div dir="ltr" className={ltrField}>
+                      <CardCvcElement options={stripeFieldStyle} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Klarna info */}
           {activeTab === 'klarna' && (
@@ -549,50 +789,15 @@ function StepPaymentInner() {
           </div>
 
           <Button variant="ghost" onClick={() => setStep('shipping')} className="w-full gap-2">
-            <ArrowLeft className="h-4 w-4" />{t('payment.backToShipping')}
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />{t('payment.backToShipping')}
           </Button>
         </div>
 
-        {/* Right: Order Summary */}
-        <div className="lg:col-span-2">
-          <div className="sticky top-20 border rounded-2xl shadow-card p-5 space-y-4">
-            <h3 className="font-semibold">{t('orderSummary')}</h3>
-            <div className="space-y-3 max-h-60 overflow-y-auto">
-              {items.map((item) => (
-                <div key={item.variantId} className="flex gap-3">
-                  <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
-                    {item.imageUrl && <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="w-full h-full object-cover" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{item.names?.[locale] ?? item.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{item.color}{item.color && item.size ? ' / ' : ''}{item.size} x {item.quantity}</p>
-                  </div>
-                  <span className="text-xs font-medium">&euro;{(item.unitPrice * item.quantity).toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="border-t pt-3 space-y-1.5 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{cartSubtotal.toFixed(2)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>{shippingCost === 0 ? t('shippingStep.free') : `€${shippingCost.toFixed(2)}`}</span></div>
-              {useCheckoutStore.getState().discountAmount > 0 && (
-                <div className="flex justify-between text-green-600 text-xs font-medium">
-                  <span>{locale === 'ar' ? 'خصم' : locale === 'en' ? 'Discount' : 'Rabatt'} ({useCheckoutStore.getState().couponCode})</span>
-                  <span>-&euro;{useCheckoutStore.getState().discountAmount.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{totalAmount.toFixed(2)}</span></div>
-              <p className="text-[11px] text-muted-foreground text-end">
-                {locale === 'ar'
-                  ? `شامل ${(totalAmount - (totalAmount / 1.19)).toFixed(2)}€ ضريبة القيمة المضافة`
-                  : locale === 'en'
-                    ? `Incl. €${(totalAmount - (totalAmount / 1.19)).toFixed(2)} VAT`
-                    : `Inkl. ${(totalAmount - (totalAmount / 1.19)).toFixed(2)} € MwSt.`}
-              </p>
-              {/* Coupon Input */}
-              <div className="pt-3 border-t">
-                <CouponInput subtotal={cartSubtotal} />
-              </div>
-            </div>
+        {/* Right: Order Summary — desktop only (mobile uses the collapsible bar above) */}
+        <div className="hidden lg:block">
+          <div className="sticky top-20 border rounded-2xl shadow-card p-6 space-y-5">
+            <h3 className="font-bold text-lg">{t('orderSummary')}</h3>
+            {orderSummaryContent}
           </div>
         </div>
       </div>

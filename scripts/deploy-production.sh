@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================
-# Malak Store — Production Deployment Script
+# Malak Bekleidung — Production Deployment Script
 # Prüft alle Voraussetzungen bevor deployed wird
 # =============================================================
 

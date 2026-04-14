@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { BadRequestException } from '@nestjs/common'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { AuditService } from '../services/audit.service'
+import { NotificationService } from '../services/notification.service'
 import { AdminOrdersService } from '../services/admin-orders.service'
 import { AdminUsersService } from '../services/admin-users.service'
 import { AdminProductsService } from '../services/admin-products.service'
@@ -8,6 +10,14 @@ import { AdminInventoryService } from '../services/admin-inventory.service'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { PaymentsService } from '../../payments/payments.service'
 import { ShipmentsService } from '../../shipments/shipments.service'
+import { EmailService } from '../../email/email.service'
+
+const mockNotificationService = {
+  create: jest.fn().mockResolvedValue(undefined),
+  createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+}
+const mockEmailService = { enqueue: jest.fn().mockResolvedValue(undefined) }
+const mockEventEmitter = { emit: jest.fn(), emitAsync: jest.fn().mockResolvedValue([]) }
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -82,6 +92,9 @@ describe('Admin — AdminOrdersService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: PaymentsService, useValue: mockPayments },
         { provide: ShipmentsService, useValue: mockShipments },
+        { provide: NotificationService, useValue: mockNotificationService },
+        { provide: EmailService, useValue: mockEmailService },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile()
     ordersService = module.get(AdminOrdersService)
@@ -97,12 +110,14 @@ describe('Admin — AdminOrdersService', () => {
     expect(result.status).toBe('processing')
   })
 
-  it('wirft BadRequestException ohne Begründung', async () => {
+  it('akzeptiert Status-Update auch ohne Begründung (notes optional)', async () => {
     mockPrisma.order.findFirst.mockResolvedValue({ id: 'o1', status: 'confirmed' })
+    mockPrisma.order.update.mockResolvedValue({ status: 'processing' })
+    mockPrisma.orderStatusHistory.create.mockResolvedValue({})
 
-    await expect(
-      ordersService.updateStatus('o1', 'processing', '', 'admin1', '127.0.0.1'),
-    ).rejects.toThrow(BadRequestException)
+    const result = await ordersService.updateStatus('o1', 'processing', '', 'admin1', '127.0.0.1')
+    expect(result.status).toBe('processing')
+    // Empty notes should be normalized to null in the cancellation path; here we just verify no throw.
   })
 
   it('storniert + refunded automatisch', async () => {
@@ -146,6 +161,7 @@ describe('Admin — AdminUsersService', () => {
         AdminUsersService,
         AuditService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: EmailService, useValue: mockEmailService },
       ],
     }).compile()
     usersService = module.get(AdminUsersService)
@@ -282,10 +298,16 @@ describe('Admin — AdminInventoryService', () => {
     expect(result.diff).toBe(5)
   })
 
-  it('wirft BadRequestException ohne Begründung', async () => {
-    await expect(
-      inventoryService.adjustStock('inv1', 15, '', 'admin1', '127.0.0.1'),
-    ).rejects.toThrow(BadRequestException)
+  it('akzeptiert Bestandskorrektur auch ohne Begründung (notes optional)', async () => {
+    mockPrisma.inventory.findUnique.mockResolvedValue({
+      id: 'inv1', variantId: 'v1', warehouseId: 'wh1', quantityOnHand: 10,
+    })
+    mockPrisma.inventory.update.mockResolvedValue({})
+    mockPrisma.inventoryMovement.create.mockResolvedValue({})
+    mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+    const result = await inventoryService.adjustStock('inv1', 15, '', 'admin1', '127.0.0.1')
+    expect(result.diff).toBe(5)
   })
 
   it('Transfer zwischen Lagern', async () => {

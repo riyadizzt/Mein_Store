@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useLocale } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
 import { MessageCircle } from 'lucide-react'
@@ -11,7 +12,7 @@ export function WhatsAppButton() {
     queryKey: ['whatsapp-settings'],
     queryFn: async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/settings/public`)
+        const res = await fetch(`${API_BASE_URL}/api/v1/settings/public`)
         if (!res.ok) return null
         return res.json()
       } catch { return null }
@@ -31,7 +32,8 @@ export function WhatsAppButton() {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-6 ltr:right-6 rtl:left-6 z-40 w-14 h-14 rounded-full bg-[#d4a853] hover:bg-[#c49b4a] shadow-lg hover:shadow-xl flex items-center justify-center transition-all hover:scale-110 group"
+      aria-label={locale === 'ar' ? 'تواصل معنا عبر واتساب' : 'WhatsApp Chat'}
+      className="fixed bottom-6 ltr:right-6 rtl:left-6 z-40 min-w-[56px] min-h-[56px] w-14 h-14 rounded-full bg-[#d4a853] hover:bg-[#c49b4a] shadow-lg hover:shadow-xl flex items-center justify-center transition-all hover:scale-110 group"
       title="WhatsApp"
     >
       <MessageCircle className="h-6 w-6 text-black" />

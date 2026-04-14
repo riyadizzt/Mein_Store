@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { Instagram, Facebook, Cookie } from 'lucide-react'
 import { useConsentStore } from '@/store/consent-store'
+import { VisaLogo, MastercardLogo, PayPalLogo, KlarnaLogo, SumUpLogo } from '@/components/ui/payment-logos'
 
 /* ── TikTok SVG ── */
 const TikTokIcon = () => (
@@ -12,22 +13,13 @@ const TikTokIcon = () => (
   </svg>
 )
 
-/* ── Payment Logos (simple pill badges — always visible, always correct) ── */
-function PaymentBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="h-9 px-5 rounded-md bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-white/70 text-sm font-bold tracking-tight">
-      {children}
-    </span>
-  )
-}
-
 /* ── Footer Link with gold underline hover ── */
 function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <li>
       <Link
         href={href}
-        className="relative inline-block text-base text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
+        className="relative inline-block text-base text-white/70 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
       >
         {children}
         <span className="absolute bottom-0 left-0 rtl:left-auto rtl:right-0 w-0 h-px bg-brand-gold transition-all duration-300 group-hover:w-full" />
@@ -55,7 +47,7 @@ export function Footer({ locale }: { locale: string }) {
               <span className="text-2xl font-display font-bold text-white tracking-[0.3em] logo-shimmer">
                 MALAK
               </span>
-              <p className="mt-4 text-sm text-white/40 leading-relaxed max-w-[220px]">
+              <p className="mt-4 text-sm text-white/65 leading-relaxed max-w-[220px]">
                 {t('tagline')}
               </p>
               <div className="flex gap-2.5 mt-6">
@@ -107,7 +99,7 @@ export function Footer({ locale }: { locale: string }) {
                 <li>
                   <button
                     onClick={() => useConsentStore.getState().openSettings()}
-                    className="relative inline-flex items-center gap-1.5 text-base text-white/50 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
+                    className="relative inline-flex items-center gap-1.5 text-base text-white/70 hover:text-white/90 transition-colors duration-200 pb-0.5 group"
                   >
                     <Cookie className="h-3.5 w-3.5" />
                     {locale === 'ar' ? 'إعدادات الكوكيز' : locale === 'en' ? 'Cookie Settings' : 'Cookie-Einstellungen'}
@@ -123,23 +115,29 @@ export function Footer({ locale }: { locale: string }) {
 
           {/* Bottom — Payments + Copyright */}
           <div className="mt-8 flex flex-col items-center gap-5">
-            <div className="flex items-center gap-3 flex-wrap justify-center">
-              <PaymentBadge>
-                <svg viewBox="0 0 48 30" className="h-5 w-auto" aria-label="Mastercard">
-                  <circle cx="17" cy="15" r="9" fill="#eb001b" opacity="0.7"/><circle cx="31" cy="15" r="9" fill="#f79e1b" opacity="0.7"/><path d="M24 8a9 9 0 010 14 9 9 0 000-14z" fill="#ff5f00" opacity="0.8"/>
-                </svg>
-              </PaymentBadge>
-              <PaymentBadge>VISA</PaymentBadge>
-              <PaymentBadge>PayPal</PaymentBadge>
-              <PaymentBadge>Klarna</PaymentBadge>
-              <PaymentBadge>
-                <span className="flex items-center gap-1">
-                  <svg viewBox="0 0 17 20" className="h-4 w-auto" fill="currentColor"><path d="M14.5 10.3c0-2.1 1.7-3.1 1.8-3.2-1-1.5-2.5-1.7-3-1.7-1.3-.1-2.5.8-3.1.8-.7 0-1.7-.7-2.7-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.3 1.1 8.3.7 1 1.5 2.2 2.6 2.1 1.1 0 1.4-.7 2.7-.7 1.3 0 1.5.7 2.7.7 1.1 0 1.8-1 2.5-2.1.8-1.2 1.1-2.3 1.1-2.4-1.7-.8-2.3-4-.3-5.2zM12 4c.6-.7 1-1.7.9-2.7-1 0-2.1.7-2.7 1.3-.6.6-1 1.5-.9 2.5 1 .1 2.1-.5 2.7-1.1z"/></svg>
-                  Pay
-                </span>
-              </PaymentBadge>
+            <div className="flex flex-col items-center gap-3">
+              <span className="text-[11px] font-semibold text-white/65 uppercase tracking-[0.18em]">
+                {locale === 'ar' ? 'نقبل الدفع عبر' : locale === 'en' ? 'We accept' : 'Wir akzeptieren'}
+              </span>
+              <div className="flex items-center gap-2.5 flex-wrap justify-center">
+                <div className="h-9 px-2 rounded-md bg-white border border-white/20 flex items-center">
+                  <VisaLogo className="h-6" />
+                </div>
+                <div className="h-9 px-2 rounded-md bg-white border border-white/20 flex items-center">
+                  <MastercardLogo className="h-6" />
+                </div>
+                <div className="h-9 px-3 rounded-md bg-white border border-white/20 flex items-center">
+                  <PayPalLogo className="h-5" />
+                </div>
+                <div className="h-9 px-2 rounded-md bg-white border border-white/20 flex items-center">
+                  <KlarnaLogo className="h-5" />
+                </div>
+                <div className="h-9 px-2 rounded-md bg-white border border-white/20 flex items-center">
+                  <SumUpLogo className="h-5" />
+                </div>
+              </div>
             </div>
-            <p className="text-sm text-white/30">
+            <p className="text-sm text-white/65">
               &copy; {new Date().getFullYear()} Malak Bekleidung. {tc('allRightsReserved')}
             </p>
           </div>

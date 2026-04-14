@@ -5,9 +5,13 @@ import { NotificationService } from '../services/notification.service'
 
 /**
  * Automatic cleanup of orders that were created but never paid.
- * Runs every 15 minutes. Finds orders with status "pending" that are older than
- * 30 minutes with NO successful payment. Cancels them, releases reserved stock,
- * logs to audit, and notifies admins.
+ * Runs every 5 minutes. Finds orders with status "pending" / "pending_payment"
+ * that are older than 10 minutes with NO successful payment. Cancels them,
+ * releases reserved stock, logs to audit, and notifies admins.
+ *
+ * Why 10 min (was 30): paired with the 15-min reuse window, orphan orders from
+ * method-switches or abandoned widgets are cleaned up fast enough to not clutter
+ * the customer's account view. 10 is still comfortable for slow 3DS challenges.
  *
  * DOES NOT: create refunds (nothing was paid), send customer emails, touch any
  * other order status besides "pending".
@@ -21,15 +25,15 @@ export class PaymentTimeoutCron {
     private readonly notifications: NotificationService,
   ) {}
 
-  @Cron('*/15 * * * *') // Every 15 minutes
+  @Cron('*/5 * * * *') // Every 5 minutes
   async cleanupTimedOutOrders() {
     const cutoff = new Date()
-    cutoff.setMinutes(cutoff.getMinutes() - 30)
+    cutoff.setMinutes(cutoff.getMinutes() - 10)
 
-    // Find pending orders older than 30 minutes with no successful payment
+    // Find pending/pending_payment orders older than 30 minutes with no successful payment
     const staleOrders = await this.prisma.order.findMany({
       where: {
-        status: 'pending',
+        status: { in: ['pending', 'pending_payment'] },
         createdAt: { lt: cutoff },
         deletedAt: null,
       },
@@ -108,7 +112,7 @@ export class PaymentTimeoutCron {
           await tx.orderStatusHistory.create({
             data: {
               orderId: order.id,
-              fromStatus: 'pending',
+              fromStatus: order.status as any,
               toStatus: 'cancelled',
               source: 'system',
               notes: 'Zahlungstimeout — automatisch storniert',
@@ -137,16 +141,21 @@ export class PaymentTimeoutCron {
       }
     }
 
-    // 5. Admin notification (summary)
+    // 5. Admin notification (summary) — only if setting enabled
     if (cancelledCount > 0) {
       try {
-        await this.notifications.create({
-          type: 'order_cancelled',
-          title: `${cancelledCount} Bestellung${cancelledCount > 1 ? 'en' : ''} automatisch storniert`,
-          body: `Zahlungstimeout: ${cancelledNumbers.join(', ')}`,
-          entityType: 'order',
-          channel: 'admin',
-        })
+        const setting = await this.prisma.shopSetting.findUnique({ where: { key: 'notif_email_auto_cancel' } })
+        const emailEnabled = setting?.value !== 'false'
+
+        if (emailEnabled) {
+          await this.notifications.create({
+            type: 'order_cancelled',
+            title: `${cancelledCount} Bestellung${cancelledCount > 1 ? 'en' : ''} automatisch storniert`,
+            body: `Zahlungstimeout: ${cancelledNumbers.join(', ')}`,
+            entityType: 'order',
+            channel: 'admin',
+          })
+        }
       } catch (err: any) {
         this.logger.error(`Failed to create notification: ${err.message}`)
       }

@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/auth-store'
@@ -28,7 +29,7 @@ export function useNotificationStream() {
   const connect = useCallback(() => {
     if (!token) return
 
-    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const API = API_BASE_URL
     // SSE doesn't support custom headers, so we pass token as query param
     const url = `${API}/api/v1/admin/notifications/stream?token=${encodeURIComponent(token)}`
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useEffect } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
@@ -12,7 +13,7 @@ export default function MaintenancePage() {
   const { data: settings } = useQuery({
     queryKey: ['maintenance-status'],
     queryFn: async () => {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/maintenance/status`)
+      const res = await fetch(`${API_BASE_URL}/api/v1/maintenance/status`)
       return res.ok ? res.json() : {}
     },
   })
@@ -23,7 +24,7 @@ export default function MaintenancePage() {
 
   // Track view
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/maintenance/view`, { method: 'POST' }).catch(() => {})
+    fetch(`${API_BASE_URL}/api/v1/maintenance/view`, { method: 'POST' }).catch(() => {})
   }, [])
 
   // Countdown
@@ -47,7 +48,7 @@ export default function MaintenancePage() {
 
   const handleSubmit = async () => {
     if (!email.includes('@')) return
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/maintenance/subscribe`, {
+    const res = await fetch(`${API_BASE_URL}/api/v1/maintenance/subscribe`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, locale }),
     })

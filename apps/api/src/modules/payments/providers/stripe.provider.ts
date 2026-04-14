@@ -33,7 +33,7 @@ export class StripeProvider implements IPaymentProvider {
         ...input.metadata,
       },
       receipt_email: input.customerEmail,
-      description: `Malak Shop — Bestellung ${input.orderId}`,
+      description: `Malak Bekleidung — Bestellung ${input.orderId}`,
       // SCA/3D Secure automatisch für EU-Karten
       automatic_payment_methods: { enabled: true },
     }
@@ -85,8 +85,9 @@ export class StripeProvider implements IPaymentProvider {
         eventId: event.id,
         payload: event.data.object as unknown as Record<string, unknown>,
       }
-    } catch (err: any) {
-      this.logger.error(`Stripe webhook signature verification failed: ${err.message}`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.logger.error(`Stripe webhook signature verification failed: ${msg}`)
       return {
         isValid: false,
         eventType: '',

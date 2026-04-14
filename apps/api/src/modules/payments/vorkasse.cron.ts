@@ -112,8 +112,9 @@ export class VorkasseCron {
       })
 
       this.logger.log(`Vorkasse reminder sent: ${order.orderNumber} → ${email}`)
-    } catch (err: any) {
-      this.logger.error(`Failed to send Vorkasse reminder for ${order.orderNumber}: ${err.message}`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.logger.error(`Failed to send Vorkasse reminder for ${order.orderNumber}: ${msg}`)
     }
   }
 
@@ -167,8 +168,9 @@ export class VorkasseCron {
       })
 
       this.logger.log(`Vorkasse auto-cancelled: ${order.orderNumber} (no payment after ${order.payment?.metadata ? 'deadline' : '10'} days)`)
-    } catch (err: any) {
-      this.logger.error(`Failed to auto-cancel Vorkasse order ${order.orderNumber}: ${err.message}`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.logger.error(`Failed to auto-cancel Vorkasse order ${order.orderNumber}: ${msg}`)
     }
   }
 }

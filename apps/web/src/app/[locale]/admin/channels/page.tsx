@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useEffect } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -158,7 +159,7 @@ export default function ChannelsPage() {
   }
 
   // ── Computed ──────────────────────────────────────────────────
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  const apiUrl = API_BASE_URL
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const totalProducts = channelStats?.total ?? 0
   const channelCounts: Record<string, number> = {

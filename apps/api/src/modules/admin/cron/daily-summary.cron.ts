@@ -66,21 +66,31 @@ export class DailySummaryCron {
     const lastWeekCount = lastWeekOrders._count
 
     const dateStr = yesterday.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    const dateStrAr = yesterday.toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+    // Determine language from admin preferences
+    const adminUser = await this.prisma.user.findFirst({ where: { email: recipientEmail } })
+    const lang = adminUser?.preferredLang ?? 'ar'
+
+    const appUrl = process.env.APP_URL || 'http://localhost:3000'
 
     await this.emailService.enqueue({
       to: recipientEmail,
-      type: 'welcome' as any, // Reuse welcome template for now
-      lang: 'de',
+      type: 'daily-summary' as any,
+      lang,
       data: {
-        firstName: 'Admin',
-        subject: `Tagesbericht — ${dateStr}`,
-        content: [
-          `Bestellungen: ${orderCount} (${revenue.toFixed(2)} EUR)`,
-          `Letzte Woche gleicher Tag: ${lastWeekCount} (${lastWeekRevenue.toFixed(2)} EUR)`,
-          `Neue Kunden: ${newCustomers}`,
-          `Produkte unter Mindestbestand: ${lowStock}`,
-          `Offene Retouren: ${openReturns}`,
-        ].join('\n'),
+        firstName: adminUser?.firstName ?? 'Admin',
+        subject: lang === 'ar' ? `التقرير اليومي — ${dateStrAr}` : `Tagesbericht — ${dateStr}`,
+        dateStr: lang === 'ar' ? dateStrAr : dateStr,
+        orderCount,
+        revenue: revenue.toFixed(2),
+        lastWeekCount,
+        lastWeekRevenue: lastWeekRevenue.toFixed(2),
+        newCustomers,
+        lowStock,
+        lowStockAlert: lowStock > 50,
+        openReturns,
+        dashboardUrl: `${appUrl}/${lang}/admin/dashboard`,
       },
     })
 

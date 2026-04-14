@@ -4,16 +4,39 @@ import { useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Eye, EyeOff, AlertCircle, Lock, WifiOff } from 'lucide-react'
+import { Loader2, Eye, EyeOff, AlertCircle, Lock, WifiOff, ShieldAlert } from 'lucide-react'
 import { useLogin } from '@/hooks/use-auth'
 import { Input } from '@/components/ui/input'
 import { GoogleSignIn } from '@/components/auth/google-sign-in'
 import { FacebookSignIn } from '@/components/auth/facebook-sign-in'
 
-function getErrorInfo(error: any, locale: string): { msg: string; icon: 'auth' | 'lock' | 'network'; showReset?: boolean } | null {
+function getErrorInfo(error: any, locale: string): {
+  msg: string
+  icon: 'auth' | 'lock' | 'network' | 'blocked'
+  showReset?: boolean
+  showContact?: boolean
+} | null {
   if (!error) return null
 
   const status = error?.response?.status
+  const body = error?.response?.data
+  const errorCode = body?.error
+  // Backend returns localized message object for AccountBlocked
+  const localizedMsg = typeof body?.message === 'object'
+    ? body.message[locale] ?? body.message.de
+    : null
+
+  // Admin-blocked account — specific error code from backend
+  if (status === 403 && errorCode === 'AccountBlocked') {
+    return {
+      icon: 'blocked',
+      showContact: true,
+      msg: localizedMsg
+        ?? (locale === 'ar' ? 'تم حظر حسابك من قبل خدمة العملاء. يرجى التواصل معنا.'
+          : locale === 'en' ? 'Your account has been blocked by customer service. Please contact us.'
+          : 'Dein Konto wurde vom Kundenservice gesperrt. Bitte kontaktiere uns.'),
+    }
+  }
 
   if (status === 403) {
     return {
@@ -55,6 +78,10 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect')
+  // OAuth callbacks (Google/Facebook) redirect here with ?error=... when
+  // login fails. account_blocked is the one we want to surface as a friendly
+  // "contact support" screen, everything else is just a generic failure.
+  const oauthError = searchParams.get('error')
 
   const login = useLogin()
   const [email, setEmail] = useState('')
@@ -71,8 +98,35 @@ export default function LoginPage() {
     }
   }
 
-  const errorInfo = getErrorInfo(login.error, locale)
-  const ErrorIcon = errorInfo?.icon === 'lock' ? Lock : errorInfo?.icon === 'network' ? WifiOff : AlertCircle
+  // Synthesize an errorInfo from ?error= query param when present — same
+  // shape as getErrorInfo so the render path below stays single-branch.
+  const oauthErrorInfo: ReturnType<typeof getErrorInfo> = oauthError === 'account_blocked'
+    ? {
+        icon: 'blocked',
+        showContact: true,
+        msg: locale === 'ar'
+          ? 'تم حظر حسابك من قبل خدمة العملاء. يرجى التواصل معنا.'
+          : locale === 'en'
+            ? 'Your account has been blocked by customer service. Please contact us.'
+            : 'Dein Konto wurde vom Kundenservice gesperrt. Bitte kontaktiere uns.',
+      }
+    : (oauthError === 'google_failed' || oauthError === 'facebook_failed')
+      ? {
+          icon: 'auth',
+          msg: locale === 'ar'
+            ? 'فشل تسجيل الدخول عبر المنصة الاجتماعية'
+            : locale === 'en'
+              ? 'Social login failed. Please try again.'
+              : 'Social Login fehlgeschlagen. Bitte versuche es erneut.',
+        }
+      : null
+
+  const errorInfo = getErrorInfo(login.error, locale) ?? oauthErrorInfo
+  const ErrorIcon =
+    errorInfo?.icon === 'blocked' ? ShieldAlert
+    : errorInfo?.icon === 'lock' ? Lock
+    : errorInfo?.icon === 'network' ? WifiOff
+    : AlertCircle
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center py-16 bg-[#fafafa]">
@@ -90,7 +144,8 @@ export default function LoginPage() {
         {errorInfo && (
           <div
             className={`mb-6 p-4 rounded-xl text-sm ${
-              errorInfo.icon === 'lock' ? 'bg-orange-50 text-orange-800 border border-orange-200'
+              errorInfo.icon === 'blocked' ? 'bg-red-50 text-red-900 border border-red-200'
+              : errorInfo.icon === 'lock' ? 'bg-orange-50 text-orange-800 border border-orange-200'
               : errorInfo.icon === 'network' ? 'bg-blue-50 text-blue-800 border border-blue-200'
               : 'bg-red-50 text-red-700 border border-red-200'
             }`}
@@ -98,8 +153,8 @@ export default function LoginPage() {
             style={{ animation: 'shake 400ms ease-out' }}
           >
             <div className="flex items-start gap-3">
-              <ErrorIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span>{errorInfo.msg}</span>
+              <ErrorIcon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${errorInfo.icon === 'blocked' ? 'text-red-600' : ''}`} />
+              <span className={errorInfo.icon === 'blocked' ? 'leading-relaxed font-medium' : ''}>{errorInfo.msg}</span>
             </div>
             {errorInfo.showReset && (
               <Link
@@ -107,6 +162,14 @@ export default function LoginPage() {
                 className="mt-3 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-orange-100 text-orange-900 text-xs font-semibold hover:bg-orange-200 transition-colors"
               >
                 {locale === 'ar' ? 'إعادة تعيين كلمة المرور لإلغاء القفل' : locale === 'en' ? 'Reset password to unlock' : 'Passwort zurücksetzen zum Entsperren'}
+              </Link>
+            )}
+            {errorInfo.showContact && (
+              <Link
+                href={`/${locale}/contact`}
+                className="mt-3 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-white border border-red-300 text-red-900 text-sm font-semibold hover:bg-red-50 transition-colors"
+              >
+                {locale === 'ar' ? 'التواصل مع خدمة العملاء' : locale === 'en' ? 'Contact customer service' : 'Kundenservice kontaktieren'}
               </Link>
             )}
           </div>
@@ -119,8 +182,8 @@ export default function LoginPage() {
 
           {/* Social Login */}
           <div className="space-y-3">
-            <GoogleSignIn label={`Google ${t('loginButton')}`} />
-            <FacebookSignIn label={`Facebook ${t('loginButton')}`} />
+            <GoogleSignIn label={locale === 'ar' ? 'تسجيل الدخول من خلال Google' : locale === 'en' ? 'Sign in with Google' : 'Mit Google anmelden'} />
+            <FacebookSignIn label={locale === 'ar' ? 'تسجيل الدخول من خلال Facebook' : locale === 'en' ? 'Sign in with Facebook' : 'Mit Facebook anmelden'} />
           </div>
 
           {/* Divider */}
@@ -175,7 +238,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={login.isPending}
-              className="w-full h-13 rounded-xl bg-[#d4a853] text-white text-base font-semibold hover:bg-[#c49b45] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full h-14 rounded-xl bg-[#d4a853] text-white text-lg font-semibold hover:bg-[#c49b45] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {login.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {t('loginButton')}

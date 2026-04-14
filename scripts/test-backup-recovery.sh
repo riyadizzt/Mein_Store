@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================
-# Malak Store — Backup + Recovery Test (NUR AUF STAGING!)
+# Malak Bekleidung — Backup + Recovery Test (NUR AUF STAGING!)
 #
 # Testet den kompletten Zyklus:
 # 1. Backup erstellen

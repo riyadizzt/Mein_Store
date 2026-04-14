@@ -107,10 +107,20 @@ export class OrderEmailListener {
       const order = await this.prisma.order.findFirst({
         where: { id: event.orderId },
         include: {
-          user: { select: { email: true, firstName: true, preferredLang: true } },
+          user: { select: { email: true, firstName: true, preferredLang: true, passwordHash: true } },
           shipment: { select: { trackingNumber: true, trackingUrl: true, carrier: true } },
-          items: { select: { snapshotName: true, snapshotSku: true, quantity: true, unitPrice: true, totalPrice: true,
-            variant: { select: { color: true, size: true } } } },
+          items: {
+            select: {
+              snapshotName: true, snapshotSku: true, quantity: true, unitPrice: true, totalPrice: true,
+              variant: {
+                select: {
+                  color: true,
+                  size: true,
+                  product: { select: { excludeFromReturns: true } },
+                },
+              },
+            },
+          },
           shippingAddress: { select: { firstName: true, lastName: true, street: true, houseNumber: true, postalCode: true, city: true } },
         },
       })
@@ -118,20 +128,31 @@ export class OrderEmailListener {
       const recipient = getRecipient(order)
       if (!recipient) return
 
-      // Guest invite email — when order is first confirmed (payment captured)
-      if (event.toStatus === 'confirmed' && !order!.userId && order!.guestEmail) {
+      // Guest invite email — fires when the order is first confirmed.
+      //
+      // Detection: a "guest" in this codebase is a User with passwordHash=null
+      // (stub account created by orders.service.ts for guest checkouts). The
+      // old check `!order.userId && order.guestEmail` never matched any real
+      // order because userId is always set, so no guest ever got the invite.
+      const isStubGuest = order?.user && !order.user.passwordHash && !!order.user.email
+      const isPureGuest = !order?.userId && !!order?.guestEmail
+      if (event.toStatus === 'confirmed' && (isStubGuest || isPureGuest)) {
         try {
           const notes = JSON.parse(order!.notes ?? '{}')
-          if (notes.inviteToken) {
+          const inviteEmail = order!.user?.email ?? order!.guestEmail
+          if (notes.inviteToken && inviteEmail) {
             await this.emailService.queueGuestInvite(recipient.email, recipient.lang, {
               firstName: recipient.firstName,
               orderNumber: order!.orderNumber,
-              email: order!.guestEmail,
+              email: inviteEmail,
               inviteToken: notes.inviteToken,
               appUrl: process.env.APP_URL || 'https://malak-bekleidung.com',
             })
+            this.logger.log(`Guest invite email queued for ${inviteEmail} (${order!.orderNumber})`)
           }
-        } catch {}
+        } catch (err) {
+          this.logger.error(`Failed to send guest invite for ${event.orderId}`, err)
+        }
       }
 
       // Status-Update email — ONLY for admin-initiated status changes
@@ -144,6 +165,58 @@ export class OrderEmailListener {
         name: item.snapshotName, sku: item.snapshotSku, color: item.variant?.color, size: item.variant?.size,
         quantity: item.quantity, totalPrice: Number(item.totalPrice).toFixed(2),
       }))
+
+      // ── Return button eligibility ─────────────────────────
+      //
+      // The CTA only appears when ALL of these are true:
+      //   1. Status is 'delivered' (only useful window)
+      //   2. Global ShopSettings.returnsEnabled is ON (admin kill switch)
+      //   3. Order has at least one product that is NOT excludeFromReturns
+      //      (otherwise the Return page would reject every item anyway)
+      //   4. notes.confirmationToken is present (public-token auth)
+      //
+      // This mirrors exactly what the customer-facing order detail page
+      // does for registered customers, so guest and logged-in customers
+      // see the same policy. Admin controls the button via the existing
+      // toggle in /admin/settings → "Retouren-System".
+      let returnUrl: string | null = null
+      let returnEligible = false
+      if (event.toStatus === 'delivered') {
+        try {
+          // 1. Global toggle
+          const setting = await this.prisma.shopSetting.findUnique({
+            where: { key: 'returnsEnabled' },
+          })
+          const returnsGloballyOn = setting?.value !== 'false' // default: on
+
+          // 2. At least one returnable item
+          const hasReturnableItem = (order!.items ?? []).some(
+            (it: any) => it.variant?.product?.excludeFromReturns !== true,
+          )
+
+          // 3. Token present
+          let token: string | null = null
+          try {
+            const notes = JSON.parse((order as any)!.notes ?? '{}')
+            token = notes.confirmationToken ?? null
+          } catch {}
+
+          if (returnsGloballyOn && hasReturnableItem && token) {
+            const appUrl = process.env.APP_URL || 'https://malak-bekleidung.com'
+            returnUrl = `${appUrl}/${recipient.lang}/return/${order!.id}?token=${token}`
+            returnEligible = true
+          } else {
+            this.logger.debug(
+              `[order-email] Return CTA hidden for ${order!.orderNumber}: ` +
+              `globallyOn=${returnsGloballyOn} hasReturnable=${hasReturnableItem} hasToken=${!!token}`,
+            )
+          }
+        } catch (err) {
+          this.logger.warn(
+            `[order-email] Return eligibility check failed for ${event.orderId}: ${(err as Error).message}`,
+          )
+        }
+      }
 
       await this.emailService.queueOrderStatus(recipient.email, recipient.lang, {
         firstName: recipient.firstName,
@@ -159,6 +232,8 @@ export class OrderEmailListener {
         shippingAddress: order!.shippingAddress,
         isShipped: event.toStatus === 'shipped',
         isDelivered: event.toStatus === 'delivered',
+        returnUrl,
+        returnEligible,
         appUrl: process.env.APP_URL || 'https://malak-bekleidung.com',
       })
     } catch (err) {

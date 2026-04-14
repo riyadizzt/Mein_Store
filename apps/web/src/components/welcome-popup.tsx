@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useState, useEffect } from 'react'
 import { useLocale } from 'next-intl'
 import { X, Gift, Mail } from 'lucide-react'
@@ -19,7 +20,7 @@ export function WelcomePopup() {
     if (typeof window === 'undefined') return
     if (localStorage.getItem('malak_welcome_shown')) return
 
-    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const API = API_BASE_URL
     fetch(`${API}/api/v1/settings/public`)
       .then((r) => r.json())
       .then((data) => {
@@ -45,7 +46,7 @@ export function WelcomePopup() {
     setError('')
 
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API = API_BASE_URL
       await fetch(`${API}/api/v1/newsletter/subscribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

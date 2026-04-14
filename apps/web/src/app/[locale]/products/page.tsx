@@ -16,21 +16,39 @@ function ProductsContent() {
   const searchParams = useSearchParams()
   const { data: categories } = useCategories()
 
-  // Resolve department slug to categoryId
+  // Resolve category slugs to categoryId.
+  //   - `?department=baby`            → top-level category "baby"
+  //   - `?department=baby&category=x` → child of "baby" with slug "x"
+  //   - `?category=baby`              → also resolves to top-level "baby" (sidebar uses
+  //                                     this when no department was previously set)
   const departmentSlug = searchParams.get('department') ?? undefined
-  const departmentCategory = departmentSlug ? (categories ?? []).find((c) => c.slug === departmentSlug) : undefined
-  const subCategorySlug = searchParams.get('category') ?? undefined
-  const subCategory = subCategorySlug && departmentCategory
-    ? (departmentCategory as any).children?.find((c: any) => c.slug === subCategorySlug)
+  const departmentCategory = departmentSlug
+    ? (categories ?? []).find((c) => c.slug === departmentSlug)
     : undefined
+  const categorySlug = searchParams.get('category') ?? undefined
+
+  let resolvedCategory: any = undefined
+  if (categorySlug) {
+    if (departmentCategory) {
+      resolvedCategory = (departmentCategory as any).children?.find((c: any) => c.slug === categorySlug)
+    }
+    // Fallback: treat `?category=` as a top-level category lookup.
+    // Without this, clicking "Baby" in the sidebar (which sets ?category=baby) silently
+    // returned ALL products because the slug never matched a child of an unset department.
+    if (!resolvedCategory) {
+      resolvedCategory = (categories ?? []).find((c: any) => c.slug === categorySlug)
+    }
+  }
 
   const params = {
-    categoryId: subCategory?.id ?? departmentCategory?.id ?? undefined,
+    categoryId: resolvedCategory?.id ?? departmentCategory?.id ?? undefined,
     sort: searchParams.get('sort') ?? undefined,
     minPrice: searchParams.get('minPrice') ? Number(searchParams.get('minPrice')) : undefined,
     maxPrice: searchParams.get('maxPrice') ? Number(searchParams.get('maxPrice')) : undefined,
     inStock: searchParams.get('inStock') === 'true' ? true : undefined,
     search: searchParams.get('q') ?? undefined,
+    colors: searchParams.get('colors') ?? undefined,
+    sizes: searchParams.get('sizes') ?? undefined,
   }
 
   const {

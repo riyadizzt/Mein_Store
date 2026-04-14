@@ -105,12 +105,13 @@ export class PaymentsWebhookController {
         where: { id: webhookRecord.id },
         data: { processed: true, processedAt: new Date() },
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
       await this.prisma.webhookEvent.update({
         where: { id: webhookRecord.id },
-        data: { error: err.message },
+        data: { error: msg },
       })
-      this.logger.error(`Stripe webhook processing error: ${verification.eventType}`, err)
+      this.logger.error(`Stripe webhook processing error: ${verification.eventType} — ${msg}`)
     }
 
     return { received: true }
@@ -174,12 +175,13 @@ export class PaymentsWebhookController {
         where: { id: webhookRecord.id },
         data: { processed: true, processedAt: new Date() },
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
       await this.prisma.webhookEvent.update({
         where: { id: webhookRecord.id },
-        data: { error: err.message },
+        data: { error: msg },
       })
-      this.logger.error(`Klarna webhook processing error`, err)
+      this.logger.error(`Klarna webhook processing error: ${msg}`)
     }
 
     return { received: true }

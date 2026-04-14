@@ -1,7 +1,10 @@
 import { useAuthStore } from '@/store/auth-store'
+import { API_BASE_URL } from '@/lib/env'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = API_BASE_URL
 const BASE = `${API_URL}/api/v1`
+
+export { API_BASE_URL }
 
 let isRefreshing = false
 

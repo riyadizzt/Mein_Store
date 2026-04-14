@@ -1,5 +1,6 @@
 'use client'
 
+import { API_BASE_URL } from '@/lib/env'
 import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
@@ -15,7 +16,7 @@ export function MaintenanceCheck() {
   const { data: publicSettings } = useQuery({
     queryKey: ['public-settings-maintenance'],
     queryFn: async () => {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/settings/public`)
+      const res = await fetch(`${API_BASE_URL}/api/v1/settings/public`)
       return res.ok ? res.json() : {}
     },
     staleTime: 30_000,
