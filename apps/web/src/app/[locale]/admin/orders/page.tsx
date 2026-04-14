@@ -34,16 +34,22 @@ function getCustomerName(order: any): string {
   return order.guestEmail ?? ''
 }
 
+// Vibrant pill colors with matching border + dot. Every status has a
+// distinct hue so the admin can skim a long list and see the state
+// at a glance. `cancelled` was previously pale-grey which looked
+// uncolored on Arabic admin screens — now red-tinted. `processing`
+// was previously identical to `confirmed`; now indigo vs. blue.
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  pending_payment: 'bg-yellow-100 text-yellow-800',
-  confirmed: 'bg-blue-100 text-blue-800',
-  processing: 'bg-blue-100 text-blue-800',
-  shipped: 'bg-purple-100 text-purple-800',
-  delivered: 'bg-green-100 text-green-800',
-  cancelled: 'bg-gray-100 text-gray-600',
-  refunded: 'bg-orange-100 text-orange-800',
-  disputed: 'bg-red-100 text-red-800',
+  pending:         'bg-amber-100  text-amber-800  border border-amber-200',
+  pending_payment: 'bg-amber-100  text-amber-800  border border-amber-200',
+  confirmed:       'bg-blue-100   text-blue-800   border border-blue-200',
+  processing:      'bg-indigo-100 text-indigo-800 border border-indigo-200',
+  shipped:         'bg-purple-100 text-purple-800 border border-purple-200',
+  delivered:       'bg-green-100  text-green-800  border border-green-200',
+  cancelled:       'bg-red-100    text-red-700    border border-red-200',
+  refunded:        'bg-orange-100 text-orange-800 border border-orange-200',
+  returned:        'bg-orange-100 text-orange-800 border border-orange-200',
+  disputed:        'bg-rose-100   text-rose-800   border border-rose-300',
 }
 
 const STATUS_KEYS = Object.keys(STATUS_COLORS)
@@ -135,7 +141,7 @@ export default function AdminOrdersPage() {
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.customer')}</div>
               <div className="px-2 py-3 text-sm font-semibold text-muted-foreground text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{locale === 'ar' ? 'الوقت' : locale === 'en' ? 'Time' : 'Uhrzeit'}</div>
-              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.status')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.status')}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.amount')}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.payment')}</div>
             </div>
@@ -204,8 +210,8 @@ export default function AdminOrdersPage() {
                             <ChannelIcon channel={order.channel ?? 'website'} size={18} />
                           </div>
                           <div className="px-4 py-4 text-sm text-muted-foreground tabular-nums text-center">{formatTime(order.createdAt, locale)}</div>
-                          <div className="px-4 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
+                          <div className="px-4 py-4 flex items-center justify-center">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusColor}`}>{t(`status.${order.status}`)}</span>
                           </div>
                           <div className="px-4 py-4 text-center text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
                           <div className="px-4 py-4 text-sm text-muted-foreground flex items-center justify-center">{(() => {
