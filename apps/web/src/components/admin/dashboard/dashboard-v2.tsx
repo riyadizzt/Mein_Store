@@ -214,11 +214,13 @@ export function DashboardV2() {
                       key={i}
                       className="group flex items-center gap-3 px-2 py-2.5 rounded-xl transition-colors duration-150 hover:bg-muted/40"
                     >
-                      {/* Rank badge — medal colors for top 3 */}
+                      {/* Rank badge — medal colors for top 3.
+                          Glyph wrapped in leading-none span so flex centers
+                          the actual number, not the font's line-height box. */}
                       <div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold tabular-nums ring-1 ${rankStyles}`}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ring-1 ${rankStyles}`}
                       >
-                        {rank}
+                        <span className="text-[11px] font-bold leading-none">{rank}</span>
                       </div>
 
                       {/* Product thumbnail */}
