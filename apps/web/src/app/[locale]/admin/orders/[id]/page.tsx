@@ -8,7 +8,7 @@ import Image from 'next/image'
 import {
   Check, Truck, Download, Ban, Loader2, ExternalLink, StickyNote,
   Package, CreditCard, MapPin, User, Clock, FileText,
-  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro, Building2, Pencil
+  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro, Building2, Pencil, Send
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
@@ -90,6 +90,20 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
   const noteMutation = useMutation({
     mutationFn: () => api.post(`/admin/orders/${id}/notes`, { content: notes }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-order', id] }); setNotes('') },
+  })
+
+  // Resend Vorkasse instructions email. Only useful when the order is
+  // still in pending_payment state — the UI hides the button otherwise.
+  const resendVorkasseMutation = useMutation({
+    mutationFn: () => api.post(`/admin/orders/${id}/resend-vorkasse-instructions`),
+    onSuccess: () => {
+      alert(locale === 'ar' ? 'تم إرسال تعليمات الدفع بنجاح' : locale === 'en' ? 'Payment instructions sent successfully' : 'Zahlungsdaten erfolgreich nachgesendet')
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message
+      const localized = typeof msg === 'object' ? (msg[locale] ?? msg.de) : msg
+      alert(localized ?? (locale === 'ar' ? 'فشل إرسال البريد الإلكتروني' : 'Fehler beim Versenden'))
+    },
   })
 
   // ── Keyboard Shortcuts ─────────────────────────────────────
@@ -701,6 +715,36 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
               >
                 <Check className="h-4 w-4" />
                 {t3('Zahlung eingegangen', 'Payment Received', 'تم استلام الدفع')}
+              </Button>
+              {/* Resend bank-transfer instructions (IBAN/BIC) — for
+                  customers who claim they never got the email, or as a
+                  recovery path for orders created before the Vorkasse
+                  instructions feature existed. Fires the same
+                  PaymentsService.sendVorkasseInstructions() that the
+                  createPayment flow uses, so the rendered email is
+                  identical. */}
+              <Button
+                variant="outline"
+                className="w-full rounded-xl font-semibold gap-2 mt-2 border-[#d4a853]/40 text-[#1a1a2e] hover:bg-[#d4a853]/10"
+                disabled={resendVorkasseMutation.isPending}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t3('Zahlungsdaten nachsenden', 'Resend payment instructions', 'إعادة إرسال تعليمات الدفع'),
+                    description: t3(
+                      `Die E-Mail mit IBAN, BIC und Verwendungszweck wird erneut an den Kunden gesendet (${order.guestEmail ?? order.user?.email ?? ''}).`,
+                      `The email with IBAN, BIC and payment reference will be sent to the customer again (${order.guestEmail ?? order.user?.email ?? ''}).`,
+                      `سيتم إرسال البريد الإلكتروني الذي يحتوي على IBAN وBIC ومرجع الدفع إلى العميل مرة أخرى (${order.guestEmail ?? order.user?.email ?? ''}).`
+                    ),
+                    confirmLabel: t3('Nachsenden', 'Resend', 'إعادة إرسال'),
+                    cancelLabel: t3('Abbrechen', 'Cancel', 'إلغاء'),
+                  })
+                  if (ok) resendVorkasseMutation.mutate()
+                }}
+              >
+                {resendVorkasseMutation.isPending
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Send className="h-4 w-4" />}
+                {t3('Zahlungsdaten nachsenden', 'Resend payment instructions', 'إعادة إرسال تعليمات الدفع')}
               </Button>
             </div>
           )}
