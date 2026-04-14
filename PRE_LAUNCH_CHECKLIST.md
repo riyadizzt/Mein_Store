@@ -55,403 +55,403 @@
 
 ## 1.1 Homepage
 
-⬜ **[Homepage] Layout A wird als Standard angezeigt**
+✅ **[Homepage] Layout A wird als Standard angezeigt**
    Schritt: Cache leeren, `/` aufrufen
    Erwartet: Layout A (Editorial Premium) lädt mit Hero, Trust-Signals, Category Showcase, Bestsellers, Editorial Banner, New Arrivals, Newsletter
 
-⬜ **[Homepage] Layout B wird korrekt angezeigt**
+✅ **[Homepage] Layout B wird korrekt angezeigt**
    Schritt: Admin → Einstellungen → Homepage-Design → "B" → Speichern → `/` aufrufen
    Erwartet: Layout B (Minimal High-End) lädt ohne Hero-Bild, nur Text-Intro, Editorial Banner, Bestsellers, 2-Column Category Teaser, Newsletter
 
-⬜ **[Homepage] Layout C wird korrekt angezeigt**
+✅ **[Homepage] Layout C wird korrekt angezeigt**
    Schritt: Admin → Einstellungen → Homepage-Design → "C" → Speichern → `/` aufrufen
    Erwartet: Layout C (Dark Luxury) lädt mit dunklem Hintergrund, Gold-Akzenten, Editorial Split, dunklen Product Sections
 
-⬜ **[Homepage] Preview-Parameter funktioniert**
+✅ **[Homepage] Preview-Parameter funktioniert**
    Schritt: `/?preview=B` aufrufen (ohne Admin-Änderung)
    Erwartet: Layout B wird angezeigt, ohne Admin-Setting zu ändern
 
-⬜ **[Homepage] Campaign Hero Override funktioniert**
+✅ **[Homepage] Campaign Hero Override funktioniert**
    Schritt: Admin → Campaigns → neue Kampagne mit heroBannerEnabled=true anlegen → Homepage aufrufen
    Erwartet: CampaignHero wird statt Standard-Hero angezeigt (in allen 3 Layouts)
 
-⬜ **[Homepage] Announcement Bar wird angezeigt**
+✅ **[Homepage] Announcement Bar wird angezeigt**
    Schritt: Kampagne mit Announcement Bar aktivieren → Homepage
    Erwartet: Bar oben mit Custom Text und Farben sichtbar
 
-⬜ **[Homepage] Popup erscheint bei aktiver Kampagne**
+✅ **[Homepage] Popup erscheint bei aktiver Kampagne**
    Schritt: Kampagne mit Popup aktivieren (delay 3s) → Homepage
    Erwartet: Popup erscheint nach 3s mit Coupon Code
 
 ## 1.2 Produktliste / Katalog
 
-⬜ **[Katalog] Produktliste lädt**
+✅ **[Katalog] Produktliste lädt**
    Schritt: `/products` aufrufen
    Erwartet: Alle aktiven Produkte werden angezeigt mit Bild, Name, Preis
 
-⬜ **[Katalog] Kategorie-Filter funktioniert**
+✅ **[Katalog] Kategorie-Filter funktioniert**
    Schritt: Kategorie "Schuhe" auswählen
    Erwartet: Nur Produkte der Kategorie "Schuhe" werden angezeigt
 
-⬜ **[Katalog] Farb-Filter funktioniert**
+✅ **[Katalog] Farb-Filter funktioniert**
    Schritt: Farbe "Schwarz" auswählen
    Erwartet: Nur Produkte mit schwarzer Variante werden angezeigt
 
-⬜ **[Katalog] Größen-Filter funktioniert**
+✅ **[Katalog] Größen-Filter funktioniert**
    Schritt: Größe "M" auswählen
    Erwartet: Nur Produkte mit Größe M werden angezeigt
 
-⬜ **[Katalog] Preis-Range Filter funktioniert**
+✅ **[Katalog] Preis-Range Filter funktioniert**
    Schritt: Preis 20-100€ setzen
    Erwartet: Nur Produkte in diesem Preisbereich
 
-⬜ **[Katalog] Sortierung funktioniert**
+✅ **[Katalog] Sortierung funktioniert**
    Schritt: Sortierung "Preis aufsteigend" wählen
    Erwartet: Produkte aufsteigend nach Preis sortiert
 
-⬜ **[Katalog] Sortierung "Neueste zuerst" funktioniert**
+✅ **[Katalog] Sortierung "Neueste zuerst" funktioniert**
    Schritt: Sortierung "Neueste zuerst"
    Erwartet: Neueste Produkte zuerst
 
-⬜ **[Katalog] Pagination funktioniert**
+✅ **[Katalog] Pagination funktioniert**
    Schritt: Nach unten scrollen oder Seite 2 klicken
    Erwartet: Weitere Produkte werden geladen ohne Fehler
 
-⬜ **[Katalog] Keine Ergebnisse Seite**
+✅ **[Katalog] Keine Ergebnisse Seite**
    Schritt: Filter setzen die keine Produkte matchen
    Erwartet: "Keine Produkte gefunden" Meldung mit Reset-Button
 
 ## 1.3 Suche
 
-⬜ **[Suche] Instant-Search Overlay öffnet**
+✅ **[Suche] Instant-Search Overlay öffnet**
    Schritt: In Header auf Such-Icon klicken
    Erwartet: Overlay mit Suchfeld, Suchverlauf, Vorschläge
 
-⬜ **[Suche] Suchergebnisse bei Eingabe**
+✅ **[Suche] Suchergebnisse bei Eingabe**
    Schritt: "Kleid" eingeben
    Erwartet: Nach 300ms Debounce erscheinen Ergebnisse im Overlay
 
-⬜ **[Suche] Keyboard-Shortcut ⌘K öffnet Suche**
+✅ **[Suche] Keyboard-Shortcut ⌘K öffnet Suche**
    Schritt: ⌘K oder Ctrl+K drücken
    Erwartet: Suchoverlay öffnet
 
-⬜ **[Suche] Zero-Results wird geloggt**
+✅ **[Suche] Zero-Results wird geloggt**
    Schritt: Unsinniges Wort "xyzabc" suchen
    Erwartet: "Keine Ergebnisse" Meldung + Admin → Analytics zeigt Zero-Result
 
-⬜ **[Suche] Full-Text + ILIKE Fallback**
+✅ **[Suche] Full-Text + ILIKE Fallback**
    Schritt: Deutsches Wort "Hose" suchen
    Erwartet: Alle Hosen-Produkte werden gefunden (auch bei Varianten)
 
-⬜ **[Suche] Arabische Suche funktioniert**
+✅ **[Suche] Arabische Suche funktioniert**
    Schritt: In AR-Locale "فستان" eingeben
    Erwartet: Relevante Produkte in Arabisch werden gefunden
 
 ## 1.4 Produktdetailseite (PDP)
 
-⬜ **[PDP] Produkt lädt mit allen Bildern**
+✅ **[PDP] Produkt lädt mit allen Bildern**
    Schritt: Beliebiges Produkt anklicken
    Erwartet: Produktname, Beschreibung, Preis, Bilder-Gallery laden
 
-⬜ **[PDP] Gallery-Zoom funktioniert**
+✅ **[PDP] Gallery-Zoom funktioniert**
    Schritt: Auf Haupt-Bild klicken
    Erwartet: Fullscreen Lightbox öffnet mit Zoom + Pan
 
-⬜ **[PDP] Bildnavigation per Thumbnails**
+✅ **[PDP] Bildnavigation per Thumbnails**
    Schritt: Auf Thumbnail unten klicken
    Erwartet: Haupt-Bild wechselt zum Thumbnail-Bild
 
-⬜ **[PDP] Drag/Swipe auf Mobile funktioniert**
+✅ **[PDP] Drag/Swipe auf Mobile funktioniert**
    Schritt: Mobile-Ansicht, Bild nach links wischen
    Erwartet: Nächstes Bild erscheint mit Slide-Animation
 
-⬜ **[PDP] Größenauswahl funktioniert**
+✅ **[PDP] Größenauswahl funktioniert**
    Schritt: Größe "L" anklicken
    Erwartet: Größe wird gold umrahmt, Varianten-State aktualisiert
 
-⬜ **[PDP] Ausverkaufte Größen durchgestrichen**
+✅ **[PDP] Ausverkaufte Größen durchgestrichen**
    Schritt: Produkt mit out-of-stock Variante öffnen
    Erwartet: Nicht verfügbare Größe ist durchgestrichen + disabled
 
-⬜ **[PDP] Farbauswahl wechselt Bilder**
+✅ **[PDP] Farbauswahl wechselt Bilder**
    Schritt: Andere Farbe anklicken
    Erwartet: Haupt-Bild wechselt zum farbspezifischen Bild
 
-⬜ **[PDP] Stock-Progress-Bar bei ≤5**
+✅ **[PDP] Stock-Progress-Bar bei ≤5**
    Schritt: Produkt mit 3 Stück auf Lager öffnen
    Erwartet: Stock-Bar mit "Nur noch 3 verfügbar" angezeigt
 
-⬜ **[PDP] "Auf Lager" bei >5**
+✅ **[PDP] "Auf Lager" bei >5**
    Schritt: Produkt mit 10+ Stück öffnen
    Erwartet: "Auf Lager" Badge (nicht Zahl)
 
-⬜ **[PDP] Add-to-Cart funktioniert**
+✅ **[PDP] Add-to-Cart funktioniert**
    Schritt: Größe wählen, "In den Warenkorb" klicken
    Erwartet: Cart-Drawer öffnet, Toast "Hinzugefügt", Cart-Counter +1
 
-⬜ **[PDP] Wishlist-Herz funktioniert**
+✅ **[PDP] Wishlist-Herz funktioniert**
    Schritt: Auf Herz klicken
    Erwartet: Herz wird gefüllt, Produkt in Wishlist gespeichert
 
-⬜ **[PDP] Bewertungen werden angezeigt**
+✅ **[PDP] Bewertungen werden angezeigt**
    Schritt: Produkt mit Reviews öffnen
    Erwartet: Sterne-Durchschnitt, Verteilung, Reviews-Liste
 
-⬜ **[PDP] Review schreiben funktioniert**
+✅ **[PDP] Review schreiben funktioniert**
    Schritt: Als eingeloggter Kunde "Bewertung schreiben" klicken
    Erwartet: Modal öffnet, Sterne + Text möglich, Submit → pending Status
 
-⬜ **[PDP] Größenberatung (Smart Sizing) öffnet**
+✅ **[PDP] Größenberatung (Smart Sizing) öffnet**
    Schritt: "Größentabelle" klicken
    Erwartet: Modal mit Tabelle, Mannequin-Figur, 3 Tabs
 
-⬜ **[PDP] Smart Sizing Empfehlung**
+✅ **[PDP] Smart Sizing Empfehlung**
    Schritt: Als eingeloggter Kunde mit gespeicherten Maßen
    Erwartet: KI-Empfehlung zeigt passende Größe
 
-⬜ **[PDP] Related Products werden angezeigt**
+✅ **[PDP] Related Products werden angezeigt**
    Schritt: Zum unteren Bereich scrollen
    Erwartet: 4-6 verwandte Produkte erscheinen
 
-⬜ **[PDP] Zuletzt angesehen werden angezeigt**
+✅ **[PDP] Zuletzt angesehen werden angezeigt**
    Schritt: Mehrere Produkte öffnen, dann ein neues
    Erwartet: "Zuletzt angesehen" Sektion mit vorherigen Produkten
 
-⬜ **[PDP] Breadcrumbs korrekt**
+✅ **[PDP] Breadcrumbs korrekt**
    Schritt: Produkt öffnen
    Erwartet: Home > Kategorie > Produktname (klickbar)
 
-⬜ **[PDP] Trust Bar sichtbar**
+✅ **[PDP] Trust Bar sichtbar**
    Schritt: PDP aufrufen
    Erwartet: Trust-Signale (Kundenservice, Sichere Zahlung, Versand, DSGVO)
 
-⬜ **[PDP] Mobile Sticky Bar funktioniert**
+✅ **[PDP] Mobile Sticky Bar funktioniert**
    Schritt: Mobile-Ansicht, nach unten scrollen
    Erwartet: Sticky Bar unten mit Preis + Add-to-Cart Button
 
-⬜ **[PDP] Notify-me bei Ausverkauf**
+✅ **[PDP] Notify-me bei Ausverkauf**
    Schritt: Produkt mit 0 Bestand öffnen
    Erwartet: "Benachrichtigen" Button statt Add-to-Cart
 
-⬜ **[PDP] Hinweis bei excludeFromReturns**
+✅ **[PDP] Hinweis bei excludeFromReturns**
    Schritt: Produkt mit excludeFromReturns=true öffnen
    Erwartet: Hinweis "Dieses Produkt kann nicht retourniert werden"
 
 ## 1.5 Warenkorb
 
-⬜ **[Cart] Cart-Drawer öffnet**
+✅ **[Cart] Cart-Drawer öffnet**
    Schritt: Cart-Icon in Header klicken
    Erwartet: Drawer slidet rein mit allen Items
 
-⬜ **[Cart] Menge erhöhen funktioniert**
+✅ **[Cart] Menge erhöhen funktioniert**
    Schritt: "+" Button neben Menge klicken
    Erwartet: Menge erhöht sich, Gesamtpreis aktualisiert
 
-⬜ **[Cart] Menge verringern funktioniert**
+✅ **[Cart] Menge verringern funktioniert**
    Schritt: "-" Button klicken
    Erwartet: Menge verringert sich, Gesamtpreis aktualisiert
 
-⬜ **[Cart] Item entfernen funktioniert**
+✅ **[Cart] Item entfernen funktioniert**
    Schritt: Papierkorb-Icon klicken
    Erwartet: Item wird entfernt, Undo-Toast erscheint
 
-⬜ **[Cart] Undo-Toast stellt Item wieder her**
+✅ **[Cart] Undo-Toast stellt Item wieder her**
    Schritt: "Rückgängig" im Undo-Toast klicken
    Erwartet: Item erscheint wieder im Cart
 
-⬜ **[Cart] Swipe-to-delete funktioniert (Mobile)**
+✅ **[Cart] Swipe-to-delete funktioniert (Mobile)**
    Schritt: Mobile, Item nach links wischen
    Erwartet: Delete-Button erscheint, Swipe komplett → Item entfernt
 
-⬜ **[Cart] Gratis-Versand Progress-Bar**
+✅ **[Cart] Gratis-Versand Progress-Bar**
    Schritt: Warenkorb unter 100€
    Erwartet: Progress-Bar "Noch X€ bis Gratisversand"
 
-⬜ **[Cart] Gratis-Versand ab 100€**
+✅ **[Cart] Gratis-Versand ab 100€**
    Schritt: Warenkorb über 100€
    Erwartet: "Gratis-Versand freigeschaltet" Meldung
 
-⬜ **[Cart] Coupon-Code eingeben**
+✅ **[Cart] Coupon-Code eingeben**
    Schritt: Coupon-Code in Feld eingeben + "Einlösen"
    Erwartet: Rabatt wird angewendet oder Fehler bei ungültig
 
-⬜ **[Cart] Ungültiger Coupon zeigt Fehler**
+✅ **[Cart] Ungültiger Coupon zeigt Fehler**
    Schritt: "INVALID" Code eingeben
    Erwartet: Fehlermeldung "Coupon nicht gültig"
 
-⬜ **[Cart] Abgelaufener Coupon zeigt Fehler**
+✅ **[Cart] Abgelaufener Coupon zeigt Fehler**
    Schritt: Expired Coupon eingeben
    Erwartet: Fehler "Coupon ist abgelaufen"
 
-⬜ **[Cart] Free-Shipping Coupon → Versand auf 0€**
+✅ **[Cart] Free-Shipping Coupon → Versand auf 0€**
    Schritt: freeShipping Coupon einlösen
    Erwartet: Versandkosten = 0€, Rabatt = 0€
 
-⬜ **[Cart] Echtzeit-Bestandsprüfung**
+✅ **[Cart] Echtzeit-Bestandsprüfung**
    Schritt: Produkt mit 2 Stück in Cart, jemand anders kauft 1
    Erwartet: Cart zeigt "Nur noch 1 verfügbar" beim Reload
 
-⬜ **[Cart] Gesamt-Berechnung korrekt**
+✅ **[Cart] Gesamt-Berechnung korrekt**
    Schritt: Mehrere Items mit verschiedenen Preisen
    Erwartet: Zwischensumme + Versand - Rabatt = Gesamt (Brutto inkl. MwSt)
 
-⬜ **[Cart] MwSt wird rausgerechnet (nicht addiert)**
+✅ **[Cart] MwSt wird rausgerechnet (nicht addiert)**
    Schritt: Item mit 100€ Bruttopreis
    Erwartet: "Enthaltene MwSt (19%): 15,97€" — totalAmount bleibt 100€
 
 ## 1.6 Checkout
 
-⬜ **[Checkout] Guest-Checkout funktioniert**
+✅ **[Checkout] Guest-Checkout funktioniert**
    Schritt: Cart → Checkout → "Als Gast bestellen"
    Erwartet: Formular für Adresse + Zahlung ohne Registrierung
 
-⬜ **[Checkout] Login-Checkout funktioniert**
+✅ **[Checkout] Login-Checkout funktioniert**
    Schritt: Cart → Checkout → Login
    Erwartet: Gespeicherte Adressen werden geladen
 
-⬜ **[Checkout] GuestOrLogin — kein Infinite Loop**
+✅ **[Checkout] GuestOrLogin — kein Infinite Loop**
    Schritt: Checkout aufrufen, zwischen Guest/Login hin-und-her wechseln
    Erwartet: Keine Endlosschleife, UI stabil
 
-⬜ **[Checkout] Adressformular validiert**
+✅ **[Checkout] Adressformular validiert**
    Schritt: Leere Pflichtfelder, "Weiter" klicken
    Erwartet: Fehlermeldungen bei leeren Feldern
 
-⬜ **[Checkout] PLZ→Stadt Auto-Fill**
+✅ **[Checkout] PLZ→Stadt Auto-Fill**
    Schritt: "10115" als PLZ eingeben
    Erwartet: Stadt "Berlin" wird automatisch ausgefüllt
 
-⬜ **[Checkout] PLZ↔Stadt Mismatch-Warnung**
+✅ **[Checkout] PLZ↔Stadt Mismatch-Warnung**
    Schritt: PLZ "10115" + Stadt "München"
    Erwartet: Warnung "PLZ passt nicht zur Stadt" + Korrekturvorschlag
 
-⬜ **[Checkout] Photon Autocomplete funktioniert**
+✅ **[Checkout] Photon Autocomplete funktioniert**
    Schritt: "Alexanderpl" eingeben
    Erwartet: Vorschlag "Alexanderplatz, Berlin" erscheint
 
-⬜ **[Checkout] DHL-Validierung bei Adress-Eingabe**
+✅ **[Checkout] DHL-Validierung bei Adress-Eingabe**
    Schritt: Adresse eintragen, Formular weiter
    Erwartet: Spinner "Adresse wird geprüft", dann OK oder Warnung
 
-⬜ **[Checkout] Ungültige DHL-Adresse → "Trotzdem fortfahren"**
+✅ **[Checkout] Ungültige DHL-Adresse → "Trotzdem fortfahren"**
    Schritt: Ungültige PLZ eingeben
    Erwartet: Warnung + Button "Trotzdem fortfahren" möglich
 
-⬜ **[Checkout] Versandmethode wählen**
+✅ **[Checkout] Versandmethode wählen**
    Schritt: Versand-Schritt
    Erwartet: Versandzonen-basierte Optionen (DHL Standard, Express)
 
-⬜ **[Checkout] Zahlungsschritt — deaktivierte Methoden ausgeblendet**
+✅ **[Checkout] Zahlungsschritt — deaktivierte Methoden ausgeblendet**
    Schritt: Admin → Klarna deaktivieren → Checkout
    Erwartet: Klarna wird nicht angezeigt
 
-⬜ **[Checkout] Stripe Karte — Widget lädt**
+✅  **[Checkout] Stripe Karte — Widget lädt**
    Schritt: "Kreditkarte" wählen
    Erwartet: Stripe Element (Nummer, Ablauf, CVC) erscheint
 
-⬜ **[Checkout] Stripe-Zahlung erfolgreich**
+✅ **[Checkout] Stripe-Zahlung erfolgreich**
    Schritt: Test-Karte 4242 4242 4242 4242, 12/30, 123
    Erwartet: Redirect zu Bestätigungsseite mit Bestellnummer
 
-⬜ **[Checkout] Stripe-Zahlung abgelehnt**
+✅ **[Checkout] Stripe-Zahlung abgelehnt**
    Schritt: Test-Karte 4000 0000 0000 0002
    Erwartet: Fehlermeldung "Zahlung abgelehnt", Cart bleibt
 
-⬜ **[Checkout] Klarna-Flow funktioniert**
+✅ **[Checkout] Klarna-Flow funktioniert**
    Schritt: "Klarna" wählen → Weiter
    Erwartet: Redirect zu Klarna, Test-Login, zurück mit Erfolg
 
-⬜ **[Checkout] PayPal-Flow funktioniert**
+✅ **[Checkout] PayPal-Flow funktioniert**
    Schritt: "PayPal" wählen → Weiter
    Erwartet: Redirect zu PayPal Sandbox, zurück → Capture → Erfolg
 
-⬜ **[Checkout] PayPal Capture nach Redirect**
+✅ **[Checkout] PayPal Capture nach Redirect**
    Schritt: PayPal-Flow abschließen
    Erwartet: Bestätigungsseite ruft capture-paypal auf, Order → paid
 
-⬜ **[Checkout] SumUp Card-Widget lädt**
+✅ **[Checkout] SumUp Card-Widget lädt**
    Schritt: "SumUp" wählen
    Erwartet: SumUp Card Widget erscheint
 
-⬜ **[Checkout] SumUp-Zahlung erfolgreich**
+✅ **[Checkout] SumUp-Zahlung erfolgreich**
    Schritt: Test-Karte in SumUp Widget, Submit
    Erwartet: Verify-Endpoint wird aufgerufen, Order → paid
 
-⬜ **[Checkout] SumUp — kein Fallback ohne Verify**
+✅ **[Checkout] SumUp — kein Fallback ohne Verify**
    Schritt: Versuch, ohne Verify zur Bestätigung zu gehen
    Erwartet: Nicht möglich, explizite Prüfung
 
-⬜ **[Checkout] Vorkasse wählen**
+✅ **[Checkout] Vorkasse wählen**
    Schritt: "Vorkasse (Banküberweisung)" wählen
    Erwartet: Erklärungstext bei Auswahl sichtbar
 
-⬜ **[Checkout] Vorkasse → Bankdaten auf Bestätigung**
+✅ **[Checkout] Vorkasse → Bankdaten auf Bestätigung**
    Schritt: Vorkasse-Bestellung abschließen
    Erwartet: Bestätigungsseite zeigt IBAN + Referenznummer
 
-⬜ **[Checkout] Vorkasse — kein Rechnungs-Download vor Zahlung**
+✅ **[Checkout] Vorkasse — kein Rechnungs-Download vor Zahlung**
    Schritt: Vorkasse-Bestellung, zum Kundenkonto
    Erwartet: Invoice-Button NICHT sichtbar bei pending_payment
 
-⬜ **[Checkout] Vorkasse → 7-Tage-Reminder**
+✅ **[Checkout] Vorkasse → 7-Tage-Reminder**
    Schritt: Vorkasse-Bestellung älter als 7 Tage ohne Zahlung
    Erwartet: Reminder-E-Mail wird versendet (Cron)
 
-⬜ **[Checkout] Vorkasse → 10-Tage-Cancel**
+✅ **[Checkout] Vorkasse → 10-Tage-Cancel**
    Schritt: Vorkasse-Bestellung älter als 10 Tage
    Erwartet: Auto-Stornierung per Cron
 
-⬜ **[Checkout] Payment-Timeout → Auto-Cancel**
+✅ **[Checkout] Payment-Timeout → Auto-Cancel**
    Schritt: Bestellung mit pending_payment länger als 30min
    Erwartet: Auto-Stornierung per Cron
 
-⬜ **[Checkout] 3-Schritt Progress Bar**
+✅ **[Checkout] 3-Schritt Progress Bar**
    Schritt: Checkout durchlaufen
    Erwartet: Progress zeigt Adresse → Versand → Zahlung
 
-⬜ **[Checkout] Bestellbestätigung zeigt alle Details**
+✅ **[Checkout] Bestellbestätigung zeigt alle Details**
    Schritt: Bestellung abschließen
    Erwartet: Bestellnummer, Artikel, Adresse, Zahlung, Versand
 
-⬜ **[Checkout] Bestätigungs-E-Mail kommt an**
+✅ **[Checkout] Bestätigungs-E-Mail kommt an**
    Schritt: Nach Checkout E-Mail prüfen
    Erwartet: HTML-E-Mail mit Bestellübersicht + Rechnung (außer Vorkasse)
 
-⬜ **[Checkout] UTM-Kanal-Attribution funktioniert**
+✅ **[Checkout] UTM-Kanal-Attribution funktioniert**
    Schritt: Shop mit `?utm_source=facebook` öffnen, bestellen
    Erwartet: Bestellung in DB hat channel=facebook
 
 ## 1.7 Authentifizierung
 
-⬜ **[Auth] Registrierung mit E-Mail**
+✅ **[Auth] Registrierung mit E-Mail**
    Schritt: /auth/register → Formular ausfüllen → Submit
    Erwartet: Account erstellt, Verification-E-Mail gesendet
 
-⬜ **[Auth] E-Mail-Verifizierung funktioniert**
+✅ **[Auth] E-Mail-Verifizierung funktioniert**
    Schritt: Link in Verification-E-Mail klicken
    Erwartet: Account bestätigt, Login möglich
 
-⬜ **[Auth] Login mit E-Mail + Passwort**
+✅ **[Auth] Login mit E-Mail + Passwort**
    Schritt: /auth/login → Credentials → Submit
    Erwartet: JWT im Cookie, Redirect zu /account
 
-⬜ **[Auth] Falsches Passwort**
+✅ **[Auth] Falsches Passwort**
    Schritt: Falsches Passwort eingeben
    Erwartet: Fehlermeldung "Ungültige Zugangsdaten"
 
-⬜ **[Auth] Account-Sperre nach 5 Fehlern**
+✅  **[Auth] Account-Sperre nach 5 Fehlern**
    Schritt: 5× falsches Passwort
    Erwartet: Account temporär gesperrt, Hinweis angezeigt
 
-⬜ **[Auth] Password-Reset funktioniert**
+✅  **[Auth] Password-Reset funktioniert**
    Schritt: "Passwort vergessen" → E-Mail → Link → Neues Passwort
    Erwartet: Passwort geändert, Login mit neuem möglich
 
-⬜ **[Auth] Google OAuth funktioniert**
+✅  **[Auth] Google OAuth funktioniert**
    Schritt: "Mit Google anmelden" klicken
    Erwartet: Google-Dialog, zurück → Account verknüpft
 
-⬜ **[Auth] Google OAuth Abbruch → zurück zum Login**
+✅ **[Auth] Google OAuth Abbruch → zurück zum Login**
    Schritt: Google-Dialog abbrechen
    Erwartet: Redirect zur Login-Seite (kein JSON 401)
 
@@ -695,9 +695,15 @@
    Schritt: 30min keine Aktion
    Erwartet: Auto-Logout, Re-Login nötig
 
-⬜ **[Admin] 2FA-Login (falls aktiv)**
-   Schritt: Mit 2FA aktiviertem Account einloggen
-   Erwartet: 2FA-Code abgefragt nach Passwort
+⚪ **[Admin] 2FA-Login — POST-LAUNCH TODO**
+   Status: Nicht implementiert. Nur DB-Spalten (user.twoFactorSecret + twoFactorEnabled)
+           existieren, kein Backend-Flow, keine otplib-Library, kein Frontend-UI.
+   Entschieden: 14.04.2026 — Auth-Flow wird vor Launch nicht angefasst. Bestehende
+                Schutzmaßnahmen (Rate-Limit, 5-Fail-Lock, 8h Session-Max, httpOnly
+                SameSite Cookies, Permissions, Audit-Log) reichen für Launch.
+   Nach Launch: ~4-6h Implementierung — Setup-Endpoint + QR-Code + Verify in Login-Flow
+                + Backup-Codes + Lost-Device-Recovery + Admin-Settings-UI + Rate-Limit.
+   Siehe CLAUDE.md → "Sicherheit — POST-LAUNCH TODO" für vollen Scope.
 
 ## 2.2 Dashboard / KPIs
 
