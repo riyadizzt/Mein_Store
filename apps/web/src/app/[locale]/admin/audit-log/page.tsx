@@ -1,12 +1,100 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
 import { ScrollText, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+
+// ── Render helpers for the `changes` JSON payload ──────────────
+// Audit logs write three different shapes depending on the action:
+//   1. { before: {...}, after: {...} }  → field-by-field diff
+//   2. { after: {...} }                  → only new values (settings updates)
+//   3. { before: {...} }                 → only old values (deletions)
+//   4. any other shape                   → pretty-print key/value
+// Settings updates trigger shape #2 which previously fell through to a
+// 80-char JSON.stringify and rendered as garbled raw text in the admin.
+
+function formatAuditValue(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—'
+  if (typeof v === 'boolean') return v ? '✓' : '✗'
+  if (typeof v === 'number') return v.toString()
+  if (typeof v === 'string') return v
+  try { return JSON.stringify(v) } catch { return String(v) }
+}
+
+function renderKvList(
+  obj: Record<string, unknown>,
+  valueClass: string,
+  strikethrough = false,
+): React.ReactNode {
+  return Object.keys(obj).map((k) => (
+    <div key={k} className="text-[11px] leading-snug break-words">
+      <span className="text-muted-foreground">{k}:</span>{' '}
+      <span className={`${valueClass} ${strikethrough ? 'line-through' : ''}`}>
+        {formatAuditValue(obj[k])}
+      </span>
+    </div>
+  ))
+}
+
+function renderChanges(ch: any, locale: string): React.ReactNode {
+  // Case 1: full before/after diff
+  if (ch && typeof ch === 'object' && ch.before && ch.after) {
+    const allKeys = new Set<string>([
+      ...Object.keys(ch.before ?? {}),
+      ...Object.keys(ch.after ?? {}),
+    ])
+    return [...allKeys].map((k) => {
+      const beforeVal = ch.before?.[k]
+      const afterVal = ch.after?.[k]
+      const changed = JSON.stringify(beforeVal) !== JSON.stringify(afterVal)
+      return (
+        <div key={k} className="text-[11px] leading-snug break-words">
+          <span className="text-muted-foreground">{k}:</span>{' '}
+          {beforeVal !== undefined && (
+            <span className={`${changed ? 'text-red-400 line-through' : 'text-foreground'}`}>
+              {formatAuditValue(beforeVal)}
+            </span>
+          )}
+          {changed && afterVal !== undefined && <> → </>}
+          {afterVal !== undefined && changed && (
+            <span className="text-green-600">{formatAuditValue(afterVal)}</span>
+          )}
+        </div>
+      )
+    })
+  }
+  // Case 2: after-only (settings updates, creations)
+  if (ch && typeof ch === 'object' && ch.after && typeof ch.after === 'object') {
+    return (
+      <>
+        <div className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-0.5">
+          {locale === 'ar' ? 'القيم الجديدة' : locale === 'en' ? 'New values' : 'Neue Werte'}
+        </div>
+        {renderKvList(ch.after as Record<string, unknown>, 'text-green-600')}
+      </>
+    )
+  }
+  // Case 3: before-only (deletions)
+  if (ch && typeof ch === 'object' && ch.before && typeof ch.before === 'object') {
+    return (
+      <>
+        <div className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-0.5">
+          {locale === 'ar' ? 'تم حذفها' : locale === 'en' ? 'Removed' : 'Gelöschte Werte'}
+        </div>
+        {renderKvList(ch.before as Record<string, unknown>, 'text-red-400', true)}
+      </>
+    )
+  }
+  // Case 4: flat object (no before/after wrapper)
+  if (ch && typeof ch === 'object') {
+    return renderKvList(ch as Record<string, unknown>, 'text-foreground')
+  }
+  return <span className="text-[10px] text-muted-foreground">{String(ch).slice(0, 80)}</span>
+}
 
 const ACTION_COLORS: Record<string, string> = {
   ADMIN_LOGIN: 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300',
@@ -295,14 +383,8 @@ export default function AuditLogPage() {
                 {ch ? (
                   <button onClick={() => setExpandedId(isExp ? null : log.id)} className="text-start">
                     {isExp ? (
-                      <div className="space-y-0.5 max-w-[250px]">
-                        {ch.before && ch.after ? Object.keys(ch.after).map((k: string) => (
-                          <div key={k} className="text-[11px]">
-                            <span className="text-muted-foreground">{k}: </span>
-                            {ch.before[k] !== undefined && <span className="text-red-400 line-through">{String(ch.before[k])}</span>}
-                            {' '}<span className="text-green-600">{String(ch.after[k])}</span>
-                          </div>
-                        )) : <span className="text-[10px] text-muted-foreground">{JSON.stringify(ch).slice(0, 80)}</span>}
+                      <div className="space-y-1 max-w-[360px]">
+                        {renderChanges(ch, locale)}
                       </div>
                     ) : (
                       <span className="text-[#d4a853] hover:underline">{locale === 'ar' ? 'التفاصيل' : 'Details'}</span>
