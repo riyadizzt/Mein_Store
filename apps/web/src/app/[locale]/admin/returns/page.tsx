@@ -1,7 +1,7 @@
 'use client'
 
 import { API_BASE_URL } from '@/lib/env'
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -13,8 +13,9 @@ import { Input } from '@/components/ui/input'
 import {
   RotateCcw, Search, Package, X, Check, Truck,
   Download, Eye, TrendingDown, BarChart3, Euro, AlertTriangle,
+  ChevronDown, ChevronRight,
 } from 'lucide-react'
-import { formatDate, formatCurrency } from '@/lib/locale-utils'
+import { formatDate, formatDateWithWeekday, formatCurrency } from '@/lib/locale-utils'
 import { PayPalLogo, KlarnaLogo, SumUpLogo, StripeLogo } from '@/components/ui/payment-logos'
 
 // ── Status & Reason maps ────────────────────────────────────
@@ -72,6 +73,7 @@ export default function AdminReturnsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [inspectItems, setInspectItems] = useState<Record<string, 'ok' | 'damaged'>>({})
   const [rejectReason, setRejectReason] = useState('')
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
 
   // ── Queries ────────────────────────────────────────────────
   const { data: result, isLoading } = useQuery({
@@ -326,40 +328,74 @@ export default function AdminReturnsPage() {
               ) : returns.length === 0 ? (
                 <div className="px-4 py-12 text-center text-muted-foreground">{t3('Keine Retouren gefunden', 'No returns found', 'لم يتم العثور على مرتجعات')}</div>
               ) : (
-                returns.map((ret: any) => (
-                  <div
-                    key={ret.id}
-                    className={`grid grid-cols-7 gap-x-2 border-b cursor-pointer transition-colors items-center ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
-                    onClick={() => openDetail(ret)}
-                  >
-                    <div className="px-4 py-4">
-                      <span className="font-mono text-sm font-medium text-[#d4a853]">{ret.returnNumber}</span>
-                    </div>
-                    <div className="px-4 py-4">
-                      <span className="font-mono text-sm text-primary">{ret.order?.orderNumber ?? '—'}</span>
-                    </div>
-                    <div className="px-4 py-4">
-                      <p className="text-sm font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
-                      <p className="text-sm text-muted-foreground">{ret.order?.user?.email}</p>
-                    </div>
-                    <div className="px-4 py-4">
-                      <span className="px-2.5 py-1 rounded-full text-sm font-medium bg-muted">{reasonLabel(ret.reason)}</span>
-                    </div>
-                    <div className="px-4 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
-                        {statusLabel(ret.status)}
-                      </span>
-                    </div>
-                    <div className="px-4 py-4 text-center text-sm font-medium">{(() => {
-                      const amt = Number(ret.refundAmount ?? 0) > 0
-                        ? Number(ret.refundAmount)
-                        : (ret.returnItems ?? []).reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
-                      return amt > 0 ? formatCurrency(amt, locale) : '—'
-                    })()}</div>
-                    <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
-                  </div>
-                ))
+                (() => {
+                  // Same day-grouping pattern as /admin/orders and /admin/shipments.
+                  // API returns rows sorted by createdAt desc so iteration order
+                  // already matches "newest day first".
+                  const grouped: Record<string, any[]> = {}
+                  for (const r of returns as any[]) {
+                    const dateKey = r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : 'unknown'
+                    if (!grouped[dateKey]) grouped[dateKey] = []
+                    grouped[dateKey].push(r)
+                  }
+                  return Object.entries(grouped).map(([dateKey, items]) => (
+                    <React.Fragment key={dateKey}>
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedDays((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(dateKey)) next.delete(dateKey); else next.add(dateKey)
+                          return next
+                        })}
+                        className="w-full flex items-center justify-between px-4 py-2.5 bg-[#d4a853]/5 hover:bg-[#d4a853]/10 border-b transition-colors text-start"
+                      >
+                        <div className="flex items-center gap-2">
+                          {collapsedDays.has(dateKey)
+                            ? <ChevronRight className="h-4 w-4 text-[#d4a853]" />
+                            : <ChevronDown className="h-4 w-4 text-[#d4a853]" />}
+                          <span className="text-sm font-bold text-[#d4a853]">{formatDateWithWeekday(dateKey, locale)}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {items.length} {t3('Retouren', 'returns', 'مرتجعات')}
+                        </span>
+                      </button>
+                      {!collapsedDays.has(dateKey) && items.map((ret: any) => (
+                        <div
+                          key={ret.id}
+                          className={`grid grid-cols-7 gap-x-2 border-b cursor-pointer transition-colors items-center ${selectedId === ret.id ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
+                          onClick={() => openDetail(ret)}
+                        >
+                          <div className="px-4 py-4">
+                            <span className="font-mono text-sm font-medium text-[#d4a853]">{ret.returnNumber}</span>
+                          </div>
+                          <div className="px-4 py-4">
+                            <span className="font-mono text-sm text-primary">{ret.order?.orderNumber ?? '—'}</span>
+                          </div>
+                          <div className="px-4 py-4">
+                            <p className="text-sm font-medium">{ret.order?.user?.firstName} {ret.order?.user?.lastName}</p>
+                            <p className="text-sm text-muted-foreground">{ret.order?.user?.email}</p>
+                          </div>
+                          <div className="px-4 py-4">
+                            <span className="px-2.5 py-1 rounded-full text-sm font-medium bg-muted">{reasonLabel(ret.reason)}</span>
+                          </div>
+                          <div className="px-4 py-4">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${STATUS_BADGE[ret.status as ReturnStatus] ?? 'bg-gray-100'}`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[ret.status as ReturnStatus] ?? 'bg-gray-400'}`} />
+                              {statusLabel(ret.status)}
+                            </span>
+                          </div>
+                          <div className="px-4 py-4 text-center text-sm font-medium">{(() => {
+                            const amt = Number(ret.refundAmount ?? 0) > 0
+                              ? Number(ret.refundAmount)
+                              : (ret.returnItems ?? []).reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
+                            return amt > 0 ? formatCurrency(amt, locale) : '—'
+                          })()}</div>
+                          <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
+                        </div>
+                      ))}
+                    </React.Fragment>
+                  ))
+                })()
               )}
             </div>
           </div>
