@@ -343,6 +343,14 @@ export class AdminReturnsService {
       await this.notificationService.createForAllAdmins({
         type: 'return_approved', title: `Retoure ${returnNumber} genehmigt`,
         body: `Retoure für Bestellung ${ret.order.orderNumber} wurde genehmigt.`, entityType: 'return', entityId: id,
+        // Data payload so the frontend bell can render the title+body in
+        // the viewing admin's locale (DE title/body persisted as fallback).
+        data: {
+          returnId: id,
+          orderId: ret.orderId,
+          orderNumber: ret.order.orderNumber,
+          returnNumber,
+        },
       })
     } catch (e: any) { this.logger.error(`Notification failed: ${e.message}`) }
 
@@ -804,7 +812,7 @@ export class AdminReturnsService {
       })
     }
 
-    try { await this.notificationService.createForAllAdmins({ type: 'return_refunded', title: `Erstattung ${returnNumber}`, body: `${refundAmountEur.toFixed(2)} EUR erstattet für Bestellung ${ret.order.orderNumber}.`, entityType: 'return', entityId: id }) } catch (e: any) { this.logger.error(`Notification: ${e.message}`) }
+    try { await this.notificationService.createForAllAdmins({ type: 'return_refunded', title: `Erstattung ${returnNumber}`, body: `${refundAmountEur.toFixed(2)} EUR erstattet für Bestellung ${ret.order.orderNumber}.`, entityType: 'return', entityId: id, data: { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, returnNumber, refundAmount: refundAmountEur } }) } catch (e: any) { this.logger.error(`Notification: ${e.message}`) }
     try { await this.audit.log({ adminId, action: 'RETURN_REFUNDED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'refunded', refundAmount: refundAmountEur } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
 
     this.logger.log(

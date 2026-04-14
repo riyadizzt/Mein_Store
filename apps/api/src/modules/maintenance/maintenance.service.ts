@@ -107,13 +107,16 @@ export class MaintenanceService {
       this.cacheTime = 0 // invalidate cache
       this.logger.log('Maintenance mode auto-disabled (countdown expired)')
 
-      // Notification
+      // Notification — typed so the admin bell can render it in the
+      // viewing locale (DE title/body are kept as the raw fallback).
       try {
         await this.prisma.notification.create({
           data: {
-            type: 'system', title: 'Wartungsmodus automatisch beendet',
+            type: 'maintenance_auto_ended',
+            title: 'Wartungsmodus automatisch beendet',
             body: 'Der Shop ist wieder online — Countdown ist abgelaufen.',
             channel: 'admin',
+            data: { reason: 'countdown_expired' },
           },
         })
       } catch {}

@@ -514,6 +514,20 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
         }
       }
       case 'return_refunded': return { title: t(`Erstattung verarbeitet`, `Refund processed`, `تم معالجة الاسترداد`), body: d.refundAmount ? `€${Number(d.refundAmount).toFixed(2)}` : '' }
+      case 'maintenance_auto_ended': {
+        return {
+          title: t(
+            'Wartungsmodus automatisch beendet',
+            'Maintenance mode auto-ended',
+            'تم إنهاء وضع الصيانة تلقائياً',
+          ),
+          body: t(
+            'Der Shop ist wieder online — Countdown ist abgelaufen.',
+            'The shop is back online — countdown has expired.',
+            'المتجر متاح مجدداً — انتهى العد التنازلي.',
+          ),
+        }
+      }
       case 'admin_password_reset': {
         const who = d.email ?? d.name ?? ''
         const whoName = d.name ?? d.email ?? ''
@@ -568,6 +582,7 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
     return_received: { Icon: RotateCcw, bg: 'bg-sky-100', fg: 'text-sky-600', dot: 'bg-sky-500' },
     return_refunded: { Icon: RotateCcw, bg: 'bg-emerald-100', fg: 'text-emerald-600', dot: 'bg-emerald-500' },
     admin_password_reset: { Icon: ShieldAlert, bg: 'bg-purple-100', fg: 'text-purple-600', dot: 'bg-purple-500' },
+    maintenance_auto_ended: { Icon: Bell, bg: 'bg-teal-100', fg: 'text-teal-600', dot: 'bg-teal-500' },
     payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
     customer_registered: { Icon: Users, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
     coupon_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },
