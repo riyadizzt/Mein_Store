@@ -198,7 +198,11 @@ export default function NewProductPage() {
 
       // 2. Upload images to Supabase (if product was created and images exist)
       if (productId && images.length > 0) {
-        const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
+        // Admin routes require the admin token, not the customer token.
+        // /admin/products/:id/images/upload is admin-only and used to 401
+        // silently because this block grabbed accessToken instead.
+        const store = (await import('@/store/auth-store')).useAuthStore.getState()
+        const token = store.adminAccessToken || store.accessToken
         let uploadFailed = 0
 
         for (const img of images) {
@@ -211,11 +215,18 @@ export default function NewProductPage() {
             const res = await fetch(`${API_BASE_URL}/api/v1/admin/products/${productId}/images/upload`, {
               method: 'POST',
               headers: { Authorization: `Bearer ${token}` },
+              credentials: 'include',
               body: formData,
             })
-            if (!res.ok) uploadFailed++
-          } catch {
+            if (!res.ok) {
+              uploadFailed++
+              // eslint-disable-next-line no-console
+              console.error(`[new-product] image upload failed: ${res.status} ${res.statusText}`)
+            }
+          } catch (e: any) {
             uploadFailed++
+            // eslint-disable-next-line no-console
+            console.error('[new-product] image upload threw:', e?.message ?? e)
           }
         }
 
