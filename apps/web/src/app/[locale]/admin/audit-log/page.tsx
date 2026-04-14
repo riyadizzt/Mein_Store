@@ -500,18 +500,23 @@ export default function AuditLogPage() {
               size="sm"
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
-              className="gap-1"
+              className="gap-1.5 px-4"
             >
-              <ChevronLeft className="h-4 w-4" />{t('auditLog.prev')}
+              {/* rtl:rotate-180 mirrors the chevron so it points in the
+                  reading-back direction (right) in Arabic, not the source
+                  direction (left) which would look like "next" in RTL. */}
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              {t('auditLog.prev')}
             </Button>
             <Button
               variant="outline"
               size="sm"
               disabled={page >= meta.totalPages}
               onClick={() => setPage(page + 1)}
-              className="gap-1"
+              className="gap-1.5 px-4"
             >
-              {t('auditLog.next')}<ChevronRight className="h-4 w-4" />
+              {t('auditLog.next')}
+              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </Button>
           </div>
         </div>
