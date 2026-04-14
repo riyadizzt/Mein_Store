@@ -3,11 +3,14 @@
 import { API_BASE_URL } from '@/lib/env'
 import { useState, useEffect } from 'react'
 import { useLocale } from 'next-intl'
-import { useQuery } from '@tanstack/react-query'
+import { useRouter } from 'next/navigation'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Send, Check, Instagram, Facebook } from 'lucide-react'
 
 export default function MaintenancePage() {
   const locale = useLocale()
+  const router = useRouter()
+  const qc = useQueryClient()
   const t = (d: string, a: string) => locale === 'ar' ? a : d
 
   const { data: settings } = useQuery({
@@ -16,7 +19,19 @@ export default function MaintenancePage() {
       const res = await fetch(`${API_BASE_URL}/api/v1/maintenance/status`)
       return res.ok ? res.json() : {}
     },
+    // Poll every 15s so customers stuck here auto-redirect when the cron
+    // (or countdown self-heal) flips maintenance_enabled back to false.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
+
+  // If maintenance mode is off, customer should not be here — bounce to home.
+  useEffect(() => {
+    if (!settings) return
+    if (settings.maintenance_enabled === 'false') {
+      router.replace(`/${locale}`)
+    }
+  }, [settings, locale, router])
 
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -31,6 +46,7 @@ export default function MaintenancePage() {
   useEffect(() => {
     if (settings?.maintenance_countdown_enabled !== 'true' || !settings?.maintenance_countdown_end) return
     const end = new Date(settings.maintenance_countdown_end).getTime()
+    let expiredFired = false
     const tick = () => {
       const now = Date.now()
       const diff = Math.max(0, end - now)
@@ -40,11 +56,17 @@ export default function MaintenancePage() {
         minutes: Math.floor((diff % 3600000) / 60000),
         seconds: Math.floor((diff % 60000) / 1000),
       })
+      // When countdown hits zero, force an immediate status re-check so
+      // we don't wait up to 15s for the next poll before redirecting.
+      if (diff === 0 && !expiredFired) {
+        expiredFired = true
+        qc.invalidateQueries({ queryKey: ['maintenance-status'] })
+      }
     }
     tick()
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
-  }, [settings])
+  }, [settings, qc])
 
   const handleSubmit = async () => {
     if (!email.includes('@')) return

@@ -28,6 +28,25 @@ export class MaintenanceService {
   async getPublicSettings(): Promise<Record<string, string>> {
     const s = await this.getSettings()
     if (s.maintenance_enabled !== 'true') return { maintenance_enabled: 'false' }
+
+    // Self-heal: if a countdown was set and is already past, flip the flag
+    // off inline rather than waiting up to 60s for the Cron tick. The Cron
+    // still runs and is the authoritative auto-disable path, but this makes
+    // the maintenance-page redirect snap the moment the countdown expires.
+    if (s.maintenance_countdown_enabled === 'true' && s.maintenance_countdown_end) {
+      const end = new Date(s.maintenance_countdown_end)
+      if (!isNaN(end.getTime()) && Date.now() >= end.getTime()) {
+        await this.prisma.shopSetting.upsert({
+          where: { key: 'maintenance_enabled' },
+          create: { key: 'maintenance_enabled', value: 'false' },
+          update: { value: 'false' },
+        })
+        this.cacheTime = 0
+        this.logger.log('Maintenance mode self-healed on status read (countdown expired)')
+        return { maintenance_enabled: 'false' }
+      }
+    }
+
     // Get social links from shop settings
     const social = await this.prisma.shopSetting.findMany({
       where: { key: { in: ['instagramUrl', 'facebookUrl', 'tiktokUrl', 'logoUrl'] } },
