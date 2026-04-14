@@ -205,6 +205,13 @@ export function CameraBarcodeScannerOverlay({ mode, locale, warehouseId, onSingl
 
     try {
       const { data } = await api.get(`/admin/inventory/barcode/${encodeURIComponent(code.trim())}`)
+      // Prefer the inventory row matching the selected warehouseId. If the
+      // variant doesn't exist in that warehouse yet (intake of a new
+      // product into a new location), fall back to null — the backend
+      // scanner-intake endpoint will create the row on save. The old code
+      // picked inventory[0] blindly, which always resolved to Marzahn and
+      // caused the 14.04.2026 wrong-warehouse regression.
+      const matching = (data.inventory ?? []).find((inv: any) => inv.warehouseId === warehouseId) ?? null
       const product: ScannedProduct = {
         variantId: data.variantId ?? data.id,
         sku: data.sku,
@@ -213,9 +220,9 @@ export function CameraBarcodeScannerOverlay({ mode, locale, warehouseId, onSingl
         image: data.image,
         color: data.color,
         size: data.size,
-        inventoryId: data.inventory?.[0]?.id ?? '',
-        warehouseId: data.inventory?.[0]?.warehouseId ?? warehouseId ?? '',
-        currentStock: data.inventory?.[0]?.available ?? 0,
+        inventoryId: matching?.id ?? '',
+        warehouseId: warehouseId ?? matching?.warehouseId ?? '',
+        currentStock: matching?.available ?? 0,
       }
 
       if (mode === 'single') {
@@ -276,11 +283,17 @@ export function CameraBarcodeScannerOverlay({ mode, locale, warehouseId, onSingl
     setProcessing(true)
     try {
       if (action === 'intake') {
+        // Route via SKU + currently-selected warehouseId so variants that
+        // don't have an inventory row in this warehouse yet get one
+        // created. See 14.04.2026 fix: /intake-scanner uses
+        // intakeBySku() which find-or-creates the inventory row on
+        // the backend. The old /intake endpoint blindly consumed the
+        // inventoryId that was picked as inventory[0] at scan time.
         const intakeItems = batchItems
-          .filter((item) => item.inventoryId)
-          .map((item) => ({ inventoryId: item.inventoryId, quantity: item.count }))
-        if (intakeItems.length > 0) {
-          await api.post('/admin/inventory/intake', { items: intakeItems, reason: 'Camera batch scan' })
+          .filter((item) => item.sku)
+          .map((item) => ({ sku: item.sku, quantity: item.count }))
+        if (intakeItems.length > 0 && warehouseId) {
+          await api.post('/admin/inventory/intake-scanner', { items: intakeItems, warehouseId, reason: 'Camera batch scan' })
         }
       }
       // For stocktake and correction, delegate to parent

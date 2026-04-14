@@ -1075,6 +1075,35 @@ export class AdminController {
     return this.inventory.intakeBySku(items, reason, req.user.id, ip, warehouseId)
   }
 
+  // Scanner-based intake (barcode scanner + camera scanner).
+  // Shares the find-or-create inventory row logic with intakeBySku so
+  // scanning an item in a warehouse where it does NOT yet have stock
+  // correctly creates a new Inventory row instead of landing in the
+  // first-seen warehouse (Marzahn). See the 14.04.2026 bug where the
+  // frontend picked inventory[0].id blindly.
+  @Post('inventory/intake-scanner')
+  @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
+  @HttpCode(HttpStatus.OK)
+  stockIntakeScanner(
+    @Body('items') items: { sku: string; quantity: number }[],
+    @Body('warehouseId') warehouseId: string,
+    @Body('reason') reason: string | undefined,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    if (!warehouseId) {
+      throw new BadRequestException({
+        statusCode: 400, error: 'WarehouseRequired',
+        message: {
+          de: 'Lager muss angegeben werden.',
+          en: 'Warehouse must be specified.',
+          ar: 'يجب تحديد المستودع.',
+        },
+      })
+    }
+    return this.inventory.intakeBySku(items, reason ?? 'Scanner intake', req.user.id, ip, warehouseId)
+  }
+
   @Post('inventory/:id/output')
   @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)

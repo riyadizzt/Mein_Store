@@ -324,8 +324,16 @@ export default function InventoryPage() {
         await api.post(`/admin/inventory/return-scan/${encodeURIComponent(returnPending)}`)
         setReturnPending(null)
       } else if (scannerMode === 'intake') {
-        const items = scanLog.filter((item) => item.inventoryId).map((item) => ({ inventoryId: item.inventoryId, quantity: item.qty }))
-        if (items.length > 0) await api.post('/admin/inventory/intake', { items, reason: 'Batch scanner intake' })
+        // Use /intake-scanner which routes via SKU + the currently-selected
+        // warehouseId. The old /intake endpoint took a pre-resolved
+        // inventoryId which led to the 14.04.2026 regression where stock
+        // always landed in the first (Marzahn) warehouse regardless of
+        // the selected one. The new endpoint find-or-creates the inventory
+        // row for the correct warehouse on the backend.
+        const items = scanLog.filter((item) => item.sku).map((item) => ({ sku: item.sku, quantity: item.qty }))
+        if (items.length > 0 && warehouseId) {
+          await api.post('/admin/inventory/intake-scanner', { items, warehouseId, reason: 'Batch scanner intake' })
+        }
       } else {
         // STEP 1: Clear all previous failed flags — fresh check every time
         setScanLog((prev) => prev.map((item) => ({ ...item, failed: false })))
