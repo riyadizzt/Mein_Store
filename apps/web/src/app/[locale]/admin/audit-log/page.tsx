@@ -154,6 +154,7 @@ const ACTION_COLORS: Record<string, string> = {
   SHIPMENT_STATUS_DELIVERED: 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300',
   SHIPMENT_STATUS_IN_TRANSIT: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300',
   SHIPMENT_STATUS_LABEL_CREATED: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300',
+  SHIPMENT_CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   SHIPMENT_TRACKING_UPDATED: 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300',
   SHIPMENTS_BATCH_CREATED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300',
   USER_BLOCKED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
