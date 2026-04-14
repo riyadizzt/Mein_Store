@@ -137,7 +137,7 @@ export default function AdminOrdersPage() {
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.date')}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.status')}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.amount')}</div>
-              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.payment')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.payment')}</div>
             </div>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
