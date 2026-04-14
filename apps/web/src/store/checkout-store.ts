@@ -88,8 +88,8 @@ const initialState = {
 }
 
 // Checkout state is persisted to sessionStorage so browser inactivity,
-// soft-navigations, or hot-reloads do not wipe guestEmail / shippingAddress
-// / coupon between entry and final payment.
+// soft-navigations, or hot-reloads do not wipe the address form between
+// entry and final payment.
 //
 // sessionStorage (not localStorage) is deliberate:
 //  - scoped to one browser tab → closing the tab resets the checkout
@@ -97,10 +97,27 @@ const initialState = {
 //  - cart stays in localStorage (cart-store) so items survive across visits,
 //    but the in-progress checkout itself is session-local
 //
-// partialize() whitelists FORM fields only. The ephemeral per-attempt state
-// (orderId, orderNumber, idempotencyKey, isProcessing, error) MUST reset
-// between attempts — persisting them would cause "ghost order" state after a
-// failed retry. If you add a new ephemeral field, do NOT put it in partialize.
+// partialize() whitelist is intentionally minimal: ONLY address-form fields
+// that don't depend on the current cart contents. Anything derived from the
+// cart (shippingOption, couponCode/appliedCoupon/discountAmount, paymentMethod)
+// would go stale the moment the customer edits their cart mid-checkout —
+// that's exactly how the 14.04.2026 "€140.89 vs €135.90" regression happened.
+// The user came back to a cached shippingOption.price=4.99 after the subtotal
+// crossed the free-shipping threshold and saw two conflicting numbers.
+//
+// Excluded on purpose:
+//   - step                → user should re-enter the flow from guest-or-login
+//   - shippingOption      → recomputed by step-shipping from the live cart
+//   - paymentMethod       → re-selected each session
+//   - couponCode,
+//     appliedCoupon,
+//     discountAmount      → re-validated each session (min-order-amount rules)
+//   - termsAccepted       → legal hygiene: AGB must be accepted per session
+//   - orderId, orderNumber, idempotencyKey, isProcessing, error → ephemera
+//
+// Included (safe, form-only):
+//   - guestEmail, shippingAddress, billingAddress,
+//     billingSameAsShipping, savedAddressId
 export const useCheckoutStore = create<CheckoutState>()(
   persist(
     (set) => ({
@@ -133,19 +150,11 @@ export const useCheckoutStore = create<CheckoutState>()(
       name: 'malak-checkout',
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
-        step: state.step,
-        isGuest: state.isGuest,
         guestEmail: state.guestEmail,
         shippingAddress: state.shippingAddress,
         billingAddress: state.billingAddress,
         billingSameAsShipping: state.billingSameAsShipping,
         savedAddressId: state.savedAddressId,
-        shippingOption: state.shippingOption,
-        paymentMethod: state.paymentMethod,
-        couponCode: state.couponCode,
-        appliedCoupon: state.appliedCoupon,
-        discountAmount: state.discountAmount,
-        termsAccepted: state.termsAccepted,
       }),
     },
   ),

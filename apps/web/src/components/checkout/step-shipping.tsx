@@ -65,6 +65,22 @@ export function StepShipping() {
     }
   }, [options.length, shippingOption]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Freshness check: re-sync the stored shippingOption whenever the cart
+  // subtotal changes. Without this, a customer who selected a €4.99 option
+  // while their cart was below the free-shipping threshold would keep that
+  // stale €4.99 in the summary even after adding items that push the
+  // subtotal over the threshold. The backend would apply free shipping
+  // correctly at order creation, but the customer would see two different
+  // totals (summary €140.89, pay button €135.90). This effect detects the
+  // drift and updates the stored option to match the live zone quote.
+  useEffect(() => {
+    if (!shippingOption || options.length === 0) return
+    const fresh = options.find((o) => o.id === shippingOption.id)
+    if (fresh && Number(fresh.price) !== Number(shippingOption.price)) {
+      setShippingOption(fresh)
+    }
+  }, [subtotal, options.length, shippingOption, setShippingOption]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleContinue = () => {
     if (!shippingOption) return
     setStep('payment')
