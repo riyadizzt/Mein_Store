@@ -2277,8 +2277,12 @@ export class AdminController {
 
   @Get('suppliers/search-products')
   @RequirePermission(PERMISSIONS.SUPPLIERS_RECEIVING)
-  searchProductsForReceiving(@Query('q') q: string, @Query('lang') lang?: string) {
-    return this.suppliers.searchProducts(q || '', lang ?? 'de')
+  searchProductsForReceiving(
+    @Query('q') q: string,
+    @Query('lang') lang?: string,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    return this.suppliers.searchProducts(q || '', lang ?? 'de', warehouseId)
   }
 
   @Get('suppliers/:id')

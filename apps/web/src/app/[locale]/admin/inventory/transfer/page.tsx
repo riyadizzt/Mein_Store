@@ -44,13 +44,18 @@ export default function TransferPage() {
   })
 
   const { data: searchResults } = useQuery({
-    queryKey: ['transfer-search', searchQuery, locale],
+    queryKey: ['transfer-search', searchQuery, locale, fromWarehouseId],
     queryFn: async () => {
       if (!searchQuery || searchQuery.length < 2) return []
-      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: searchQuery, lang: locale } })
+      // Scope stock to the source warehouse — transfers always ship
+      // FROM fromWarehouseId, so that's the inventory the admin cares
+      // about. Without this, the stock column summed all warehouses.
+      const { data } = await api.get('/admin/suppliers/search-products', {
+        params: { q: searchQuery, lang: locale, ...(fromWarehouseId ? { warehouseId: fromWarehouseId } : {}) },
+      })
       return data ?? []
     },
-    enabled: searchQuery.length >= 2,
+    enabled: searchQuery.length >= 2 && !!fromWarehouseId,
   })
 
   const submitMut = useMutation({
@@ -92,11 +97,13 @@ export default function TransferPage() {
   // Barcode scan
   const handleBarcodeScan = useCallback(async (barcode: string) => {
     try {
-      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: barcode.trim(), lang: locale } })
+      const { data } = await api.get('/admin/suppliers/search-products', {
+        params: { q: barcode.trim(), lang: locale, ...(fromWarehouseId ? { warehouseId: fromWarehouseId } : {}) },
+      })
       if (data?.length === 1) addItem(data[0])
       else if (data?.length > 1) setSearchQuery(barcode.trim())
     } catch {}
-  }, [addItem, locale])
+  }, [addItem, locale, fromWarehouseId])
 
   // USB scanner detection
   useEffect(() => {

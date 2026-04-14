@@ -829,12 +829,20 @@ export class AdminSuppliersService {
 
   // ── Product search for receiving ─────────────────────────────
 
-  async searchProducts(query: string, lang: string = 'de') {
+  async searchProducts(query: string, lang: string = 'de', warehouseId?: string) {
     // Load the requested language + German as a fallback so Arabic
     // and English admins don't see "Unbekannt" when a product has
     // no AR/EN translation yet. The frontend picks the right one
     // from the returned productName string.
     const locale = (['de', 'en', 'ar'] as const).includes(lang as any) ? (lang as 'de' | 'en' | 'ar') : 'de'
+    // Inventory filter: when warehouseId is provided (transfer flow,
+    // goods receiving into a specific warehouse), only load the stock
+    // row for that warehouse so the returned `stock` field is the
+    // warehouse-specific count — not the total across all locations.
+    // Without this filter, the transfer page's "Bestand" column was
+    // summing Hamburg + Marzahn + Außenlager, so an admin transferring
+    // 5 units from Hamburg saw a misleading 36 instead of the actual
+    // Hamburg inventory.
     const variants = await this.prisma.productVariant.findMany({
       where: {
         product: { deletedAt: null },
@@ -852,7 +860,10 @@ export class AdminSuppliersService {
             images: { select: { url: true }, take: 1, orderBy: { sortOrder: 'asc' } },
           },
         },
-        inventory: { select: { quantityOnHand: true } },
+        inventory: {
+          select: { quantityOnHand: true, quantityReserved: true, warehouseId: true },
+          ...(warehouseId ? { where: { warehouseId } } : {}),
+        },
       },
       take: 20,
     })
@@ -863,6 +874,16 @@ export class AdminSuppliersService {
       const localeName = v.product.translations.find((t) => t.language === locale)?.name
       const germanName = v.product.translations.find((t) => t.language === 'de')?.name
       const anyName = v.product.translations[0]?.name
+      // When warehouseId was passed, v.inventory contains at most one row
+      // (the target warehouse) so the reduce degenerates to that row's
+      // available stock. When not passed, it sums everything as before.
+      // Available stock = onHand - reserved (don't count already-reserved
+      // units as transferable — you can't move goods that belong to an
+      // active order).
+      const stock = v.inventory.reduce(
+        (s, i) => s + Math.max(0, i.quantityOnHand - (i.quantityReserved ?? 0)),
+        0,
+      )
       return {
         variantId: v.id,
         productId: v.product.id,
@@ -873,7 +894,7 @@ export class AdminSuppliersService {
         size: v.size,
         purchasePrice: v.purchasePrice ? Number(v.purchasePrice) : null,
         salePrice: Number(v.product.basePrice),
-        stock: v.inventory.reduce((s, i) => s + i.quantityOnHand, 0),
+        stock,
         image: v.product.images[0]?.url ?? null,
       }
     })
