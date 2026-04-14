@@ -1,11 +1,11 @@
 'use client'
 
 import { API_BASE_URL } from '@/lib/env'
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Download } from 'lucide-react'
+import { Search, Download, ChevronDown, ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatDate, formatCurrency } from '@/lib/locale-utils'
 import { Button } from '@/components/ui/button'
@@ -54,6 +54,7 @@ export default function AdminOrdersPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['admin-orders', search, statusFilter, channelFilter],
@@ -149,44 +150,80 @@ export default function AdminOrdersPage() {
             ) : (orders ?? []).length === 0 ? (
               <div className="px-4 py-12 text-center text-muted-foreground">{t('orders.noOrders')}</div>
             ) : (
-              (orders ?? []).map((order: any) => {
-                const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
-                return (
-                  <div key={order.id} className="grid grid-cols-7 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
-                    <div className="px-4 py-4">
-                      <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono text-sm font-medium text-primary hover:underline">
-                        {order.orderNumber}
-                      </Link>
-                    </div>
-                    <div className="px-4 py-4">
-                      <p className="text-sm font-medium">
-                        {getCustomerName(order)}
-                        {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground"> (Gast)</span>}
-                        {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg} ltr:ml-1.5 rtl:mr-1.5`}>{badge.label}</span> : null })()}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
-                    </div>
-                    <div className="px-2 py-4 flex justify-center">
-                      <ChannelIcon channel={order.channel ?? 'website'} size={18} />
-                    </div>
-                    <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(order.createdAt, locale)}</div>
-                    <div className="px-4 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
-                    </div>
-                    <div className="px-4 py-4 text-center text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
-                    <div className="px-4 py-4 text-sm text-muted-foreground flex items-center justify-center">{(() => {
-                      const p = (order.payment?.provider ?? '').toLowerCase()
-                      const m = (order.payment?.method ?? '').toLowerCase()
-                      if (p === 'stripe' || m === 'card') return <StripeLogo className="h-5" />
-                      if (p === 'paypal' || m === 'paypal') return <PayPalLogo className="h-5" />
-                      if (p === 'klarna' || m === 'klarna') return <KlarnaLogo className="h-5" />
-                      if (p === 'sumup' || m === 'sumup') return <SumUpLogo className="h-5" />
-                      if (m === 'vorkasse' || p === 'vorkasse') return <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted">Vorkasse</span>
-                      return <span>{order.payment?.provider ?? '—'}</span>
-                    })()}</div>
-                  </div>
-                )
-              })
+              (() => {
+                // Group orders by creation-day (YYYY-MM-DD). The API already
+                // returns rows sorted by createdAt desc, so iterating in
+                // order preserves the "newest day first" layout the shipments
+                // page uses. Each group becomes one collapsible section with
+                // a gold header row and one child row per order.
+                const grouped: Record<string, any[]> = {}
+                for (const o of (orders ?? []) as any[]) {
+                  const dateKey = o.createdAt ? new Date(o.createdAt).toISOString().slice(0, 10) : 'unknown'
+                  if (!grouped[dateKey]) grouped[dateKey] = []
+                  grouped[dateKey].push(o)
+                }
+                return Object.entries(grouped).map(([dateKey, items]) => (
+                  <React.Fragment key={dateKey}>
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedDays((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(dateKey)) next.delete(dateKey); else next.add(dateKey)
+                        return next
+                      })}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-[#d4a853]/5 hover:bg-[#d4a853]/10 border-b transition-colors text-start"
+                    >
+                      <div className="flex items-center gap-2">
+                        {collapsedDays.has(dateKey)
+                          ? <ChevronRight className="h-4 w-4 text-[#d4a853]" />
+                          : <ChevronDown className="h-4 w-4 text-[#d4a853]" />}
+                        <span className="text-sm font-bold text-[#d4a853]">{formatDate(dateKey, locale)}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {items.length} {locale === 'ar' ? 'طلبات' : locale === 'en' ? 'orders' : 'Bestellungen'}
+                      </span>
+                    </button>
+                    {!collapsedDays.has(dateKey) && items.map((order: any) => {
+                      const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
+                      return (
+                        <div key={order.id} className="grid grid-cols-7 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
+                          <div className="px-4 py-4">
+                            <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono text-sm font-medium text-primary hover:underline">
+                              {order.orderNumber}
+                            </Link>
+                          </div>
+                          <div className="px-4 py-4">
+                            <p className="text-sm font-medium">
+                              {getCustomerName(order)}
+                              {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground"> (Gast)</span>}
+                              {(() => { const loc = getOrderLocale(order); const badge = LOCALE_BADGE[loc]; return badge ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.bg} ltr:ml-1.5 rtl:mr-1.5`}>{badge.label}</span> : null })()}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{order.user?.email ?? order.guestEmail ?? ''}</p>
+                          </div>
+                          <div className="px-2 py-4 flex justify-center">
+                            <ChannelIcon channel={order.channel ?? 'website'} size={18} />
+                          </div>
+                          <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(order.createdAt, locale)}</div>
+                          <div className="px-4 py-4">
+                            <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
+                          </div>
+                          <div className="px-4 py-4 text-center text-sm font-medium">{formatCurrency(Number(order.totalAmount), locale)}</div>
+                          <div className="px-4 py-4 text-sm text-muted-foreground flex items-center justify-center">{(() => {
+                            const p = (order.payment?.provider ?? '').toLowerCase()
+                            const m = (order.payment?.method ?? '').toLowerCase()
+                            if (p === 'stripe' || m === 'card') return <StripeLogo className="h-5" />
+                            if (p === 'paypal' || m === 'paypal') return <PayPalLogo className="h-5" />
+                            if (p === 'klarna' || m === 'klarna') return <KlarnaLogo className="h-5" />
+                            if (p === 'sumup' || m === 'sumup') return <SumUpLogo className="h-5" />
+                            if (m === 'vorkasse' || p === 'vorkasse') return <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted">Vorkasse</span>
+                            return <span>{order.payment?.provider ?? '—'}</span>
+                          })()}</div>
+                        </div>
+                      )
+                    })}
+                  </React.Fragment>
+                ))
+              })()
             )}
           </div>
         </div>
