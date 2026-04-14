@@ -39,7 +39,7 @@ function renderKvList(
   strikethrough = false,
 ): React.ReactNode {
   return Object.keys(obj).map((k) => (
-    <div key={k} className="text-[11px] leading-snug break-words">
+    <div key={k} className="text-xs leading-normal break-words">
       <span className="text-muted-foreground">{labelKey(k, locale)}:</span>{' '}
       <span className={`${valueClass} ${strikethrough ? 'line-through' : ''}`}>
         {formatAuditValue(k, obj[k], locale)}
@@ -60,7 +60,7 @@ function renderChanges(ch: any, locale: string): React.ReactNode {
       const afterVal = ch.after?.[k]
       const changed = JSON.stringify(beforeVal) !== JSON.stringify(afterVal)
       return (
-        <div key={k} className="text-[11px] leading-snug break-words">
+        <div key={k} className="text-xs leading-normal break-words">
           <span className="text-muted-foreground">{labelKey(k, locale)}:</span>{' '}
           {beforeVal !== undefined && (
             <span className={`${changed ? 'text-red-400 line-through' : 'text-foreground'}`}>
@@ -79,7 +79,7 @@ function renderChanges(ch: any, locale: string): React.ReactNode {
   if (ch && typeof ch === 'object' && ch.after && typeof ch.after === 'object') {
     return (
       <>
-        <div className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-0.5">
+        <div className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1">
           {locale === 'ar' ? 'القيم الجديدة' : locale === 'en' ? 'New values' : 'Neue Werte'}
         </div>
         {renderKvList(ch.after as Record<string, unknown>, 'text-green-600', locale)}
@@ -90,7 +90,7 @@ function renderChanges(ch: any, locale: string): React.ReactNode {
   if (ch && typeof ch === 'object' && ch.before && typeof ch.before === 'object') {
     return (
       <>
-        <div className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-0.5">
+        <div className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1">
           {locale === 'ar' ? 'تم حذفها' : locale === 'en' ? 'Removed' : 'Gelöschte Werte'}
         </div>
         {renderKvList(ch.before as Record<string, unknown>, 'text-red-400', locale, true)}
@@ -101,7 +101,7 @@ function renderChanges(ch: any, locale: string): React.ReactNode {
   if (ch && typeof ch === 'object') {
     return renderKvList(ch as Record<string, unknown>, 'text-foreground', locale)
   }
-  return <span className="text-[10px] text-muted-foreground">{String(ch).slice(0, 80)}</span>
+  return <span className="text-xs text-muted-foreground">{String(ch).slice(0, 80)}</span>
 }
 
 const ACTION_COLORS: Record<string, string> = {
@@ -374,24 +374,24 @@ export default function AuditLogPage() {
 
           return (
             <tr key={log.id} className="border-b border-border/20 hover:bg-muted/20 transition-colors">
-              <td className="px-4 py-2.5 ltr:pl-14 rtl:pr-14 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{timeStr}</td>
+              <td className="px-4 py-2.5 ltr:pl-14 rtl:pr-14 text-sm text-muted-foreground tabular-nums whitespace-nowrap">{timeStr}</td>
               <td className="px-4 py-2.5">
-                <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${getActionColor(log.action)}`}>
+                <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${getActionColor(log.action)}`}>
                   {getActionLabel(log.action, locale)}
                 </span>
               </td>
-              <td className="px-4 py-2.5 text-xs">
+              <td className="px-4 py-2.5 text-sm">
                 {link ? (
                   <a href={link} className="inline-flex items-center gap-1 text-primary hover:underline">
-                    {entity} <ExternalLink className="h-3 w-3" />
+                    {entity} <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 ) : <span className="text-muted-foreground">{entity}</span>}
               </td>
-              <td className="px-4 py-2.5 text-xs">
+              <td className="px-4 py-2.5 text-sm">
                 {ch ? (
                   <button onClick={() => setExpandedId(isExp ? null : log.id)} className="text-start">
                     {isExp ? (
-                      <div className="space-y-1 max-w-[360px]">
+                      <div className="space-y-1 max-w-[420px]">
                         {renderChanges(ch, locale)}
                       </div>
                     ) : (
@@ -400,7 +400,7 @@ export default function AuditLogPage() {
                   </button>
                 ) : <span className="text-muted-foreground/30">—</span>}
               </td>
-              <td className="px-4 py-2.5 text-[10px] text-muted-foreground/50 font-mono tabular-nums">{log.ipAddress ?? '—'}</td>
+              <td className="px-4 py-2.5 text-xs text-muted-foreground/60 font-mono tabular-nums">{log.ipAddress ?? '—'}</td>
             </tr>
           )
         }
@@ -408,14 +408,14 @@ export default function AuditLogPage() {
         return (
           <div className="bg-background border rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'الوقت' : 'Zeit'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'الإجراء' : 'Aktion'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'الكائن' : 'Objekt'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-sm">{locale === 'ar' ? 'التغييرات' : 'Änderungen'}</th>
-                    <th className="text-start px-4 py-3 font-medium text-sm">IP</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الوقت' : 'Zeit'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الإجراء' : 'Aktion'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الكائن' : 'Objekt'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'التغييرات' : 'Änderungen'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">IP</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -436,11 +436,11 @@ export default function AuditLogPage() {
                     return [
                       // === Day header ===
                       <tr key={`day-${dateKey}`} className="bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => toggleDay(dateKey)}>
-                        <td colSpan={5} className="px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${isDayCollapsed ? '' : 'rotate-90'}`} />
-                            <span className="text-xs font-bold">{dateLabel}</span>
-                            <span className="text-[10px] text-muted-foreground/50">{totalDayLogs} {locale === 'ar' ? 'إجراء' : 'Einträge'}</span>
+                        <td colSpan={5} className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isDayCollapsed ? '' : 'rotate-90'}`} />
+                            <span className="text-sm font-bold">{dateLabel}</span>
+                            <span className="text-xs text-muted-foreground/60">{totalDayLogs} {locale === 'ar' ? 'إجراء' : 'Einträge'}</span>
                           </div>
                         </td>
                       </tr>,
@@ -452,14 +452,14 @@ export default function AuditLogPage() {
                         return [
                           // Admin sub-header
                           <tr key={`grp-${groupKey}`} className="bg-muted/10 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => toggleGroup(groupKey)}>
-                            <td colSpan={5} className="px-4 ltr:pl-8 rtl:pr-8 py-2">
-                              <div className="flex items-center gap-2.5">
-                                <ChevronRight className={`h-3 w-3 text-muted-foreground/60 transition-transform duration-200 ${isGroupCollapsed ? '' : 'rotate-90'}`} />
-                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#d4a853]/15 text-[#d4a853] text-[10px] font-bold">
+                            <td colSpan={5} className="px-4 ltr:pl-8 rtl:pr-8 py-2.5">
+                              <div className="flex items-center gap-3">
+                                <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 ${isGroupCollapsed ? '' : 'rotate-90'}`} />
+                                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-[#d4a853]/15 text-[#d4a853] text-xs font-bold">
                                   {adminName.charAt(0).toUpperCase()}
                                 </div>
-                                <span className="text-xs font-semibold">{adminName}</span>
-                                <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+                                <span className="text-sm font-semibold">{adminName}</span>
+                                <span className="text-xs text-muted-foreground/50 tabular-nums">
                                   {adminLogs.length} {locale === 'ar' ? 'إجراء' : locale === 'en' ? 'actions' : 'Aktionen'}
                                 </span>
                               </div>
