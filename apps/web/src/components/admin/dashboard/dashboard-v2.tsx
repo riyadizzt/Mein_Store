@@ -234,10 +234,21 @@ export function DashboardV2() {
                         )}
                       </div>
 
-                      {/* Name + qty badge */}
+                      {/* Name + qty badge — picks the translation matching the
+                          admin's current locale, falling back down the chain:
+                          current locale → DE → EN → snapshot name → dash. */}
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium text-foreground/90 truncate leading-tight">
-                          {p.name ?? '—'}
+                          {(locale === 'ar'
+                            ? p.nameAr
+                            : locale === 'en'
+                            ? p.nameEn
+                            : p.nameDe)
+                            ?? p.nameDe
+                            ?? p.nameEn
+                            ?? p.snapshotName
+                            ?? p.name
+                            ?? '—'}
                         </p>
                         <p className="text-[11px] text-muted-foreground/70 tabular-nums mt-0.5">
                           {Number(p.quantity ?? 0)}× {t3('verkauft', 'sold', 'مبيع')}

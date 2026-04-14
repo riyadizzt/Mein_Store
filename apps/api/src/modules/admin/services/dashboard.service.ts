@@ -128,16 +128,20 @@ export class DashboardService {
         _count: true,
         where: { status: 'captured' },
       }),
-      // Top 10 products this month (with names + images)
+      // Top 10 products this month (with names in all 3 locales + images)
       this.prisma.$queryRaw<Array<{
         snapshot_name: string
-        product_name: string | null
+        product_name_de: string | null
+        product_name_en: string | null
+        product_name_ar: string | null
         image_url: string | null
         total_revenue: number
         total_quantity: number
       }>>`
         SELECT oi.snapshot_name,
-               pt.name as product_name,
+               pt_de.name as product_name_de,
+               pt_en.name as product_name_en,
+               pt_ar.name as product_name_ar,
                pi.url as image_url,
                COALESCE(SUM(CAST(oi.total_price AS DECIMAL(10,2))), 0) as total_revenue,
                COALESCE(SUM(oi.quantity), 0) as total_quantity
@@ -145,12 +149,14 @@ export class DashboardService {
         JOIN orders o ON o.id = oi.order_id
         LEFT JOIN product_variants pv ON pv.id = oi.variant_id
         LEFT JOIN products p ON p.id = pv.product_id
-        LEFT JOIN product_translations pt ON pt.product_id = p.id AND pt.language = 'de'
+        LEFT JOIN product_translations pt_de ON pt_de.product_id = p.id AND pt_de.language = 'de'
+        LEFT JOIN product_translations pt_en ON pt_en.product_id = p.id AND pt_en.language = 'en'
+        LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.language = 'ar'
         LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
         WHERE o.created_at >= ${monthStart}
           AND o.status != 'cancelled'
           AND o.deleted_at IS NULL
-        GROUP BY oi.snapshot_name, pt.name, pi.url
+        GROUP BY oi.snapshot_name, pt_de.name, pt_en.name, pt_ar.name, pi.url
         ORDER BY total_revenue DESC
         LIMIT 10
       `,
@@ -209,9 +215,16 @@ export class DashboardService {
         revenue: Number(r._sum.amount ?? 0).toFixed(2),
         count: r._count,
       })),
-      // Convert BigInt from raw SQL to Number for JSON serialization
+      // Convert BigInt from raw SQL to Number for JSON serialization.
+      // `name` kept as DE default for backwards-compat with other consumers
+      // (finance page etc.); nameDe/nameEn/nameAr exposed so the dashboard
+      // top-products widget can pick the viewing admin's locale at render.
       topProducts: (topProducts as any[]).map((p) => ({
-        name: p.product_name ?? p.snapshot_name,
+        name: p.product_name_de ?? p.snapshot_name,
+        nameDe: p.product_name_de ?? null,
+        nameEn: p.product_name_en ?? null,
+        nameAr: p.product_name_ar ?? null,
+        snapshotName: p.snapshot_name ?? null,
         imageUrl: p.image_url ?? null,
         revenue: Number(p.total_revenue ?? 0),
         quantity: Number(p.total_quantity ?? 0),
