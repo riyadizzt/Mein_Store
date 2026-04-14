@@ -151,12 +151,20 @@ export default function TransferPage() {
               <div className="flex justify-between"><span className="text-muted-foreground">{t3(locale, 'Fehlgeschlagen', 'Failed', 'فشل')}</span><span className="font-bold text-red-500">{result.summary?.failed}</span></div>
             )}
           </div>
+          {/* Error render — backend returns structured errors of shape
+              { code, params?, message: {de, en, ar} } (see batchTransfer
+              in admin-inventory.service.ts). Falls back to plain string
+              for legacy compatibility. */}
           {result.results?.some((r: any) => !r.success) && (
             <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-4 text-start">
               <p className="text-sm font-semibold text-red-600 mb-2">{t3(locale, 'Fehler:', 'Errors:', 'أخطاء:')}</p>
-              {result.results.filter((r: any) => !r.success).map((r: any, i: number) => (
-                <p key={i} className="text-xs text-red-500">{r.sku}: {r.error}</p>
-              ))}
+              {result.results.filter((r: any) => !r.success).map((r: any, i: number) => {
+                const errText =
+                  typeof r.error === 'string'
+                    ? r.error
+                    : r.error?.message?.[locale] ?? r.error?.message?.de ?? r.error?.code ?? 'Error'
+                return <p key={i} className="text-xs text-red-500">{r.sku}: {errText}</p>
+              })}
             </div>
           )}
           <Button variant="outline" onClick={() => { setResult(null); setItems([]) }}>

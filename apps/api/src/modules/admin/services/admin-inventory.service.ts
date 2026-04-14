@@ -704,22 +704,64 @@ export class AdminInventoryService {
         message: { de: 'Quell- und Ziellager dürfen nicht gleich sein.', en: 'Source and target warehouse must be different.', ar: 'المستودع المصدر والهدف يجب أن يكونا مختلفين.' } })
     }
 
-    const results: { sku: string; quantity: number; success: boolean; error?: string }[] = []
+    // Error payloads are structured { code, params?, message: {de,en,ar} }
+    // so the frontend can render the right locale. `message` is provided
+    // pre-built for convenience — consumers that care about i18n use
+    // `message[locale]` and fall back to the string lookup in code
+    // mapping if they need a different shape.
+    type TransferError = {
+      code: 'NOT_FOUND' | 'NO_STOCK_IN_SOURCE' | 'INSUFFICIENT_STOCK'
+      params?: Record<string, string | number>
+      message: { de: string; en: string; ar: string }
+    }
+    const results: { sku: string; quantity: number; success: boolean; error?: TransferError | string }[] = []
 
     for (const item of items) {
       try {
         const variant = await this.prisma.productVariant.findFirst({
           where: { OR: [{ sku: item.sku }, { barcode: item.sku }] },
         })
-        if (!variant) { results.push({ sku: item.sku, quantity: item.quantity, success: false, error: 'Not found' }); continue }
+        if (!variant) {
+          results.push({
+            sku: item.sku, quantity: item.quantity, success: false,
+            error: {
+              code: 'NOT_FOUND',
+              message: { de: 'Artikel nicht gefunden', en: 'Product not found', ar: 'المنتج غير موجود' },
+            },
+          })
+          continue
+        }
 
         const inv = await this.prisma.inventory.findFirst({
           where: { variantId: variant.id, warehouseId: fromWarehouseId },
         })
-        if (!inv) { results.push({ sku: item.sku, quantity: item.quantity, success: false, error: 'No stock in source' }); continue }
+        if (!inv) {
+          results.push({
+            sku: item.sku, quantity: item.quantity, success: false,
+            error: {
+              code: 'NO_STOCK_IN_SOURCE',
+              message: { de: 'Kein Bestand im Quelllager', en: 'No stock in source warehouse', ar: 'لا يوجد مخزون في المستودع المصدر' },
+            },
+          })
+          continue
+        }
 
         const available = inv.quantityOnHand - inv.quantityReserved
-        if (item.quantity > available) { results.push({ sku: item.sku, quantity: item.quantity, success: false, error: `Only ${available} available` }); continue }
+        if (item.quantity > available) {
+          results.push({
+            sku: item.sku, quantity: item.quantity, success: false,
+            error: {
+              code: 'INSUFFICIENT_STOCK',
+              params: { available },
+              message: {
+                de: `Nur ${available} verfügbar`,
+                en: `Only ${available} available`,
+                ar: `متاح فقط ${available}`,
+              },
+            },
+          })
+          continue
+        }
 
         await this.prisma.$transaction(async (tx) => {
           await tx.inventory.update({ where: { id: inv.id }, data: { quantityOnHand: { decrement: item.quantity } } })
