@@ -160,15 +160,18 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
           />
         </button>
 
-        {/* Badges — Sale / Featured */}
+        {/* Badges — Sale / Featured (premium gold variants) */}
         <div className="absolute top-3 left-3 rtl:left-auto rtl:right-3 flex flex-col gap-1.5">
           {hasDiscount && (
-            <span className="px-2 py-0.5 text-[10px] font-medium tracking-wide bg-[#0f1419]/70 text-white backdrop-blur-sm">
+            <span
+              className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold tabular-nums rounded-md shadow-md ring-1 ring-black/10 bg-[#d4a853] text-[#0f1419] ltr:tracking-wider"
+              dir="ltr"
+            >
               -{discountPercent}%
             </span>
           )}
           {p.isFeatured && !hasDiscount && (
-            <span className="px-2 py-0.5 text-[10px] font-medium tracking-wide bg-[#0f1419]/70 text-white backdrop-blur-sm">
+            <span className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded-md shadow-md ring-1 ring-[#d4a853]/50 bg-[#0f1419]/95 text-[#d4a853] backdrop-blur-sm ltr:uppercase ltr:tracking-wider">
               {locale === 'ar' ? 'مميز' : 'Best'}
             </span>
           )}
