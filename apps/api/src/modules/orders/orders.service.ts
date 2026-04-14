@@ -89,12 +89,39 @@ export class OrdersService {
     const cutoff = new Date()
     cutoff.setMinutes(cutoff.getMinutes() - this.REUSE_WINDOW_MINUTES)
 
+    // Identity resolution for reuse lookup.
+    //
+    // Since 14.04.2026 Bug-Hunt 2B, guest checkouts create a stub user and
+    // store the order with userId=<stub> + guestEmail=NULL. Matching purely
+    // by guestEmail therefore misses all post-2B guest orders. We look up
+    // the stub user by email and match EITHER the legacy guestEmail field
+    // OR the stub user's ID, so both pre-2B and post-2B guest orders reuse
+    // correctly. Real users (passwordHash set) are not treated as stubs —
+    // a logged-out checkout with a real user's email is kept separate from
+    // that user's authenticated orders for safety.
+    let identityWhere: any
+    if (userId) {
+      identityWhere = { userId }
+    } else if (guestEmail) {
+      const stubUser = await this.prisma.user.findUnique({
+        where: { email: guestEmail },
+        select: { id: true, passwordHash: true },
+      })
+      if (stubUser && !stubUser.passwordHash) {
+        identityWhere = { OR: [{ guestEmail }, { userId: stubUser.id }] }
+      } else {
+        identityWhere = { guestEmail }
+      }
+    } else {
+      return null
+    }
+
     const candidates = await this.prisma.order.findMany({
       where: {
         deletedAt: null,
         status: { in: ['pending', 'pending_payment'] },
         createdAt: { gte: cutoff },
-        ...(userId ? { userId } : { guestEmail }),
+        ...identityWhere,
       },
       include: {
         items: { select: { variantId: true, quantity: true } },
@@ -207,6 +234,29 @@ export class OrdersService {
           de: 'Eine Lieferadresse ist erforderlich.',
           en: 'A shipping address is required.',
           ar: 'عنوان التوصيل مطلوب.',
+        },
+      })
+    }
+
+    // 1a-bis. Hard guard: guest checkouts MUST provide an email.
+    //     Background: on 14.04.2026 a customer retried Stripe 5 times in
+    //     90 seconds because the frontend checkout-store was not persisted
+    //     across browser inactivity and dropped guestEmail back to ''. The
+    //     frontend then silently omitted the guestEmail field from the
+    //     POST, and the backend happily created 5 fully anonymous orders
+    //     (userId=null + guestEmail=null). Every retry hit Stripe with
+    //     receipt_email:'' which is "Invalid email address". We now refuse
+    //     the order at the gate so the frontend is forced to surface the
+    //     missing-email state to the user.
+    const trimmedGuestEmail = dto.guestEmail?.trim()
+    if (!userId && !trimmedGuestEmail) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'GuestEmailRequired',
+        message: {
+          de: 'Eine E-Mail-Adresse ist für den Gast-Checkout erforderlich.',
+          en: 'An email address is required for guest checkout.',
+          ar: 'البريد الإلكتروني مطلوب للشراء كزائر.',
         },
       })
     }

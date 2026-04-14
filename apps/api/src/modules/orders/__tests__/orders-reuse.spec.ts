@@ -17,6 +17,11 @@ import { SHIPPING_CALCULATOR } from '../shipping/shipping-calculator.interface'
 
 const mockPrisma: any = {
   order: { findMany: jest.fn(), findUnique: jest.fn() },
+  // findReusableOrder looks up stub users by email when resolving guest
+  // identity (added with the 14.04.2026 bug-5 fix). Default: no match,
+  // falls back to the legacy guestEmail WHERE clause. Individual tests
+  // override this when they need to assert stub-user resolution.
+  user: { findUnique: jest.fn().mockResolvedValue(null) },
 }
 
 const mockIdempotency = {

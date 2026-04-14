@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 export interface CheckoutAddress {
   firstName: string
@@ -86,29 +87,66 @@ const initialState = {
   error: null,
 }
 
-export const useCheckoutStore = create<CheckoutState>()((set) => ({
-  ...initialState,
+// Checkout state is persisted to sessionStorage so browser inactivity,
+// soft-navigations, or hot-reloads do not wipe guestEmail / shippingAddress
+// / coupon between entry and final payment.
+//
+// sessionStorage (not localStorage) is deliberate:
+//  - scoped to one browser tab → closing the tab resets the checkout
+//  - dies with the session → no stale weeks-old checkout form
+//  - cart stays in localStorage (cart-store) so items survive across visits,
+//    but the in-progress checkout itself is session-local
+//
+// partialize() whitelists FORM fields only. The ephemeral per-attempt state
+// (orderId, orderNumber, idempotencyKey, isProcessing, error) MUST reset
+// between attempts — persisting them would cause "ghost order" state after a
+// failed retry. If you add a new ephemeral field, do NOT put it in partialize.
+export const useCheckoutStore = create<CheckoutState>()(
+  persist(
+    (set) => ({
+      ...initialState,
 
-  setStep: (step) => set({ step, error: null }),
-  setGuest: (isGuest, email) => set({ isGuest, guestEmail: email ?? '', step: 'address' }),
-  setShippingAddress: (address) => set({ shippingAddress: address }),
-  setBillingAddress: (address) => set({ billingAddress: address }),
-  setBillingSameAsShipping: (same) => set({ billingSameAsShipping: same }),
-  setSavedAddressId: (id) => set({ savedAddressId: id }),
-  setShippingOption: (option) => set({ shippingOption: option }),
-  setPaymentMethod: (method) => set({ paymentMethod: method }),
-  setCoupon: (code, coupon, discount) => set({ couponCode: code, appliedCoupon: coupon, discountAmount: discount }),
-  removeCoupon: () => set({ couponCode: null, appliedCoupon: null, discountAmount: 0 }),
-  setTermsAccepted: (accepted) => set({ termsAccepted: accepted }),
-  setOrder: (orderId, orderNumber) => set({ orderId, orderNumber }),
-  setProcessing: (processing) => set({ isProcessing: processing }),
-  setError: (error) => set({ error }),
+      setStep: (step) => set({ step, error: null }),
+      setGuest: (isGuest, email) => set({ isGuest, guestEmail: email ?? '', step: 'address' }),
+      setShippingAddress: (address) => set({ shippingAddress: address }),
+      setBillingAddress: (address) => set({ billingAddress: address }),
+      setBillingSameAsShipping: (same) => set({ billingSameAsShipping: same }),
+      setSavedAddressId: (id) => set({ savedAddressId: id }),
+      setShippingOption: (option) => set({ shippingOption: option }),
+      setPaymentMethod: (method) => set({ paymentMethod: method }),
+      setCoupon: (code, coupon, discount) => set({ couponCode: code, appliedCoupon: coupon, discountAmount: discount }),
+      removeCoupon: () => set({ couponCode: null, appliedCoupon: null, discountAmount: 0 }),
+      setTermsAccepted: (accepted) => set({ termsAccepted: accepted }),
+      setOrder: (orderId, orderNumber) => set({ orderId, orderNumber }),
+      setProcessing: (processing) => set({ isProcessing: processing }),
+      setError: (error) => set({ error }),
 
-  generateIdempotencyKey: () => {
-    const key = crypto.randomUUID()
-    set({ idempotencyKey: key })
-    return key
-  },
+      generateIdempotencyKey: () => {
+        const key = crypto.randomUUID()
+        set({ idempotencyKey: key })
+        return key
+      },
 
-  reset: () => set(initialState),
-}))
+      reset: () => set(initialState),
+    }),
+    {
+      name: 'malak-checkout',
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({
+        step: state.step,
+        isGuest: state.isGuest,
+        guestEmail: state.guestEmail,
+        shippingAddress: state.shippingAddress,
+        billingAddress: state.billingAddress,
+        billingSameAsShipping: state.billingSameAsShipping,
+        savedAddressId: state.savedAddressId,
+        shippingOption: state.shippingOption,
+        paymentMethod: state.paymentMethod,
+        couponCode: state.couponCode,
+        appliedCoupon: state.appliedCoupon,
+        discountAmount: state.discountAmount,
+        termsAccepted: state.termsAccepted,
+      }),
+    },
+  ),
+)

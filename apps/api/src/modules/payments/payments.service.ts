@@ -182,12 +182,18 @@ export class PaymentsService {
     const idempotencyKey = dto.idempotencyKey ?? crypto.randomUUID()
 
     // 5. Create payment intent via provider
+    // customerEmail MUST be undefined (not '') when missing — Stripe rejects
+    // `receipt_email: ''` with "Invalid email address". See step-payment.tsx
+    // retry-loop regression from 14.04.2026 where 5 anonymous orders were
+    // created because the frontend sent no guestEmail and the receipt_email
+    // fell through to an empty string.
+    const customerEmail = order.user?.email || order.guestEmail || undefined
     const intentResult = await provider.createPaymentIntent({
       orderId: order.id,
       amount: amountCents,
       currency: order.currency,
       method: dto.method,
-      customerEmail: order.user?.email ?? order.guestEmail ?? '',
+      customerEmail,
       customerName: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Guest',
       metadata: { correlationId, orderNumber: order.orderNumber },
       idempotencyKey,

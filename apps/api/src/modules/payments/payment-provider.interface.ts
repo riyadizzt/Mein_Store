@@ -7,7 +7,9 @@ export interface CreatePaymentInput {
   amount: number          // in cents (Stripe) or smallest unit
   currency: string        // EUR
   method: string          // stripe_card, klarna_pay_now, etc.
-  customerEmail: string
+  // Optional: absent for anonymous paths. Stripe accepts `receipt_email: undefined`
+  // but rejects empty strings. Callers should pass undefined, never ''.
+  customerEmail?: string
   customerName: string
   metadata?: Record<string, string>
   idempotencyKey?: string

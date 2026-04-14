@@ -15,6 +15,7 @@ import {
 import { ArrowLeft, Loader2, CreditCard, Lock, Shield, Building2, ChevronDown, MapPin } from 'lucide-react'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { useCartStore } from '@/store/cart-store'
+import { useAuthStore } from '@/store/auth-store'
 import { CouponInput } from '@/components/coupon-input'
 import { getChannelFromUtm } from '@/components/utm-capture'
 import { useShopSettings } from '@/hooks/use-shop-settings'
@@ -67,6 +68,7 @@ function StepPaymentInner() {
     setTermsAccepted, setStep, setProcessing, setError,
     setOrder, generateIdempotencyKey, setPaymentMethod,
   } = useCheckoutStore()
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const { items, subtotal } = useCartStore()
   const cartSubtotal = subtotal()
   const [stockError, setStockError] = useState(false)
@@ -177,6 +179,22 @@ function StepPaymentInner() {
     // it auto-collects the values of the sibling expiry + CVC elements internally.
     const cardElement = activeTab === 'card' ? elements?.getElement(CardNumberElement) : null
     if (activeTab === 'card' && !cardElement) return
+
+    // Defensive guard — the backend now rejects anonymous orders with
+    // GuestEmailRequired, but we should never even hit the network in
+    // that state. If somehow the user reached the payment step without
+    // a guest email AND without being logged in (e.g. persisted state
+    // got mangled, tab restored from crash), bounce them back to the
+    // guest-or-login step instead of showing an opaque Stripe error.
+    if (!isAuthenticated && !guestEmail?.trim()) {
+      setError(
+        locale === 'ar' ? 'الرجاء إدخال بريدك الإلكتروني للمتابعة.' :
+        locale === 'en' ? 'Please enter your email to continue.' :
+        'Bitte gib deine E-Mail-Adresse ein, um fortzufahren.',
+      )
+      setStep('guest')
+      return
+    }
 
     setProcessing(true)
     setError(null)

@@ -32,7 +32,8 @@ export class StripeProvider implements IPaymentProvider {
         orderId: input.orderId,
         ...input.metadata,
       },
-      receipt_email: input.customerEmail,
+      // Stripe rejects empty strings — only pass if we have a real value
+      receipt_email: input.customerEmail || undefined,
       description: `Malak Bekleidung — Bestellung ${input.orderId}`,
       // SCA/3D Secure automatisch für EU-Karten
       automatic_payment_methods: { enabled: true },
