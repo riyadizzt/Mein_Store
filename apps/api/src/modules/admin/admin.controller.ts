@@ -49,6 +49,79 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { ShipmentsService } from '../shipments/shipments.service'
 import { Response } from 'express'
 
+/**
+ * Whitelist of shop_settings keys that can be written via PATCH /admin/settings.
+ *
+ * Every key here MUST also be projected by getSettings() below, otherwise
+ * the admin UI saves via PATCH but the next GET returns `undefined` for
+ * that key, the form falls back to its default, and the toggle appears
+ * to "turn off by itself". admin-settings-parity.spec.ts enforces this
+ * invariant — see the addressAutocompleteEnabled regression from
+ * 14.04.2026 evening where 61 keys had this exact bug.
+ */
+export const ADMIN_SETTINGS_WRITABLE_KEYS = [
+  // Company
+  'companyName', 'companyAddress', 'companyVatId', 'companyCeo',
+  'companyPhone', 'companyEmail', 'companyRegister', 'logoUrl', 'faviconUrl',
+  // Bank details (for invoices)
+  'bankName', 'bankIban', 'bankBic',
+  // Payments
+  'stripeEnabled', 'klarnaEnabled', 'paypalEnabled',
+  // Shipping
+  'freeShippingThreshold', 'minOrderValue', 'minOrderEnabled',
+  // Tax
+  'taxRate', 'currency',
+  // Appearance
+  'brandName', 'accentColor',
+  'heroBannerImage', 'heroBannerTitle_de', 'heroBannerTitle_en', 'heroBannerTitle_ar',
+  'heroBannerSubtitle_de', 'heroBannerSubtitle_en', 'heroBannerSubtitle_ar',
+  'heroBannerCta_de', 'heroBannerCta_en', 'heroBannerCta_ar', 'heroBannerCtaLink',
+  // Marketing
+  'welcomePopupEnabled', 'welcomeDiscountPercent',
+  // Returns
+  'returnsEnabled',
+  // Address Autocomplete
+  'addressAutocompleteEnabled',
+  // Notifications
+  'notif_email_new_order', 'notif_email_low_stock', 'notif_sound_enabled',
+  'notif_daily_summary', 'notif_daily_summary_email', 'notif_email_auto_cancel',
+  // Footer
+  'instagramUrl', 'facebookUrl', 'tiktokUrl',
+  // Legal pages (stored as HTML)
+  'impressum_de', 'impressum_en', 'impressum_ar',
+  'agb_de', 'agb_en', 'agb_ar',
+  'datenschutz_de', 'datenschutz_en', 'datenschutz_ar',
+  'widerruf_de', 'widerruf_en', 'widerruf_ar',
+  // Contact
+  'contactEmail', 'contactPhone', 'contactAddress', 'contactHours',
+  // Email
+  'orderConfirmationEnabled',
+  // Channels / Feeds / Pixels
+  'meta_pixel_id', 'tiktok_pixel_id',
+  'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar',
+  'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled',
+  // Maintenance
+  'maintenance_enabled', 'maintenance_title_de', 'maintenance_title_ar',
+  'maintenance_desc_de', 'maintenance_desc_ar', 'maintenance_countdown_enabled',
+  'maintenance_countdown_end', 'maintenance_email_collection', 'maintenance_social_links',
+  'maintenance_bg_image', 'maintenance_activated_at', 'maintenance_views',
+  // AI
+  'ai_global_enabled', 'ai_customer_chat_enabled', 'ai_admin_assistant_enabled',
+  'ai_product_description_enabled', 'ai_inventory_suggestions_enabled',
+  'ai_marketing_text_enabled', 'ai_social_reply_enabled',
+  // PostHog Analytics
+  'posthog_enabled', 'posthog_key', 'posthog_host',
+  // Cookie Consent
+  'cookie_banner_enabled',
+  // Vorkasse (Bank Transfer)
+  'vorkasse_enabled', 'vorkasse_account_holder', 'vorkasse_iban', 'vorkasse_bic',
+  'vorkasse_bank_name', 'vorkasse_deadline_days', 'vorkasse_reminder_days', 'vorkasse_cancel_days',
+  // SumUp
+  'sumup_enabled', 'sumup_merchant_code',
+  // Homepage Design
+  'homepage_design',
+] as const
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
 @Roles('admin', 'super_admin', 'warehouse_staff')
@@ -1374,6 +1447,7 @@ export class AdminController {
     for (const r of rows) db[r.key] = r.value
 
     return {
+      // Company
       companyName: db.companyName ?? process.env.COMPANY_NAME ?? '',
       companyAddress: db.companyAddress ?? process.env.COMPANY_ADDRESS ?? '',
       companyVatId: db.companyVatId ?? process.env.COMPANY_VAT_ID ?? '',
@@ -1382,15 +1456,46 @@ export class AdminController {
       companyEmail: db.companyEmail ?? process.env.COMPANY_CONTACT_EMAIL ?? '',
       companyRegister: db.companyRegister ?? process.env.COMPANY_REGISTER ?? '',
       logoUrl: db.logoUrl ?? '',
+      faviconUrl: db.faviconUrl ?? '',
+      // Bank details
       bankName: db.bankName ?? '',
       bankIban: db.bankIban ?? '',
       bankBic: db.bankBic ?? '',
+      // Payments
       stripeEnabled: db.stripeEnabled === 'true' || !!process.env.STRIPE_SECRET_KEY,
       klarnaEnabled: db.klarnaEnabled === 'true',
       paypalEnabled: db.paypalEnabled === 'true',
+      // Env-derived (not in writable whitelist)
       dhlConfigured: !!process.env.DHL_API_KEY,
       emailFrom: process.env.EMAIL_FROM_NOREPLY ?? '',
+      // Shipping
       freeShippingThreshold: db.freeShippingThreshold ?? '100',
+      minOrderValue: db.minOrderValue ?? '0',
+      minOrderEnabled: db.minOrderEnabled ?? 'false',
+      // Tax
+      taxRate: db.taxRate ?? '19',
+      currency: db.currency ?? 'EUR',
+      // Appearance
+      brandName: db.brandName ?? 'Malak Bekleidung',
+      accentColor: db.accentColor ?? '#d4a853',
+      heroBannerImage: db.heroBannerImage ?? '',
+      heroBannerTitle_de: db.heroBannerTitle_de ?? '',
+      heroBannerTitle_en: db.heroBannerTitle_en ?? '',
+      heroBannerTitle_ar: db.heroBannerTitle_ar ?? '',
+      heroBannerSubtitle_de: db.heroBannerSubtitle_de ?? '',
+      heroBannerSubtitle_en: db.heroBannerSubtitle_en ?? '',
+      heroBannerSubtitle_ar: db.heroBannerSubtitle_ar ?? '',
+      heroBannerCta_de: db.heroBannerCta_de ?? '',
+      heroBannerCta_en: db.heroBannerCta_en ?? '',
+      heroBannerCta_ar: db.heroBannerCta_ar ?? '',
+      heroBannerCtaLink: db.heroBannerCtaLink ?? '',
+      // Marketing
+      welcomePopupEnabled: db.welcomePopupEnabled ?? 'true',
+      welcomeDiscountPercent: db.welcomeDiscountPercent ?? '10',
+      // Returns
+      returnsEnabled: db.returnsEnabled ?? 'true',
+      // Address Autocomplete
+      addressAutocompleteEnabled: db.addressAutocompleteEnabled ?? 'false',
       // Maintenance
       maintenance_enabled: db.maintenance_enabled ?? 'false',
       maintenance_title_de: db.maintenance_title_de ?? '',
@@ -1416,6 +1521,50 @@ export class AdminController {
       notif_sound_enabled: db.notif_sound_enabled ?? 'true',
       notif_daily_summary: db.notif_daily_summary ?? 'false',
       notif_daily_summary_email: db.notif_daily_summary_email ?? '',
+      notif_email_auto_cancel: db.notif_email_auto_cancel ?? 'true',
+      // Footer / Social
+      instagramUrl: db.instagramUrl ?? '',
+      facebookUrl: db.facebookUrl ?? '',
+      tiktokUrl: db.tiktokUrl ?? '',
+      // Legal pages (stored as HTML)
+      impressum_de: db.impressum_de ?? '',
+      impressum_en: db.impressum_en ?? '',
+      impressum_ar: db.impressum_ar ?? '',
+      agb_de: db.agb_de ?? '',
+      agb_en: db.agb_en ?? '',
+      agb_ar: db.agb_ar ?? '',
+      datenschutz_de: db.datenschutz_de ?? '',
+      datenschutz_en: db.datenschutz_en ?? '',
+      datenschutz_ar: db.datenschutz_ar ?? '',
+      widerruf_de: db.widerruf_de ?? '',
+      widerruf_en: db.widerruf_en ?? '',
+      widerruf_ar: db.widerruf_ar ?? '',
+      // Contact
+      contactEmail: db.contactEmail ?? '',
+      contactPhone: db.contactPhone ?? '',
+      contactAddress: db.contactAddress ?? '',
+      contactHours: db.contactHours ?? '',
+      // Email
+      orderConfirmationEnabled: db.orderConfirmationEnabled ?? 'true',
+      // Channels / Feeds / Pixels
+      meta_pixel_id: db.meta_pixel_id ?? '',
+      tiktok_pixel_id: db.tiktok_pixel_id ?? '',
+      whatsapp_number: db.whatsapp_number ?? '',
+      whatsapp_enabled: db.whatsapp_enabled ?? 'false',
+      whatsapp_message_de: db.whatsapp_message_de ?? '',
+      whatsapp_message_ar: db.whatsapp_message_ar ?? '',
+      channel_facebook_enabled: db.channel_facebook_enabled ?? 'false',
+      channel_tiktok_enabled: db.channel_tiktok_enabled ?? 'false',
+      channel_google_enabled: db.channel_google_enabled ?? 'false',
+      channel_whatsapp_enabled: db.channel_whatsapp_enabled ?? 'false',
+      // AI
+      ai_global_enabled: db.ai_global_enabled ?? 'false',
+      ai_customer_chat_enabled: db.ai_customer_chat_enabled ?? 'false',
+      ai_admin_assistant_enabled: db.ai_admin_assistant_enabled ?? 'false',
+      ai_product_description_enabled: db.ai_product_description_enabled ?? 'false',
+      ai_inventory_suggestions_enabled: db.ai_inventory_suggestions_enabled ?? 'false',
+      ai_marketing_text_enabled: db.ai_marketing_text_enabled ?? 'false',
+      ai_social_reply_enabled: db.ai_social_reply_enabled ?? 'false',
       // Vorkasse (Bank Transfer)
       vorkasse_enabled: db.vorkasse_enabled ?? 'false',
       vorkasse_account_holder: db.vorkasse_account_holder ?? '',
@@ -1428,6 +1577,8 @@ export class AdminController {
       // SumUp
       sumup_enabled: db.sumup_enabled ?? 'false',
       sumup_merchant_code: db.sumup_merchant_code ?? '',
+      // Homepage Design
+      homepage_design: db.homepage_design ?? 'a',
     }
   }
 
@@ -1435,70 +1586,12 @@ export class AdminController {
   @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
   @Roles('admin', 'super_admin')
   async updateSettings(@Body() body: Record<string, string>, @Req() req: any, @Ip() ip: string) {
-    const allowed = [
-      // Company
-      'companyName', 'companyAddress', 'companyVatId', 'companyCeo',
-      'companyPhone', 'companyEmail', 'companyRegister', 'logoUrl', 'faviconUrl',
-      // Bank details (for invoices)
-      'bankName', 'bankIban', 'bankBic',
-      // Payments
-      'stripeEnabled', 'klarnaEnabled', 'paypalEnabled',
-      // Shipping
-      'freeShippingThreshold', 'minOrderValue', 'minOrderEnabled',
-      // Tax
-      'taxRate', 'currency',
-      // Appearance
-      'brandName', 'accentColor',
-      'heroBannerImage', 'heroBannerTitle_de', 'heroBannerTitle_en', 'heroBannerTitle_ar',
-      'heroBannerSubtitle_de', 'heroBannerSubtitle_en', 'heroBannerSubtitle_ar',
-      'heroBannerCta_de', 'heroBannerCta_en', 'heroBannerCta_ar', 'heroBannerCtaLink',
-      // Marketing
-      'welcomePopupEnabled', 'welcomeDiscountPercent',
-      // Returns
-      'returnsEnabled',
-      // Address Autocomplete
-      'addressAutocompleteEnabled',
-      // Notifications
-      'notif_email_new_order', 'notif_email_low_stock', 'notif_sound_enabled',
-      'notif_daily_summary', 'notif_daily_summary_email', 'notif_email_auto_cancel',
-      // Footer
-      'instagramUrl', 'facebookUrl', 'tiktokUrl',
-      // Legal pages (stored as HTML)
-      'impressum_de', 'impressum_en', 'impressum_ar',
-      'agb_de', 'agb_en', 'agb_ar',
-      'datenschutz_de', 'datenschutz_en', 'datenschutz_ar',
-      'widerruf_de', 'widerruf_en', 'widerruf_ar',
-      // Contact
-      'contactEmail', 'contactPhone', 'contactAddress', 'contactHours',
-      // Email
-      'orderConfirmationEnabled',
-      // Channels / Feeds / Pixels
-      'meta_pixel_id', 'tiktok_pixel_id',
-      'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar',
-      'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled',
-      // AI
-      // Maintenance
-      'maintenance_enabled', 'maintenance_title_de', 'maintenance_title_ar',
-      'maintenance_desc_de', 'maintenance_desc_ar', 'maintenance_countdown_enabled',
-      'maintenance_countdown_end', 'maintenance_email_collection', 'maintenance_social_links',
-      'maintenance_bg_image', 'maintenance_activated_at', 'maintenance_views',
-      // AI
-      'ai_global_enabled', 'ai_customer_chat_enabled', 'ai_admin_assistant_enabled',
-      'ai_product_description_enabled', 'ai_inventory_suggestions_enabled',
-      'ai_marketing_text_enabled', 'ai_social_reply_enabled',
-      // PostHog Analytics
-      'posthog_enabled', 'posthog_key', 'posthog_host',
-      // Cookie Consent
-      'cookie_banner_enabled',
-      // Vorkasse (Bank Transfer)
-      'vorkasse_enabled', 'vorkasse_account_holder', 'vorkasse_iban', 'vorkasse_bic',
-      'vorkasse_bank_name', 'vorkasse_deadline_days', 'vorkasse_reminder_days', 'vorkasse_cancel_days',
-      // SumUp
-      'sumup_enabled', 'sumup_merchant_code',
-      // Homepage Design
-      'homepage_design',
-    ]
-    const entries = Object.entries(body).filter(([k]) => allowed.includes(k))
+    // Whitelist is defined at module level as ADMIN_SETTINGS_WRITABLE_KEYS so
+    // the parity test (admin-settings-parity.spec.ts) can assert that every
+    // writable key is also projected by getSettings().
+    const entries = Object.entries(body).filter(([k]) =>
+      (ADMIN_SETTINGS_WRITABLE_KEYS as readonly string[]).includes(k),
+    )
 
     for (const [key, value] of entries) {
       await this.prisma.shopSetting.upsert({
