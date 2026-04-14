@@ -19,6 +19,7 @@ interface TransferItem {
   size: string | null
   quantity: number
   stock: number
+  image: string | null
 }
 
 export default function TransferPage() {
@@ -43,10 +44,10 @@ export default function TransferPage() {
   })
 
   const { data: searchResults } = useQuery({
-    queryKey: ['transfer-search', searchQuery],
+    queryKey: ['transfer-search', searchQuery, locale],
     queryFn: async () => {
       if (!searchQuery || searchQuery.length < 2) return []
-      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: searchQuery } })
+      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: searchQuery, lang: locale } })
       return data ?? []
     },
     enabled: searchQuery.length >= 2,
@@ -81,6 +82,7 @@ export default function TransferPage() {
         size: product.size,
         quantity: 1,
         stock: product.stock ?? 0,
+        image: product.image ?? null,
       }]
     })
     setSearchQuery('')
@@ -90,11 +92,11 @@ export default function TransferPage() {
   // Barcode scan
   const handleBarcodeScan = useCallback(async (barcode: string) => {
     try {
-      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: barcode.trim() } })
+      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: barcode.trim(), lang: locale } })
       if (data?.length === 1) addItem(data[0])
       else if (data?.length > 1) setSearchQuery(barcode.trim())
     } catch {}
-  }, [addItem])
+  }, [addItem, locale])
 
   // USB scanner detection
   useEffect(() => {
@@ -222,7 +224,14 @@ export default function TransferPage() {
                 <div className="absolute z-20 mt-1 w-full bg-background border rounded-xl shadow-xl max-h-60 overflow-y-auto">
                   {(searchResults ?? []).map((r: any) => (
                     <button key={r.variantId} onClick={() => addItem(r)} className="w-full flex items-center gap-3 px-4 py-2.5 text-start hover:bg-muted/50 transition-colors border-b border-border/20 last:border-0">
-                      <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      {r.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.image} alt={r.productName} className="h-9 w-9 rounded-lg object-cover bg-muted flex-shrink-0" />
+                      ) : (
+                        <div className="h-9 w-9 rounded-lg bg-muted flex-shrink-0 flex items-center justify-center">
+                          <Package className="h-4 w-4 text-muted-foreground/40" />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{r.productName}</div>
                         <div className="text-xs text-muted-foreground">{r.sku} {r.color && `· ${r.color}`} {r.size && `· ${r.size}`} · {t3(locale, 'Bestand', 'Stock', 'المخزون')}: {r.stock}</div>
@@ -262,7 +271,7 @@ export default function TransferPage() {
                 locale={locale}
                 onSingleResult={(product) => {
                   const name = Array.isArray(product.productName) ? (product.productName.find((t: any) => t.language === locale)?.name ?? product.productName[0]?.name ?? product.sku) : product.sku
-                  addItem({ sku: product.sku, productName: name, color: product.color, size: product.size, stock: product.currentStock })
+                  addItem({ sku: product.sku, productName: name, color: product.color, size: product.size, stock: product.currentStock, image: (product as any).image ?? null })
                   // Camera stays open — keeps scanning
                 }}
                 onClose={() => setShowCamera(false)}
@@ -280,9 +289,19 @@ export default function TransferPage() {
                 <div className="px-4 py-2 bg-muted/30 w-10"></div>
                 {items.map((item) => (
                   <div key={item.sku} className="contents">
-                    <div className="px-4 py-3 border-t border-border/10">
-                      <p className="text-sm font-medium">{item.productName}</p>
-                      <p className="text-[10px] text-muted-foreground">{item.sku} {item.color && `· ${item.color}`} {item.size && `· ${item.size}`}</p>
+                    <div className="px-4 py-3 border-t border-border/10 flex items-center gap-3">
+                      {item.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.image} alt={item.productName} className="h-10 w-10 rounded-lg object-cover bg-muted flex-shrink-0" />
+                      ) : (
+                        <div className="h-10 w-10 rounded-lg bg-muted flex-shrink-0 flex items-center justify-center">
+                          <Package className="h-4 w-4 text-muted-foreground/40" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{item.productName}</p>
+                        <p className="text-[10px] text-muted-foreground">{item.sku} {item.color && `· ${item.color}`} {item.size && `· ${item.size}`}</p>
+                      </div>
                     </div>
                     <div className="px-4 py-3 border-t border-border/10 text-center text-muted-foreground tabular-nums self-center">{item.stock}</div>
                     <div className="px-4 py-3 border-t border-border/10 flex items-center justify-center">

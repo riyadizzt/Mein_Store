@@ -829,7 +829,12 @@ export class AdminSuppliersService {
 
   // ── Product search for receiving ─────────────────────────────
 
-  async searchProducts(query: string) {
+  async searchProducts(query: string, lang: string = 'de') {
+    // Load the requested language + German as a fallback so Arabic
+    // and English admins don't see "Unbekannt" when a product has
+    // no AR/EN translation yet. The frontend picks the right one
+    // from the returned productName string.
+    const locale = (['de', 'en', 'ar'] as const).includes(lang as any) ? (lang as 'de' | 'en' | 'ar') : 'de'
     const variants = await this.prisma.productVariant.findMany({
       where: {
         product: { deletedAt: null },
@@ -843,7 +848,7 @@ export class AdminSuppliersService {
         product: {
           select: {
             id: true, basePrice: true, isActive: true,
-            translations: { where: { language: 'de' }, select: { name: true } },
+            translations: { select: { language: true, name: true } },
             images: { select: { url: true }, take: 1, orderBy: { sortOrder: 'asc' } },
           },
         },
@@ -852,19 +857,26 @@ export class AdminSuppliersService {
       take: 20,
     })
 
-    return variants.map((v) => ({
-      variantId: v.id,
-      productId: v.product.id,
-      sku: v.sku,
-      barcode: v.barcode,
-      productName: v.product.translations[0]?.name ?? 'Unbekannt',
-      color: v.color,
-      size: v.size,
-      purchasePrice: v.purchasePrice ? Number(v.purchasePrice) : null,
-      salePrice: Number(v.product.basePrice),
-      stock: v.inventory.reduce((s, i) => s + i.quantityOnHand, 0),
-      image: v.product.images[0]?.url ?? null,
-    }))
+    return variants.map((v) => {
+      // Prefer the requested locale, fall back to German, then any
+      // translation, then 'Unbekannt'.
+      const localeName = v.product.translations.find((t) => t.language === locale)?.name
+      const germanName = v.product.translations.find((t) => t.language === 'de')?.name
+      const anyName = v.product.translations[0]?.name
+      return {
+        variantId: v.id,
+        productId: v.product.id,
+        sku: v.sku,
+        barcode: v.barcode,
+        productName: localeName ?? germanName ?? anyName ?? 'Unbekannt',
+        color: v.color,
+        size: v.size,
+        purchasePrice: v.purchasePrice ? Number(v.purchasePrice) : null,
+        salePrice: Number(v.product.basePrice),
+        stock: v.inventory.reduce((s, i) => s + i.quantityOnHand, 0),
+        image: v.product.images[0]?.url ?? null,
+      }
+    })
   }
 
   // ── Helpers ──────────────────────────────────────────────────

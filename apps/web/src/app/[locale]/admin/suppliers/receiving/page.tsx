@@ -139,10 +139,10 @@ export default function ReceivingPage() {
   })
 
   const { data: searchResults } = useQuery({
-    queryKey: ['supplier-product-search', searchQuery],
+    queryKey: ['supplier-product-search', searchQuery, locale],
     queryFn: async () => {
       if (!searchQuery || searchQuery.length < 2) return []
-      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: searchQuery } })
+      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: searchQuery, lang: locale } })
       return data ?? []
     },
     enabled: searchQuery.length >= 2,
@@ -209,7 +209,7 @@ export default function ReceivingPage() {
   // Scan barcode — search API and auto-add
   const handleBarcodeScan = useCallback(async (barcode: string) => {
     try {
-      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: barcode.trim() } })
+      const { data } = await api.get('/admin/suppliers/search-products', { params: { q: barcode.trim(), lang: locale } })
       if (data?.length === 1) {
         addExistingItem(data[0])
       } else if (data?.length > 1) {
@@ -217,7 +217,7 @@ export default function ReceivingPage() {
         setMode('existing')
       }
     } catch {}
-  }, [addExistingItem])
+  }, [addExistingItem, locale])
 
   // USB/Bluetooth scanner keystroke detection
   useEffect(() => {
