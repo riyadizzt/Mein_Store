@@ -339,8 +339,10 @@ export class InvoiceService implements OnModuleInit {
       // Gold separator line
       doc.moveTo(50, 95).lineTo(545, 95).lineWidth(2).strokeColor(GOLD).stroke()
 
-      // Company legal line below gold (only show if data exists)
-      const invoiceLegalParts = [co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.register || '', co.ceo ? `Inh. ${co.ceo}` : ''].filter(Boolean)
+      // Company legal line below gold (only show if data exists).
+      // Einzelunternehmen "Malak Bekleidung" has no HRB entry and no separate
+      // Geschäftsführer, so register + owner name are intentionally omitted.
+      const invoiceLegalParts = [co.vatId ? `USt-IdNr.: ${co.vatId}` : ''].filter(Boolean)
       if (invoiceLegalParts.length > 0) {
         doc.fontSize(6.5).font('Helvetica').fillColor('#9ca3af').text(invoiceLegalParts.join(' | '), 50, 101)
       }
@@ -514,7 +516,7 @@ export class InvoiceService implements OnModuleInit {
       doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(1).strokeColor(GOLD).stroke()
       doc.font('Helvetica').fontSize(6.5).fillColor('#9ca3af')
       doc.text(
-        [co.name, co.address, co.ceo ? `Inh. ${co.ceo}` : '', co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.bankIban ? `IBAN: ${co.bankIban}` : ''].filter(Boolean).join(' | '),
+        [co.name, co.address, co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.bankIban ? `IBAN: ${co.bankIban}` : ''].filter(Boolean).join(' | '),
         50, footerY + 8, { align: 'center', width: 495 },
       )
 
@@ -554,8 +556,9 @@ export class InvoiceService implements OnModuleInit {
       // Red separator line
       doc.moveTo(50, 95).lineTo(545, 95).lineWidth(2).strokeColor(RED).stroke()
 
-      // Legal line (only show if data exists)
-      const legalParts = [co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.register || '', co.ceo ? `Inh. ${co.ceo}` : ''].filter(Boolean)
+      // Legal line (only show if data exists).
+      // Einzelunternehmen → no HRB entry, no separate Geschäftsführer.
+      const legalParts = [co.vatId ? `USt-IdNr.: ${co.vatId}` : ''].filter(Boolean)
       if (legalParts.length > 0) {
         doc.fontSize(6.5).font('Helvetica').fillColor('#9ca3af').text(legalParts.join(' | '), 50, 101)
       }
@@ -655,7 +658,7 @@ export class InvoiceService implements OnModuleInit {
       const footerY = 770
       doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(1).strokeColor(RED).stroke()
       doc.font('Helvetica').fontSize(6.5).fillColor('#9ca3af')
-      const footParts = [co.name, co.address, co.ceo ? `Inh. ${co.ceo}` : '', co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.bankIban ? `IBAN: ${co.bankIban}` : ''].filter(Boolean)
+      const footParts = [co.name, co.address, co.vatId ? `USt-IdNr.: ${co.vatId}` : '', co.bankIban ? `IBAN: ${co.bankIban}` : ''].filter(Boolean)
       doc.text(footParts.join(' | '), 50, footerY + 8, { align: 'center', width: 495 })
 
       doc.end()
