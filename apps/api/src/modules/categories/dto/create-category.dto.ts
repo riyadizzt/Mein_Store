@@ -32,6 +32,11 @@ export class CreateCategoryDto {
   @IsString()
   imageUrl?: string
 
+  @ApiProperty({ required: false, description: 'Canonical icon key from CategoryIcon set (null = slug-based fallback)' })
+  @IsOptional()
+  @IsString()
+  iconKey?: string
+
   @ApiProperty({ default: 0 })
   @IsOptional()
   @IsInt()

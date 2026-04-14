@@ -18,10 +18,11 @@ import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { CategoryIconPicker } from '@/components/admin/category-icon-picker'
 
 interface Translation { language: string; name: string; description?: string }
 interface Category {
-  id: string; slug: string; imageUrl: string | null; sortOrder: number
+  id: string; slug: string; imageUrl: string | null; iconKey: string | null; sortOrder: number
   parentId: string | null; translations: Translation[]
   _count?: { products: number }; children?: Category[]
 }
@@ -44,6 +45,7 @@ export default function AdminCategoriesPage() {
   const [slug, setSlug] = useState('')
   const [parentId, setParentId] = useState('')
   const [imageUrl, setImageUrl] = useState('')
+  const [iconKey, setIconKey] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState(0)
   const [nameDe, setNameDe] = useState('')
   const [nameEn, setNameEn] = useState('')
@@ -88,12 +90,13 @@ export default function AdminCategoriesPage() {
     if (!selected || isNew) return
     const g = (lang: string) => selected.translations.find((t) => t.language === lang)
     setSlug(selected.slug); setParentId(selected.parentId ?? ''); setImageUrl(selected.imageUrl ?? '')
+    setIconKey(selected.iconKey ?? null)
     setSortOrder(selected.sortOrder); setNameDe(g('de')?.name ?? ''); setNameEn(g('en')?.name ?? '')
     setNameAr(g('ar')?.name ?? ''); setDescDe(g('de')?.description ?? '')
     setDescEn(g('en')?.description ?? ''); setDescAr(g('ar')?.description ?? '')
   }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clearForm = () => { setSlug(''); setParentId(''); setImageUrl(''); setSortOrder(0); setNameDe(''); setNameEn(''); setNameAr(''); setDescDe(''); setDescEn(''); setDescAr('') }
+  const clearForm = () => { setSlug(''); setParentId(''); setImageUrl(''); setIconKey(null); setSortOrder(0); setNameDe(''); setNameEn(''); setNameAr(''); setDescDe(''); setDescEn(''); setDescAr('') }
   const startNewRoot = () => { clearForm(); setSelectedId(null); setIsNew(true); setParentId('') }
   const startNewChild = (pid: string) => { clearForm(); setSelectedId(null); setIsNew(true); setParentId(pid) }
 
@@ -103,7 +106,7 @@ export default function AdminCategoriesPage() {
       { language: 'en', name: nameEn, description: descEn || undefined },
       { language: 'ar', name: nameAr, description: descAr || undefined },
     ].filter((tr) => tr.name.trim())
-    saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, sortOrder, translations } })
+    saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, iconKey: iconKey ?? null, sortOrder, translations } })
   }
 
   const handleDelete = async () => {
@@ -169,7 +172,7 @@ export default function AdminCategoriesPage() {
 
   const dragItem = dragId ? allFlat.find((c) => c.id === dragId) : null
 
-  const parentLabel = parentId ? getName(allFlat.find((c) => c.id === parentId) ?? { slug: '?', translations: [], id: '', imageUrl: null, sortOrder: 0, parentId: null }) : null
+  const parentLabel = parentId ? getName(allFlat.find((c) => c.id === parentId) ?? { slug: '?', translations: [], id: '', imageUrl: null, iconKey: null, sortOrder: 0, parentId: null }) : null
   const totalSubs = (categories ?? []).reduce((s, c) => s + (c.children?.length ?? 0), 0)
   const totalProds = allFlat.reduce((s, c) => s + (c._count?.products ?? 0), 0)
 
@@ -430,6 +433,14 @@ export default function AdminCategoriesPage() {
                   className="mt-2 bg-white/[0.05] border-white/[0.08] text-sm"
                 />
               </div>
+
+              {/* Icon Picker — canonical icon set for header dropdown */}
+              <CategoryIconPicker
+                value={iconKey}
+                onChange={setIconKey}
+                slug={slug}
+                locale={locale}
+              />
 
               {/* Delete error toast */}
               {deleteError && (

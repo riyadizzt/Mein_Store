@@ -49,6 +49,7 @@ export class CategoriesService {
         slug: dto.slug,
         parentId: dto.parentId,
         imageUrl: dto.imageUrl,
+        iconKey: dto.iconKey ?? null,
         sortOrder: dto.sortOrder ?? 0,
         translations: {
           create: dto.translations.map((t) => ({
@@ -72,6 +73,7 @@ export class CategoriesService {
         slug: dto.slug,
         parentId: dto.parentId,
         imageUrl: dto.imageUrl,
+        iconKey: dto.iconKey,
         sortOrder: dto.sortOrder,
         translations: dto.translations
           ? {
@@ -104,6 +106,7 @@ export class CategoriesService {
       id: category.id,
       slug: category.slug,
       imageUrl: category.imageUrl,
+      iconKey: category.iconKey ?? null,
       sortOrder: category.sortOrder,
       name: translation?.name ?? category.slug,
       description: translation?.description,

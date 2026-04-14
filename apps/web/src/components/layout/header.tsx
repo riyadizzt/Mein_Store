@@ -10,6 +10,7 @@ import { useShopSettings } from '@/hooks/use-shop-settings'
 import { useCategories } from '@/hooks/use-categories'
 import { LanguageSwitcher } from './language-switcher'
 import { SearchOverlay } from './search-overlay'
+import { CategoryIcon } from '@/components/ui/category-icon'
 
 export function Header({ locale }: { locale: string }) {
   const t = useTranslations('nav')
@@ -137,14 +138,19 @@ export function Header({ locale }: { locale: string }) {
                   {/* Mega Menu Dropdown */}
                   {hoveredDept === dept.id && dept.children?.length > 0 && (
                     <div className="absolute top-full left-0 rtl:left-auto rtl:right-0 pt-1 z-50">
-                      <div className="bg-background border rounded-xl shadow-xl p-5 min-w-[320px] grid grid-cols-2 gap-x-6 gap-y-1 animate-fade-in">
+                      <div className="bg-background border rounded-xl shadow-xl p-5 min-w-[360px] grid grid-cols-2 gap-x-6 gap-y-1 animate-fade-in">
                         {dept.children.map((sub: any) => (
                           <Link
                             key={sub.id ?? sub.slug}
                             href={`/${locale}/products?department=${dept.slug}&category=${sub.slug}`}
-                            className="px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                            className="flex items-center gap-2.5 px-2 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors group/cat"
                           >
-                            {getName(sub)}
+                            <CategoryIcon
+                              iconKey={sub.iconKey}
+                              slug={sub.slug}
+                              className="h-[18px] w-[18px] flex-shrink-0 text-muted-foreground group-hover/cat:text-accent transition-colors"
+                            />
+                            <span className="truncate">{getName(sub)}</span>
                           </Link>
                         ))}
                         <Link
@@ -299,10 +305,15 @@ export function Header({ locale }: { locale: string }) {
                         <Link
                           key={sub.id ?? sub.slug}
                           href={`/${locale}/products?department=${dept.slug}&category=${sub.slug}`}
-                          className="block px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                          className="flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
                           onClick={() => setMobileMenuOpen(false)}
                         >
-                          {getName(sub)}
+                          <CategoryIcon
+                            iconKey={sub.iconKey}
+                            slug={sub.slug}
+                            className="h-[18px] w-[18px] flex-shrink-0 text-muted-foreground"
+                          />
+                          <span className="truncate">{getName(sub)}</span>
                         </Link>
                       ))}
                     </div>

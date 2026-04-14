@@ -398,6 +398,7 @@ model Category {
   parentId    String?   @map("parent_id")
   slug        String    @unique
   imageUrl    String?   @map("image_url")
+  iconKey     String?   @map("icon_key") // canonical icon key from CategoryIcon set; null → slug-based fallback
   sortOrder   Int       @default(0) @map("sort_order")
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at")
