@@ -13,6 +13,7 @@ import {
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
 import { useConfirm } from '@/components/ui/confirm-modal'
+import { toast } from '@/store/toast-store'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/locale-utils'
 import { getImageUrl } from '@/lib/imagekit'
 import { Button } from '@/components/ui/button'
@@ -97,12 +98,22 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
   const resendVorkasseMutation = useMutation({
     mutationFn: () => api.post(`/admin/orders/${id}/resend-vorkasse-instructions`),
     onSuccess: () => {
-      alert(locale === 'ar' ? 'تم إرسال تعليمات الدفع بنجاح' : locale === 'en' ? 'Payment instructions sent successfully' : 'Zahlungsdaten erfolgreich nachgesendet')
+      toast.success(
+        locale === 'ar' ? 'تم إرسال تعليمات الدفع بنجاح'
+        : locale === 'en' ? 'Payment instructions sent successfully'
+        : 'Zahlungsdaten erfolgreich nachgesendet'
+      )
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.message
       const localized = typeof msg === 'object' ? (msg[locale] ?? msg.de) : msg
-      alert(localized ?? (locale === 'ar' ? 'فشل إرسال البريد الإلكتروني' : 'Fehler beim Versenden'))
+      toast.error(
+        localized ?? (
+          locale === 'ar' ? 'فشل إرسال البريد الإلكتروني'
+          : locale === 'en' ? 'Failed to send email'
+          : 'Fehler beim Versenden'
+        )
+      )
     },
   })
 
@@ -707,8 +718,21 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                     try {
                       await api.post(`/payments/${order.id}/confirm-vorkasse`)
                       queryClient.invalidateQueries({ queryKey: ['admin-order'] })
+                      toast.success(
+                        locale === 'ar' ? 'تم تأكيد استلام الدفع'
+                        : locale === 'en' ? 'Payment confirmed'
+                        : 'Zahlung bestätigt'
+                      )
                     } catch (err: any) {
-                      alert(err?.response?.data?.message ?? 'Error')
+                      const msg = err?.response?.data?.message
+                      const localized = typeof msg === 'object' ? (msg[locale] ?? msg.de) : msg
+                      toast.error(
+                        localized ?? (
+                          locale === 'ar' ? 'فشل تأكيد الدفع'
+                          : locale === 'en' ? 'Failed to confirm payment'
+                          : 'Zahlungsbestätigung fehlgeschlagen'
+                        )
+                      )
                     }
                   }
                 }}
