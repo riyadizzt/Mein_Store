@@ -333,6 +333,10 @@ export class NotificationListener {
           orderId: event.orderId,
           orderNumber: event.orderNumber,
           status: event.status,
+          // Included so the bell/notifications page can reconstruct the
+          // body in the admin's current locale (not just the raw DE text
+          // that was persisted at create-time).
+          refundAmount: event.refundAmount ?? null,
         },
       })
     } catch (error: any) {

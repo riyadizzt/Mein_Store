@@ -505,7 +505,27 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
       case 'customer_registered': return { title: t('Neuer Kunde', 'New customer', 'عميل جديد'), body: d.name ?? d.email ?? '' }
       case 'return_submitted': return { title: t(`Neue Retoure ${on ? '#' + on : ''}`, `New return ${on ? '#' + on : ''}`, `إرجاع جديد ${on ? '#' + on : ''}`), body: d.reason ?? '' }
       case 'return_approved': return { title: t(`Retoure genehmigt`, `Return approved`, `تمت الموافقة على الإرجاع`), body: on ? t(`Bestellung #${on}`, `Order #${on}`, `طلب #${on}`) : '' }
+      case 'return_received': {
+        const orderLine = on ? t(`Bestellung #${on}`, `Order #${on}`, `طلب #${on}`) : ''
+        const amount = d.refundAmount != null ? `${Number(d.refundAmount).toFixed(2)} EUR` : ''
+        return {
+          title: t(`Retoure eingegangen ${on ? '#' + on : ''}`, `Return received ${on ? '#' + on : ''}`, `تم استلام الإرجاع ${on ? '#' + on : ''}`),
+          body: amount && orderLine ? `${orderLine} — ${amount}` : orderLine,
+        }
+      }
       case 'return_refunded': return { title: t(`Erstattung verarbeitet`, `Refund processed`, `تم معالجة الاسترداد`), body: d.refundAmount ? `€${Number(d.refundAmount).toFixed(2)}` : '' }
+      case 'admin_password_reset': {
+        const who = d.email ?? d.name ?? ''
+        const whoName = d.name ?? d.email ?? ''
+        return {
+          title: t(`Admin-Passwort zurückgesetzt${who ? ': ' + who : ''}`, `Admin password reset${who ? ': ' + who : ''}`, `تم إعادة تعيين كلمة مرور المشرف${who ? ': ' + who : ''}`),
+          body: t(
+            `${whoName} hat das Passwort per E-Mail-Link zurückgesetzt.`,
+            `${whoName} reset their password via the email link.`,
+            `${whoName} أعاد تعيين كلمة المرور عبر رابط البريد الإلكتروني.`,
+          ),
+        }
+      }
       case 'payment_failed': return { title: t(`Zahlung fehlgeschlagen ${on ? '#' + on : ''}`, `Payment failed ${on ? '#' + on : ''}`, `فشل الدفع ${on ? '#' + on : ''}`), body: d.provider ?? '' }
       case 'coupon_expiring': return { title: t(`Gutschein läuft ab`, `Coupon expiring`, `قسيمة على وشك الانتهاء`), body: d.code ?? '' }
       case 'promotion_expiring': return { title: t(`Aktion endet bald`, `Promotion ending`, `عرض على وشك الانتهاء`), body: d.name ?? '' }
@@ -545,7 +565,9 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
     low_stock: { Icon: Warehouse, bg: 'bg-orange-100', fg: 'text-orange-600', dot: 'bg-orange-500' },
     return_submitted: { Icon: RotateCcw, bg: 'bg-yellow-100', fg: 'text-yellow-700', dot: 'bg-yellow-500' },
     return_approved: { Icon: RotateCcw, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
+    return_received: { Icon: RotateCcw, bg: 'bg-sky-100', fg: 'text-sky-600', dot: 'bg-sky-500' },
     return_refunded: { Icon: RotateCcw, bg: 'bg-emerald-100', fg: 'text-emerald-600', dot: 'bg-emerald-500' },
+    admin_password_reset: { Icon: ShieldAlert, bg: 'bg-purple-100', fg: 'text-purple-600', dot: 'bg-purple-500' },
     payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
     customer_registered: { Icon: Users, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
     coupon_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },

@@ -393,11 +393,19 @@ export class AuthService {
       for (const sa of superAdmins) {
         await this.prisma.notification.create({
           data: {
-            type: 'system',
+            // Typed notification so the frontend bell can render it in
+            // the viewing admin's locale instead of showing the raw
+            // German fallback we persist as title/body.
+            type: 'admin_password_reset',
             title: `Admin-Passwort zurückgesetzt: ${user.email}`,
             body: `${user.firstName ?? user.email} hat das Passwort per E-Mail-Link zurückgesetzt.`,
             channel: 'admin',
             userId: sa.id,
+            data: {
+              email: user.email,
+              name: user.firstName ?? user.email,
+              resetBy: 'email_link',
+            },
           },
         }).catch(() => {})
       }
