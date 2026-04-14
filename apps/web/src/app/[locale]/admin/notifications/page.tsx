@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import { translateNotification } from '@/lib/notif-i18n'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import {
-  Bell, ShoppingBag, Warehouse, RotateCcw, Users, X, Trash2, ShieldAlert, MessageSquare,
+  Bell, ShoppingBag, RotateCcw, Users, X, Trash2, ShieldAlert, MessageSquare,
   Check, ChevronLeft, ChevronRight, Filter,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -15,31 +15,48 @@ import { useRouter } from 'next/navigation'
 const t3 = (locale: string, de: string, en: string, ar: string) =>
   locale === 'ar' ? ar : locale === 'en' ? en : de
 
-// Notification types: new_order, order_cancelled, low_stock, return_submitted, payment_failed, customer_registered
+// Supported notification types — see apps/web/src/lib/notif-i18n.ts for the
+// canonical localization. Every type in TYPE_CONFIG below must have a case in
+// translateNotification() so the admin never sees the raw persisted fallback.
 
 const TYPE_CONFIG: Record<string, { Icon: typeof Bell; bg: string; fg: string; dot: string }> = {
   new_order: { Icon: ShoppingBag, bg: 'bg-blue-100', fg: 'text-blue-600', dot: 'bg-blue-500' },
   order_cancelled: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
-  low_stock: { Icon: Warehouse, bg: 'bg-orange-100', fg: 'text-orange-600', dot: 'bg-orange-500' },
+  order_partial_cancelled: { Icon: X, bg: 'bg-orange-100', fg: 'text-orange-600', dot: 'bg-orange-500' },
+  orders_auto_cancelled: { Icon: X, bg: 'bg-rose-100', fg: 'text-rose-600', dot: 'bg-rose-500' },
   return_submitted: { Icon: RotateCcw, bg: 'bg-yellow-100', fg: 'text-yellow-700', dot: 'bg-yellow-500' },
   return_approved: { Icon: RotateCcw, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
   return_received: { Icon: RotateCcw, bg: 'bg-sky-100', fg: 'text-sky-600', dot: 'bg-sky-500' },
   return_refunded: { Icon: RotateCcw, bg: 'bg-emerald-100', fg: 'text-emerald-600', dot: 'bg-emerald-500' },
   payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
+  payment_disputed: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-600' },
+  refund_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
   customer_registered: { Icon: Users, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
   contact_message: { Icon: MessageSquare, bg: 'bg-indigo-100', fg: 'text-indigo-600', dot: 'bg-indigo-500' },
   account_deletion_requested: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
   admin_password_reset: { Icon: ShieldAlert, bg: 'bg-purple-100', fg: 'text-purple-600', dot: 'bg-purple-500' },
   maintenance_auto_ended: { Icon: Bell, bg: 'bg-teal-100', fg: 'text-teal-600', dot: 'bg-teal-500' },
+  // NOTE: 'low_stock' removed — backend never emits this type.
 }
 
+// Filter-dropdown labels. Keep in sync with the types emitted by the backend;
+// order here controls the order shown in the dropdown.
 const TYPE_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   new_order: { de: 'Neue Bestellung', en: 'New Order', ar: 'طلب جديد' },
   order_cancelled: { de: 'Stornierung', en: 'Cancelled', ar: 'ملغى' },
-  low_stock: { de: 'Niedriger Bestand', en: 'Low Stock', ar: 'مخزون منخفض' },
+  order_partial_cancelled: { de: 'Teilstornierung', en: 'Partial Cancellation', ar: 'إلغاء جزئي' },
+  orders_auto_cancelled: { de: 'Auto-Stornierung', en: 'Auto Cancellation', ar: 'إلغاء تلقائي' },
   return_submitted: { de: 'Retoure', en: 'Return', ar: 'إرجاع' },
+  return_approved: { de: 'Retoure genehmigt', en: 'Return Approved', ar: 'موافقة الإرجاع' },
+  return_received: { de: 'Retoure eingegangen', en: 'Return Received', ar: 'استلام الإرجاع' },
+  return_refunded: { de: 'Erstattet', en: 'Refunded', ar: 'مسترد' },
   payment_failed: { de: 'Zahlung fehlgeschlagen', en: 'Payment Failed', ar: 'فشل الدفع' },
+  payment_disputed: { de: 'Zahlung bestritten', en: 'Payment Disputed', ar: 'نزاع على الدفع' },
+  refund_failed: { de: 'Erstattung fehlgeschlagen', en: 'Refund Failed', ar: 'فشل الاسترداد' },
   customer_registered: { de: 'Neuer Kunde', en: 'New Customer', ar: 'عميل جديد' },
+  contact_message: { de: 'Kontaktanfrage', en: 'Contact Request', ar: 'رسالة تواصل' },
+  admin_password_reset: { de: 'Passwort zurückgesetzt', en: 'Password Reset', ar: 'إعادة تعيين كلمة المرور' },
+  maintenance_auto_ended: { de: 'Wartungsende', en: 'Maintenance Ended', ar: 'نهاية الصيانة' },
 }
 
 const LIMIT = 20

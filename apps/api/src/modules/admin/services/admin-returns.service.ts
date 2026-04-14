@@ -772,10 +772,19 @@ export class AdminReturnsService {
       this.logger.error(`Return refund failed for ${returnNumber}: ${e.message}`)
       try {
         await this.notificationService.create({
-          type: 'payment_failed',
+          type: 'refund_failed',
           title: `⚠ Retoure-Erstattung fehlgeschlagen: ${returnNumber}`,
           body: `Retoure genehmigt, aber Erstattung von €${(amountCents / 100).toFixed(2)} konnte nicht durchgeführt werden. Bitte manuell erstatten. Fehler: ${e.message?.slice(0, 100)}`,
           entityType: 'return', entityId: id, channel: 'admin',
+          data: {
+            kind: 'return',
+            returnNumber,
+            returnId: id,
+            orderNumber: ret.order.orderNumber,
+            orderId: ret.orderId,
+            amount: amountCents / 100,
+            error: (e.message ?? '').slice(0, 100),
+          },
         })
       } catch {}
       // Don't block the return status update — the return is approved, refund can be retried manually

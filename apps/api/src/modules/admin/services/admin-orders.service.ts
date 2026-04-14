@@ -318,10 +318,20 @@ export class AdminOrdersService {
         this.logger.error(`Refund failed for ${order.orderNumber}: ${errorMsg}`)
         try {
           await this.notificationService.create({
-            type: 'payment_failed',
+            // Dedicated type so the bell differentiates a refund failure
+            // from a normal payment failure (same type 'payment_failed'
+            // used to collapse the two in the UI).
+            type: 'refund_failed',
             title: `⚠ Erstattung fehlgeschlagen: ${order.orderNumber}`,
             body: `Erstattung von €${Number(order.payment!.amount).toFixed(2)} fehlgeschlagen. Fehler: ${errorMsg.slice(0, 100)}`,
             entityType: 'order', entityId: orderId, channel: 'admin',
+            data: {
+              kind: 'order_full',
+              orderNumber: order.orderNumber,
+              orderId,
+              amount: Number(order.payment!.amount),
+              error: errorMsg.slice(0, 100),
+            },
           })
         } catch (notifyErr) {
           this.logger.warn(`Failed to create refund-failure notification for ${order.orderNumber}: ${(notifyErr as Error).message}`)
@@ -489,10 +499,17 @@ export class AdminOrdersService {
         this.logger.error(`Partial refund failed: ${e.message}`)
         try {
           await this.notificationService.create({
-            type: 'payment_failed',
+            type: 'refund_failed',
             title: `⚠ Teilerstattung fehlgeschlagen: ${order.orderNumber}`,
             body: `Teilstornierung durchgeführt, aber Erstattung von €${(refundAmountCents / 100).toFixed(2)} konnte nicht durchgeführt werden. Bitte manuell erstatten. Fehler: ${e.message?.slice(0, 100)}`,
             entityType: 'order', entityId: orderId, channel: 'admin',
+            data: {
+              kind: 'order_partial',
+              orderNumber: order.orderNumber,
+              orderId,
+              amount: refundAmountCents / 100,
+              error: (e.message ?? '').slice(0, 100),
+            },
           })
         } catch {}
       }
@@ -542,9 +559,19 @@ export class AdminOrdersService {
         })
       }
       await this.notificationService.createForAllAdmins({
-        type: 'order_cancelled', title: `Teilstornierung ${order.orderNumber}`,
+        // Dedicated type so the admin bell renders a locale-aware title/body
+        // ("Teilstornierung" differs semantically from a full cancellation).
+        type: 'order_partial_cancelled',
+        title: `Teilstornierung ${order.orderNumber}`,
         body: `${itemsToCancel.length} von ${order.items.length} Artikel storniert — €${refundAmount.toFixed(2)}`,
         entityType: 'order', entityId: orderId,
+        data: {
+          orderNumber: order.orderNumber,
+          orderId,
+          itemsCancelled: itemsToCancel.length,
+          itemsTotal: order.items.length,
+          refundAmount,
+        },
       })
     } catch (e: any) { this.logger.error(`Notification failed: ${e.message}`) }
 

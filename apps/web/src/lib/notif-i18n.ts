@@ -53,19 +53,41 @@ export function translateNotification(
         ),
         body: d.reason ?? '',
       }
-    case 'low_stock':
+    case 'order_partial_cancelled': {
+      const cancelled = d.itemsCancelled ?? 0
+      const total = d.itemsTotal ?? 0
+      const amt = d.refundAmount != null ? `€${Number(d.refundAmount).toFixed(2)}` : ''
       return {
         title: t(
-          `Mindestbestand: ${d.sku ?? ''}`,
-          `Low stock: ${d.sku ?? ''}`,
-          `مخزون منخفض: ${d.sku ?? ''}`,
+          `Teilstornierung ${on ? '#' + on : ''}`,
+          `Partial cancellation ${on ? '#' + on : ''}`,
+          `إلغاء جزئي ${on ? '#' + on : ''}`,
         ),
         body: t(
-          `Noch ${d.available ?? 0} Stück`,
-          `${d.available ?? 0} left`,
-          `${d.available ?? 0} متبقي`,
+          `${cancelled} von ${total} Artikel storniert${amt ? ' — ' + amt : ''}`,
+          `${cancelled} of ${total} items cancelled${amt ? ' — ' + amt : ''}`,
+          `${cancelled} من ${total} عناصر ملغاة${amt ? ' — ' + amt : ''}`,
         ),
       }
+    }
+    case 'orders_auto_cancelled': {
+      const count = d.count ?? 0
+      const orderNumbers = Array.isArray(d.orderNumbers) ? d.orderNumbers : []
+      const preview = orderNumbers.slice(0, 3).join(', ')
+      const suffix = orderNumbers.length > 3 ? '…' : ''
+      return {
+        title: t(
+          `${count} Bestellung${count === 1 ? '' : 'en'} automatisch storniert`,
+          `${count} order${count === 1 ? '' : 's'} auto-cancelled`,
+          `تم إلغاء ${count} طلب تلقائياً`,
+        ),
+        body: t(
+          `Zahlungstimeout${preview ? ': ' + preview + suffix : ''}`,
+          `Payment timeout${preview ? ': ' + preview + suffix : ''}`,
+          `انتهاء مهلة الدفع${preview ? ': ' + preview + suffix : ''}`,
+        ),
+      }
+    }
     case 'customer_registered':
       return {
         title: t('Neuer Kunde', 'New customer', 'عميل جديد'),
@@ -111,6 +133,56 @@ export function translateNotification(
         ),
         body: d.provider ?? '',
       }
+    case 'payment_disputed': {
+      const amt = d.amount != null ? `€${Number(d.amount).toFixed(2)}` : ''
+      const reason = d.reason ? ` — ${d.reason}` : ''
+      return {
+        title: t(
+          `⚠ Zahlung bestritten ${on ? '#' + on : ''}`,
+          `⚠ Payment disputed ${on ? '#' + on : ''}`,
+          `⚠ نزاع على الدفع ${on ? '#' + on : ''}`,
+        ),
+        body: t(
+          `${amt} bestritten${reason} — bitte umgehend prüfen.`,
+          `${amt} disputed${reason} — please review immediately.`,
+          `${amt} متنازع عليه${reason} — يرجى المراجعة فوراً.`,
+        ),
+      }
+    }
+    case 'refund_failed': {
+      // kind: 'order_full' | 'order_partial' | 'return'
+      const kind = d.kind ?? 'order_full'
+      const amt = d.amount != null ? `€${Number(d.amount).toFixed(2)}` : ''
+      const ref = kind === 'return'
+        ? (d.returnNumber ?? '')
+        : (on ?? '')
+      const errSuffix = d.error ? ` — ${d.error}` : ''
+      const titleDe =
+        kind === 'order_partial'
+          ? `⚠ Teilerstattung fehlgeschlagen${ref ? ': ' + ref : ''}`
+          : kind === 'return'
+          ? `⚠ Retoure-Erstattung fehlgeschlagen${ref ? ': ' + ref : ''}`
+          : `⚠ Erstattung fehlgeschlagen${ref ? ': ' + ref : ''}`
+      const titleEn =
+        kind === 'order_partial'
+          ? `⚠ Partial refund failed${ref ? ': ' + ref : ''}`
+          : kind === 'return'
+          ? `⚠ Return refund failed${ref ? ': ' + ref : ''}`
+          : `⚠ Refund failed${ref ? ': ' + ref : ''}`
+      const titleAr =
+        kind === 'order_partial'
+          ? `⚠ فشل الاسترداد الجزئي${ref ? ': ' + ref : ''}`
+          : kind === 'return'
+          ? `⚠ فشل استرداد الإرجاع${ref ? ': ' + ref : ''}`
+          : `⚠ فشل الاسترداد${ref ? ': ' + ref : ''}`
+      const bodyDe = `${amt} konnte nicht erstattet werden. Bitte manuell prüfen.${errSuffix}`
+      const bodyEn = `${amt} could not be refunded. Please review manually.${errSuffix}`
+      const bodyAr = `تعذّر استرداد ${amt}. يرجى المراجعة اليدوية.${errSuffix}`
+      return {
+        title: t(titleDe, titleEn, titleAr),
+        body: t(bodyDe, bodyEn, bodyAr),
+      }
+    }
     case 'coupon_expiring':
       return {
         title: t('Gutschein läuft ab', 'Coupon expiring', 'قسيمة على وشك الانتهاء'),

@@ -149,11 +149,19 @@ export class PaymentTimeoutCron {
 
         if (emailEnabled) {
           await this.notifications.create({
-            type: 'order_cancelled',
+            // Dedicated type: batch auto-cancellation (N orders at once due
+            // to payment timeout) renders differently from a user-initiated
+            // single order cancellation.
+            type: 'orders_auto_cancelled',
             title: `${cancelledCount} Bestellung${cancelledCount > 1 ? 'en' : ''} automatisch storniert`,
             body: `Zahlungstimeout: ${cancelledNumbers.join(', ')}`,
             entityType: 'order',
             channel: 'admin',
+            data: {
+              count: cancelledCount,
+              orderNumbers: cancelledNumbers,
+              reason: 'payment_timeout',
+            },
           })
         }
       } catch (err: any) {
