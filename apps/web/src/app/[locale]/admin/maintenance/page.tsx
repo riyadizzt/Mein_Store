@@ -46,8 +46,10 @@ export default function AdminMaintenancePage() {
     setForm({
       maintenance_enabled: settings.maintenance_enabled ?? 'false',
       maintenance_title_de: settings.maintenance_title_de ?? '',
+      maintenance_title_en: settings.maintenance_title_en ?? '',
       maintenance_title_ar: settings.maintenance_title_ar ?? '',
       maintenance_desc_de: settings.maintenance_desc_de ?? '',
+      maintenance_desc_en: settings.maintenance_desc_en ?? '',
       maintenance_desc_ar: settings.maintenance_desc_ar ?? '',
       maintenance_countdown_enabled: settings.maintenance_countdown_enabled ?? 'false',
       maintenance_countdown_end: settings.maintenance_countdown_end ?? '',
@@ -209,14 +211,25 @@ export default function AdminMaintenancePage() {
                   placeholder="Wir arbeiten an Verbesserungen" />
               </div>
               <div>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t('Titel (Englisch)', 'العنوان (إنجليزي)')}</label>
+                <Input value={form.maintenance_title_en ?? ''} onChange={(e) => updateField('maintenance_title_en', e.target.value)}
+                  placeholder="We're making improvements" />
+              </div>
+              <div>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t('Titel (Arabisch)', 'العنوان (عربي)')}</label>
                 <Input value={form.maintenance_title_ar ?? ''} onChange={(e) => updateField('maintenance_title_ar', e.target.value)}
                   placeholder="نعمل على تحسينات" dir="rtl" />
               </div>
+              <div className="hidden sm:block" />
               <div>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t('Beschreibung (Deutsch)', 'الوصف (ألماني)')}</label>
                 <Input value={form.maintenance_desc_de ?? ''} onChange={(e) => updateField('maintenance_desc_de', e.target.value)}
                   placeholder="Unser Shop wird gerade aktualisiert." />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t('Beschreibung (Englisch)', 'الوصف (إنجليزي)')}</label>
+                <Input value={form.maintenance_desc_en ?? ''} onChange={(e) => updateField('maintenance_desc_en', e.target.value)}
+                  placeholder="Our shop is being updated." />
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t('Beschreibung (Arabisch)', 'الوصف (عربي)')}</label>

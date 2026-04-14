@@ -102,8 +102,10 @@ export const ADMIN_SETTINGS_WRITABLE_KEYS = [
   'whatsapp_number', 'whatsapp_enabled', 'whatsapp_message_de', 'whatsapp_message_ar',
   'channel_facebook_enabled', 'channel_tiktok_enabled', 'channel_google_enabled', 'channel_whatsapp_enabled',
   // Maintenance
-  'maintenance_enabled', 'maintenance_title_de', 'maintenance_title_ar',
-  'maintenance_desc_de', 'maintenance_desc_ar', 'maintenance_countdown_enabled',
+  'maintenance_enabled',
+  'maintenance_title_de', 'maintenance_title_en', 'maintenance_title_ar',
+  'maintenance_desc_de', 'maintenance_desc_en', 'maintenance_desc_ar',
+  'maintenance_countdown_enabled',
   'maintenance_countdown_end', 'maintenance_email_collection', 'maintenance_social_links',
   'maintenance_bg_image', 'maintenance_activated_at', 'maintenance_views',
   // AI
@@ -1585,8 +1587,10 @@ export class AdminController {
       // Maintenance
       maintenance_enabled: db.maintenance_enabled ?? 'false',
       maintenance_title_de: db.maintenance_title_de ?? '',
+      maintenance_title_en: db.maintenance_title_en ?? '',
       maintenance_title_ar: db.maintenance_title_ar ?? '',
       maintenance_desc_de: db.maintenance_desc_de ?? '',
+      maintenance_desc_en: db.maintenance_desc_en ?? '',
       maintenance_desc_ar: db.maintenance_desc_ar ?? '',
       maintenance_countdown_enabled: db.maintenance_countdown_enabled ?? 'false',
       maintenance_countdown_end: db.maintenance_countdown_end ?? '',

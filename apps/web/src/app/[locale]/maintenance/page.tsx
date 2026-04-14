@@ -12,7 +12,9 @@ export default function MaintenancePage() {
   const locale = useLocale()
   const router = useRouter()
   const qc = useQueryClient()
-  const t = (d: string, a: string) => locale === 'ar' ? a : d
+  // 3-way locale helper: arg order is (de, en, ar)
+  const L = (de: string, en: string, ar: string) =>
+    locale === 'ar' ? ar : locale === 'en' ? en : de
 
   const { data: settings } = useQuery({
     queryKey: ['maintenance-status'],
@@ -78,8 +80,18 @@ export default function MaintenancePage() {
     if (res.ok) setSubmitted(true)
   }
 
-  const title = locale === 'ar' ? (settings?.maintenance_title_ar || 'نعمل على تحسينات') : (settings?.maintenance_title_de || 'Wir arbeiten an Verbesserungen')
-  const desc = locale === 'ar' ? (settings?.maintenance_desc_ar || 'متجرنا قيد التحديث. سنعود قريباً!') : (settings?.maintenance_desc_de || 'Unser Shop wird gerade aktualisiert. Wir sind bald zurück!')
+  const title =
+    locale === 'ar'
+      ? (settings?.maintenance_title_ar || 'نعمل على تحسينات')
+      : locale === 'en'
+      ? (settings?.maintenance_title_en || "We're making improvements")
+      : (settings?.maintenance_title_de || 'Wir arbeiten an Verbesserungen')
+  const desc =
+    locale === 'ar'
+      ? (settings?.maintenance_desc_ar || 'متجرنا قيد التحديث. سنعود قريباً!')
+      : locale === 'en'
+      ? (settings?.maintenance_desc_en || "Our shop is being updated. We'll be back soon!")
+      : (settings?.maintenance_desc_de || 'Unser Shop wird gerade aktualisiert. Wir sind bald zurück!')
   const showCountdown = settings?.maintenance_countdown_enabled === 'true' && settings?.maintenance_countdown_end
   const showEmailCollection = settings?.maintenance_email_collection === 'true'
   const showSocial = settings?.maintenance_social_links !== 'false'
@@ -109,10 +121,11 @@ export default function MaintenancePage() {
         }
       `}</style>
 
-      {/* Animated gold-dust background — only when no custom bgImage is set */}
-      {!bgImage && <GoldParticles />}
+      {/* Dark overlay over admin-uploaded bgImage (sits at z:0, below particles) */}
+      {bgImage && <div className="absolute inset-0 bg-black/60 z-0" />}
 
-      {bgImage && <div className="absolute inset-0 bg-black/60" />}
+      {/* Animated gold-dust — always rendered, sits above the bg + overlay */}
+      <GoldParticles />
 
       <div className="relative z-10 text-center px-6 max-w-xl mx-auto" style={{ animation: 'fadeIn 1s ease-out' }}>
         {/* Logo */}
@@ -143,10 +156,10 @@ export default function MaintenancePage() {
         {showCountdown && (
           <div className="flex justify-center gap-4 mb-10" style={{ animation: 'fadeSlide 1s ease-out 0.6s both' }}>
             {[
-              { val: countdown.days, label: t('Tage', 'أيام') },
-              { val: countdown.hours, label: t('Stunden', 'ساعات') },
-              { val: countdown.minutes, label: t('Minuten', 'دقائق') },
-              { val: countdown.seconds, label: t('Sekunden', 'ثواني') },
+              { val: countdown.days, label: L('Tage', 'Days', 'أيام') },
+              { val: countdown.hours, label: L('Stunden', 'Hours', 'ساعات') },
+              { val: countdown.minutes, label: L('Minuten', 'Minutes', 'دقائق') },
+              { val: countdown.seconds, label: L('Sekunden', 'Seconds', 'ثواني') },
             ].map((item, i) => (
               <div key={i} className="text-center">
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/5 border border-[#d4a853]/30 flex items-center justify-center mb-2">
@@ -161,14 +174,14 @@ export default function MaintenancePage() {
         {/* Email Collection */}
         {showEmailCollection && !submitted && (
           <div className="max-w-sm mx-auto mb-10" style={{ animation: 'fadeSlide 1s ease-out 0.8s both' }}>
-            <p className="text-sm text-white/50 mb-3">{t('Benachrichtige mich wenn der Shop wieder online ist', 'أعلمني عندما يعود المتجر')}</p>
+            <p className="text-sm text-white/50 mb-3">{L('Benachrichtige mich wenn der Shop wieder online ist', 'Notify me when the shop is back online', 'أعلمني عندما يعود المتجر')}</p>
             <div className="flex gap-2">
               <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                placeholder={t('Deine E-Mail-Adresse', 'بريدك الإلكتروني')}
+                placeholder={L('Deine E-Mail-Adresse', 'Your email address', 'بريدك الإلكتروني')}
                 className="flex-1 h-11 px-4 rounded-xl bg-white/10 border border-white/20 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-[#d4a853]"
               />
               <button onClick={handleSubmit} className="h-11 px-5 rounded-xl bg-[#d4a853] text-black font-medium text-sm hover:bg-[#c49b4a] transition-colors flex items-center gap-1.5">
-                <Send className="h-4 w-4" />{t('Senden', 'إرسال')}
+                <Send className="h-4 w-4" />{L('Senden', 'Send', 'إرسال')}
               </button>
             </div>
           </div>
@@ -176,7 +189,7 @@ export default function MaintenancePage() {
         {submitted && (
           <div className="flex items-center justify-center gap-2 text-[#d4a853] mb-10" style={{ animation: 'fadeSlide 0.5s ease-out' }}>
             <Check className="h-5 w-5" />
-            <span className="text-sm">{t('Danke! Wir benachrichtigen dich.', 'شكراً! سنعلمك عند العودة.')}</span>
+            <span className="text-sm">{L('Danke! Wir benachrichtigen dich.', 'Thanks! We\'ll notify you.', 'شكراً! سنعلمك عند العودة.')}</span>
           </div>
         )}
 
@@ -204,11 +217,23 @@ export default function MaintenancePage() {
           </div>
         )}
 
-        {/* Language toggle */}
-        <div className="mt-10">
-          <a href={locale === 'ar' ? '/de/maintenance' : '/ar/maintenance'} className="text-xs text-white/30 hover:text-white/50 transition-colors">
-            {locale === 'ar' ? 'Deutsch' : 'العربية'}
-          </a>
+        {/* Language toggle — 3-way */}
+        <div className="mt-10 flex justify-center gap-4 text-xs">
+          {locale !== 'de' && (
+            <a href="/de/maintenance" className="text-white/30 hover:text-white/50 transition-colors">
+              Deutsch
+            </a>
+          )}
+          {locale !== 'en' && (
+            <a href="/en/maintenance" className="text-white/30 hover:text-white/50 transition-colors">
+              English
+            </a>
+          )}
+          {locale !== 'ar' && (
+            <a href="/ar/maintenance" className="text-white/30 hover:text-white/50 transition-colors">
+              العربية
+            </a>
+          )}
         </div>
       </div>
     </div>
