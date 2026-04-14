@@ -134,7 +134,7 @@ export default function AdminOrdersPage() {
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.order')}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.customer')}</div>
               <div className="px-2 py-3 text-sm font-semibold text-muted-foreground text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
-              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{locale === 'ar' ? 'الوقت' : locale === 'en' ? 'Time' : 'Uhrzeit'}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{locale === 'ar' ? 'الوقت' : locale === 'en' ? 'Time' : 'Uhrzeit'}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.status')}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.amount')}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.payment')}</div>
@@ -203,7 +203,7 @@ export default function AdminOrdersPage() {
                           <div className="px-2 py-4 flex justify-center">
                             <ChannelIcon channel={order.channel ?? 'website'} size={18} />
                           </div>
-                          <div className="px-4 py-4 text-sm text-muted-foreground tabular-nums">{formatTime(order.createdAt, locale)}</div>
+                          <div className="px-4 py-4 text-sm text-muted-foreground tabular-nums text-center">{formatTime(order.createdAt, locale)}</div>
                           <div className="px-4 py-4">
                             <span className={`px-2.5 py-1 rounded-full text-sm font-medium ${statusColor}`}>{t(`status.${order.status}`)}</span>
                           </div>
