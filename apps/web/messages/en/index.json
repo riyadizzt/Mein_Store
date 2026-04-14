@@ -11,7 +11,8 @@
     "bestsellers": "Bestsellers",
     "newArrivals": "New Arrivals",
     "recentlyViewed": "Recently Viewed",
-    "alsoLike": "You may also like"
+    "alsoLike": "You may also like",
+    "scrollHint": "Scroll"
   },
   "nav": {
     "home": "Home",
@@ -722,6 +723,11 @@
       "filterActive": "Active",
       "filterBlocked": "Blocked",
       "filterVip": "VIP",
+      "filterGdpr": "GDPR",
+      "filterDeletionScheduled": "Deletion requested",
+      "filterAnonymized": "Anonymized",
+      "deletionScheduledBadge": "Deletion",
+      "anonymizedBadge": "Anonymized",
       "filterType": "Type",
       "filterStatus": "Status",
       "filterLang": "Language",

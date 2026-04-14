@@ -12,7 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone, Layers,
-  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare,
+  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -463,6 +463,7 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
                  n.entityType === 'return' ? `/${locale}/admin/returns` :
                  n.entityType === 'inventory' ? `/${locale}/admin/inventory` :
                  n.entityType === 'contact_message' ? `/${locale}/admin/contact-messages` :
+                 n.entityType === 'user' ? `/${locale}/admin/customers/${n.entityId}` :
                  `/${locale}/admin/dashboard`
     navRouter.push(link)
   }
@@ -520,6 +521,20 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
           body: senderName ? t(`Von ${senderName}`, `From ${senderName}`, `من ${senderName}`) : '',
         }
       }
+      case 'account_deletion_requested': {
+        return {
+          title: t(
+            'Kontolöschung beantragt',
+            'Account deletion requested',
+            'طلب حذف الحساب',
+          ),
+          body: t(
+            'Ein Kunde hat die Löschung seines Kontos beantragt',
+            'A customer has requested deletion of their account',
+            'طلب أحد العملاء حذف حسابه',
+          ),
+        }
+      }
       default: return { title: n.title ?? '', body: n.body ?? '' }
     }
   }
@@ -536,6 +551,7 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
     coupon_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },
     promotion_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },
     contact_message: { Icon: MessageSquare, bg: 'bg-indigo-100', fg: 'text-indigo-600', dot: 'bg-indigo-500' },
+    account_deletion_requested: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
   }
 
   return (

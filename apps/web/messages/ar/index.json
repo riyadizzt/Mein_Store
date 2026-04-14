@@ -11,7 +11,8 @@
     "bestsellers": "الأكثر مبيعاً",
     "newArrivals": "وصل حديثاً",
     "recentlyViewed": "شاهدتها مؤخراً",
-    "alsoLike": "قد يعجبك أيضاً"
+    "alsoLike": "قد يعجبك أيضاً",
+    "scrollHint": "مرّر للأسفل"
   },
   "nav": {
     "home": "الرئيسية",
@@ -722,6 +723,11 @@
       "filterActive": "نشطون",
       "filterBlocked": "محظورون",
       "filterVip": "VIP",
+      "filterGdpr": "حماية البيانات",
+      "filterDeletionScheduled": "طلب حذف",
+      "filterAnonymized": "مُخفى",
+      "deletionScheduledBadge": "طلب حذف",
+      "anonymizedBadge": "مُخفى",
       "filterType": "النوع",
       "filterStatus": "الحالة",
       "filterLang": "اللغة",

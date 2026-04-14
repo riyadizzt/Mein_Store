@@ -166,9 +166,11 @@ export function HeroSection({ locale }: { locale: string }) {
         data-hero-scroll
         onClick={scrollDown}
         className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 text-white/50 hover:text-white transition-colors"
-        aria-label="Scroll down"
+        aria-label={t('scrollHint')}
       >
-        <span className="text-[10px] tracking-[0.3em] uppercase">Scroll</span>
+        <span className={isRTL ? 'text-xs' : 'text-[10px] tracking-[0.3em] uppercase'}>
+          {t('scrollHint')}
+        </span>
         <ChevronDown className="h-5 w-5 animate-fade-up motion-reduce:animate-none" style={{ animationDuration: '1.5s', animationIterationCount: '2' }} />
       </button>
     </section>

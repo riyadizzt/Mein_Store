@@ -116,6 +116,57 @@ export function getCityForPLZ(plz: string): string | null {
   return cities?.[0] ?? null
 }
 
+// Normalize a city name for fuzzy comparison.
+// Lowercases, transliterates German umlauts (ä→ae, ö→oe, ü→ue, ß→ss),
+// then strips remaining diacritics via Unicode NFD. This way "Köln",
+// "Koeln", and "KÖLN" all match the same key "koeln". Also handles
+// "München"/"Muenchen", "Düsseldorf"/"Duesseldorf", "Zürich"/"Zurich", etc.
+function normalizeCity(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+// Reverse index: normalized city → set of leitzones it appears in.
+// Built once at module load. Used to detect true PLZ↔city mismatches
+// without false-positiving on small towns that aren't in the short list.
+const CITY_TO_LEITZONES: Map<string, Set<string>> = (() => {
+  const map = new Map<string, Set<string>>()
+  for (const [lz, cities] of Object.entries(PLZ_REGIONS)) {
+    for (const city of cities) {
+      const key = normalizeCity(city)
+      if (!map.has(key)) map.set(key, new Set())
+      map.get(key)!.add(lz)
+    }
+  }
+  return map
+})()
+
+// Check if the user's city name matches any known primary city
+// (exact or prefix match — handles "Frankfurt" → "Frankfurt am Main" etc).
+// Returns the set of leitzones where a known city name lives, or null if unknown.
+function findKnownCityLeitzones(userCity: string): Set<string> | null {
+  const key = normalizeCity(userCity)
+  if (key.length < 3) return null
+  // Exact match first
+  const exact = CITY_TO_LEITZONES.get(key)
+  if (exact) return exact
+  // Prefix match: user typed "Frankfurt" → match "frankfurt am main"
+  const matches = new Set<string>()
+  for (const [knownCity, lzSet] of CITY_TO_LEITZONES) {
+    if (knownCity.startsWith(key) || key.startsWith(knownCity)) {
+      lzSet.forEach(lz => matches.add(lz))
+    }
+  }
+  return matches.size > 0 ? matches : null
+}
+
 export interface AddressValidationResult {
   valid: boolean
   warnings: Array<{ field: string; message: { de: string; en: string; ar: string } }>
@@ -151,8 +202,22 @@ export function validateAddressOffline(address: {
   if (!address.houseNumber || address.houseNumber.trim().length < 1) {
     warnings.push({ field: 'houseNumber', message: { de: 'Hausnummer fehlt', en: 'House number missing', ar: 'رقم المنزل مفقود' } })
   }
-  if (!address.city || address.city.trim().length < 2) {
-    warnings.push({ field: 'city', message: { de: 'Stadt zu kurz (mind. 2 Zeichen)', en: 'City too short (min 2 chars)', ar: 'المدينة قصيرة جداً (حرفان على الأقل)' } })
+  const cityTrim = address.city?.trim() ?? ''
+  if (!cityTrim || cityTrim.length < 3) {
+    warnings.push({ field: 'city', message: { de: 'Stadt zu kurz (mind. 3 Zeichen)', en: 'City too short (min 3 chars)', ar: 'المدينة قصيرة جداً (3 أحرف على الأقل)' } })
+  } else if (!/^[A-Za-zÀ-ÿ\u00C0-\u017F][A-Za-zÀ-ÿ\u00C0-\u017F\s\-.()'/]*$/.test(cityTrim)) {
+    // City must start with a letter and contain only letters, spaces, hyphens,
+    // dots, parentheses, apostrophes, slashes. Rejects `;kp`, `1234`, `!!!`, etc.
+    // Covers real German city names: "Zeil am Main", "Frankfurt (Oder)",
+    // "Castrop-Rauxel", "St. Ingbert", "Baden-Baden", "Zweibrücken".
+    warnings.push({
+      field: 'city',
+      message: {
+        de: `"${address.city}" ist kein gültiger Stadtname`,
+        en: `"${address.city}" is not a valid city name`,
+        ar: `"\u200E${address.city}\u200F" ليس اسم مدينة صالح`,
+      },
+    })
   }
 
   const country = (address.country ?? 'DE').toUpperCase()
@@ -163,13 +228,19 @@ export function validateAddressOffline(address: {
     if (!/^\d{5}$/.test(plz)) {
       warnings.push({ field: 'postalCode', message: { de: 'Deutsche PLZ muss 5 Ziffern haben', en: 'German postal code must be 5 digits', ar: 'الرمز البريدي الألماني يجب أن يكون 5 أرقام' } })
     } else {
-      // PLZ ↔ City match
+      // PLZ ↔ City match.
+      // We only warn when the user's city is a KNOWN primary city that
+      // belongs to a DIFFERENT leitzone — that catches real typos like
+      // "München" with PLZ 20095 (Hamburg). Unknown small towns are
+      // accepted silently because our table only lists 4-6 primary
+      // cities per leitzone but Germany has thousands of small towns
+      // and DHL validates authoritatively on the backend anyway.
       const leitzone = plz.slice(0, 2)
       const regionCities = PLZ_REGIONS[leitzone]
       if (regionCities && address.city) {
-        const cityLower = address.city.trim().toLowerCase()
-        const match = regionCities.some(c => cityLower.includes(c.toLowerCase()) || c.toLowerCase().includes(cityLower))
-        if (!match && cityLower.length >= 3) {
+        const userCityLeitzones = findKnownCityLeitzones(address.city)
+        if (userCityLeitzones && !userCityLeitzones.has(leitzone)) {
+          // User typed a city we recognize, but it lives in a different region.
           warnings.push({
             field: 'city',
             message: {

@@ -33,7 +33,9 @@ export class AdminUsersService {
   }) {
     const limit = Math.min(query.limit ?? 25, 100)
     const offset = query.offset ?? 0
-    const where: any = { deletedAt: null, anonymizedAt: null, role: 'customer' }
+    const where: any = { deletedAt: null, role: 'customer' }
+    // Default: hide anonymized (GDPR) users. Opt-in via filter=anonymized.
+    if (query.filter !== 'anonymized') where.anonymizedAt = null
 
     // Search: name, email, phone, order number
     if (query.search) {
@@ -52,6 +54,8 @@ export class AdminUsersService {
     else if (query.filter === 'active') { where.isBlocked = false; where.isActive = true }
     else if (query.filter === 'registered') where.passwordHash = { not: null }
     else if (query.filter === 'vip') where.tags = { array_contains: ['VIP'] }
+    else if (query.filter === 'deletion_scheduled') where.scheduledDeletionAt = { not: null }
+    else if (query.filter === 'anonymized') where.anonymizedAt = { not: null }
     // guest handled post-fetch
 
     if (query.lang) where.preferredLang = query.lang
@@ -85,6 +89,7 @@ export class AdminUsersService {
           lockedUntil: true, loginAttempts: true,
           preferredLang: true, passwordHash: true, profileImageUrl: true,
           tags: true, createdAt: true, lastLoginAt: true,
+          scheduledDeletionAt: true, anonymizedAt: true,
           // OAuth users have no password but are NOT guests — check the
           // oauth_accounts relation so Google/Apple signups get the right
           // badge in the admin list.
@@ -126,6 +131,8 @@ export class AdminUsersService {
         isGuest, authProvider: oauthProvider, profileImageUrl: u.profileImageUrl,
         tags: (u.tags as string[]) ?? [],
         createdAt: u.createdAt, lastLoginAt: u.lastLoginAt,
+        scheduledDeletionAt: u.scheduledDeletionAt,
+        anonymizedAt: u.anonymizedAt,
         ordersCount: u._count.orders, wishlistCount: u._count.wishlistItems,
         reviewsCount: u._count.reviews,
         totalRevenue: revenueMap.get(u.id) ?? 0,
@@ -213,6 +220,8 @@ export class AdminUsersService {
       profileImageUrl: user.profileImageUrl,
       tags: (user.tags as string[]) ?? [],
       blockReason: user.blockReason, blockedAt: user.blockedAt,
+      scheduledDeletionAt: user.scheduledDeletionAt,
+      anonymizedAt: user.anonymizedAt,
       createdAt: user.createdAt, lastLoginAt: user.lastLoginAt, lastActivity,
       orders: user.orders.map((o) => ({ ...o, totalAmount: Number(o.totalAmount), itemsCount: o.items.length })),
       addresses: user.addresses,

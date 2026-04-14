@@ -242,6 +242,11 @@ export default function AdminCustomersPage() {
         <FilterSelect label={t('users.filterStatus')} value={filter === 'active' || filter === 'blocked' ? filter : ''} onChange={(v) => { setFilter(v); setPage(0) }} options={[
           { value: '', label: t('users.filterAll') }, { value: 'active', label: t('users.filterActive') }, { value: 'blocked', label: t('users.filterBlocked') },
         ]} />
+        <FilterSelect label={t('users.filterGdpr')} value={filter === 'deletion_scheduled' || filter === 'anonymized' ? filter : ''} onChange={(v) => { setFilter(v); setPage(0) }} options={[
+          { value: '', label: t('users.filterAll') },
+          { value: 'deletion_scheduled', label: t('users.filterDeletionScheduled') },
+          { value: 'anonymized', label: t('users.filterAnonymized') },
+        ]} />
         <FilterSelect label={t('users.filterLang')} value={langFilter} onChange={(v) => { setLangFilter(v); setPage(0) }} options={[
           { value: '', label: t('users.filterAll') }, { value: 'de', label: 'DE' }, { value: 'en', label: 'EN' }, { value: 'ar', label: 'AR' },
         ]} />
@@ -338,6 +343,8 @@ export default function AdminCustomersPage() {
                             {u.isGuest ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">{t('users.guest')}</span>
                               : <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 border border-green-200">{t('users.filterRegistered')}</span>}
                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${LANG_COLORS[u.preferredLang] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>{u.preferredLang}</span>
+                            {u.anonymizedAt && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-900 text-gray-100 border border-gray-700" title="DSGVO Art. 17">⚫ {t('users.anonymizedBadge')}</span>}
+                            {!u.anonymizedAt && u.scheduledDeletionAt && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700 border border-red-200" title="DSGVO Art. 17">⚠ {t('users.deletionScheduledBadge')}</span>}
                             {(u.tags ?? []).map((tag: string) => (
                               <span key={tag} className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${TAG_COLORS[tag] ?? 'bg-gray-100 text-gray-700 border-gray-200'}`}>{tag}</span>
                             ))}

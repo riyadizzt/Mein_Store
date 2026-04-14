@@ -19,6 +19,7 @@ import { useConfirm } from '@/components/ui/confirm-modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { DeletionStatusBanner } from './deletion-status-banner'
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800', pending_payment: 'bg-yellow-100 text-yellow-800',
@@ -206,6 +207,12 @@ export default function CustomerDetailPage() {
       <button onClick={() => router.push(`/${locale}/admin/customers`)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group">
         <ArrowLeft className="h-4 w-4 transition-transform group-hover:ltr:-translate-x-1 group-hover:rtl:translate-x-1" />{t('users.back')}
       </button>
+
+      <DeletionStatusBanner
+        scheduledDeletionAt={customer.scheduledDeletionAt}
+        anonymizedAt={customer.anonymizedAt}
+        locale={locale}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* ─ Left Column ─ */}

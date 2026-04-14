@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common'
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { Inject } from '@nestjs/common'
 import { Queue } from 'bullmq'
@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt'
 import { PrismaService } from '../../prisma/prisma.service'
 import { InvalidPasswordException } from './exceptions/invalid-password.exception'
 import { UserNotFoundException } from './exceptions/user-not-found.exception'
+import { NotificationService } from '../admin/services/notification.service'
 
 const ANONYMIZATION_DELAY_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
@@ -16,6 +17,9 @@ export class GdprService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('GDPR_QUEUE') private readonly gdprQueue: Queue,
+    // Optional: present in runtime (admin module exports it), absent in
+    // unit tests that only provide Prisma + queue. Null-safe call below.
+    @Optional() private readonly notificationService?: NotificationService,
   ) {}
 
   // ── Data Export (Art. 20 DSGVO) ─────────────────────────────
@@ -160,6 +164,21 @@ export class GdprService {
     )
 
     this.logger.log(`Account deletion scheduled for user ${userId} at ${scheduledAt.toISOString()}`)
+
+    // Fire-and-forget bell notification for admins. Wrapped in a check
+    // because the service is optional in tests. Any failure here must
+    // never break the user-facing deletion flow.
+    this.notificationService
+      ?.createForAllAdmins({
+        type: 'account_deletion_requested',
+        title: 'Kontolöschung beantragt',
+        body: 'Ein Kunde hat die Löschung seines Kontos beantragt',
+        entityType: 'user',
+        entityId: userId,
+        data: { userId, scheduledAt: scheduledAt.toISOString() },
+      })
+      .catch((err) => this.logger.error(`Deletion notification failed: ${(err as Error).message}`))
+
     return { scheduledAt }
   }
 
