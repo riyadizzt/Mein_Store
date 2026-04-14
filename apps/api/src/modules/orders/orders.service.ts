@@ -502,18 +502,36 @@ export class OrdersService {
           // Backfill: if the existing stub has empty/weaker names but this
           // checkout has fresh address data, update it. Don't touch REAL
           // users (passwordHash set) — their name is their canonical choice.
-          if (!existing.passwordHash && addrFirst && addrLast) {
-            const weak =
-              !existing.firstName?.trim() ||
-              !existing.lastName?.trim() ||
-              existing.firstName.length < 2
-            if (weak) {
+          //
+          // Also backfill preferredLang: stub users' preferredLang is
+          // frozen from their very first checkout. A stub who first
+          // bought in German and then switches to Arabic needs to get
+          // Arabic emails for every new order. Real users are never
+          // touched — their profile language is their explicit choice.
+          // See 14.04.2026 bug where a customer ordered in Arabic but
+          // got 19 German emails because of this freeze.
+          if (!existing.passwordHash) {
+            const update: any = {}
+            const weakName =
+              addrFirst && addrLast && (
+                !existing.firstName?.trim() ||
+                !existing.lastName?.trim() ||
+                existing.firstName.length < 2
+              )
+            if (weakName) {
+              update.firstName = addrFirst
+              update.lastName = addrLast
+            }
+            if (dto.locale && existing.preferredLang !== dto.locale) {
+              update.preferredLang = dto.locale as any
+            }
+            if (Object.keys(update).length > 0) {
               await this.prisma.user.update({
                 where: { id: existing.id },
-                data: { firstName: addrFirst, lastName: addrLast },
+                data: update,
               })
               this.logger.log(
-                `[${correlationId}] Stub user ${existing.email} name backfilled from shipping address`,
+                `[${correlationId}] Stub user ${existing.email} backfilled: ${Object.keys(update).join(', ')}`,
               )
             }
           }

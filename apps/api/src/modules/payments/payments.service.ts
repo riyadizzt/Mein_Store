@@ -334,21 +334,31 @@ export class PaymentsService {
       throw new NotFoundException(`Order ${orderId} not found`)
     }
 
-    // Resolve recipient identity (same pattern as order-email.listener.ts)
+    // Resolve recipient identity (same pattern as order-email.listener.ts).
+    // Language priority: notes.locale (checkout-time session lang) first,
+    // then user.preferredLang as a fallback. This prevents stub-user
+    // lang drift — see 14.04.2026 bug where a customer ordered in Arabic
+    // but got German bank-transfer instructions because the stub user's
+    // preferredLang was frozen from their first-ever checkout.
+    let notesLocale: string | null = null
+    let notesFirstName: string | null = null
+    try {
+      const n = JSON.parse(order.notes ?? '{}')
+      notesLocale = typeof n.locale === 'string' ? n.locale : null
+      notesFirstName = typeof n.guestFirstName === 'string' ? n.guestFirstName : null
+    } catch {}
+
     let email: string | null = null
     let firstName = 'Kunde'
     let lang = 'de'
     if (order.user?.email) {
       email = order.user.email
       firstName = order.user.firstName || firstName
-      lang = order.user.preferredLang ?? 'de'
+      lang = notesLocale ?? order.user.preferredLang ?? 'de'
     } else if (order.guestEmail) {
       email = order.guestEmail
-      try {
-        const notes = JSON.parse(order.notes ?? '{}')
-        firstName = notes.guestFirstName || firstName
-        lang = notes.locale || 'de'
-      } catch {}
+      firstName = notesFirstName ?? firstName
+      lang = notesLocale ?? 'de'
     }
     if (!email) {
       this.logger.warn(

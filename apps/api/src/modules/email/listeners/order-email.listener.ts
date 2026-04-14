@@ -18,22 +18,48 @@ const STATUS_LABELS: Record<string, Record<string, string>> = {
   refunded:   { de: 'Erstattet', en: 'Refunded', ar: 'مُسترد' },
 }
 
-/** Extract email + name from order (registered user OR guest) */
+/**
+ * Extract email + name + language from an order (registered user OR guest).
+ *
+ * Language resolution priority:
+ *   1. order.notes.locale  — the session language at checkout time
+ *   2. user.preferredLang  — the profile language (only if notes has none)
+ *   3. 'de'                — hard default
+ *
+ * Why checkout-time wins: since 14.04.2026 Bug-Hunt 2B every order has
+ * a linked user (real or stub). Stub users keep the preferredLang from
+ * their very first checkout frozen forever — so a customer who made
+ * a first purchase in German and then shops in Arabic would always get
+ * German emails unless we consult the notes.locale. The reverse is
+ * also true: a customer who changes their mind mid-session and switches
+ * the site to German gets the confirmation in the language they were
+ * actually looking at.
+ */
 function getRecipient(order: any): { email: string; firstName: string; lang: string } | null {
-  if (order.user?.email) {
-    return { email: order.user.email, firstName: order.user.firstName, lang: order.user.preferredLang ?? 'de' }
-  }
-  // Guest: email from guestEmail, name + lang from notes
-  const email = order.guestEmail
-  if (!email) return null
-  let firstName = 'Kunde'
-  let lang = 'de'
+  let notesLocale: string | null = null
+  let notesFirstName: string | null = null
   try {
     const n = JSON.parse(order.notes ?? '{}')
-    firstName = n.guestFirstName || firstName
-    lang = n.locale || 'de'
+    notesLocale = typeof n.locale === 'string' ? n.locale : null
+    notesFirstName = typeof n.guestFirstName === 'string' ? n.guestFirstName : null
   } catch {}
-  return { email, firstName, lang }
+
+  if (order.user?.email) {
+    return {
+      email: order.user.email,
+      firstName: order.user.firstName,
+      lang: notesLocale ?? order.user.preferredLang ?? 'de',
+    }
+  }
+  // Legacy guest path (pre Bug-Hunt 2B): only hit for historical orders
+  // without a linked user. New orders always take the branch above.
+  const email = order.guestEmail
+  if (!email) return null
+  return {
+    email,
+    firstName: notesFirstName ?? 'Kunde',
+    lang: notesLocale ?? 'de',
+  }
 }
 
 @Injectable()
