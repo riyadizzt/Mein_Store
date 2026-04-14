@@ -175,29 +175,84 @@ export function DashboardV2() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Top 10 Products */}
         {canRevenue && (
-          <div className="bg-background border rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-sm">{t3('Top 10 Produkte', 'Top 10 Products', 'أفضل 10 منتجات')}</h3>
-              <Link href={`/${locale}/admin/finance`} className="text-[10px] text-muted-foreground hover:text-foreground">{t3('Mehr', 'More', 'المزيد')} →</Link>
+          <div className="bg-background border border-border/60 rounded-2xl p-5 shadow-sm">
+            {/* Header with gold accent bar (consistent with tasks + activity) */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <span className="h-4 w-1 rounded-full bg-[#d4a853]" aria-hidden="true" />
+                <h3 className="font-semibold text-[15px] tracking-tight">
+                  {t3('Top 10 Produkte', 'Top 10 Products', 'أفضل 10 منتجات')}
+                </h3>
+              </div>
+              <Link
+                href={`/${locale}/admin/finance`}
+                className="text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {t3('Mehr', 'More', 'المزيد')} <span className="rtl:hidden">→</span><span className="ltr:hidden">←</span>
+              </Link>
             </div>
-            <div className="space-y-1">
-              {(data?.topProducts ?? []).slice(0, 10).map((p: any, i: number) => (
-                <div key={i} className="flex items-center gap-2.5 py-2 border-b last:border-b-0 group">
-                  <span className="text-[10px] text-muted-foreground w-4 text-end tabular-nums">{i + 1}</span>
-                  <div className="h-8 w-8 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-                    {p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[8px] text-muted-foreground font-bold">{(p.name ?? '?')[0]}</div>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{p.name ?? '—'}</p>
-                  </div>
-                  <div className="text-end flex-shrink-0">
-                    <p className="text-xs font-bold tabular-nums">{formatCurrency(Number(p.revenue ?? 0), locale)}</p>
-                    <p className="text-[10px] text-muted-foreground tabular-nums">{Number(p.quantity ?? 0)}×</p>
-                  </div>
-                </div>
-              ))}
-              {(data?.topProducts ?? []).length === 0 && <p className="text-xs text-muted-foreground py-6 text-center">{t3('Keine Daten', 'No data', 'لا توجد بيانات')}</p>}
-            </div>
+
+            {(data?.topProducts ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground py-10 text-center">
+                {t3('Keine Daten', 'No data', 'لا توجد بيانات')}
+              </p>
+            ) : (
+              <div className="-mx-2">
+                {(data?.topProducts ?? []).slice(0, 10).map((p: any, i: number) => {
+                  const rank = i + 1
+                  // Medal styling for top 3, neutral pill for 4-10
+                  const rankStyles =
+                    rank === 1
+                      ? 'bg-[#d4a853] text-white ring-[#d4a853]/30'
+                      : rank === 2
+                      ? 'bg-slate-200 text-slate-700 ring-slate-300/60 dark:bg-slate-500/30 dark:text-slate-200 dark:ring-slate-400/30'
+                      : rank === 3
+                      ? 'bg-amber-700/90 text-white ring-amber-700/30'
+                      : 'bg-muted text-muted-foreground ring-border/40'
+                  return (
+                    <div
+                      key={i}
+                      className="group flex items-center gap-3 px-2 py-2.5 rounded-xl transition-colors duration-150 hover:bg-muted/40"
+                    >
+                      {/* Rank badge — medal colors for top 3 */}
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold tabular-nums ring-1 ${rankStyles}`}
+                      >
+                        {rank}
+                      </div>
+
+                      {/* Product thumbnail */}
+                      <div className="h-10 w-10 rounded-xl bg-muted overflow-hidden flex-shrink-0 ring-1 ring-border/40">
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground font-bold">
+                            {(p.name ?? '?')[0]}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Name + qty badge */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-foreground/90 truncate leading-tight">
+                          {p.name ?? '—'}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground/70 tabular-nums mt-0.5">
+                          {Number(p.quantity ?? 0)}× {t3('verkauft', 'sold', 'مبيع')}
+                        </p>
+                      </div>
+
+                      {/* Revenue — prominent, tabular */}
+                      <div className="text-end flex-shrink-0">
+                        <p className="text-sm font-bold tabular-nums text-foreground">
+                          {formatCurrency(Number(p.revenue ?? 0), locale)}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
