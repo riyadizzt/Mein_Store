@@ -15,7 +15,7 @@ import {
   Download, Eye, TrendingDown, BarChart3, Euro, AlertTriangle,
   ChevronDown, ChevronRight,
 } from 'lucide-react'
-import { formatDate, formatDateWithWeekday, formatCurrency } from '@/lib/locale-utils'
+import { formatDate, formatDateWithWeekday, formatTime, formatCurrency } from '@/lib/locale-utils'
 import { PayPalLogo, KlarnaLogo, SumUpLogo, StripeLogo } from '@/components/ui/payment-logos'
 
 // ── Status & Reason maps ────────────────────────────────────
@@ -315,7 +315,7 @@ export default function AdminReturnsPage() {
                 <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Grund', 'Reason', 'السبب')}</div>
                 <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Status', 'Status', 'الحالة')}</div>
                 <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t3('Betrag', 'Amount', 'المبلغ')}</div>
-                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Datum', 'Date', 'التاريخ')}</div>
+                <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t3('Uhrzeit', 'Time', 'الوقت')}</div>
               </div>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
@@ -390,7 +390,7 @@ export default function AdminReturnsPage() {
                               : (ret.returnItems ?? []).reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
                             return amt > 0 ? formatCurrency(amt, locale) : '—'
                           })()}</div>
-                          <div className="px-4 py-4 text-sm text-muted-foreground">{formatDate(ret.createdAt, locale)}</div>
+                          <div className="px-4 py-4 text-sm text-muted-foreground tabular-nums">{formatTime(ret.createdAt, locale)}</div>
                         </div>
                       ))}
                     </React.Fragment>

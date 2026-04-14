@@ -125,6 +125,18 @@ export function formatDateWithWeekday(date: string | null, locale: string): stri
   return new Intl.DateTimeFormat(safeLocale, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(date))
 }
 
+// Hours + minutes only (e.g. "18:45"). Used by list rows when the
+// group header already shows the date — the row only needs the time.
+// Latin numerals in Arabic per project rule.
+export function formatTime(date: string | null, locale: string): string {
+  if (!date) return '—'
+  if (locale === 'ar') {
+    return new Intl.DateTimeFormat('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(date))
+  }
+  const safeLocale = locale === 'de' ? 'de-DE' : 'en-GB'
+  return new Intl.DateTimeFormat(safeLocale, { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(date))
+}
+
 export function formatDateTime(date: string | null, locale: string): string {
   if (!date) return '—'
   if (locale === 'ar') {
