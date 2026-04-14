@@ -72,28 +72,39 @@ export function ActivityTimeline({ actions, locale }: { actions: any[]; locale: 
   const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 
   return (
-    <div className="bg-background border rounded-2xl p-5 h-full">
-      <h3 className="font-semibold text-sm mb-4">{t3('Letzte Aktivität', 'Recent Activity', 'آخر الأنشطة')}</h3>
+    <div className="bg-background border border-border/60 rounded-2xl p-5 h-full shadow-sm">
+      {/* Header with subtle gold accent bar */}
+      <div className="flex items-center gap-2.5 mb-5">
+        <span className="h-4 w-1 rounded-full bg-[#d4a853]" aria-hidden="true" />
+        <h3 className="font-semibold text-[15px] tracking-tight">
+          {t3('Letzte Aktivität', 'Recent Activity', 'آخر الأنشطة')}
+        </h3>
+      </div>
       {(!actions || actions.length === 0) ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">{t3('Keine Aktivitäten', 'No activity', 'لا توجد أنشطة')}</p>
+        <p className="text-sm text-muted-foreground py-10 text-center">{t3('Keine Aktivitäten', 'No activity', 'لا توجد أنشطة')}</p>
       ) : (
-        <div className="space-y-0">
+        <div className="-mx-2">
           {actions.slice(0, 8).map((a: any, i: number) => {
             const cfg = ACTION_LABELS[a.action] ?? { de: a.action, ar: a.action, icon: '•', color: 'bg-gray-100 dark:bg-gray-800' }
             const label = locale === 'ar' ? cfg.ar : locale === 'en' ? cfg.en : cfg.de
             const time = formatRelativeTime(new Date(a.createdAt), locale)
-            const entityShort = a.entityId?.slice(0, 6) ?? ''
 
             return (
-              <div key={a.id ?? i} className="flex items-start gap-3 py-2.5 border-b last:border-b-0">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs ${cfg.color}`}>
+              <div
+                key={a.id ?? i}
+                className="group flex items-center gap-3 px-2 py-3 rounded-xl transition-colors duration-150 hover:bg-muted/40"
+              >
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm ring-1 ring-border/30 ${cfg.color}`}
+                >
                   {cfg.icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium leading-tight">{label}</p>
-                  {entityShort && <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{a.entityType}:{entityShort}</p>}
+                  <p className="text-[13px] font-medium leading-snug text-foreground/90 truncate">{label}</p>
                 </div>
-                <span className="text-[10px] text-muted-foreground flex-shrink-0 whitespace-nowrap">{time}</span>
+                <span className="text-[11px] text-muted-foreground/70 flex-shrink-0 whitespace-nowrap tabular-nums">
+                  {time}
+                </span>
               </div>
             )
           })}
