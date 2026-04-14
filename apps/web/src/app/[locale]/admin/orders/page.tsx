@@ -132,7 +132,7 @@ export default function AdminOrdersPage() {
           <div className="min-w-[900px]">
             <div className="grid grid-cols-7 gap-x-2 bg-muted/50 border-b">
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.order')}</div>
-              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.customer')}</div>
+              <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{t('orders.customer')}</div>
               <div className="px-2 py-3 text-sm font-semibold text-muted-foreground text-center">{locale === 'ar' ? 'القناة' : 'Kanal'}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground text-center">{locale === 'ar' ? 'الوقت' : locale === 'en' ? 'Time' : 'Uhrzeit'}</div>
               <div className="px-4 py-3 text-sm font-semibold text-muted-foreground">{t('orders.status')}</div>
@@ -192,7 +192,7 @@ export default function AdminOrdersPage() {
                               {order.orderNumber}
                             </Link>
                           </div>
-                          <div className="px-4 py-4">
+                          <div className="px-4 py-4 text-center">
                             <p className="text-sm font-medium">
                               {getCustomerName(order)}
                               {!order.user && order.guestEmail && <span className="text-[10px] font-normal text-muted-foreground"> (Gast)</span>}
