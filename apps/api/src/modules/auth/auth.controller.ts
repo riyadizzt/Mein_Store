@@ -31,6 +31,13 @@ import { OAuthRedirectFilter } from './guards/google-oauth.guard'
 // ── Separate cookies for Admin vs Customer ──────────────────
 const ADMIN_COOKIE = 'malak_admin_rt'
 const CUSTOMER_COOKIE = 'malak_customer_rt'
+// Legacy cookie name from before the Admin/Customer split. The current
+// code never sets it, but older browsers still carry it around from
+// pre-split sessions. We clear it on every login AND every logout so
+// it is guaranteed to disappear from every active browser over time.
+// Safe to remove this constant once zero users still have the cookie —
+// check devtools across a few sessions a month from now.
+const LEGACY_COOKIE = 'malak_refresh'
 const ADMIN_COOKIE_MAX_AGE = 8 * 60 * 60 * 1000 // 8 hours (Admin security)
 const CUSTOMER_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000 // 30 days (Customer convenience)
 
@@ -54,6 +61,9 @@ export class AuthController {
       maxAge: ADMIN_COOKIE_MAX_AGE, // 8 hours — admin security
       path: '/',
     })
+    // Housekeeping: kill the legacy malak_refresh cookie on every login
+    // so browsers that carry it from pre-split sessions get cleaned up.
+    res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
   private setCustomerCookie(res: Response, refreshToken: string) {
@@ -64,14 +74,17 @@ export class AuthController {
       maxAge: CUSTOMER_COOKIE_MAX_AGE, // 30 days — customer convenience
       path: '/',
     })
+    res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
   private clearAdminCookie(res: Response) {
     res.clearCookie(ADMIN_COOKIE, { path: '/' })
+    res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
   private clearCustomerCookie(res: Response) {
     res.clearCookie(CUSTOMER_COOKIE, { path: '/' })
+    res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
   // ── Register (always customer) ──────────────────────────────
