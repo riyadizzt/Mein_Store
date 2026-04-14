@@ -4,9 +4,10 @@ import { useState } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { translateNotification } from '@/lib/notif-i18n'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import {
-  Bell, ShoppingBag, Warehouse, RotateCcw, Users, X, Trash2,
+  Bell, ShoppingBag, Warehouse, RotateCcw, Users, X, Trash2, ShieldAlert, MessageSquare,
   Check, ChevronLeft, ChevronRight, Filter,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -21,8 +22,15 @@ const TYPE_CONFIG: Record<string, { Icon: typeof Bell; bg: string; fg: string; d
   order_cancelled: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
   low_stock: { Icon: Warehouse, bg: 'bg-orange-100', fg: 'text-orange-600', dot: 'bg-orange-500' },
   return_submitted: { Icon: RotateCcw, bg: 'bg-yellow-100', fg: 'text-yellow-700', dot: 'bg-yellow-500' },
+  return_approved: { Icon: RotateCcw, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
+  return_received: { Icon: RotateCcw, bg: 'bg-sky-100', fg: 'text-sky-600', dot: 'bg-sky-500' },
+  return_refunded: { Icon: RotateCcw, bg: 'bg-emerald-100', fg: 'text-emerald-600', dot: 'bg-emerald-500' },
   payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
   customer_registered: { Icon: Users, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
+  contact_message: { Icon: MessageSquare, bg: 'bg-indigo-100', fg: 'text-indigo-600', dot: 'bg-indigo-500' },
+  account_deletion_requested: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
+  admin_password_reset: { Icon: ShieldAlert, bg: 'bg-purple-100', fg: 'text-purple-600', dot: 'bg-purple-500' },
+  maintenance_auto_ended: { Icon: Bell, bg: 'bg-teal-100', fg: 'text-teal-600', dot: 'bg-teal-500' },
 }
 
 const TYPE_LABELS: Record<string, { de: string; en: string; ar: string }> = {
@@ -151,26 +159,10 @@ export default function NotificationsPage() {
         ) : items.map((n: any) => {
           const cfg = TYPE_CONFIG[n.type] ?? { Icon: Bell, bg: 'bg-muted', fg: 'text-muted-foreground', dot: 'bg-muted-foreground' }
           const Icon = cfg.Icon
-          const d = n.data ?? {}
-          // Translate title + body based on type + data + locale
-          const translated = (() => {
-            const l = locale
-            const t = (de: string, en: string, ar: string) => l === 'ar' ? ar : l === 'en' ? en : de
-            const on = d.orderNumber ?? ''
-            switch (n.type) {
-              case 'new_order': return { title: t(`Neue Bestellung #${on}`, `New Order #${on}`, `طلب جديد #${on}`), body: d.amount ? `€${d.amount} ${t('von', 'from', 'من')} ${d.customerName ?? ''}` : '' }
-              case 'order_cancelled': return { title: t(`Bestellung storniert ${on ? '#' + on : ''}`, `Order cancelled ${on ? '#' + on : ''}`, `طلب ملغى ${on ? '#' + on : ''}`), body: d.reason ?? '' }
-              case 'low_stock': return { title: t(`Mindestbestand: ${d.sku ?? ''}`, `Low stock: ${d.sku ?? ''}`, `مخزون منخفض: ${d.sku ?? ''}`), body: t(`Noch ${d.available ?? 0} Stück`, `${d.available ?? 0} left`, `${d.available ?? 0} متبقي`) }
-              case 'customer_registered': return { title: t('Neuer Kunde', 'New customer', 'عميل جديد'), body: d.name ?? d.email ?? '' }
-              case 'return_submitted': return { title: t(`Neue Retoure ${on ? '#' + on : ''}`, `New return ${on ? '#' + on : ''}`, `إرجاع جديد ${on ? '#' + on : ''}`), body: d.reason ?? '' }
-              case 'return_approved': return { title: t('Retoure genehmigt', 'Return approved', 'تمت الموافقة على الإرجاع'), body: on ? t(`Bestellung #${on}`, `Order #${on}`, `طلب #${on}`) : '' }
-              case 'return_refunded': return { title: t('Erstattung verarbeitet', 'Refund processed', 'تم معالجة الاسترداد'), body: d.refundAmount ? `€${Number(d.refundAmount).toFixed(2)}` : '' }
-              case 'payment_failed': return { title: t(`Zahlung fehlgeschlagen ${on ? '#' + on : ''}`, `Payment failed ${on ? '#' + on : ''}`, `فشل الدفع ${on ? '#' + on : ''}`), body: d.provider ?? '' }
-              case 'coupon_expiring': return { title: t('Gutschein läuft ab', 'Coupon expiring', 'قسيمة على وشك الانتهاء'), body: d.code ?? '' }
-              case 'promotion_expiring': return { title: t('Aktion endet bald', 'Promotion ending', 'عرض على وشك الانتهاء'), body: d.name ?? '' }
-              default: return { title: n.title ?? '', body: n.body ?? '' }
-            }
-          })()
+          // Shared translator — same source of truth as the bell dropdown,
+          // so new notification types automatically render in the admin's
+          // locale on both surfaces.
+          const translated = translateNotification(n, locale)
           const timeAgo = (() => {
             const s = Math.floor((Date.now() - new Date(n.createdAt).getTime()) / 1000)
             const t = (de: string, en: string, ar: string) => locale === 'ar' ? ar : locale === 'en' ? en : de

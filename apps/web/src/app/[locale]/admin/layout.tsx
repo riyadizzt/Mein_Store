@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
+import { translateNotification } from '@/lib/notif-i18n'
 import { MaintenanceBanner } from '@/components/admin/maintenance-banner'
 import { AdminSessionGuard } from '@/components/admin/admin-session-guard'
 
@@ -492,86 +493,9 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
     return `${Math.floor(s / 86400)} ${locale === 'ar' ? 'ي' : 'd'}`
   }
 
-  // Translate notification title/body based on type + data + locale
-  const translateNotif = (n: any) => {
-    const d = n.data ?? {}
-    const l = locale
-    const t = (de: string, en: string, ar: string) => l === 'ar' ? ar : l === 'en' ? en : de
-    const on = d.orderNumber ?? ''
-    switch (n.type) {
-      case 'new_order': return { title: t(`Neue Bestellung #${on}`, `New Order #${on}`, `طلب جديد #${on}`), body: d.amount ? `€${d.amount} ${t('von', 'from', 'من')} ${d.customerName ?? ''}` : '' }
-      case 'order_cancelled': return { title: t(`Bestellung storniert ${on ? '#' + on : ''}`, `Order cancelled ${on ? '#' + on : ''}`, `طلب ملغى ${on ? '#' + on : ''}`), body: d.reason ?? '' }
-      case 'low_stock': return { title: t(`Mindestbestand: ${d.sku ?? ''}`, `Low stock: ${d.sku ?? ''}`, `مخزون منخفض: ${d.sku ?? ''}`), body: t(`Noch ${d.available ?? 0} Stück`, `${d.available ?? 0} left`, `${d.available ?? 0} متبقي`) }
-      case 'customer_registered': return { title: t('Neuer Kunde', 'New customer', 'عميل جديد'), body: d.name ?? d.email ?? '' }
-      case 'return_submitted': return { title: t(`Neue Retoure ${on ? '#' + on : ''}`, `New return ${on ? '#' + on : ''}`, `إرجاع جديد ${on ? '#' + on : ''}`), body: d.reason ?? '' }
-      case 'return_approved': return { title: t(`Retoure genehmigt`, `Return approved`, `تمت الموافقة على الإرجاع`), body: on ? t(`Bestellung #${on}`, `Order #${on}`, `طلب #${on}`) : '' }
-      case 'return_received': {
-        const orderLine = on ? t(`Bestellung #${on}`, `Order #${on}`, `طلب #${on}`) : ''
-        const amount = d.refundAmount != null ? `${Number(d.refundAmount).toFixed(2)} EUR` : ''
-        return {
-          title: t(`Retoure eingegangen ${on ? '#' + on : ''}`, `Return received ${on ? '#' + on : ''}`, `تم استلام الإرجاع ${on ? '#' + on : ''}`),
-          body: amount && orderLine ? `${orderLine} — ${amount}` : orderLine,
-        }
-      }
-      case 'return_refunded': return { title: t(`Erstattung verarbeitet`, `Refund processed`, `تم معالجة الاسترداد`), body: d.refundAmount ? `€${Number(d.refundAmount).toFixed(2)}` : '' }
-      case 'maintenance_auto_ended': {
-        return {
-          title: t(
-            'Wartungsmodus automatisch beendet',
-            'Maintenance mode auto-ended',
-            'تم إنهاء وضع الصيانة تلقائياً',
-          ),
-          body: t(
-            'Der Shop ist wieder online — Countdown ist abgelaufen.',
-            'The shop is back online — countdown has expired.',
-            'المتجر متاح مجدداً — انتهى العد التنازلي.',
-          ),
-        }
-      }
-      case 'admin_password_reset': {
-        const who = d.email ?? d.name ?? ''
-        const whoName = d.name ?? d.email ?? ''
-        return {
-          title: t(`Admin-Passwort zurückgesetzt${who ? ': ' + who : ''}`, `Admin password reset${who ? ': ' + who : ''}`, `تم إعادة تعيين كلمة مرور المشرف${who ? ': ' + who : ''}`),
-          body: t(
-            `${whoName} hat das Passwort per E-Mail-Link zurückgesetzt.`,
-            `${whoName} reset their password via the email link.`,
-            `${whoName} أعاد تعيين كلمة المرور عبر رابط البريد الإلكتروني.`,
-          ),
-        }
-      }
-      case 'payment_failed': return { title: t(`Zahlung fehlgeschlagen ${on ? '#' + on : ''}`, `Payment failed ${on ? '#' + on : ''}`, `فشل الدفع ${on ? '#' + on : ''}`), body: d.provider ?? '' }
-      case 'coupon_expiring': return { title: t(`Gutschein läuft ab`, `Coupon expiring`, `قسيمة على وشك الانتهاء`), body: d.code ?? '' }
-      case 'promotion_expiring': return { title: t(`Aktion endet bald`, `Promotion ending`, `عرض على وشك الانتهاء`), body: d.name ?? '' }
-      case 'contact_message': {
-        const subject = d.subject ?? ''
-        const senderName = d.name ?? d.email ?? ''
-        return {
-          title: t(
-            `Neue Kontaktanfrage: ${subject}`,
-            `New contact request: ${subject}`,
-            `طلب تواصل جديد: ${subject}`,
-          ),
-          body: senderName ? t(`Von ${senderName}`, `From ${senderName}`, `من ${senderName}`) : '',
-        }
-      }
-      case 'account_deletion_requested': {
-        return {
-          title: t(
-            'Kontolöschung beantragt',
-            'Account deletion requested',
-            'طلب حذف الحساب',
-          ),
-          body: t(
-            'Ein Kunde hat die Löschung seines Kontos beantragt',
-            'A customer has requested deletion of their account',
-            'طلب أحد العملاء حذف حسابه',
-          ),
-        }
-      }
-      default: return { title: n.title ?? '', body: n.body ?? '' }
-    }
-  }
+  // Translate notification title/body — shared helper so the bell and
+  // the full notifications page (/admin/notifications) never drift apart.
+  const translateNotif = (n: any) => translateNotification(n, locale)
 
   const typeConfig: Record<string, { Icon: any; bg: string; fg: string; dot: string }> = {
     new_order: { Icon: ShoppingBag, bg: 'bg-blue-100', fg: 'text-blue-600', dot: 'bg-blue-500' },
