@@ -233,6 +233,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   SHIPMENT_STATUS_DELIVERED: { de: 'Zugestellt', en: 'Delivered', ar: 'تم التسليم' },
   SHIPMENT_STATUS_IN_TRANSIT: { de: 'Unterwegs', en: 'In transit', ar: 'في الطريق' },
   SHIPMENT_STATUS_LABEL_CREATED: { de: 'Versandlabel erstellt', en: 'Label created', ar: 'إنشاء ملصق الشحن' },
+  SHIPMENT_CANCELLED: { de: 'Versand storniert', en: 'Shipment cancelled', ar: 'إلغاء الشحنة' },
   SHIPMENT_TRACKING_UPDATED: { de: 'Tracking aktualisiert', en: 'Tracking updated', ar: 'تحديث التتبع' },
   SHIPMENTS_BATCH_CREATED: { de: 'Sammelversand erstellt', en: 'Batch created', ar: 'إنشاء شحنة جماعية' },
   USER_BLOCKED: { de: 'Benutzer gesperrt', en: 'User blocked', ar: 'حظر المستخدم' },
