@@ -141,16 +141,31 @@ export default function ReceivingPage() {
       }
 
       if (newProducts.length > 0) {
-        body.newProducts = newProducts.map((np) => ({
-          productName: np.productName,
-          productNameDe: np.productNameDe || undefined,
-          categoryId: np.categoryId || undefined,
-          colors: np.colors,
-          sizes: np.sizes,
-          purchasePrice: np.purchasePrice,
-          salePrice: np.salePrice,
-          quantities: np.quantities,
-        }))
+        body.newProducts = newProducts.map((np) => {
+          // Build a hex lookup map for the colour names we're sending.
+          // Looks up each stored DE name in the runtime COLORS_LIST (which
+          // includes both the shared presets and any runtime custom colors
+          // the admin added via the "+" button) and extracts its hex.
+          // Without this, the backend variant would be created with
+          // colorHex=null and the product edit page would render a gray
+          // fallback dot next to each color group header.
+          const colorHexes: Record<string, string> = {}
+          for (const name of np.colors) {
+            const preset = COLORS_LIST.find((c) => c.name.de === name)
+            if (preset) colorHexes[name] = preset.hex
+          }
+          return {
+            productName: np.productName,
+            productNameDe: np.productNameDe || undefined,
+            categoryId: np.categoryId || undefined,
+            colors: np.colors,
+            colorHexes,
+            sizes: np.sizes,
+            purchasePrice: np.purchasePrice,
+            salePrice: np.salePrice,
+            quantities: np.quantities,
+          }
+        })
       }
 
       const { data } = await api.post('/admin/suppliers/deliveries', body)

@@ -31,6 +31,11 @@ interface DeliveryNewProductItem {
   productNameDe?: string
   categoryId?: string
   colors: string[]
+  // Hex lookup for each colour name in `colors`. Optional for backwards
+  // compat — older clients that don't send it fall back to null (which
+  // makes the product edit page render a #999 gray placeholder). New
+  // clients include this map so variants get their real color swatch.
+  colorHexes?: Record<string, string>
   sizes: string[]
   purchasePrice: number
   salePrice: number
@@ -316,6 +321,10 @@ export class AdminSuppliersService {
                 sku,
                 barcode: sku,
                 color: color || null,
+                // Look up the hex for this colour name from the payload.
+                // Falls back to null when the client didn't send a
+                // colorHexes map (backwards compat).
+                colorHex: color ? (np.colorHexes?.[color] ?? null) : null,
                 size: size || null,
                 purchasePrice: np.purchasePrice,
               },
