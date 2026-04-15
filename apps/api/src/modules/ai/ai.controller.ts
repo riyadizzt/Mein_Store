@@ -275,44 +275,97 @@ ${body.material ? `Material: ${body.material}` : ''}
 ${body.target ? `Zielgruppe: ${body.target}` : ''}${extraContext}
 ${imageUrl ? `\n[IMAGE:${imageUrl}]\nAnalysiere das Produktbild genau: beschreibe Material, Schnitt, Stil, Kragen, Details die du siehst.` : ''}
 
-Generiere die Beschreibung in DREI Sprachen. Regeln:
+Regeln:
 - Schreibe ehrlich und realistisch — beschreibe NUR was du siehst oder weißt
 - KEINE Übertreibungen, KEINE Floskeln wie "Premium", "unverzichtbar", "zeitlos", "außergewöhnlich"
 - 2-3 kurze, konkrete Sätze pro Sprache
 - Beschreibe: Material, Passform, wofür geeignet, wie kombinierbar
+- ALLE DREI Sprachen müssen befüllt sein: Deutsch, Arabisch, Englisch — nicht eine leer lassen
+- META_TITLE max 60 Zeichen, META_DESC max 155 Zeichen
 
-1. DEUTSCH: Sachlich, natürlich, wie ein echter Verkäufer beschreiben würde.
-2. ARABISCH: Gleicher Inhalt auf Arabisch. Natürliche Formulierung.
-3. ENGLISCH: Gleicher Inhalt auf Englisch.
+WICHTIG: Antworte NUR mit einem gültigen JSON-Objekt. Kein Markdown, kein Code-Fence, kein Fließtext davor oder dahinter. Exakt diese Struktur:
 
-Format (GENAU so, jede auf eigener Zeile):
-DE: [deutsche Beschreibung]
-AR: [arabische Beschreibung]
-EN: [englische Beschreibung]
-META_TITLE_DE: [deutscher SEO-Titel, max 60 Zeichen]
-META_TITLE_AR: [arabischer SEO-Titel, max 60 Zeichen]
-META_TITLE_EN: [englischer SEO-Titel, max 60 Zeichen]
-META_DESC_DE: [deutsche SEO-Beschreibung, max 155 Zeichen]
-META_DESC_AR: [arabische SEO-Beschreibung, max 155 Zeichen]
-META_DESC_EN: [englische SEO-Beschreibung, max 155 Zeichen]`
+{
+  "de": "deutsche Beschreibung hier",
+  "ar": "الوصف بالعربية هنا",
+  "en": "english description here",
+  "metaTitleDe": "deutscher SEO-Titel",
+  "metaTitleAr": "عنوان SEO بالعربية",
+  "metaTitleEn": "english SEO title",
+  "metaDescDe": "deutsche SEO-Beschreibung",
+  "metaDescAr": "وصف SEO بالعربية",
+  "metaDescEn": "english SEO description"
+}`
 
     const response = await this.ai.adminChat([
-      { role: 'system', content: 'Du bist ein Produkttexter für einen Online-Modeshop. Schreibe ehrlich, realistisch und sachlich — KEINE Übertreibungen, KEINE Marketingfloskeln wie "Premium", "unverzichtbar", "außergewöhnlich". Beschreibe NUR was du wirklich siehst und weißt. Kurz und konkret. Keine Sternchen (**) im Text.' },
+      { role: 'system', content: 'Du bist ein Produkttexter für einen Online-Modeshop. Schreibe ehrlich, realistisch und sachlich — KEINE Übertreibungen, KEINE Marketingfloskeln wie "Premium", "unverzichtbar", "außergewöhnlich". Beschreibe NUR was du wirklich siehst und weißt. Kurz und konkret. Keine Sternchen (**) im Text. Antworte IMMER mit einem einzelnen JSON-Objekt, nichts anderes.' },
       { role: 'user', content: prompt },
-    ], 800, req.user?.id, 'de')
+    ], 1200, req.user?.id, 'de')
 
-    // Parse descriptions + SEO meta tags
+    // Primary parser: extract the first JSON object block and JSON.parse it.
+    // Fallback: the old DE:/AR:/EN: regex scheme, in case the model returns
+    // the legacy line-based format for some reason (keeps backwards compat).
     const text = response.content
-    const de = text.match(/DE:\s*(.*?)(?=AR:|$)/s)?.[1]?.trim() ?? text
-    const ar = text.match(/AR:\s*(.*?)(?=EN:|$)/s)?.[1]?.trim() ?? ''
-    const en = text.match(/EN:\s*(.*?)(?=META_TITLE_DE:|$)/s)?.[1]?.trim() ?? ''
+    let de = ''
+    let ar = ''
+    let en = ''
+    let metaTitleDe = ''
+    let metaTitleAr = ''
+    let metaTitleEn = ''
+    let metaDescDe = ''
+    let metaDescAr = ''
+    let metaDescEn = ''
 
-    const metaTitleDe = text.match(/META_TITLE_DE:\s*(.*?)(?=META_TITLE_AR:|$)/s)?.[1]?.trim() ?? ''
-    const metaTitleAr = text.match(/META_TITLE_AR:\s*(.*?)(?=META_TITLE_EN:|$)/s)?.[1]?.trim() ?? ''
-    const metaTitleEn = text.match(/META_TITLE_EN:\s*(.*?)(?=META_DESC_DE:|$)/s)?.[1]?.trim() ?? ''
-    const metaDescDe = text.match(/META_DESC_DE:\s*(.*?)(?=META_DESC_AR:|$)/s)?.[1]?.trim() ?? ''
-    const metaDescAr = text.match(/META_DESC_AR:\s*(.*?)(?=META_DESC_EN:|$)/s)?.[1]?.trim() ?? ''
-    const metaDescEn = text.match(/META_DESC_EN:\s*(.*?)$/s)?.[1]?.trim() ?? ''
+    // Strip markdown code fences like ```json ... ``` before extracting.
+    const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+    let parsedOk = false
+    if (jsonMatch) {
+      try {
+        const obj = JSON.parse(jsonMatch[0])
+        de = (obj.de ?? '').toString().trim()
+        ar = (obj.ar ?? '').toString().trim()
+        en = (obj.en ?? '').toString().trim()
+        metaTitleDe = (obj.metaTitleDe ?? '').toString().trim()
+        metaTitleAr = (obj.metaTitleAr ?? '').toString().trim()
+        metaTitleEn = (obj.metaTitleEn ?? '').toString().trim()
+        metaDescDe = (obj.metaDescDe ?? '').toString().trim()
+        metaDescAr = (obj.metaDescAr ?? '').toString().trim()
+        metaDescEn = (obj.metaDescEn ?? '').toString().trim()
+        parsedOk = !!(de || ar || en)
+      } catch {
+        // fall through to regex fallback
+      }
+    }
+
+    if (!parsedOk) {
+      // Legacy DE:/AR:/EN: format. Pre-strip bold/headers so markdown-wrapped
+      // markers still match.
+      const raw = text.replace(/\*\*/g, '').replace(/^#+\s*/gm, '')
+      de = raw.match(/DE:\s*(.*?)(?=\bAR:|$)/is)?.[1]?.trim() ?? ''
+      ar = raw.match(/AR:\s*(.*?)(?=\bEN:|$)/is)?.[1]?.trim() ?? ''
+      en = raw.match(/EN:\s*(.*?)(?=\bMETA_TITLE_DE:|$)/is)?.[1]?.trim() ?? ''
+      metaTitleDe = raw.match(/META_TITLE_DE:\s*(.*?)(?=\bMETA_TITLE_AR:|$)/is)?.[1]?.trim() ?? ''
+      metaTitleAr = raw.match(/META_TITLE_AR:\s*(.*?)(?=\bMETA_TITLE_EN:|$)/is)?.[1]?.trim() ?? ''
+      metaTitleEn = raw.match(/META_TITLE_EN:\s*(.*?)(?=\bMETA_DESC_DE:|$)/is)?.[1]?.trim() ?? ''
+      metaDescDe = raw.match(/META_DESC_DE:\s*(.*?)(?=\bMETA_DESC_AR:|$)/is)?.[1]?.trim() ?? ''
+      metaDescAr = raw.match(/META_DESC_AR:\s*(.*?)(?=\bMETA_DESC_EN:|$)/is)?.[1]?.trim() ?? ''
+      metaDescEn = raw.match(/META_DESC_EN:\s*(.*?)$/is)?.[1]?.trim() ?? ''
+    }
+
+    // Defensive logging: if any language came back empty after BOTH parsers,
+    // log the raw response so we can see what the model actually returned.
+    // eslint-disable-next-line no-console
+    if (!de || !ar || !en) {
+      console.error('[ai/generate-product-description] incomplete languages', {
+        de: de.length,
+        ar: ar.length,
+        en: en.length,
+        parsedOk,
+        provider: response.provider,
+        rawPreview: text.slice(0, 500),
+      })
+    }
 
     return {
       de, ar, en,
