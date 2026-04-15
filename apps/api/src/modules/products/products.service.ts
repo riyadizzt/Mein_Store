@@ -322,7 +322,12 @@ export class ProductsService {
     const product = await this.prisma.product.findFirst({
       where: { slug, isActive: true, deletedAt: null },
       include: {
-        translations: { where: { language: lang as any } },
+        // Load ALL three translations, not just the requested locale.
+        // formatProductDetail() walks a fallback chain
+        // requested → de → en → first available, so a product that only
+        // has a German description still shows something on the Arabic
+        // storefront instead of "no description available".
+        translations: true,
         images: { orderBy: { sortOrder: 'asc' } },
         variants: {
           where: { isActive: true },
@@ -338,7 +343,7 @@ export class ProductsService {
         },
         category: {
           include: {
-            translations: { where: { language: lang as any } },
+            translations: true,
           },
         },
       },
@@ -346,7 +351,7 @@ export class ProductsService {
 
     if (!product) throw new NotFoundException(`Produkt "${slug}" nicht gefunden`)
 
-    return this.formatProductDetail(product)
+    return this.formatProductDetail(product, lang)
   }
 
   async findById(id: string) {
@@ -530,8 +535,36 @@ export class ProductsService {
     }
   }
 
-  private formatProductDetail(product: any) {
-    const translation = product.translations?.[0]
+  private formatProductDetail(product: any, lang: Language = 'de') {
+    // Pick the best available translation using a fallback chain:
+    // requested language → de → en → whatever comes first. Same chain
+    // applied per field so a product with e.g. AR name but empty AR
+    // description falls back to DE description only for the missing field,
+    // keeping the Arabic name when possible.
+    const translations: any[] = product.translations ?? []
+    const byLang = (l: string) => translations.find((t: any) => t.language === l)
+    const pickField = (key: 'name' | 'description' | 'sizeGuide' | 'metaTitle' | 'metaDesc'): string | undefined => {
+      const val = byLang(lang)?.[key]
+      if (val) return val
+      const de = byLang('de')?.[key]
+      if (de) return de
+      const en = byLang('en')?.[key]
+      if (en) return en
+      for (const t of translations) {
+        if (t?.[key]) return t[key]
+      }
+      return undefined
+    }
+
+    const categoryTranslations: any[] = product.category?.translations ?? []
+    const categoryName = (() => {
+      const inLang = categoryTranslations.find((t: any) => t.language === lang)?.name
+      if (inLang) return inLang
+      const de = categoryTranslations.find((t: any) => t.language === 'de')?.name
+      if (de) return de
+      const en = categoryTranslations.find((t: any) => t.language === 'en')?.name
+      return en ?? categoryTranslations[0]?.name
+    })()
 
     return {
       id: product.id,
@@ -545,11 +578,11 @@ export class ProductsService {
       publishedAt: product.publishedAt,
       excludeFromReturns: product.excludeFromReturns ?? false,
       returnExclusionReason: product.returnExclusionReason ?? null,
-      name: translation?.name ?? product.slug,
-      description: translation?.description,
-      sizeGuide: translation?.sizeGuide,
-      metaTitle: translation?.metaTitle,
-      metaDesc: translation?.metaDesc,
+      name: pickField('name') ?? product.slug,
+      description: pickField('description'),
+      sizeGuide: pickField('sizeGuide'),
+      metaTitle: pickField('metaTitle'),
+      metaDesc: pickField('metaDesc'),
       images: product.images.map((img: any) => ({
         id: img.id,
         url: img.url,
@@ -582,7 +615,8 @@ export class ProductsService {
         ? {
             id: product.category.id,
             slug: product.category.slug,
-            name: product.category.translations?.[0]?.name ?? product.category.slug,
+            // Same fallback chain as the product name.
+            name: categoryName ?? product.category.slug,
           }
         : null,
       createdAt: product.createdAt,
