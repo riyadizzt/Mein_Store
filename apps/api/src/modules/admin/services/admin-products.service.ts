@@ -703,7 +703,55 @@ export class AdminProductsService {
       ipAddress,
     })
 
+    // Fire-and-forget storefront cache invalidation. If the web app's
+    // revalidation endpoint is unreachable or not configured, the soft
+    // delete still succeeds — the customer just sees the cached page
+    // for up to 10 seconds longer (same as the pre-fix behavior).
+    this.revalidateStorefront(product.slug).catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error('[softDelete] storefront revalidation failed:', e?.message ?? e)
+    })
+
     return { deleted: true, name: product.translations[0]?.name }
+  }
+
+  /**
+   * POSTs to the Next.js /api/revalidate endpoint to invalidate cached
+   * storefront pages for a product that was just soft-deleted. Non-
+   * blocking: any failure here only affects cache freshness, never data
+   * integrity — the DB delete has already committed by the time we
+   * reach this call.
+   *
+   * Env vars:
+   *   WEB_BASE_URL       — defaults to http://localhost:3000 for dev
+   *   REVALIDATE_SECRET  — MUST match the value on the web app
+   * If REVALIDATE_SECRET is missing, we silently skip (graceful
+   * degradation) so admins don't get 500s during local dev setup.
+   */
+  private async revalidateStorefront(slug: string): Promise<void> {
+    const secret = process.env.REVALIDATE_SECRET
+    if (!secret || !slug) return
+    const webUrl = process.env.WEB_BASE_URL ?? 'http://localhost:3000'
+    // Revalidate the PDP page for each locale + the top-level products
+    // listing page. Category-filtered listings share the same cache
+    // entry shape, so revalidating the base /<locale>/products invalidates
+    // all of them.
+    const paths: string[] = []
+    for (const locale of ['de', 'en', 'ar']) {
+      paths.push(`/${locale}/products/${slug}`)
+      paths.push(`/${locale}/products`)
+    }
+    const res = await fetch(`${webUrl}/api/revalidate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths, secret }),
+      // short timeout so a hanging web app never blocks the admin
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.error(`[softDelete revalidate] HTTP ${res.status} ${res.statusText}`)
+    }
   }
 
   async restore(productId: string, adminId: string, ipAddress: string) {
