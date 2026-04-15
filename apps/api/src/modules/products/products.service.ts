@@ -6,6 +6,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service'
 import { CreateProductDto } from './dto/create-product.dto'
 import { Language } from '@omnichannel/types'
+import { ensureVariantBarcode } from '../../common/helpers/variant-barcode'
+import { resolveUniqueSkus, SkuAdjustment } from '../../common/helpers/sku-resolver'
 
 export interface ProductFilters {
   lang?: Language
@@ -82,6 +84,19 @@ export class ProductsService {
       where: { isDefault: true, isActive: true },
     })
 
+    // Resolve SKU collisions BEFORE insert. The wizard generates
+    // deterministic SKUs from `MAL-<slug6>-<color3>-<size>`, which means
+    // two products with similar slug prefixes (e.g. "herren-schuhe" vs
+    // "herren-schue") would produce identical SKUs and trip Prisma's
+    // `sku @unique` constraint with a P2002 → 500 error.
+    //
+    // The resolver checks each base SKU against the DB, appending a
+    // `-002/-003/...` suffix until it finds a free slot. The list of
+    // adjustments is returned to the caller so the frontend can surface
+    // a toast like "SKU war belegt, wurde zu ...-002 geändert".
+    const baseSkus = dto.variants.map((v) => v.sku)
+    const { resolved, adjustments } = await resolveUniqueSkus(this.prisma, baseSkus)
+
     const product = await this.prisma.product.create({
       data: {
         slug: dto.slug,
@@ -105,26 +120,34 @@ export class ProductsService {
           })),
         },
         variants: {
-          create: dto.variants.map((v) => ({
-            sku: v.sku,
-            barcode: v.barcode,
-            color: v.color,
-            colorHex: v.colorHex,
-            size: v.size,
-            sizeSystem: v.sizeSystem as any,
-            priceModifier: v.priceModifier ?? 0,
-            weightGrams: v.weightGrams,
-            ...(defaultWarehouse && v.initialStock !== undefined
-              ? {
-                  inventory: {
-                    create: {
-                      warehouseId: defaultWarehouse.id,
-                      quantityOnHand: v.initialStock,
+          create: dto.variants.map((v, i) => {
+            // Use the resolved SKU — may be suffixed if the base
+            // collided with an existing variant.
+            const finalSku = resolved[i]
+            return {
+              sku: finalSku,
+              // Guard: every variant must carry a non-empty barcode.
+              // Default = final SKU (not the original!) to keep sku
+              // and barcode in sync. External EAN overrides still win.
+              barcode: ensureVariantBarcode({ sku: finalSku, barcode: v.barcode }),
+              color: v.color,
+              colorHex: v.colorHex,
+              size: v.size,
+              sizeSystem: v.sizeSystem as any,
+              priceModifier: v.priceModifier ?? 0,
+              weightGrams: v.weightGrams,
+              ...(defaultWarehouse && v.initialStock !== undefined
+                ? {
+                    inventory: {
+                      create: {
+                        warehouseId: defaultWarehouse.id,
+                        quantityOnHand: v.initialStock,
+                      },
                     },
-                  },
-                }
-              : {}),
-          })),
+                  }
+                : {}),
+            }
+          }),
         },
       },
       include: {
@@ -136,7 +159,10 @@ export class ProductsService {
       },
     })
 
-    return product
+    // Attach the adjustments list as a non-DB field on the response so
+    // the frontend can show a "SKU was auto-renamed" toast without an
+    // extra round-trip. Non-empty only when at least one SKU changed.
+    return { ...product, skuAdjustments: adjustments } as typeof product & { skuAdjustments: SkuAdjustment[] }
   }
 
   async findAll(filters: ProductFilters = {}) {

@@ -8,11 +8,13 @@ import {
   ArrowLeft, ArrowRightLeft, PackagePlus, RotateCcw,
   ShoppingBag, ChevronLeft, ChevronRight, Search, Calendar,
   Package, AlertTriangle, Filter, X, User, ChevronDown,
+  TrendingUp, TrendingDown, Lock, Unlock, CalendarRange,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { translateColor, translateMovement, getProductName } from '@/lib/locale-utils'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { Input } from '@/components/ui/input'
+import { DateTimePicker } from '@/components/ui/datetime-picker'
 
 // ── Type config ─────────────────────────────────────────────
 const TYPE_CONFIG: Record<string, { icon: any; bg: string; text: string; ring: string }> = {
@@ -53,6 +55,66 @@ function getTimeOnly(dateStr: string, locale: string): string {
   return new Intl.DateTimeFormat(fmt, { hour: '2-digit', minute: '2-digit' }).format(new Date(dateStr))
 }
 
+// ── Time range helpers ─────────────────────────────────────
+type TimeRange = 'today' | 'week' | 'month' | '3months' | 'all' | 'custom'
+
+function rangeBounds(range: TimeRange, customFrom: string, customUntil: string): { from: Date | null; until: Date | null } {
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+
+  switch (range) {
+    case 'today':
+      return { from: startOfToday, until: endOfToday }
+    case 'week': {
+      const d = new Date(startOfToday)
+      d.setDate(d.getDate() - 6) // last 7 days including today
+      return { from: d, until: endOfToday }
+    }
+    case 'month': {
+      const d = new Date(startOfToday)
+      d.setDate(d.getDate() - 29) // last 30 days
+      return { from: d, until: endOfToday }
+    }
+    case '3months': {
+      const d = new Date(startOfToday)
+      d.setDate(d.getDate() - 89)
+      return { from: d, until: endOfToday }
+    }
+    case 'custom': {
+      // DateTimePicker returns "YYYY-MM-DDTHH:mm" — we only care about the
+      // date part. Strip the time portion, then widen the range to include
+      // the whole start day (00:00) and the whole end day (23:59:59.999).
+      const fromDate = customFrom
+        ? new Date(customFrom.slice(0, 10) + 'T00:00:00')
+        : null
+      const untilDate = customUntil
+        ? new Date(customUntil.slice(0, 10) + 'T23:59:59.999')
+        : null
+      return { from: fromDate, until: untilDate }
+    }
+    case 'all':
+    default:
+      return { from: null, until: null }
+  }
+}
+
+// Categorize movement types for the stats bar
+const TYPE_CATEGORIES: Record<string, 'in' | 'out' | 'correction' | 'reserved' | 'released' | 'other'> = {
+  purchase_received: 'in',
+  supplier_delivery: 'in',
+  return_received: 'in',
+  sale_online: 'out',
+  sale_pos: 'out',
+  sale_social: 'out',
+  stocktake_adjustment: 'correction',
+  damaged: 'correction',
+  expired: 'correction',
+  reserved: 'reserved',
+  released: 'released',
+  transfer: 'other',
+}
+
 // ── Page ────────────────────────────────────────────────────
 export default function MovementsPage() {
   const locale = useLocale()
@@ -64,7 +126,14 @@ export default function MovementsPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [timeRange, setTimeRange] = useState<TimeRange>('today')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customUntil, setCustomUntil] = useState('')
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
   const pageSize = 40
+  const bulkFetchSize = 200 // when a time filter is active, fetch up to 200 at once
+
+  const isTimeFiltered = timeRange !== 'all'
 
   const { data: warehouses } = useQuery({
     queryKey: ['admin-warehouses'],
@@ -72,25 +141,64 @@ export default function MovementsPage() {
   })
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['inventory-movements', warehouseFilter, typeFilter, search, page],
+    queryKey: ['inventory-movements', warehouseFilter, typeFilter, search, page, timeRange, customFrom, customUntil],
     queryFn: async () => {
       const { data } = await api.get('/admin/inventory/movements', {
         params: {
           warehouseId: warehouseFilter || undefined,
           type: typeFilter || undefined,
           search: search || undefined,
-          limit: pageSize,
-          offset: page * pageSize,
+          // When a time filter is active, fetch the max server allows (200)
+          // and we filter client-side. When "all" is active, use regular
+          // pagination so we don't overfetch.
+          limit: isTimeFiltered ? bulkFetchSize : pageSize,
+          offset: isTimeFiltered ? 0 : page * pageSize,
         },
       })
       return data
     },
   })
 
-  const movements = result?.data ?? []
-  const total = result?.meta?.total ?? 0
-  const totalPages = Math.ceil(total / pageSize)
-  const hasFilters = warehouseFilter || typeFilter || search
+  const rawMovements = result?.data ?? []
+  const rawTotal = result?.meta?.total ?? 0
+
+  // Client-side time filter
+  const { from: rangeFrom, until: rangeUntil } = useMemo(
+    () => rangeBounds(timeRange, customFrom, customUntil),
+    [timeRange, customFrom, customUntil],
+  )
+  const movements = useMemo(() => {
+    if (!isTimeFiltered && !rangeFrom && !rangeUntil) return rawMovements
+    return rawMovements.filter((m: any) => {
+      const t = new Date(m.createdAt).getTime()
+      if (rangeFrom && t < rangeFrom.getTime()) return false
+      if (rangeUntil && t >= rangeUntil.getTime()) return false
+      return true
+    })
+  }, [rawMovements, isTimeFiltered, rangeFrom, rangeUntil])
+
+  // When time-filtered, total is the filtered count (and may under-report
+  // if the range exceeds the 200-row fetch ceiling). When not, it's the
+  // raw server total across all pages.
+  const total = isTimeFiltered ? movements.length : rawTotal
+  const overflow = isTimeFiltered && rawTotal > bulkFetchSize
+  const totalPages = isTimeFiltered ? 1 : Math.ceil(rawTotal / pageSize)
+  const hasFilters = warehouseFilter || typeFilter || search || isTimeFiltered
+
+  // Stats bar: aggregate the currently-visible movements into buckets
+  const stats = useMemo(() => {
+    const acc = { in: 0, out: 0, correction: 0, reserved: 0, released: 0 }
+    for (const m of movements) {
+      const cat = TYPE_CATEGORIES[m.type] ?? 'other'
+      const qty = Math.abs(m.quantity)
+      if (cat === 'in') acc.in += qty
+      else if (cat === 'out') acc.out += qty
+      else if (cat === 'correction') acc.correction += qty
+      else if (cat === 'reserved') acc.reserved += qty
+      else if (cat === 'released') acc.released += qty
+    }
+    return acc
+  }, [movements])
 
   // Group movements by date, then by product+type within each date
   const grouped = useMemo(() => {
@@ -139,11 +247,36 @@ export default function MovementsPage() {
     })
   }
 
+  const toggleDate = (dateKey: string) => {
+    setCollapsedDates((prev) => {
+      const next = new Set(prev)
+      next.has(dateKey) ? next.delete(dateKey) : next.add(dateKey)
+      return next
+    })
+  }
+
   const clearFilters = () => {
     setWarehouseFilter('')
     setTypeFilter('')
     setSearch('')
+    setTimeRange('all')
+    setCustomFrom('')
+    setCustomUntil('')
     setPage(0)
+  }
+
+  // Localized labels for time-range chips
+  const timeLabel = (r: TimeRange): string => {
+    const map: Record<TimeRange, { de: string; en: string; ar: string }> = {
+      today:    { de: 'Heute',             en: 'Today',             ar: 'اليوم' },
+      week:     { de: 'Diese Woche',       en: 'This week',         ar: 'هذا الأسبوع' },
+      month:    { de: 'Dieser Monat',      en: 'This month',        ar: 'هذا الشهر' },
+      '3months':{ de: 'Letzte 3 Monate',   en: 'Last 3 months',     ar: 'آخر 3 أشهر' },
+      all:      { de: 'Alles',             en: 'All',               ar: 'الكل' },
+      custom:   { de: 'Zeitraum',          en: 'Custom',            ar: 'فترة' },
+    }
+    const e = map[r]
+    return e[locale as 'de' | 'en' | 'ar'] ?? e.de
   }
 
   return (
@@ -174,6 +307,124 @@ export default function MovementsPage() {
         </div>
       </div>
 
+      {/* ── Time-range chips ── */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {(['today', 'week', 'month', '3months', 'all'] as TimeRange[]).map((r) => {
+          const active = timeRange === r
+          return (
+            <button
+              key={r}
+              onClick={() => { setTimeRange(r); setPage(0); setCustomFrom(''); setCustomUntil('') }}
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-all whitespace-nowrap ring-1 ${
+                active
+                  ? 'bg-[#0f1419] text-white ring-[#0f1419] shadow-sm'
+                  : 'bg-background text-muted-foreground ring-border hover:bg-muted'
+              }`}
+            >
+              {timeLabel(r)}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Custom date range card (matches coupons/promotions style) ── */}
+      <div className="border rounded-xl p-4 mb-4 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <CalendarRange className="h-3.5 w-3.5" />
+          {locale === 'ar' ? 'الفترة الزمنية' : locale === 'en' ? 'Time Period' : 'Zeitraum'}
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              {locale === 'ar' ? 'البداية' : locale === 'en' ? 'Start' : 'Start'}
+            </label>
+            <DateTimePicker
+              value={customFrom}
+              onChange={(v) => { setCustomFrom(v); setTimeRange('custom'); setPage(0) }}
+              placeholder={locale === 'ar' ? 'تاريخ البدء' : locale === 'en' ? 'Start date' : 'Startdatum'}
+              showTime={false}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              {locale === 'ar' ? 'الانتهاء' : locale === 'en' ? 'End' : 'Ende'}
+            </label>
+            <DateTimePicker
+              value={customUntil}
+              onChange={(v) => { setCustomUntil(v); setTimeRange('custom'); setPage(0) }}
+              placeholder={locale === 'ar' ? 'تاريخ الانتهاء' : locale === 'en' ? 'End date' : 'Enddatum'}
+              showTime={false}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Stats bar ── */}
+      {movements.length > 0 && (
+        <div className="mb-4 bg-background border rounded-2xl p-4 shadow-sm">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2.5">
+            {timeLabel(timeRange)}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 ring-1 ring-emerald-200/60">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-emerald-700/70 font-semibold leading-none">
+                  {locale === 'ar' ? 'دخول' : locale === 'en' ? 'Incoming' : 'Eingang'}
+                </div>
+                <div className="text-base font-bold text-emerald-700 tabular-nums leading-tight mt-0.5">+{stats.in}</div>
+              </div>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 ring-1 ring-blue-200/60">
+              <TrendingDown className="h-4 w-4 text-blue-600" />
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-blue-700/70 font-semibold leading-none">
+                  {locale === 'ar' ? 'مبيعات' : locale === 'en' ? 'Sold' : 'Verkauft'}
+                </div>
+                <div className="text-base font-bold text-blue-700 tabular-nums leading-tight mt-0.5">−{stats.out}</div>
+              </div>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 ring-1 ring-slate-200/60">
+              <RotateCcw className="h-4 w-4 text-slate-600" />
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-700/70 font-semibold leading-none">
+                  {locale === 'ar' ? 'تصحيحات' : locale === 'en' ? 'Corrections' : 'Korrekturen'}
+                </div>
+                <div className="text-base font-bold text-slate-700 tabular-nums leading-tight mt-0.5">{stats.correction}</div>
+              </div>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-50 ring-1 ring-orange-200/60">
+              <Lock className="h-4 w-4 text-orange-600" />
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-orange-700/70 font-semibold leading-none">
+                  {locale === 'ar' ? 'محجوز' : locale === 'en' ? 'Reserved' : 'Reserviert'}
+                </div>
+                <div className="text-base font-bold text-orange-700 tabular-nums leading-tight mt-0.5">−{stats.reserved}</div>
+              </div>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 ring-1 ring-teal-200/60">
+              <Unlock className="h-4 w-4 text-teal-600" />
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-teal-700/70 font-semibold leading-none">
+                  {locale === 'ar' ? 'تم الإفراج' : locale === 'en' ? 'Released' : 'Freigegeben'}
+                </div>
+                <div className="text-base font-bold text-teal-700 tabular-nums leading-tight mt-0.5">+{stats.released}</div>
+              </div>
+            </div>
+          </div>
+          {overflow && (
+            <div className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-200/60 rounded-lg px-3 py-2 inline-flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              {locale === 'ar'
+                ? `يعرض هذا النطاق أكثر من 200 حركة — استخدم فلتر النوع أو المستودع أو فترة أدق لرؤية الكل.`
+                : locale === 'en'
+                  ? `This range has more than 200 movements — use a type, warehouse, or narrower date filter to see all.`
+                  : `Dieser Zeitraum hat mehr als 200 Bewegungen — nutze Typ-, Lager- oder einen engeren Datumsfilter.`}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Filter Bar ── */}
       <div className="bg-background border rounded-2xl p-3 mb-6 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
@@ -184,7 +435,7 @@ export default function MovementsPage() {
               placeholder={locale === 'ar' ? 'بحث عن SKU أو منتج...' : locale === 'en' ? 'Search SKU or product...' : 'SKU oder Produkt suchen...'}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-              className="pl-10 rtl:pl-3 rtl:pr-10 h-9 rounded-xl text-sm"
+              className="pl-10 rtl:pl-3 rtl:pr-10 h-10 rounded-xl text-sm"
             />
           </div>
 
@@ -192,7 +443,7 @@ export default function MovementsPage() {
           <select
             value={warehouseFilter}
             onChange={(e) => { setWarehouseFilter(e.target.value); setPage(0) }}
-            className={`h-9 px-3 rounded-xl text-xs font-medium border bg-background cursor-pointer transition-all ${warehouseFilter ? 'border-primary bg-primary/5 text-primary' : 'hover:border-muted-foreground/30'}`}
+            className={`h-10 px-3 rounded-xl text-sm font-semibold border bg-background cursor-pointer transition-all ${warehouseFilter ? 'border-primary bg-primary/5 text-primary' : 'hover:border-muted-foreground/30'}`}
           >
             <option value="">{t('inventory.allWarehouses')}</option>
             {(warehouses as any[])?.map((w: any) => (
@@ -201,8 +452,8 @@ export default function MovementsPage() {
           </select>
 
           {/* Type pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-2 flex-wrap">
+            <Filter className="h-4 w-4 text-muted-foreground" />
             {MOVEMENT_TYPES.map((type) => {
               const active = typeFilter === type
               const cfg = TYPE_CONFIG[type]
@@ -210,7 +461,7 @@ export default function MovementsPage() {
                 <button
                   key={type}
                   onClick={() => { setTypeFilter(active ? '' : type); setPage(0) }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
                     active
                       ? `${cfg.bg} ${cfg.text} ring-1 ${cfg.ring}`
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -263,27 +514,41 @@ export default function MovementsPage() {
             )}
           </div>
         ) : (
-          grouped.map((dateGroup) => (
+          grouped.map((dateGroup) => {
+            const dateCollapsed = collapsedDates.has(dateGroup.dateKey)
+            const entriesCount = dateGroup.productGroups.reduce((s, pg) => s + pg.items.length, 0)
+            return (
             <div key={dateGroup.dateKey}>
-              {/* Date header */}
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60">
+              {/* Date header — clickable to collapse/expand */}
+              <button
+                type="button"
+                onClick={() => toggleDate(dateGroup.dateKey)}
+                className="w-full flex items-center gap-3 mb-3 group"
+              >
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60 group-hover:bg-muted transition-colors">
+                  <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${dateCollapsed ? '-rotate-90 rtl:rotate-90' : ''}`} />
                   <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold text-muted-foreground">{dateGroup.label}</span>
+                  <span className="text-sm font-semibold text-muted-foreground">{dateGroup.label}</span>
                 </div>
                 <div className="flex-1 h-px bg-border" />
-                <span className="text-[11px] text-muted-foreground/60">
-                  {dateGroup.productGroups.reduce((s, pg) => s + pg.items.length, 0)} {locale === 'ar' ? 'حركة' : locale === 'en' ? 'entries' : 'Einträge'}
+                <span className="text-xs text-muted-foreground/70 tabular-nums">
+                  {entriesCount} {locale === 'ar' ? 'حركة' : locale === 'en' ? 'entries' : 'Einträge'}
                 </span>
-              </div>
+              </button>
 
-              {/* Product groups */}
+              {/* Product groups — hidden when date is collapsed */}
+              {!dateCollapsed && (
               <div className="bg-background border rounded-2xl overflow-hidden shadow-sm divide-y divide-border/50">
                 {dateGroup.productGroups.map((pg) => {
                   const cfg = TYPE_CONFIG[pg.type] ?? { icon: RotateCcw, bg: 'bg-muted', text: 'text-muted-foreground', ring: 'ring-muted' }
                   const Icon = cfg.icon
-                  const isPositive = pg.totalQty > 0
-                  const isZero = pg.totalQty === 0
+                  // `reserved` stores a positive DB quantity (= units locked),
+                  // but from the admin's available-stock perspective that's a
+                  // DECREASE. Flip the sign at display time so the badge reads
+                  // red/− instead of green/+. `released` naturally stays +.
+                  const displayQty = pg.type === 'reserved' ? -pg.totalQty : pg.totalQty
+                  const isPositive = displayQty > 0
+                  const isZero = displayQty === 0
                   const isSingle = pg.items.length === 1
                   const isExpanded = expandedGroups.has(pg.key)
                   const firstItem = pg.items[0]
@@ -301,14 +566,23 @@ export default function MovementsPage() {
                         className={`flex items-center gap-3 px-4 py-3 transition-all hover:bg-muted/30 ${!isSingle ? 'cursor-pointer' : 'cursor-default'}`}
                         style={{ animation: 'fadeIn 300ms ease-out both' }}
                       >
-                        {/* Product image */}
-                        {pg.productImage ? (
-                          <img src={pg.productImage} alt="" className="h-11 w-11 rounded-xl object-cover flex-shrink-0" />
-                        ) : (
-                          <div className={`h-11 w-11 rounded-xl ${cfg.bg} ${cfg.text} flex items-center justify-center flex-shrink-0`}>
-                            <Icon className="h-[18px] w-[18px]" />
-                          </div>
-                        )}
+                        {/* Product image — with graceful fallback when the URL
+                            is broken (e.g. Supabase bucket file deleted but
+                            image row still in DB). We render the fallback
+                            icon div absolutely-positioned BEHIND the img,
+                            so when <img> errors out we just swap its display
+                            to none and the icon shows through. */}
+                        <div className={`relative h-11 w-11 rounded-xl flex-shrink-0 overflow-hidden ${cfg.bg} ${cfg.text} flex items-center justify-center`}>
+                          <Icon className="h-[18px] w-[18px]" />
+                          {pg.productImage && (
+                            <img
+                              src={pg.productImage}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-cover"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                            />
+                          )}
+                        </div>
 
                         {/* Main info */}
                         <div className="flex-1 min-w-0">
@@ -375,7 +649,7 @@ export default function MovementsPage() {
                                   ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60'
                                   : 'bg-red-50 text-red-600 ring-1 ring-red-200/60'
                             }`}>
-                              {isZero ? '±0' : isPositive ? `+${pg.totalQty}` : pg.totalQty}
+                              {isZero ? '±0' : isPositive ? `+${displayQty}` : displayQty}
                             </div>
                             {isSingle && firstItem.quantityBefore != null && (
                               <div className="text-[11px] text-muted-foreground/50 font-mono tabular-nums">
@@ -389,7 +663,10 @@ export default function MovementsPage() {
                       {/* Expanded variants */}
                       {!isSingle && isExpanded && (
                         <div className="bg-muted/20 divide-y divide-border/30">
-                          {pg.items.map((m: any) => (
+                          {pg.items.map((m: any) => {
+                            // Same sign-flip for `reserved` as in the group header
+                            const mDisplay = m.type === 'reserved' ? -m.quantity : m.quantity
+                            return (
                             <div key={m.id} className="flex items-center gap-3 px-4 ltr:pl-[72px] rtl:pr-[72px] py-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -404,8 +681,8 @@ export default function MovementsPage() {
                                   )}
                                 </div>
                               </div>
-                              <div className={`px-2 py-0.5 rounded text-xs font-bold tabular-nums ${m.quantity > 0 ? 'text-emerald-600' : m.quantity < 0 ? 'text-red-500' : 'text-slate-400'}`}>
-                                {m.quantity > 0 ? '+' : ''}{m.quantity}
+                              <div className={`px-2 py-0.5 rounded text-xs font-bold tabular-nums ${mDisplay > 0 ? 'text-emerald-600' : mDisplay < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                {mDisplay > 0 ? '+' : ''}{mDisplay}
                               </div>
                               {m.quantityBefore != null && (
                                 <div className="text-[10px] text-muted-foreground/40 font-mono tabular-nums w-16 text-end">
@@ -413,20 +690,23 @@ export default function MovementsPage() {
                                 </div>
                               )}
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       )}
                     </div>
                   )
                 })}
               </div>
+              )}
             </div>
-          ))
+            )
+          })
         )}
       </div>
 
       {/* ── Pagination ── */}
-      {total > pageSize && (
+      {!isTimeFiltered && total > pageSize && (
         <div className="flex items-center justify-between mt-6 px-1">
           <span className="text-xs text-muted-foreground">
             {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} {locale === 'ar' ? 'من' : locale === 'en' ? 'of' : 'von'} {total}

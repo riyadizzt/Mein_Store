@@ -116,6 +116,7 @@ const ACTION_COLORS: Record<string, string> = {
   PRODUCT_CREATED: 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
   PRODUCT_UPDATED: 'bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300',
   PRODUCT_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
+  PRODUCT_HARD_DELETED: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
   PRODUCT_RESTORED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
   PRODUCT_DUPLICATED: 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
   PRODUCT_PRICE_CHANGED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
@@ -173,6 +174,11 @@ const ACTION_COLORS: Record<string, string> = {
   SUPPLIER_PAYMENT_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   SUPPLIER_DELIVERY_CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   INVENTORY_BATCH_TRANSFER: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-300',
+  INVENTORY_CSV_INTAKE: 'bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300',
+  STOCKTAKE_STARTED: 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300',
+  STOCKTAKE_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
+  STOCKTAKE_CORRECTION_STARTED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  PRODUCTS_CATEGORY_CHANGED: 'bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300',
   ADMIN_PASSWORD_RESET: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300',
   MAINTENANCE_AUTO_DISABLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
   EMERGENCY_RECOVERY: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -193,6 +199,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   PRODUCT_CREATED: { de: 'Produkt erstellt', en: 'Product created', ar: 'منتج جديد' },
   PRODUCT_UPDATED: { de: 'Produkt bearbeitet', en: 'Product updated', ar: 'تعديل المنتج' },
   PRODUCT_DELETED: { de: 'Produkt gelöscht', en: 'Product deleted', ar: 'حذف المنتج' },
+  PRODUCT_HARD_DELETED: { de: 'Produkt endgültig gelöscht', en: 'Product permanently deleted', ar: 'حذف المنتج نهائياً' },
   PRODUCT_RESTORED: { de: 'Produkt wiederhergestellt', en: 'Product restored', ar: 'استعادة المنتج' },
   INVENTORY_INTAKE: { de: 'Wareneingang', en: 'Stock received', ar: 'استلام بضاعة' },
   INVENTORY_OUTPUT: { de: 'Warenausgang', en: 'Stock output', ar: 'صرف بضاعة' },
@@ -252,6 +259,11 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   SUPPLIER_PAYMENT_DELETED: { de: 'Zahlung gelöscht', en: 'Payment deleted', ar: 'حذف الدفعة' },
   SUPPLIER_DELIVERY_CANCELLED: { de: 'Lieferung storniert', en: 'Delivery cancelled', ar: 'إلغاء التوريد' },
   INVENTORY_BATCH_TRANSFER: { de: 'Sammel-Transfer', en: 'Batch transfer', ar: 'نقل جماعي بين المستودعات' },
+  INVENTORY_CSV_INTAKE: { de: 'CSV-Wareneingang', en: 'CSV stock intake', ar: 'استلام بضاعة عبر CSV' },
+  STOCKTAKE_STARTED: { de: 'Inventur gestartet', en: 'Stocktake started', ar: 'بدء الجرد' },
+  STOCKTAKE_DELETED: { de: 'Inventur verworfen', en: 'Stocktake discarded', ar: 'تم تجاهل الجرد' },
+  STOCKTAKE_CORRECTION_STARTED: { de: 'Korrektur-Inventur gestartet', en: 'Correction stocktake started', ar: 'بدء جرد تصحيحي' },
+  PRODUCTS_CATEGORY_CHANGED: { de: 'Kategorie geändert', en: 'Category changed', ar: 'تغيير فئة المنتجات' },
   PRODUCTS_CHANNEL_ENABLED: { de: 'Kanal aktiviert', en: 'Channel enabled', ar: 'تفعيل القناة' },
   PRODUCTS_CHANNEL_DISABLED: { de: 'Kanal deaktiviert', en: 'Channel disabled', ar: 'إلغاء تفعيل القناة' },
   DELIVERY_CREATED: { de: 'Lieferung erstellt', en: 'Delivery created', ar: 'إنشاء توصيل' },
@@ -359,9 +371,24 @@ export default function AuditLogPage() {
           supplier: locale === 'ar' ? 'مورد' : locale === 'en' ? 'Supplier' : 'Lieferant',
           supplier_delivery: locale === 'ar' ? 'توريد' : locale === 'en' ? 'Delivery' : 'Wareneingang',
           shipment: locale === 'ar' ? 'شحنة' : locale === 'en' ? 'Shipment' : 'Sendung',
+          stocktake: locale === 'ar' ? 'جرد' : locale === 'en' ? 'Stocktake' : 'Inventur',
+          staff: locale === 'ar' ? 'موظف' : locale === 'en' ? 'Staff' : 'Mitarbeiter',
+          payment: locale === 'ar' ? 'دفعة' : locale === 'en' ? 'Payment' : 'Zahlung',
+          contact_message: locale === 'ar' ? 'رسالة تواصل' : locale === 'en' ? 'Contact message' : 'Kontaktnachricht',
         }
         const entityLink = (type: string, id: string) => {
-          const links: Record<string, string> = { order: `/${locale}/admin/orders/${id}`, product: `/${locale}/admin/products/${id}`, user: `/${locale}/admin/customers/${id}`, return: `/${locale}/admin/returns`, inventory: `/${locale}/admin/inventory`, supplier: `/${locale}/admin/suppliers/${id}`, supplier_delivery: `/${locale}/admin/suppliers` }
+          const links: Record<string, string> = {
+            order: `/${locale}/admin/orders/${id}`,
+            product: `/${locale}/admin/products/${id}`,
+            user: `/${locale}/admin/customers/${id}`,
+            return: `/${locale}/admin/returns`,
+            inventory: `/${locale}/admin/inventory`,
+            supplier: `/${locale}/admin/suppliers/${id}`,
+            supplier_delivery: `/${locale}/admin/suppliers`,
+            stocktake: `/${locale}/admin/inventory/stocktake`,
+            staff: `/${locale}/admin/staff`,
+            contact_message: `/${locale}/admin/contact-messages`,
+          }
           return links[type]
         }
 
@@ -422,10 +449,10 @@ export default function AuditLogPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الوقت' : 'Zeit'}</th>
-                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الإجراء' : 'Aktion'}</th>
-                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الكائن' : 'Objekt'}</th>
-                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'التغييرات' : 'Änderungen'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الوقت' : locale === 'en' ? 'Time' : 'Zeit'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الإجراء' : locale === 'en' ? 'Action' : 'Aktion'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'الكائن' : locale === 'en' ? 'Object' : 'Objekt'}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-[15px]">{locale === 'ar' ? 'التغييرات' : locale === 'en' ? 'Changes' : 'Änderungen'}</th>
                     <th className="text-start px-4 py-3 font-semibold text-[15px]">IP</th>
                   </tr>
                 </thead>

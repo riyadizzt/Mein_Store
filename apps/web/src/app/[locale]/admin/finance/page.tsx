@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { MonthlyTabV2 } from '@/components/admin/finance/monthly-tab'
+import { DateTimePicker } from '@/components/ui/datetime-picker'
 
 type Tab = 'overview' | 'daily' | 'monthly' | 'profit' | 'vat' | 'bestsellers' | 'customers'
 
@@ -245,11 +246,26 @@ function KpiCard({ title, value, comparison, icon }: {
 
 function DateRange({ from, to, setFrom, setTo }: {
   from: string; to: string; setFrom: (v: string) => void; setTo: (v: string) => void }) {
+  // DateTimePicker returns "YYYY-MM-DDTHH:mm"; upstream callers only use the
+  // date portion, so we strip the T* suffix when mirroring the value out,
+  // and expand the stored date back to midnight when feeding it in.
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="bg-background border rounded-lg px-3 py-2 text-sm" />
+      <div className="min-w-[180px]">
+        <DateTimePicker
+          value={from ? `${from}T00:00` : ''}
+          onChange={(v) => setFrom(v ? v.slice(0, 10) : '')}
+          showTime={false}
+        />
+      </div>
       <span className="text-muted-foreground">-</span>
-      <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="bg-background border rounded-lg px-3 py-2 text-sm" />
+      <div className="min-w-[180px]">
+        <DateTimePicker
+          value={to ? `${to}T00:00` : ''}
+          onChange={(v) => setTo(v ? v.slice(0, 10) : '')}
+          showTime={false}
+        />
+      </div>
     </div>
   )
 }
@@ -418,8 +434,13 @@ function DailyTab({ data, isLoading, date, setDate, t3 }: {
     <div className="space-y-6">
       {/* Controls */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="bg-background border rounded-lg px-3 py-2 text-sm" />
+        <div className="min-w-[200px]">
+          <DateTimePicker
+            value={date ? `${date}T00:00` : ''}
+            onChange={(v) => setDate(v ? v.slice(0, 10) : '')}
+            showTime={false}
+          />
+        </div>
         <ExportButtons t3={t3} onCsv={() => downloadDataAsCsv(data, `Tagesbericht-${date}.csv`)} />
       </div>
 

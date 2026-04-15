@@ -9,6 +9,7 @@ import {
   Search, Plus, Copy, Trash2, LayoutList, LayoutGrid,
   ChevronDown, ChevronRight, ChevronLeft, Check, Download,
   Package, Edit3, ArrowUpDown, RotateCcw, AlertTriangle,
+  Flame,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { translateColor, getProductName, getCategoryName, formatCurrency } from '@/lib/locale-utils'
@@ -127,8 +128,48 @@ export default function AdminProductsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-products'] }),
   })
 
+  // Permanent delete. The backend rejects with ConflictException +
+  // { error: 'ProductHasReferences', message: {de,en,ar}, blockers } when
+  // the product is still referenced by orders/reviews/coupons/promotions.
+  // We catch that specifically and surface it as a read-only info modal
+  // instead of a toast, so the admin gets the full list of blockers.
+  const hardDeleteMut = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/products/${id}/hard-delete`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-products'] })
+      setHardDeleteTarget(null)
+      setHardDeleteConfirmText('')
+    },
+    onError: (err: any) => {
+      const data = err?.response?.data
+      if (data?.error === 'ProductHasReferences') {
+        setHardDeleteBlockers({
+          message: data.message,
+          blockers: data.blockers,
+          name: hardDeleteTarget?.name ?? '',
+        })
+        setHardDeleteTarget(null)
+        setHardDeleteConfirmText('')
+      }
+    },
+  })
+
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [hardDeleteConfirmText, setHardDeleteConfirmText] = useState('')
+  const [hardDeleteBlockers, setHardDeleteBlockers] = useState<{
+    message: { de: string; en: string; ar: string }
+    blockers: { orderItems: number; reviews: number; coupons: number; promotions: number }
+    name: string
+  } | null>(null)
+
+  // The typed-confirmation phrase for hard delete. Must be spelled out
+  // by the admin — "löschen" / "delete" / "حذف" depending on locale.
+  // NOT the product name, because typing the name is a "skill check"
+  // that the admin already passed for soft-delete; for the dangerous
+  // irreversible step we want a separate explicit phrase.
+  const hardDeletePhrase = locale === 'ar' ? 'حذف نهائي' : locale === 'en' ? 'permanently delete' : 'endgültig löschen'
 
   // Helpers
   const getName = (ts: any[]) => getProductName(ts, locale)
@@ -143,9 +184,24 @@ export default function AdminProductsPage() {
   const resetFilters = () => { setCategoryId(''); setStatusFilter(''); setStockFilter(''); setChannelFilter(''); setPage(0) }
 
   const handleExport = async () => {
+    // Admin endpoints need the admin JWT, not the customer accessToken.
+    // Using accessToken returns 401 and writes the JSON error to disk.
+    const store = (await import('@/store/auth-store')).useAuthStore.getState()
+    const token = store.adminAccessToken || store.accessToken
+    if (!token) {
+      alert(locale === 'ar' ? 'يرجى تسجيل الدخول كمسؤول أولاً' : locale === 'en' ? 'Please log in as admin first' : 'Bitte als Admin einloggen')
+      return
+    }
     const res = await fetch(`${API_BASE_URL}/api/v1/admin/products/export`, {
-      headers: { Authorization: `Bearer ${(await import('@/store/auth-store')).useAuthStore.getState().accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
     })
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      console.error('[products export] HTTP', res.status, errText)
+      alert(locale === 'ar' ? `فشل التصدير (${res.status})` : locale === 'en' ? `Export failed (${res.status})` : `Export fehlgeschlagen (${res.status})`)
+      return
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'produkte.csv'; a.click(); URL.revokeObjectURL(url)
@@ -421,9 +477,18 @@ export default function AdminProductsPage() {
                           <Link href={`/${locale}/admin/products/${p.id}`} className="p-1.5 rounded-lg hover:bg-muted"><Edit3 className="h-3.5 w-3.5 text-muted-foreground" /></Link>
                           <button onClick={() => dupMut.mutate(p.id)} className="p-1.5 rounded-lg hover:bg-muted"><Copy className="h-3.5 w-3.5 text-muted-foreground" /></button>
                           {p.deletedAt ? (
-                            <button onClick={() => restoreMut.mutate(p.id)} className="p-1.5 rounded-lg hover:bg-green-100" title={locale === 'ar' ? 'استعادة' : 'Wiederherstellen'}>
-                              <RotateCcw className="h-3.5 w-3.5 text-green-600" />
-                            </button>
+                            <>
+                              <button onClick={() => restoreMut.mutate(p.id)} className="p-1.5 rounded-lg hover:bg-green-100" title={locale === 'ar' ? 'استعادة' : locale === 'en' ? 'Restore' : 'Wiederherstellen'}>
+                                <RotateCcw className="h-3.5 w-3.5 text-green-600" />
+                              </button>
+                              <button
+                                onClick={() => setHardDeleteTarget({ id: p.id, name: getName(p.translations) })}
+                                className="p-1.5 rounded-lg hover:bg-red-100 ring-1 ring-red-200/60 dark:ring-red-500/30"
+                                title={locale === 'ar' ? 'حذف نهائي' : locale === 'en' ? 'Permanently delete' : 'Endgültig löschen'}
+                              >
+                                <Flame className="h-3.5 w-3.5 text-red-600" />
+                              </button>
+                            </>
                           ) : (
                             <button onClick={() => setDeleteTarget({ id: p.id, name: getName(p.translations) })} className="p-1.5 rounded-lg hover:bg-red-100" title={locale === 'ar' ? 'حذف' : 'Löschen'}>
                               <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-500" />
@@ -528,6 +593,151 @@ export default function AdminProductsPage() {
                 className="bg-red-500 hover:bg-red-600 text-white"
               >
                 {deleteMut.isPending ? '...' : locale === 'ar' ? 'حذف' : locale === 'en' ? 'Delete' : 'Löschen'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── HARD DELETE CONFIRMATION MODAL (Stufe 3 — gefährlich, irreversibel) ── */}
+      {hardDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setHardDeleteTarget(null); setHardDeleteConfirmText('') }}>
+          <div className="bg-background border-2 border-red-500/40 rounded-2xl p-6 w-full max-w-md mx-4 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                <Flame className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-red-600">
+                  {locale === 'ar' ? 'حذف نهائي' : locale === 'en' ? 'Permanently Delete' : 'Endgültig löschen'}
+                </h2>
+                <p className="text-[11px] text-red-600/80 font-medium">
+                  {locale === 'ar' ? 'هذا الإجراء لا يمكن التراجع عنه' : locale === 'en' ? 'This action cannot be undone' : 'Diese Aktion kann nicht rückgängig gemacht werden'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg p-3 text-xs text-red-900 dark:text-red-200 space-y-1">
+              <div className="font-semibold">
+                {locale === 'ar'
+                  ? <>سيتم حذف <strong className="font-bold">{hardDeleteTarget.name}</strong> نهائياً من قاعدة البيانات.</>
+                  : locale === 'en'
+                  ? <><strong className="font-bold">{hardDeleteTarget.name}</strong> will be permanently erased from the database.</>
+                  : <><strong className="font-bold">{hardDeleteTarget.name}</strong> wird dauerhaft aus der Datenbank entfernt.</>}
+              </div>
+              <div className="opacity-80">
+                {locale === 'ar'
+                  ? 'سيتم حذف جميع الصور والمتغيرات والترجمات والمخزون المرتبط به.'
+                  : locale === 'en'
+                  ? 'All images, variants, translations and linked inventory will be wiped.'
+                  : 'Alle Bilder, Varianten, Übersetzungen und Bestand werden mitgelöscht.'}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">
+                {locale === 'ar'
+                  ? <>اكتب <code className="px-1.5 py-0.5 rounded bg-muted text-foreground font-mono">{hardDeletePhrase}</code> للتأكيد:</>
+                  : locale === 'en'
+                  ? <>Type <code className="px-1.5 py-0.5 rounded bg-muted text-foreground font-mono">{hardDeletePhrase}</code> to confirm:</>
+                  : <>Tippe <code className="px-1.5 py-0.5 rounded bg-muted text-foreground font-mono">{hardDeletePhrase}</code> zur Bestätigung:</>}
+              </label>
+              <input
+                value={hardDeleteConfirmText}
+                onChange={(e) => setHardDeleteConfirmText(e.target.value)}
+                placeholder={hardDeletePhrase}
+                className="w-full h-11 px-3 rounded-lg border border-red-300 dark:border-red-500/40 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                autoFocus
+                dir={locale === 'ar' ? 'rtl' : 'ltr'}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setHardDeleteTarget(null); setHardDeleteConfirmText('') }}>
+                {locale === 'ar' ? 'إلغاء' : locale === 'en' ? 'Cancel' : 'Abbrechen'}
+              </Button>
+              <Button
+                onClick={() => hardDeleteMut.mutate(hardDeleteTarget.id)}
+                disabled={hardDeleteConfirmText.trim() !== hardDeletePhrase || hardDeleteMut.isPending}
+                className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-40"
+              >
+                {hardDeleteMut.isPending
+                  ? '...'
+                  : locale === 'ar' ? 'حذف نهائي' : locale === 'en' ? 'Delete Forever' : 'Endgültig löschen'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── HARD DELETE BLOCKER MODAL (Produkt ist mit X Bestellungen verknüpft) ── */}
+      {hardDeleteBlockers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setHardDeleteBlockers(null)}>
+          <div className="bg-background border border-amber-500/40 rounded-2xl p-6 w-full max-w-md mx-4 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-amber-700 dark:text-amber-400">
+                  {locale === 'ar' ? 'غير قابل للحذف' : locale === 'en' ? 'Cannot Delete' : 'Nicht löschbar'}
+                </h2>
+                <p className="text-[11px] text-muted-foreground">
+                  {locale === 'ar' ? 'المنتج مرتبط بسجلات محمية' : locale === 'en' ? 'Product linked to protected records' : 'Produkt ist mit geschützten Datensätzen verknüpft'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm text-foreground">
+              {hardDeleteBlockers.message[locale as 'de' | 'en' | 'ar'] ?? hardDeleteBlockers.message.de}
+            </p>
+
+            <div className="bg-muted/40 rounded-lg p-3 space-y-1.5 text-xs">
+              {hardDeleteBlockers.blockers.orderItems > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {locale === 'ar' ? 'طلبات مرتبطة' : locale === 'en' ? 'Linked orders' : 'Verknüpfte Bestellungen'}
+                  </span>
+                  <span className="font-mono font-semibold tabular-nums">{hardDeleteBlockers.blockers.orderItems}</span>
+                </div>
+              )}
+              {hardDeleteBlockers.blockers.reviews > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {locale === 'ar' ? 'تقييمات' : locale === 'en' ? 'Reviews' : 'Bewertungen'}
+                  </span>
+                  <span className="font-mono font-semibold tabular-nums">{hardDeleteBlockers.blockers.reviews}</span>
+                </div>
+              )}
+              {hardDeleteBlockers.blockers.coupons > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {locale === 'ar' ? 'قسائم' : locale === 'en' ? 'Coupons' : 'Gutscheine'}
+                  </span>
+                  <span className="font-mono font-semibold tabular-nums">{hardDeleteBlockers.blockers.coupons}</span>
+                </div>
+              )}
+              {hardDeleteBlockers.blockers.promotions > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {locale === 'ar' ? 'عروض' : locale === 'en' ? 'Promotions' : 'Promotionen'}
+                  </span>
+                  <span className="font-mono font-semibold tabular-nums">{hardDeleteBlockers.blockers.promotions}</span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              {locale === 'ar'
+                ? 'يبقى المنتج محذوفاً (غير ظاهر للعملاء) لكن البيانات التاريخية محفوظة للامتثال الضريبي.'
+                : locale === 'en'
+                ? 'The product stays soft-deleted (hidden from customers) but historical data is preserved for tax compliance.'
+                : 'Das Produkt bleibt soft-deleted (für Kunden unsichtbar), historische Daten werden für die Steuer-Compliance aufbewahrt.'}
+            </p>
+
+            <div className="flex justify-end">
+              <Button onClick={() => setHardDeleteBlockers(null)} variant="outline">
+                {locale === 'ar' ? 'حسناً' : locale === 'en' ? 'Got it' : 'Verstanden'}
               </Button>
             </div>
           </div>

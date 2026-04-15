@@ -3,12 +3,12 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useAuthStore } from '@/store/auth-store'
 
-const INACTIVITY_TIMEOUT = 30 * 60 * 1000 // 30 minutes
+const INACTIVITY_TIMEOUT = 2 * 60 * 60 * 1000 // 2 hours
 const MAX_SESSION_DURATION = 8 * 60 * 60 * 1000 // 8 hours absolute max
 
 /**
  * Admin Session Guard — monitors inactivity and max session duration.
- * - After 30 min inactivity → auto-logout with message
+ * - After 2 hours inactivity → auto-logout with message
  * - After 8 hours total → auto-logout regardless of activity
  * - Only affects admin sessions, NOT customer sessions
  */

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
+import { ensureVariantBarcode } from '../../../common/helpers/variant-barcode'
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -319,7 +320,12 @@ export class AdminSuppliersService {
               data: {
                 productId: product.id,
                 sku,
-                barcode: sku,
+                // Guard: mandatory barcode via shared helper. Same
+                // rule as every other variant-create path — the
+                // Wareneingangs-flow was already doing this
+                // correctly (barcode=sku), but we route through the
+                // helper for a single source of truth.
+                barcode: ensureVariantBarcode({ sku }),
                 color: color || null,
                 // Look up the hex for this colour name from the payload.
                 // Falls back to null when the client didn't send a

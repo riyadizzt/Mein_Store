@@ -16,6 +16,7 @@ import { COLOR_PRESETS, getColorStyle } from '@/lib/color-presets'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { useToastStore } from '@/store/toast-store'
 
 const LANGS = [
   { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
@@ -194,6 +195,38 @@ export default function NewProductPage() {
       })
 
       const productId = created?.id
+
+      // If the backend had to auto-suffix any SKUs because they
+      // collided with existing variants, `created.skuAdjustments` is a
+      // non-empty list of { original, final } pairs. Surface it as a
+      // toast so the admin doesn't have to compare the rows manually.
+      const adjustments: Array<{ original: string; final: string }> = created?.skuAdjustments ?? []
+      if (adjustments.length > 0) {
+        const list = adjustments
+          .map((a) => `${a.original} → ${a.final}`)
+          .join('\n')
+        const title =
+          locale === 'ar'
+            ? `تم تعديل ${adjustments.length === 1 ? 'SKU واحد' : `${adjustments.length} من أرقام SKU`} تلقائياً`
+            : locale === 'en'
+            ? `${adjustments.length === 1 ? 'One SKU was' : `${adjustments.length} SKUs were`} automatically renamed`
+            : `${adjustments.length === 1 ? 'Eine SKU wurde' : `${adjustments.length} SKUs wurden`} automatisch umbenannt`
+        const body =
+          locale === 'ar'
+            ? `كانت SKU موجودة مسبقاً، فتم تعديلها:\n${list}`
+            : locale === 'en'
+            ? `The SKU(s) already existed and were suffixed:\n${list}`
+            : `Die SKU(s) waren bereits vergeben und wurden ergänzt:\n${list}`
+        // The toast helper's `info` shortcut doesn't accept a duration,
+        // so we go through the store directly to give the admin enough
+        // time to read a multi-line SKU mapping (8 seconds instead of
+        // the default 3).
+        useToastStore.getState().add({
+          message: `${title}\n\n${body}`,
+          type: 'info',
+          duration: 8000,
+        })
+      }
 
       // 2. Upload images to Supabase (if product was created and images exist)
       if (productId && images.length > 0) {

@@ -769,7 +769,7 @@ function InviteModal({
                 <Settings2 className="inline h-4 w-4 mr-1.5 -mt-0.5 text-gray-400" />
                 {t3(locale, 'Berechtigungen auswählen', 'Select Permissions', 'اختيار الأذونات')}
               </label>
-              <div className="space-y-4 max-h-60 overflow-y-auto pr-1">
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
                 {permissionsData.groups.map((group) => (
                   <div key={group.key} className="bg-gray-50 rounded-xl p-4">
                     <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3">
@@ -1004,7 +1004,7 @@ function StaffDetailPanel({
 
                 {/* Custom permission toggles */}
                 {newStaffRole === 'custom' && permissionsData && (
-                  <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
                     {permissionsData.groups.map((group) => (
                       <div key={group.key} className="bg-white rounded-lg p-3 border border-gray-100">
                         <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">

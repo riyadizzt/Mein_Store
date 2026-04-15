@@ -208,6 +208,8 @@ describe('PaymentsService — bug-fix regression', () => {
           user: {
             passwordHash: null,         // ← stub marker
             email: 'stub@example.com',
+            isVerified: false,          // ← real stub, not a legacy OAuth user
+            oauthAccounts: [],          // ← no Google/Facebook link
           },
         },
       })
@@ -237,6 +239,8 @@ describe('PaymentsService — bug-fix regression', () => {
           user: {
             passwordHash: '$argon2id$v=19$...', // ← real password
             email: 'real@example.com',
+            isVerified: true,
+            oauthAccounts: [],
           },
         },
       })
@@ -249,6 +253,78 @@ describe('PaymentsService — bug-fix regression', () => {
       expect(savedNotes.inviteToken).toBeUndefined()
       // confirmationToken always generated (used by other flows)
       expect(savedNotes.confirmationToken).toBeDefined()
+    })
+
+    // Regression test for 15.04.2026 incident: Google/Facebook users
+    // were falsely classified as stub-guests because they have no
+    // passwordHash either. The 3-signal check must exclude them via
+    // the oauthAccounts link (for users who logged in after the
+    // 14.04.2026 upsert-fix) OR via isVerified (for legacy users).
+    it('does NOT generate inviteToken for a Google OAuth user (oauthAccounts linked)', async () => {
+      prisma.payment.findFirst.mockResolvedValue({
+        id: 'pay1',
+        status: 'pending',
+        providerPaymentId: 'pi_google_1',
+        previousProviderPaymentIds: [],
+        order: {
+          id: 'order1',
+          orderNumber: 'ORD-GOOG-001',
+          status: 'pending_payment',
+          notes: null,
+          userId: 'google-user-id',
+          guestEmail: null,
+          user: {
+            passwordHash: null,          // OAuth users have no password
+            email: 'cro.defi.mail@gmail.com',
+            isVerified: true,            // Google auto-verifies
+            oauthAccounts: [{ id: 'oa1' }], // ← Google link present
+          },
+        },
+      })
+
+      const service = await makeService(prisma, eventEmitter)
+      await service.handlePaymentSuccess('pi_google_1', 'STRIPE', 'corr-google-1')
+
+      const updateCall = prisma.order.update.mock.calls[0][0]
+      const savedNotes = JSON.parse(updateCall.data.notes)
+      // Google user already has an account — must NOT receive an invite
+      expect(savedNotes.inviteToken).toBeUndefined()
+      // confirmationToken still generated (used for return-link etc.)
+      expect(savedNotes.confirmationToken).toMatch(/^[0-9a-f-]{36}$/)
+    })
+
+    // Pre-14.04.2026 Google users don't have an oauthAccounts row (the
+    // upsert was only added on that date). For them the isVerified flag
+    // is the only way to tell them apart from a real stub guest.
+    it('does NOT generate inviteToken for a LEGACY OAuth user (isVerified=true, no oauthAccounts row)', async () => {
+      prisma.payment.findFirst.mockResolvedValue({
+        id: 'pay1',
+        status: 'pending',
+        providerPaymentId: 'pi_legacy_1',
+        previousProviderPaymentIds: [],
+        order: {
+          id: 'order1',
+          orderNumber: 'ORD-LEG-001',
+          status: 'pending_payment',
+          notes: null,
+          userId: 'legacy-oauth-id',
+          guestEmail: null,
+          user: {
+            passwordHash: null,
+            email: 'legacy@example.com',
+            isVerified: true,            // ← legacy marker
+            oauthAccounts: [],           // no row because they logged in before 14.04
+          },
+        },
+      })
+
+      const service = await makeService(prisma, eventEmitter)
+      await service.handlePaymentSuccess('pi_legacy_1', 'STRIPE', 'corr-legacy-1')
+
+      const updateCall = prisma.order.update.mock.calls[0][0]
+      const savedNotes = JSON.parse(updateCall.data.notes)
+      expect(savedNotes.inviteToken).toBeUndefined()
+      expect(savedNotes.confirmationToken).toMatch(/^[0-9a-f-]{36}$/)
     })
 
     it('still handles the pure-guest case (userId=null, guestEmail set)', async () => {
@@ -363,6 +439,83 @@ describe('PaymentsService — bug-fix regression', () => {
       const updateCall = prisma.order.update.mock.calls[0][0]
       const savedNotes = JSON.parse(updateCall.data.notes)
       expect(savedNotes.inviteToken).toBe(existingToken)
+    })
+  })
+
+  // Regression for 15.04.2026 incident: markAsCaptured (manual Vorkasse
+  // admin confirm) never emitted ORDER_EVENTS.CONFIRMED, so the
+  // InventoryListener.handleOrderConfirmed branch never ran and
+  // StockReservation rows stayed RESERVED until the expiry cron
+  // swept them — without ever decrementing quantityOnHand. Result:
+  // Vorkasse orders got paid but stock was never deducted.
+  describe('Bug: markAsCaptured must emit ORDER_CONFIRMED for Vorkasse flow', () => {
+    it('emittet ORDER_CONFIRMED mit reservationIds aus notes wenn vorhanden', async () => {
+      prisma.payment.update.mockResolvedValue({})
+      prisma.order.findUnique.mockResolvedValue({
+        status: 'pending_payment',
+        orderNumber: 'ORD-VKS-001',
+        notes: JSON.stringify({
+          reservationIds: ['res-vk-1', 'res-vk-2'],
+          locale: 'de',
+        }),
+      })
+      prisma.order.update.mockResolvedValue({})
+
+      const service = await makeService(prisma, eventEmitter)
+      await service.markAsCaptured('order-vorkasse-1')
+
+      // Must have emitted ORDER_EVENTS.CONFIRMED ('order.confirmed')
+      const confirmedCalls = eventEmitter.emit.mock.calls.filter(
+        (call: any) => call[0] === 'order.confirmed',
+      )
+      expect(confirmedCalls.length).toBe(1)
+      // And the payload must carry the reservation ids
+      const payload = confirmedCalls[0][1]
+      expect(payload.reservationIds).toEqual(['res-vk-1', 'res-vk-2'])
+      expect(payload.orderId).toBe('order-vorkasse-1')
+      expect(payload.orderNumber).toBe('ORD-VKS-001')
+    })
+
+    it('emittet KEIN ORDER_CONFIRMED wenn notes.reservationIds leer/fehlt', async () => {
+      prisma.payment.update.mockResolvedValue({})
+      prisma.order.findUnique.mockResolvedValue({
+        status: 'pending_payment',
+        orderNumber: 'ORD-LEG-001',
+        notes: JSON.stringify({ locale: 'de' }),  // no reservationIds
+      })
+      prisma.order.update.mockResolvedValue({})
+
+      const service = await makeService(prisma, eventEmitter)
+      await service.markAsCaptured('order-legacy-1')
+
+      const confirmedCalls = eventEmitter.emit.mock.calls.filter(
+        (call: any) => call[0] === 'order.confirmed',
+      )
+      expect(confirmedCalls.length).toBe(0)
+      // Legacy order still gets status_changed emit (for email)
+      const statusCalls = eventEmitter.emit.mock.calls.filter(
+        (call: any) => call[0] === 'order.status_changed',
+      )
+      expect(statusCalls.length).toBe(1)
+    })
+
+    it('emittet KEIN ORDER_CONFIRMED wenn Order bereits confirmed war', async () => {
+      prisma.payment.update.mockResolvedValue({})
+      prisma.order.findUnique.mockResolvedValue({
+        status: 'confirmed',  // already confirmed — idempotent call
+        orderNumber: 'ORD-IDEM-001',
+        notes: JSON.stringify({ reservationIds: ['r1'] }),
+      })
+      prisma.order.update.mockResolvedValue({})
+
+      const service = await makeService(prisma, eventEmitter)
+      await service.markAsCaptured('order-idem-1')
+
+      // No status transition → no ORDER_CONFIRMED re-emit → no double confirm
+      const confirmedCalls = eventEmitter.emit.mock.calls.filter(
+        (call: any) => call[0] === 'order.confirmed',
+      )
+      expect(confirmedCalls.length).toBe(0)
     })
   })
 })

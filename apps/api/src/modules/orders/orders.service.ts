@@ -676,7 +676,28 @@ export class OrdersService {
 
       // 9. Inventory-Event emitieren (async — Listener reserviert Bestand)
       try {
-        const reservationIds = await this.eventEmitter.emitAsync(
+        // emitAsync waits for the listener to finish. By the time this
+        // returns, any successful reservations are already committed in
+        // the DB. Failure cases throw and land in the catch block below.
+        //
+        // We USED to trust the listener's return value that emitAsync
+        // collects and flatten it into an array of IDs. That does not
+        // actually work in @nestjs/event-emitter 3.x with
+        // `@OnEvent(..., { async: true })` — the return value of an
+        // async-decorated listener is not propagated back to the caller,
+        // so `flatIds` was always [] and `notes.reservationIds` was
+        // never written. Consequence: `payments.service.handlePaymentSuccess`
+        // read `reservationIds ?? []` → empty → never emitted
+        // `ORDER_EVENTS.CONFIRMED` → `reservation.confirm()` never ran →
+        // StockReservation rows stayed `RESERVED` forever and only the
+        // expiry cron eventually cleaned them up, WITHOUT decrementing
+        // `quantityOnHand`. See incident 15.04.2026.
+        //
+        // The robust fix: query the DB directly for RESERVED rows tied
+        // to this order. It's race-free because emitAsync has already
+        // awaited the listener, so the rows exist (or don't) by the
+        // time this query fires.
+        await this.eventEmitter.emitAsync(
           ORDER_EVENTS.CREATED,
           new OrderCreatedEvent(
             order.id,
@@ -691,10 +712,12 @@ export class OrdersService {
           ),
         )
 
-        // emitAsync returns results from ALL listeners — find the one with reservation IDs
-        const flatIds: string[] = (reservationIds ?? [])
-          .flat(2)
-          .filter((id): id is string => typeof id === 'string' && id.length > 10)
+        // Direct query — reliable regardless of event-emitter semantics.
+        const createdReservations = await this.prisma.stockReservation.findMany({
+          where: { orderId: order.id, status: 'RESERVED' },
+          select: { id: true },
+        })
+        const flatIds: string[] = createdReservations.map((r) => r.id)
 
         // Merge reservationIds into existing notes (don't overwrite guest data)
         if (flatIds.length > 0) {

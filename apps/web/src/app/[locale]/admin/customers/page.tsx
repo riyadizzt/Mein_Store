@@ -170,9 +170,23 @@ export default function AdminCustomersPage() {
     if (filter) params.set('filter', filter)
     if (tagFilter) params.set('tag', tagFilter)
     if (search) params.set('search', search)
+    // Admin export needs the admin JWT. `accessToken` is the customer
+    // token and causes a 401 that gets written into the CSV file.
+    const store = (await import('@/store/auth-store')).useAuthStore.getState()
+    const token = store.adminAccessToken || store.accessToken
+    if (!token) {
+      alert(locale === 'ar' ? 'يرجى تسجيل الدخول كمسؤول أولاً' : locale === 'en' ? 'Please log in as admin first' : 'Bitte als Admin einloggen')
+      return
+    }
     const res = await fetch(`${API_BASE_URL}/api/v1/admin/customers/export?${params}`, {
-      headers: { Authorization: `Bearer ${(await import('@/store/auth-store')).useAuthStore.getState().accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
     })
+    if (!res.ok) {
+      console.error('[customers export] HTTP', res.status)
+      alert(locale === 'ar' ? `فشل التصدير (${res.status})` : locale === 'en' ? `Export failed (${res.status})` : `Export fehlgeschlagen (${res.status})`)
+      return
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'kunden.csv'; a.click()

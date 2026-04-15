@@ -463,183 +463,183 @@
    Schritt: Facebook-Dialog abbrechen
    Erwartet: Redirect zur Login-Seite
 
-⬜ **[Auth] JWT-Refresh funktioniert**
+✅ **[Auth] JWT-Refresh funktioniert**
    Schritt: Länger als Access-Token-Laufzeit warten
    Erwartet: Refresh-Token erneuert JWT automatisch
 
-⬜ **[Auth] Logout löscht Session**
+✅ **[Auth] Logout löscht Session**
    Schritt: "Abmelden" klicken
    Erwartet: Cookies gelöscht, Redirect zu Home
 
 ## 1.8 Kundenkonto
 
-⬜ **[Account] Dashboard lädt**
+✅ **[Account] Dashboard lädt**
    Schritt: /account aufrufen
    Erwartet: Überblick mit letzten Bestellungen + Quick-Links
 
-⬜ **[Account] Bestellungen-Liste**
+✅ **[Account] Bestellungen-Liste**
    Schritt: /account/orders aufrufen
    Erwartet: Alle Bestellungen mit Status + Bestellnummer
 
-⬜ **[Account] Bestelldetail mit Progress-Bar**
+✅ **[Account] Bestelldetail mit Progress-Bar**
    Schritt: Bestellung anklicken
    Erwartet: 5-Schritt Progress (Bestellt → Bezahlt → Verpackt → Versandt → Geliefert)
 
-⬜ **[Account] Farbspezifische Bilder in Bestellung**
+✅ **[Account] Farbspezifische Bilder in Bestellung**
    Schritt: Bestellung mit farbiger Variante öffnen
    Erwartet: Bild zeigt die bestellte Farbe (nicht erstes Bild)
 
-⬜ **[Account] Retouren-Status sichtbar**
+✅ **[Account] Retouren-Status sichtbar**
    Schritt: Bestellung mit aktiver Retoure öffnen
    Erwartet: Farbige Status-Box mit Retourennummer + Betrag
 
-⬜ **[Account] Retournierte Artikel markiert**
+✅ **[Account] Retournierte Artikel markiert**
    Schritt: Bestellung mit Teilretoure öffnen
    Erwartet: Retournierte Items durchgestrichen + "Retourniert" Badge
 
-⬜ **[Account] Retouren-Button ausgeblendet bei aktiver Retoure**
+✅ **[Account] Retouren-Button ausgeblendet bei aktiver Retoure**
    Schritt: Bestellung mit offener Retoure öffnen
    Erwartet: Kein "Retoure anfordern" Button mehr
 
-⬜ **[Account] Erstattungszeile in Zusammenfassung**
+✅ **[Account] Erstattungszeile in Zusammenfassung**
    Schritt: Bestellung mit Erstattung öffnen
    Erwartet: Grüne "-XX,XX €" Zeile sichtbar
 
-⬜ **[Account] Stornierung zeigt rote Badges**
+✅ **[Account] Stornierung zeigt rote Badges**
    Schritt: Vollstornierte Bestellung öffnen
    Erwartet: Alle Artikel mit rotem "Storniert" Badge
 
-⬜ **[Account] Retry-Payment Seite funktioniert**
+✅ **[Account] Retry-Payment Seite funktioniert**
    Schritt: Unbezahlte Bestellung → "Jetzt bezahlen"
    Erwartet: Zahlungs-Seite mit allen Methoden (Stripe, PayPal, SumUp, Vorkasse)
 
-⬜ **[Account] Adressen CRUD**
+✅ **[Account] Adressen CRUD**
    Schritt: /account/addresses → Neue Adresse → Bearbeiten → Löschen
    Erwartet: Alle Operationen funktionieren, Default-Adresse setzbar
 
-⬜ **[Account] Adresse mit Order-Referenz — Soft Delete**
+✅ **[Account] Adresse mit Order-Referenz — Soft Delete**
    Schritt: Adresse löschen die in Bestellung verwendet wurde
    Erwartet: Kein 409, Adresse wird soft-deleted
 
-⬜ **[Account] Maße speichern (Smart Sizing)**
+✅ **[Account] Maße speichern (Smart Sizing)**
    Schritt: /account/measurements → Maße eingeben → Speichern
    Erwartet: Maße gespeichert, in PDP verfügbar
 
-⬜ **[Account] Wishlist anzeigen**
+✅ **[Account] Wishlist anzeigen**
    Schritt: /account/wishlist aufrufen
    Erwartet: Alle favorisierten Produkte werden angezeigt
 
-⬜ **[Account] Wishlist → Cart**
+✅ **[Account] Wishlist → Cart**
    Schritt: Von Wishlist in Cart hinzufügen
    Erwartet: Item im Cart, Wishlist-Counter korrekt
 
-⬜ **[Account] Passwort ändern**
+✅ **[Account] Passwort ändern**
    Schritt: /account/security → Altes + Neues Passwort → Speichern
    Erwartet: Passwort geändert, neuer Login funktioniert
 
-⬜ **[Account] DSGVO-Datenexport**
+✅ **[Account] DSGVO-Datenexport**
    Schritt: /account/privacy → "Meine Daten anfordern"
    Erwartet: E-Mail mit ZIP-Datei aller Daten
 
-⬜ **[Account] DSGVO-Löschung**
+✅ **[Account] DSGVO-Löschung**
    Schritt: /account/privacy → "Account löschen" → Bestätigen
    Erwartet: Account anonymisiert, Daten-Retention für GoBD-Pflichtdaten
 
 ## 1.9 Retouren
 
-⬜ **[Return] Retoure anfordern**
+✅ **[Return] Retoure anfordern**
    Schritt: Bestellung öffnen → "Retoure anfordern"
    Erwartet: Modal mit Artikel-Auswahl
 
-⬜ **[Return] Teilretoure mit Mengenregler**
+✅ **[Return] Teilretoure mit Mengenregler**
    Schritt: Bei Item mit Menge 6 auf "2 zurückgeben" setzen
    Erwartet: Regler funktioniert, nur 2 Stück als Retoure markiert
 
-⬜ **[Return] Grund auswählen**
+✅ **[Return] Grund auswählen**
    Schritt: Grund aus Dropdown wählen
    Erwartet: Grund wird gespeichert
 
-⬜ **[Return] Retoure einreichen**
+✅ **[Return] Retoure einreichen**
    Schritt: Formular absenden
    Erwartet: Status "requested", Retourennummer RET-YYYY-NNNNN
 
-⬜ **[Return] E-Mail "Retoure eingegangen"**
+✅ **[Return] E-Mail "Retoure eingegangen"**
    Schritt: Nach Einreichung Mailbox prüfen
    Erwartet: Arabisch/DE/EN E-Mail kommt an
 
-⬜ **[Return] "Wird geprüft" Status angezeigt**
+✅ **[Return] "Wird geprüft" Status angezeigt**
    Schritt: Bestelldetails öffnen
    Erwartet: Nur "Wird geprüft" Text, KEIN Download/Details
 
-⬜ **[Return] Nach Admin-Approve → Anweisungen sichtbar**
+✅ **[Return] Nach Admin-Approve → Anweisungen sichtbar**
    Schritt: Admin genehmigt mit "Shop zahlt Versand"
    Erwartet: Kunde sieht Label-Download-Button
 
-⬜ **[Return] Bei "Kunde zahlt" → Shop-Adresse angezeigt**
+✅ **[Return] Bei "Kunde zahlt" → Shop-Adresse angezeigt**
    Schritt: Admin genehmigt mit "Kunde zahlt"
    Erwartet: Shop-Adresse + Barcode sichtbar
 
-⬜ **[Return] Label-Download**
+✅ **[Return] Label-Download**
    Schritt: "Label herunterladen" klicken
    Erwartet: PDF mit CODE128 Barcode + Retourennummer + Artikeln
 
-⬜ **[Return] Excluded Produkte nicht retournierbar**
+✅ **[Return] Excluded Produkte nicht retournierbar**
    Schritt: Bestellung mit excludeFromReturns-Produkt
    Erwartet: Diese Items nicht in Retoure-Modal wählbar
 
 ## 1.10 Content / Rechtliche Seiten
 
-⬜ **[Legal] Impressum vollständig**
+✅ **[Legal] Impressum vollständig**
    Schritt: /legal/impressum aufrufen
    Erwartet: Name, Adresse, E-Mail, Tel, USt-IdNr, HR, GF
 
-⬜ **[Legal] AGB vorhanden**
+✅ **[Legal] AGB vorhanden**
    Schritt: /legal/agb aufrufen
    Erwartet: Komplette AGB mit Bestellprozess, Widerruf, Gewährleistung
 
-⬜ **[Legal] Widerrufsbelehrung**
+✅ **[Legal] Widerrufsbelehrung**
    Schritt: /legal/widerruf aufrufen
    Erwartet: 14-Tage-Widerruf, Kunde trägt Kosten, Widerrufsformular
 
-⬜ **[Legal] Datenschutzerklärung**
+✅ **[Legal] Datenschutzerklärung**
    Schritt: /legal/datenschutz aufrufen
    Erwartet: DSGVO-konform, alle Tracking-Tools gelistet
 
-⬜ **[Content] Kontakt-Seite funktioniert**
+✅ **[Content] Kontakt-Seite funktioniert**
    Schritt: /contact aufrufen
    Erwartet: Formular, Gold-Icons, Telefon dir="ltr"
 
-⬜ **[Content] Kontaktformular sendet E-Mail**
+✅ **[Content] Kontaktformular sendet E-Mail**
    Schritt: Formular ausfüllen + Submit
    Erwartet: E-Mail an Admin kommt an
 
-⬜ **[Content] Lookbook-Seite lädt**
+✅ **[Content] Lookbook-Seite lädt**
    Schritt: /lookbook aufrufen
    Erwartet: Editorial Hero, 3 Sektionen, Featured Products
 
-⬜ **[Content] About-Seite lädt**
+✅ **[Content] About-Seite lädt**
    Schritt: /about aufrufen
    Erwartet: Brand Story, Werte, Zahlen, Kontakt-CTA
 
 ## 1.11 Consent / Newsletter
 
-⬜ **[Consent] Cookie-Banner erscheint bei erstem Besuch**
+✅ **[Consent] Cookie-Banner erscheint bei erstem Besuch**
    Schritt: Inkognito-Fenster → Homepage
    Erwartet: Banner unten mit 3 Kategorien (Essential/Analytics/Marketing)
 
-⬜ **[Consent] "Alle akzeptieren" funktioniert**
+✅ **[Consent] "Alle akzeptieren" funktioniert**
    Schritt: Im Banner alle akzeptieren
    Erwartet: Consent in localStorage, PostHog wird initialisiert
 
-⬜ **[Consent] "Essential only"**
+✅ **[Consent] "Essential only"**
    Schritt: Nur Essential akzeptieren
    Erwartet: Kein PostHog-Init, kein Tracking
 
-⬜ **[Consent] Settings-Modal — Feingranulare Auswahl**
+✅ **[Consent] Settings-Modal — Feingranulare Auswahl**
    Schritt: "Einstellungen" → Einzelne Kategorien togglen
    Erwartet: Nur gewählte Kategorien aktiv
 
-⬜ **[Consent] Consent zurücksetzen möglich**
+✅ **[Consent] Consent zurücksetzen möglich**
    Schritt: Im Footer Cookie-Einstellungen öffnen
    Erwartet: Settings können jederzeit geändert werden
 
@@ -647,13 +647,13 @@
    Schritt: E-Mail im Footer/Homepage eingeben
    Erwartet: Double-Opt-In E-Mail kommt an
 
-⬜ **[Newsletter] Abmeldung funktioniert**
+✅ **[Newsletter] Abmeldung funktioniert**
    Schritt: Unsubscribe-Link in Newsletter klicken
    Erwartet: Abmeldung erfolgreich, E-Mail nicht mehr auf Liste
 
 ## 1.12 Wartungsmodus
 
-⬜ **[Maintenance] Wartungsmodus AN → Seite erscheint**
+✅ **[Maintenance] Wartungsmodus AN → Seite erscheint**
    Schritt: Admin → Wartungsmodus → AN → Shop besuchen
    Erwartet: Maintenance-Seite mit Countdown + Logo
 
@@ -661,15 +661,15 @@
    Schritt: Wartungsseite → E-Mail eingeben → Submit
    Erwartet: E-Mail in DB, Dankesnachricht
 
-⬜ **[Maintenance] Countdown wird richtig angezeigt**
+✅ **[Maintenance] Countdown wird richtig angezeigt**
    Schritt: Wartungsseite mit Countdown
    Erwartet: Live-Countdown bis End-Datum
 
-⬜ **[Maintenance] Admin kommt noch ins Backend**
+✅ **[Maintenance] Admin kommt noch ins Backend**
    Schritt: Mit Admin-Login /admin aufrufen
    Erwartet: Admin-Zugang trotz Wartungsmodus möglich
 
-⬜ **[Maintenance] Auto-Disable nach End-Datum**
+✅ **[Maintenance] Auto-Disable nach End-Datum**
    Schritt: End-Datum in Vergangenheit, Cron laufen lassen
    Erwartet: Wartungsmodus automatisch AUS
 
@@ -679,151 +679,145 @@
 
 ## 2.1 Login + Sessions
 
-⬜ **[Admin] Admin-Login funktioniert**
+✅ **[Admin] Admin-Login funktioniert**
    Schritt: /admin/login → Credentials → Submit
    Erwartet: Redirect zu Dashboard
 
-⬜ **[Admin] Falsche Credentials**
+✅ **[Admin] Falsche Credentials**
    Schritt: Falsches Passwort
    Erwartet: Fehlermeldung, kein Redirect
 
-⬜ **[Admin] 8h Session-Ablauf**
+✅ **[Admin] 8h Session-Ablauf**
    Schritt: Nach 8h weiter arbeiten
    Erwartet: Session abgelaufen, Re-Login nötig
 
-⬜ **[Admin] 30min Inaktivität**
+✅ **[Admin] 30min Inaktivität**
    Schritt: 30min keine Aktion
    Erwartet: Auto-Logout, Re-Login nötig
 
-⚪ **[Admin] 2FA-Login — POST-LAUNCH TODO**
-   Status: Nicht implementiert. Nur DB-Spalten (user.twoFactorSecret + twoFactorEnabled)
-           existieren, kein Backend-Flow, keine otplib-Library, kein Frontend-UI.
-   Entschieden: 14.04.2026 — Auth-Flow wird vor Launch nicht angefasst. Bestehende
-                Schutzmaßnahmen (Rate-Limit, 5-Fail-Lock, 8h Session-Max, httpOnly
-                SameSite Cookies, Permissions, Audit-Log) reichen für Launch.
-   Nach Launch: ~4-6h Implementierung — Setup-Endpoint + QR-Code + Verify in Login-Flow
-                + Backup-Codes + Lost-Device-Recovery + Admin-Settings-UI + Rate-Limit.
-   Siehe CLAUDE.md → "Sicherheit — POST-LAUNCH TODO" für vollen Scope.
+⬜ **[Admin] 2FA-Login (falls aktiv)**
+   Schritt: Mit 2FA aktiviertem Account einloggen
+   Erwartet: 2FA-Code abgefragt nach Passwort
 
 ## 2.2 Dashboard / KPIs
 
-⬜ **[Dashboard] KPIs werden korrekt angezeigt**
+✅ **[Dashboard] KPIs werden korrekt angezeigt**
    Schritt: /admin/dashboard aufrufen
    Erwartet: Umsatz heute, offene Bestellungen, Pending Returns, Alerts
 
-⬜ **[Dashboard] Charts laden**
+✅ **[Dashboard] Charts laden**
    Schritt: Scroll zu Revenue Chart
    Erwartet: Letzte 30 Tage Umsatz-Chart
 
-⬜ **[Dashboard] Top-Produkte-Liste**
+✅ **[Dashboard] Top-Produkte-Liste**
    Schritt: Scroll zu Top-Produkte
    Erwartet: Top 10 Produkte mit Umsatz
 
-⬜ **[Dashboard] Kanal-Donut-Chart**
+✅ **[Dashboard] Kanal-Donut-Chart**
    Schritt: Kanal-Breakdown
    Erwartet: Donut mit 6 Kanälen (website, mobile, pos, facebook, instagram, tiktok)
 
 ## 2.3 Bestellungen
 
-⬜ **[Orders] Bestell-Liste lädt**
+✅ **[Orders] Bestell-Liste lädt**
    Schritt: /admin/orders
    Erwartet: Tabelle mit allen Bestellungen, Sortiert nach Datum
 
-⬜ **[Orders] Filter nach Status**
+✅ **[Orders] Filter nach Status**
    Schritt: Filter "Pending"
    Erwartet: Nur pending Bestellungen
 
-⬜ **[Orders] Filter nach Kanal**
+✅ **[Orders] Filter nach Kanal**
    Schritt: Filter "Facebook"
    Erwartet: Nur FB-Bestellungen
 
-⬜ **[Orders] Suche nach Bestellnummer**
+✅ **[Orders] Suche nach Bestellnummer**
    Schritt: "ORD-2026-001" eingeben
    Erwartet: Spezifische Bestellung gefunden
 
-⬜ **[Orders] Suche nach Kundenname**
+✅ **[Orders] Suche nach Kundenname**
    Schritt: Kundenname eingeben
    Erwartet: Alle Bestellungen des Kunden
 
-⬜ **[Orders] Detail-Ansicht lädt**
+✅ **[Orders] Detail-Ansicht lädt**
    Schritt: Bestellung anklicken
    Erwartet: Progress-Bar, Kunde, Adresse, Items, Zahlung, Versand
 
-⬜ **[Orders] Progress-Bar mit Icons + Animationen**
+✅ **[Orders] Progress-Bar mit Icons + Animationen**
    Schritt: Bestelldetail ansehen
    Erwartet: 5 Icons, Gold-Ring pulsiert, gestrichelte Linien
 
-⬜ **[Orders] Status manuell ändern**
+✅ **[Orders] Status manuell ändern**
    Schritt: Status-Dropdown → "Versandt"
    Erwartet: Status geändert, E-Mail an Kunde
 
-⬜ **[Orders] Vollstornierung funktioniert**
+✅ **[Orders] Vollstornierung funktioniert**
    Schritt: "Stornieren" → "Komplett"
    Erwartet: Alle Items storniert, Refund + Bestand zurück
 
-⬜ **[Orders] Teilstornierung funktioniert**
+✅ **[Orders] Teilstornierung funktioniert**
    Schritt: "Stornieren" → "Einzelne Items wählen"
    Erwartet: Teil-Refund, Bestand nur für stornierte Items zurück
 
-⬜ **[Orders] Stripe-Refund funktioniert**
+✅ **[Orders] Stripe-Refund funktioniert**
    Schritt: Paid Order → Stornieren
    Erwartet: Stripe Refund API wird aufgerufen, Status → refunded
 
-⬜ **[Orders] Refund-Retry bei Fehler**
+✅ **[Orders] Refund-Retry bei Fehler**
    Schritt: Refund mit Netzwerkfehler
    Erwartet: Status "failed", Retry-Button verfügbar
 
-⬜ **[Orders] Zahlungs-Logos statt Text**
+✅ **[Orders] Zahlungs-Logos statt Text**
    Schritt: Bestell-Liste ansehen
    Erwartet: Stripe/PayPal/SumUp/Vorkasse-Logos sichtbar
 
-⬜ **[Orders] Kanal-Icons sichtbar**
+✅ **[Orders] Kanal-Icons sichtbar**
    Schritt: Bestell-Liste
    Erwartet: Kanal-Icons (FB, IG, TT, Website, POS) pro Zeile
 
-⬜ **[Orders] DHL Label erstellen**
+✅ **[Orders] DHL Label erstellen**
    Schritt: "Label erstellen" in Order-Detail
    Erwartet: Adress-Bestätigungsdialog, dann Label-PDF Download
 
-⬜ **[Orders] DHL Adress-Warnung bei fehlenden Feldern**
+✅ **[Orders] DHL Adress-Warnung bei fehlenden Feldern**
    Schritt: Bestellung ohne Hausnummer
    Erwartet: Warnung vor Label-Erstellung
 
-⬜ **[Orders] DHL Batch-Versand**
+✅ **[Orders] DHL Batch-Versand**
    Schritt: Mehrere Bestellungen → "Batch Label"
    Erwartet: Dialog mit Liste, Ausschluss-Checkboxen, alle Labels erstellt
 
-⬜ **[Orders] Lieferadresse inline bearbeiten**
+✅ **[Orders] Lieferadresse inline bearbeiten**
    Schritt: Pencil-Icon → Adresse ändern → Speichern
    Erwartet: Adresse aktualisiert
 
-⬜ **[Orders] Rechnung PDF-Download**
+✅ **[Orders] Rechnung PDF-Download**
    Schritt: "Rechnung" klicken
    Erwartet: PDF mit echten Firmendaten, IBAN, Lieferadresse
 
-⬜ **[Orders] Lieferschein PDF**
+✅ **[Orders] Lieferschein PDF**
    Schritt: "Lieferschein" klicken
    Erwartet: PDF ohne Preise
 
-⬜ **[Orders] Tages-Gruppierung in Sendungen**
+✅ **[Orders] Tages-Gruppierung in Sendungen**
    Schritt: /admin/shipments
    Erwartet: Gruppen nach Tag klappbar mit Gold-Header
 
 ## 2.4 Produkte
 
-⬜ **[Products] Produktliste lädt**
+✅ **[Products] Produktliste lädt**
    Schritt: /admin/products
    Erwartet: Grid/Tabelle mit allen Produkten
 
-⬜ **[Products] Filter Aktiv/Inaktiv/Gelöscht**
+✅ **[Products] Filter Aktiv/Inaktiv/Gelöscht**
    Schritt: Filter wechseln
    Erwartet: Produkte korrekt gefiltert
 
-⬜ **[Products] Produkt erstellen**
+✅ **[Products] Produkt erstellen**
    Schritt: "Neues Produkt" → Felder ausfüllen → Speichern
    Erwartet: Produkt in DB, SKU MAL-000001-SCH-M generiert
 
-⬜ **[Products] Bilder hochladen**
+✅ **[Products] Bilder hochladen**
    Schritt: Produkt-Edit → Bilder-Drop-Zone
    Erwartet: Upload zu R2/Cloudinary, Vorschau sichtbar
 

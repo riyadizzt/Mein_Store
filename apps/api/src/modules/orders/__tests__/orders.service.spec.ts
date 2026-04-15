@@ -32,6 +32,13 @@ const mockPrisma = {
     updateMany: jest.fn(),
     aggregate: jest.fn().mockResolvedValue({ _sum: { quantityOnHand: 100, quantityReserved: 0 } }),
   },
+  // stockReservation.findMany is called by orders.service.create() after
+  // emitAsync(ORDER_EVENTS.CREATED) to look up reservation IDs tied to
+  // the new order. Defaults to empty — tests that care about the
+  // reservationIds write override this with a mockResolvedValueOnce.
+  stockReservation: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   idempotencyKey: { deleteMany: jest.fn() },
   $transaction: jest.fn().mockImplementation((fnOrArray) =>
     typeof fnOrArray === 'function'
@@ -149,6 +156,88 @@ describe('OrdersService', () => {
           'corr-no-addr',
         ),
       ).rejects.toThrow(BadRequestException)
+    })
+
+    // Regression for 15.04.2026 incident: emitAsync return value cannot
+    // be trusted for @OnEvent(..., { async: true }) listeners in
+    // @nestjs/event-emitter 3.x, so we query the StockReservation table
+    // directly AFTER emitAsync and use those IDs. This test verifies
+    // that path: a successful reservation write ends up in notes even
+    // if the event emitter returns an empty array.
+    it('schreibt reservationIds in notes via direkter DB-Query (nicht via emitAsync-return)', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([{ seq: 1 }])
+      mockPrisma.productVariant.findMany.mockResolvedValue([makeVariant('v1', 'SKU-001')])
+      mockPrisma.order.create.mockResolvedValue(makeOrder('order1'))
+      mockPrisma.order.update.mockResolvedValue({})
+
+      // emitAsync returns EMPTY — simulating the broken-return-value case
+      mockEventEmitter.emitAsync.mockResolvedValue([])
+
+      // But the DB query finds 2 reservations (the listener DID create them,
+      // only their IDs weren't propagated back via the return value)
+      mockPrisma.stockReservation.findMany.mockResolvedValueOnce([
+        { id: 'res-alpha' },
+        { id: 'res-beta' },
+      ])
+
+      await service.create(
+        {
+          items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 1 }],
+          countryCode: 'DE',
+          shippingAddress: {
+            firstName: 'Test', lastName: 'User',
+            street: 'Teststr', houseNumber: '1',
+            postalCode: '10115', city: 'Berlin', country: 'DE',
+          },
+        } as any,
+        'user1',
+        'corr-reservation-db-query',
+      )
+
+      // The stockReservation query must have been called with the new order id
+      expect(mockPrisma.stockReservation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ orderId: 'order1', status: 'RESERVED' }),
+          select: { id: true },
+        }),
+      )
+
+      // order.update must have been called with notes containing BOTH reservation ids
+      const notesUpdates = mockPrisma.order.update.mock.calls.filter(
+        (call: any) => call[0]?.data?.notes?.includes?.('reservationIds'),
+      )
+      expect(notesUpdates.length).toBeGreaterThanOrEqual(1)
+      const savedNotes = JSON.parse(notesUpdates[0][0].data.notes)
+      expect(savedNotes.reservationIds).toEqual(['res-alpha', 'res-beta'])
+    })
+
+    it('lässt notes unverändert wenn KEINE Reservations gefunden wurden', async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([{ seq: 1 }])
+      mockPrisma.productVariant.findMany.mockResolvedValue([makeVariant('v1', 'SKU-001')])
+      mockPrisma.order.create.mockResolvedValue(makeOrder('order2'))
+      mockPrisma.order.update.mockResolvedValue({})
+      mockEventEmitter.emitAsync.mockResolvedValue([])
+      mockPrisma.stockReservation.findMany.mockResolvedValueOnce([])  // none
+
+      await service.create(
+        {
+          items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 1 }],
+          countryCode: 'DE',
+          shippingAddress: {
+            firstName: 'Test', lastName: 'User',
+            street: 'Teststr', houseNumber: '1',
+            postalCode: '10115', city: 'Berlin', country: 'DE',
+          },
+        } as any,
+        'user1',
+        'corr-no-reservations',
+      )
+
+      // No call to update() with reservationIds in the payload
+      const notesUpdates = mockPrisma.order.update.mock.calls.filter(
+        (call: any) => call[0]?.data?.notes?.includes?.('reservationIds'),
+      )
+      expect(notesUpdates.length).toBe(0)
     })
   })
 

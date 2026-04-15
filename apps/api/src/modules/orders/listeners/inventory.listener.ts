@@ -20,7 +20,20 @@ export class InventoryListener {
   // erfolgreich reservierten Items 0..N-1 wieder freigegeben.
   // Bei Fehler wird die Exception zur emitAsync() hochgereicht.
 
-  @OnEvent(ORDER_EVENTS.CREATED, { async: true })
+  // IMPORTANT: no `{ async: true }` option.
+  //
+  // `{ async: true }` in @nestjs/event-emitter schedules the listener on
+  // a deferred tick (setImmediate-style), which means `emitAsync` returns
+  // BEFORE the listener has finished. For inventory operations that is
+  // fatal: the orders.service.create caller queries the DB for the
+  // freshly-created StockReservation rows immediately after emitAsync,
+  // and that query finds nothing because the reservations don't exist
+  // yet. See incident 15.04.2026.
+  //
+  // Without the flag, the listener is invoked inline and its Promise is
+  // returned to emitAsync, which awaits it. By the time emitAsync
+  // returns, every reservation row is in the DB.
+  @OnEvent(ORDER_EVENTS.CREATED)
   async handleOrderCreated(event: OrderCreatedEvent): Promise<string[]> {
     const { orderId, orderNumber, correlationId, items } = event
     const reservationIds: string[] = []
@@ -72,7 +85,10 @@ export class InventoryListener {
 
   // ── Bestellung bestätigt → Bestand physisch abziehen ─────────
 
-  @OnEvent(ORDER_EVENTS.CONFIRMED, { async: true })
+  // Same reasoning as handleOrderCreated above — deferred scheduling
+  // makes the caller see stale DB state. Inline listener = reservation
+  // state is settled by the time the emit call-site moves on.
+  @OnEvent(ORDER_EVENTS.CONFIRMED)
   async handleOrderConfirmed(event: OrderConfirmedEvent): Promise<void> {
     const { orderId, orderNumber, correlationId, reservationIds } = event
 
@@ -95,7 +111,8 @@ export class InventoryListener {
 
   // ── Bestellung storniert → Bestand freigeben ─────────────────
 
-  @OnEvent(ORDER_EVENTS.CANCELLED, { async: true })
+  // Same reasoning as handleOrderCreated above.
+  @OnEvent(ORDER_EVENTS.CANCELLED)
   async handleOrderCancelled(event: OrderCancelledEvent): Promise<void> {
     const { orderId, orderNumber, correlationId, reservationIds, reason } = event
 

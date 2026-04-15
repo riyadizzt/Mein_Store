@@ -848,6 +848,17 @@ export class AdminController {
     return this.products.restore(id, req.user.id, ip)
   }
 
+  // Permanently delete a product (after it has been soft-deleted).
+  // Throws 409 ConflictException when the product is still referenced
+  // by orders / reviews / coupons / promotions — the frontend parses
+  // the structured `blockers` object to render a helpful error modal.
+  @Post('products/:id/hard-delete')
+  @RequirePermission(PERMISSIONS.PRODUCTS_DELETE)
+  @HttpCode(HttpStatus.OK)
+  hardDeleteProduct(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.products.hardDelete(id, req.user.id, ip)
+  }
+
   @Post('products/:id/duplicate')
   @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
   @HttpCode(HttpStatus.CREATED)
@@ -979,11 +990,15 @@ export class AdminController {
   @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
   async exportInventoryCsv(
     @Query('warehouseId') warehouseId?: string, @Query('categoryId') categoryId?: string,
-    @Query('status') status?: string, @Res({ passthrough: true }) res?: any,
+    @Query('status') status?: string, @Query('mode') mode?: string,
+    @Res({ passthrough: true }) res?: any,
   ) {
-    const csv = await this.inventory.exportCsv({ warehouseId, categoryId, status })
-    res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename=bestand.csv' })
-    return csv
+    const safeMode: 'existing' | 'matrix' = mode === 'matrix' ? 'matrix' : 'existing'
+    const csv = await this.inventory.exportCsv({ warehouseId, categoryId, status, mode: safeMode })
+    const filename = safeMode === 'matrix' ? 'bestand-matrix.csv' : 'bestand.csv'
+    res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename=${filename}` })
+    // Excel-DE BOM so Umlauts render correctly on double-click open.
+    return '\uFEFF' + csv
   }
 
   @Get('inventory/barcode/:code')
@@ -1001,6 +1016,29 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   processReturnScan(@Param('code') code: string, @Req() req: any) {
     return this.inventory.processReturnScan(code, req.user.id)
+  }
+
+  @Get('inventory/reservations')
+  @RequirePermission(PERMISSIONS.INVENTORY_VIEW)
+  listReservations(
+    @Query('status') status?: string,
+    @Query('warehouseId') warehouseId?: string,
+    @Query('variantId') variantId?: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const safeStatus = ['RESERVED', 'CONFIRMED', 'RELEASED', 'EXPIRED', 'all'].includes(status ?? '')
+      ? (status as any)
+      : 'RESERVED'
+    return this.inventory.listReservations({
+      status: safeStatus,
+      warehouseId,
+      variantId,
+      search,
+      limit: limit ? +limit : 100,
+      offset: offset ? +offset : 0,
+    })
   }
 
   @Get('inventory')
@@ -1237,6 +1275,26 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   completeStocktake(@Param('id', ParseUUIDPipe) id: string, @Body('applyChanges') applyChanges: boolean, @Req() req: any, @Ip() ip: string) {
     return this.inventory.completeStocktake(id, applyChanges, req.user.id, ip)
+  }
+
+  // Delete an in-progress stocktake. Completed ones are GoBD-protected
+  // and must use the /correction endpoint below instead.
+  @Delete('stocktakes/:id')
+  @RequirePermission(PERMISSIONS.INVENTORY_STOCKTAKE)
+  @HttpCode(HttpStatus.OK)
+  deleteStocktake(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.inventory.deleteStocktake(id, req.user.id, ip)
+  }
+
+  // Create a correction stocktake from a completed one. The new stocktake
+  // seeds expectedQty from the source's actualQty (not from live
+  // inventory) so the admin can fix mis-counts relative to what they
+  // previously recorded.
+  @Post('stocktakes/:id/correction')
+  @RequirePermission(PERMISSIONS.INVENTORY_STOCKTAKE)
+  @HttpCode(HttpStatus.CREATED)
+  createCorrectionStocktake(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
+    return this.inventory.startCorrectionStocktake(id, req.user.id)
   }
 
   // ── Audit Log ─────────────────────────────────────────────

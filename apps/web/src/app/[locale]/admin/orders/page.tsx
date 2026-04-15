@@ -74,12 +74,23 @@ export default function AdminOrdersPage() {
 
   const handleExportCsv = async () => {
     const API_URL = API_BASE_URL
-    const token = (await import('@/store/auth-store')).useAuthStore.getState().accessToken
+    // Admin endpoint requires the admin JWT. `accessToken` is the
+    // customer token and causes a 401 that gets written to the CSV.
+    const store = (await import('@/store/auth-store')).useAuthStore.getState()
+    const token = store.adminAccessToken || store.accessToken
+    if (!token) {
+      alert(locale === 'ar' ? 'يرجى تسجيل الدخول كمسؤول أولاً' : locale === 'en' ? 'Please log in as admin first' : 'Bitte als Admin einloggen')
+      return
+    }
     const res = await fetch(`${API_URL}/api/v1/admin/orders/export/csv`, {
       headers: { Authorization: `Bearer ${token}` },
       credentials: 'include',
     })
-    if (!res.ok) return
+    if (!res.ok) {
+      console.error('[orders export] HTTP', res.status)
+      alert(locale === 'ar' ? `فشل التصدير (${res.status})` : locale === 'en' ? `Export failed (${res.status})` : `Export fehlgeschlagen (${res.status})`)
+      return
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

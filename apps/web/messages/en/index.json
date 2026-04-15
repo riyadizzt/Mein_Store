@@ -508,6 +508,7 @@
       "products": "Products",
       "users": "Customers",
       "inventory": "Inventory",
+      "reservations": "Reservations",
       "etiketten": "Labels",
       "masterBoxes": "Master Boxes",
       "shippingZones": "Shipping Zones",

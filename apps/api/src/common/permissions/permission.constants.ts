@@ -127,6 +127,12 @@ export const ROLE_PRESETS: Record<string, string[]> = {
 // ── Permission labels (for UI) ───────────────────────────────
 export const PERMISSION_GROUPS: { key: string; label: { de: string; en: string; ar: string }; permissions: { key: string; label: { de: string; en: string; ar: string } }[] }[] = [
   {
+    key: 'dashboard', label: { de: 'Dashboard', en: 'Dashboard', ar: 'لوحة التحكم' },
+    permissions: [
+      { key: PERMISSIONS.DASHBOARD_VIEW, label: { de: 'Ansehen', en: 'View', ar: 'عرض' } },
+    ],
+  },
+  {
     key: 'orders', label: { de: 'Bestellungen', en: 'Orders', ar: 'الطلبات' },
     permissions: [
       { key: PERMISSIONS.ORDERS_VIEW, label: { de: 'Ansehen', en: 'View', ar: 'عرض' } },
@@ -141,6 +147,13 @@ export const PERMISSION_GROUPS: { key: string; label: { de: string; en: string; 
       { key: PERMISSIONS.PRODUCTS_CREATE, label: { de: 'Erstellen', en: 'Create', ar: 'إنشاء' } },
       { key: PERMISSIONS.PRODUCTS_EDIT, label: { de: 'Bearbeiten', en: 'Edit', ar: 'تعديل' } },
       { key: PERMISSIONS.PRODUCTS_DELETE, label: { de: 'Löschen', en: 'Delete', ar: 'حذف' } },
+    ],
+  },
+  {
+    key: 'categories', label: { de: 'Kategorien', en: 'Categories', ar: 'الفئات' },
+    permissions: [
+      { key: PERMISSIONS.CATEGORIES_VIEW, label: { de: 'Ansehen', en: 'View', ar: 'عرض' } },
+      { key: PERMISSIONS.CATEGORIES_EDIT, label: { de: 'Bearbeiten', en: 'Edit', ar: 'تعديل' } },
     ],
   },
   {
@@ -187,6 +200,15 @@ export const PERMISSION_GROUPS: { key: string; label: { de: string; en: string; 
       { key: PERMISSIONS.SHIPPING_VIEW, label: { de: 'Ansehen', en: 'View', ar: 'عرض' } },
       { key: PERMISSIONS.SHIPPING_LABELS, label: { de: 'Labels erstellen', en: 'Create labels', ar: 'إنشاء ملصقات' } },
       { key: PERMISSIONS.SHIPPING_STATUS, label: { de: 'Status ändern', en: 'Change status', ar: 'تغيير الحالة' } },
+    ],
+  },
+  {
+    key: 'suppliers', label: { de: 'Lieferanten', en: 'Suppliers', ar: 'الموردون' },
+    permissions: [
+      { key: PERMISSIONS.SUPPLIERS_VIEW, label: { de: 'Ansehen', en: 'View', ar: 'عرض' } },
+      { key: PERMISSIONS.SUPPLIERS_EDIT, label: { de: 'Bearbeiten', en: 'Edit', ar: 'تعديل' } },
+      { key: PERMISSIONS.SUPPLIERS_RECEIVING, label: { de: 'Wareneingang', en: 'Receiving', ar: 'استلام بضاعة' } },
+      { key: PERMISSIONS.SUPPLIERS_PAYMENTS, label: { de: 'Zahlungen', en: 'Payments', ar: 'المدفوعات' } },
     ],
   },
   {

@@ -42,6 +42,7 @@ import {
   Search,
   Scissors,
   Activity,
+  Flame,
 } from 'lucide-react'
 
 interface ActionConfig {
@@ -66,6 +67,7 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   PRODUCT_CREATED:           { de: 'Neues Produkt erstellt',         en: 'New product created',    ar: 'تم إنشاء منتج جديد',        Icon: Sparkles,       color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
   PRODUCT_PRICE_CHANGED:     { de: 'Preis geändert',                 en: 'Price changed',           ar: 'تم تغيير السعر',            Icon: Tag,            color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
   PRODUCT_DELETED:           { de: 'Produkt gelöscht',               en: 'Product deleted',         ar: 'تم حذف المنتج',             Icon: Trash2,         color: 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300' },
+  PRODUCT_HARD_DELETED:      { de: 'Produkt endgültig gelöscht',     en: 'Product permanently deleted', ar: 'حذف المنتج نهائياً',     Icon: Flame,          color: 'bg-red-200 text-red-700 dark:bg-red-600/30 dark:text-red-200' },
   PRODUCT_RESTORED:          { de: 'Produkt wiederhergestellt',      en: 'Product restored',       ar: 'تم استعادة المنتج',         Icon: RotateCcw,      color: 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300' },
   PRODUCT_DUPLICATED:        { de: 'Produkt dupliziert',             en: 'Product duplicated',     ar: 'تم نسخ المنتج',             Icon: Copy,           color: 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300' },
   PRODUCTS_ACTIVATED:        { de: 'Produkte aktiviert',             en: 'Products activated',     ar: 'تم تفعيل المنتجات',         Icon: CheckCircle2,   color: 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300' },
@@ -80,6 +82,8 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   INVENTORY_INTAKE:          { de: 'Wareneingang',                   en: 'Stock received',         ar: 'استلام بضاعة',              Icon: PackagePlus,    color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
   INVENTORY_TRANSFER:        { de: 'Lager-Transfer',                 en: 'Stock transfer',         ar: 'نقل مخزون',                  Icon: ArrowRightLeft, color: 'bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-300' },
   INVENTORY_TRANSFERRED:     { de: 'Bestand transferiert',           en: 'Stock transferred',      ar: 'تم نقل المخزون',             Icon: ArrowRightLeft, color: 'bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-300' },
+  INVENTORY_CSV_INTAKE:      { de: 'CSV-Wareneingang',               en: 'CSV stock intake',       ar: 'استلام بضاعة عبر CSV',      Icon: PackagePlus,    color: 'bg-teal-100 text-teal-600 dark:bg-teal-500/20 dark:text-teal-300' },
+  PRODUCTS_CATEGORY_CHANGED: { de: 'Kategorie geändert',             en: 'Category changed',       ar: 'تغيير فئة المنتجات',        Icon: Tag,            color: 'bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-300' },
   RETURN_APPROVED:           { de: 'Retoure genehmigt',              en: 'Return approved',        ar: 'تمت الموافقة على المرتجع',  Icon: CheckCircle2,   color: 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300' },
   RETURN_REJECTED:           { de: 'Retoure abgelehnt',              en: 'Return rejected',        ar: 'تم رفض المرتجع',            Icon: XCircle,        color: 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300' },
   RETURN_SCANNED:            { de: 'Retoure gescannt',               en: 'Return scanned',         ar: 'مسح المرتجع',                Icon: ScanLine,       color: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-300' },

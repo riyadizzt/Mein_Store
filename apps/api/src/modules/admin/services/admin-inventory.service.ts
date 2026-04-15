@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
 
@@ -35,6 +35,136 @@ export class AdminInventoryService {
     }
 
     return { totalItems, totalUnits, lowStock, outOfStock }
+  }
+
+  // ── RESERVATIONS (read-only view) ─────────────────────────
+  //
+  // Pure SELECT view on StockReservation. Zero writes. Zero side effects.
+  // Joins variant+product+translations+warehouse for display, and fetches
+  // the linked order (orderNumber + customer) in a second batched query
+  // because StockReservation.orderId is a plain String (no FK relation).
+  //
+  // Used by /admin/inventory/reservations page and the inventory badge.
+  async listReservations(query: {
+    status?: 'RESERVED' | 'CONFIRMED' | 'RELEASED' | 'EXPIRED' | 'all'
+    warehouseId?: string
+    variantId?: string
+    search?: string   // matches SKU or order number
+    limit?: number
+    offset?: number
+  }) {
+    const take = Math.min(Math.max(query.limit ?? 100, 1), 500)
+    const skip = Math.max(query.offset ?? 0, 0)
+    const status = query.status && query.status !== 'all' ? query.status : 'RESERVED'
+
+    const where: any = { status }
+    if (query.warehouseId) where.warehouseId = query.warehouseId
+    if (query.variantId) where.variantId = query.variantId
+
+    if (query.search?.trim()) {
+      const s = query.search.trim()
+      where.OR = [
+        { variant: { sku: { contains: s, mode: 'insensitive' } } },
+        // orderId is a plain string — we filter it after the fact against
+        // the resolved orderNumbers, so no direct Prisma filter here.
+      ]
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.stockReservation.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }],
+        take,
+        skip,
+        include: {
+          variant: {
+            select: {
+              id: true,
+              sku: true,
+              barcode: true,
+              size: true,
+              color: true,
+              product: {
+                select: {
+                  id: true,
+                  deletedAt: true,
+                  translations: { select: { language: true, name: true } },
+                  images: { where: { isPrimary: true }, select: { url: true }, take: 1 },
+                },
+              },
+            },
+          },
+          warehouse: { select: { id: true, name: true, type: true } },
+        },
+      }),
+      this.prisma.stockReservation.count({ where }),
+    ])
+
+    // Resolve orderId → {orderNumber, customer} in a single batched query
+    const orderIds = [...new Set(rows.map((r) => r.orderId).filter((x): x is string => !!x))]
+    const orders = orderIds.length
+      ? await this.prisma.order.findMany({
+          where: { id: { in: orderIds } },
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            guestEmail: true,
+            user: { select: { firstName: true, lastName: true, email: true } },
+          },
+        })
+      : []
+    const orderMap = new Map(orders.map((o) => [o.id, o]))
+
+    return {
+      data: rows.map((r) => {
+        const order = r.orderId ? orderMap.get(r.orderId) ?? null : null
+        const customerName = order
+          ? [order.user?.firstName, order.user?.lastName].filter(Boolean).join(' ').trim() || order.user?.email || order.guestEmail || null
+          : null
+        return {
+          id: r.id,
+          quantity: r.quantity,
+          status: r.status,
+          expiresAt: r.expiresAt,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          variant: {
+            id: r.variant.id,
+            sku: r.variant.sku,
+            barcode: r.variant.barcode,
+            size: r.variant.size,
+            color: r.variant.color,
+            productId: r.variant.product.id,
+            productDeleted: !!r.variant.product.deletedAt,
+            productTranslations: r.variant.product.translations,
+            productImage: r.variant.product.images[0]?.url ?? null,
+          },
+          warehouse: r.warehouse,
+          order: order
+            ? {
+                id: order.id,
+                orderNumber: order.orderNumber,
+                status: order.status,
+                customerName,
+              }
+            : null,
+        }
+      }),
+      meta: { total, limit: take, offset: skip },
+    }
+  }
+
+  // Count of active (RESERVED) reservations per variant. Used by the
+  // inventory grouped-view badge. One query, grouped aggregate, no joins.
+  async countActiveReservationsByVariant(variantIds: string[]) {
+    if (variantIds.length === 0) return new Map<string, number>()
+    const grouped = await this.prisma.stockReservation.groupBy({
+      by: ['variantId'],
+      where: { variantId: { in: variantIds }, status: 'RESERVED' },
+      _sum: { quantity: true },
+    })
+    return new Map(grouped.map((g) => [g.variantId, g._sum.quantity ?? 0]))
   }
 
   // ── LIST ───────────────────────────────────────────────────
@@ -238,7 +368,7 @@ export class AdminInventoryService {
               id: true, sku: true, barcode: true, color: true, colorHex: true, size: true,
               inventory: {
                 where: whFilter,
-                select: { id: true, quantityOnHand: true, quantityReserved: true, reorderPoint: true, maxStock: true, location: { select: { name: true } }, warehouse: { select: { name: true } } },
+                select: { id: true, warehouseId: true, quantityOnHand: true, quantityReserved: true, reorderPoint: true, maxStock: true, location: { select: { name: true } }, warehouse: { select: { name: true } } },
               },
             },
           },
@@ -902,15 +1032,233 @@ export class AdminInventoryService {
 
   // ── CSV EXPORT ─────────────────────────────────────────────
 
-  async exportCsv(query: { warehouseId?: string; categoryId?: string; status?: string }) {
-    const result = await this.findAll({ ...query, limit: 5000, offset: 0 })
-    const header = 'SKU;Barcode;Produkt;Farbe;Größe;Kategorie;Bestand;Reserviert;Verfügbar;Min-Bestand;Max-Bestand;Verkaufspreis;Lager;Lagerort;Status\n'
-    const rows = result.data.map((i: any) => {
-      const name = (i.productName ?? []).find((t: any) => t.language === 'de')?.name ?? ''
-      const cat = (i.category?.translations ?? []).find((t: any) => t.language === 'de')?.name ?? ''
-      return `${i.sku};${i.barcode ?? ''};${name};${i.color ?? ''};${i.size ?? ''};${cat};${i.quantityOnHand};${i.quantityReserved};${i.available};${i.reorderPoint};${i.maxStock};${i.salePrice};${i.warehouse?.name ?? ''};${i.location?.name ?? ''};${i.status}`
-    }).join('\n')
-    return header + rows
+  /**
+   * CSV export for inventory.
+   *
+   * Two modes:
+   *  - 'existing' (default): one row per Inventory record. Missing
+   *    variant×warehouse combos are NOT in the file. This matches the
+   *    historical behavior but without the silent 500-row cap that the
+   *    previous implementation inherited from findAll().
+   *  - 'matrix': one row per (active variant × target warehouse)
+   *    combination. Missing Inventory rows are emitted with quantity 0
+   *    so admins can see which variants are missing from which
+   *    locations. Respects the same filters as 'existing'.
+   *
+   * Safety cap: 50 000 rows. A fresh seed of the whole DB is well
+   * under that; the cap exists so a runaway query can't exhaust RAM.
+   */
+  async exportCsv(query: {
+    warehouseId?: string
+    categoryId?: string
+    status?: string
+    mode?: 'existing' | 'matrix'
+  }) {
+    const MAX_ROWS = 50_000
+    const mode = query.mode === 'matrix' ? 'matrix' : 'existing'
+    const header = 'SKU;Barcode;Produkt;Farbe;Größe;Kategorie;Bestand;Reserviert;Verfügbar;Min-Bestand;Max-Bestand;Verkaufspreis;Lager;Lagerort;Status'
+
+    // Resolve the category filter to a list of effective category IDs
+    // (sub-cats included so "Schuhe" matches "Sneaker" etc.). Shared
+    // by both modes for consistent filtering.
+    let categoryIds: string[] | null = null
+    if (query.categoryId) {
+      const subcats = await this.prisma.category.findMany({
+        where: { parentId: query.categoryId },
+        select: { id: true },
+      })
+      categoryIds = [query.categoryId, ...subcats.map((c) => c.id)]
+    }
+
+    // Status post-filter — applied identically to both modes. Zero-rows
+    // in matrix mode count as 'out_of_stock'.
+    const matchesStatus = (qty: number, reserved: number, reorderPoint: number): boolean => {
+      if (!query.status || query.status === 'all') return true
+      const avail = qty - reserved
+      if (query.status === 'out_of_stock') return avail <= 0
+      if (query.status === 'low') return avail > 0 && avail <= reorderPoint
+      if (query.status === 'in_stock') return avail > reorderPoint
+      return true
+    }
+
+    const computeStatus = (qty: number, reserved: number, reorderPoint: number): string => {
+      const avail = qty - reserved
+      if (avail <= 0) return 'out_of_stock'
+      if (avail <= reorderPoint) return 'low'
+      return 'in_stock'
+    }
+
+    // Escape CSV cells. Our delimiter is ';'. If a value contains a
+    // semicolon, quote, or newline we wrap it in double quotes and
+    // escape internal quotes by doubling. Matches RFC-4180 adapted to
+    // the German Excel convention.
+    const esc = (v: unknown): string => {
+      if (v == null) return ''
+      const s = String(v)
+      if (s.includes(';') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+        return `"${s.replace(/"/g, '""')}"`
+      }
+      return s
+    }
+
+    const rows: string[] = []
+
+    if (mode === 'existing') {
+      // ── Mode A: only rows that have an Inventory record ──
+      const where: any = { variant: { product: { deletedAt: null } } }
+      if (query.warehouseId) where.warehouseId = query.warehouseId
+      if (categoryIds) where.variant = { ...where.variant, product: { deletedAt: null, categoryId: { in: categoryIds } } }
+
+      const items = await this.prisma.inventory.findMany({
+        where,
+        include: {
+          variant: {
+            select: {
+              sku: true, barcode: true, color: true, size: true,
+              product: {
+                select: {
+                  basePrice: true, salePrice: true,
+                  translations: { where: { language: 'de' }, select: { name: true } },
+                  category: { select: { translations: { where: { language: 'de' }, select: { name: true } } } },
+                },
+              },
+            },
+          },
+          warehouse: { select: { name: true } },
+          location: { select: { name: true } },
+        },
+        take: MAX_ROWS,
+        orderBy: [{ warehouseId: 'asc' }, { variant: { sku: 'asc' } }],
+      })
+
+      for (const inv of items) {
+        if (!matchesStatus(inv.quantityOnHand, inv.quantityReserved, inv.reorderPoint)) continue
+        const name = inv.variant.product.translations[0]?.name ?? ''
+        const cat = inv.variant.product.category?.translations[0]?.name ?? ''
+        const price = Number(inv.variant.product.salePrice ?? inv.variant.product.basePrice)
+        const available = inv.quantityOnHand - inv.quantityReserved
+        const status = computeStatus(inv.quantityOnHand, inv.quantityReserved, inv.reorderPoint)
+        rows.push([
+          esc(inv.variant.sku),
+          esc(inv.variant.barcode),
+          esc(name),
+          esc(inv.variant.color),
+          esc(inv.variant.size),
+          esc(cat),
+          inv.quantityOnHand,
+          inv.quantityReserved,
+          available,
+          inv.reorderPoint,
+          inv.maxStock,
+          price,
+          esc(inv.warehouse.name),
+          esc(inv.location?.name),
+          status,
+        ].join(';'))
+      }
+    } else {
+      // ── Mode B: variant × warehouse matrix ──
+      // Fetch target warehouses. If the caller filtered by warehouseId,
+      // the matrix degrades to a single-warehouse view (which is the
+      // same as existing-mode for that one location except zeros are
+      // still emitted).
+      const warehouseWhere: any = { isActive: true }
+      if (query.warehouseId) warehouseWhere.id = query.warehouseId
+      const warehouses = await this.prisma.warehouse.findMany({
+        where: warehouseWhere,
+        select: { id: true, name: true },
+        orderBy: [{ type: 'desc' }, { name: 'asc' }],
+      })
+
+      // Fetch all variants that match the category filter.
+      const variantWhere: any = { product: { deletedAt: null } }
+      if (categoryIds) variantWhere.product = { deletedAt: null, categoryId: { in: categoryIds } }
+
+      // Safety ceiling: if the cross-join would exceed MAX_ROWS we
+      // still emit what we can. The admin can narrow by category or
+      // warehouse if they hit the cap — very unlikely at realistic
+      // catalog sizes.
+      const variantLimit = Math.max(1, Math.floor(MAX_ROWS / Math.max(1, warehouses.length)))
+
+      const variants = await this.prisma.productVariant.findMany({
+        where: variantWhere,
+        select: {
+          id: true, sku: true, barcode: true, color: true, size: true,
+          product: {
+            select: {
+              basePrice: true, salePrice: true,
+              translations: { where: { language: 'de' }, select: { name: true } },
+              category: { select: { translations: { where: { language: 'de' }, select: { name: true } } } },
+            },
+          },
+        },
+        take: variantLimit,
+        orderBy: [{ sku: 'asc' }],
+      })
+
+      if (variants.length === 0 || warehouses.length === 0) {
+        return header + '\n'
+      }
+
+      // Single bulk lookup for all existing inventory rows — avoid the
+      // N+1 pattern of querying per (variant, warehouse).
+      const variantIds = variants.map((v) => v.id)
+      const warehouseIds = warehouses.map((w) => w.id)
+      const invRows = await this.prisma.inventory.findMany({
+        where: { variantId: { in: variantIds }, warehouseId: { in: warehouseIds } },
+        select: {
+          variantId: true, warehouseId: true,
+          quantityOnHand: true, quantityReserved: true,
+          reorderPoint: true, maxStock: true,
+          location: { select: { name: true } },
+        },
+      })
+      const key = (vId: string, wId: string) => `${vId}|${wId}`
+      const invMap = new Map(invRows.map((r) => [key(r.variantId, r.warehouseId), r]))
+
+      // Default reorder/max when a variant has never been stocked in a
+      // warehouse. Matches the Prisma model defaults so the CSV columns
+      // still reflect the admin's actual thresholds.
+      const DEFAULT_REORDER = 5
+      const DEFAULT_MAX = 100
+
+      for (const v of variants) {
+        const name = v.product.translations[0]?.name ?? ''
+        const cat = v.product.category?.translations[0]?.name ?? ''
+        const price = Number(v.product.salePrice ?? v.product.basePrice)
+        for (const w of warehouses) {
+          const inv = invMap.get(key(v.id, w.id))
+          const qty = inv?.quantityOnHand ?? 0
+          const reserved = inv?.quantityReserved ?? 0
+          const reorder = inv?.reorderPoint ?? DEFAULT_REORDER
+          const maxS = inv?.maxStock ?? DEFAULT_MAX
+          if (!matchesStatus(qty, reserved, reorder)) continue
+          const available = qty - reserved
+          const status = computeStatus(qty, reserved, reorder)
+          rows.push([
+            esc(v.sku),
+            esc(v.barcode),
+            esc(name),
+            esc(v.color),
+            esc(v.size),
+            esc(cat),
+            qty,
+            reserved,
+            available,
+            reorder,
+            maxS,
+            price,
+            esc(w.name),
+            esc(inv?.location?.name),
+            status,
+          ].join(';'))
+          if (rows.length >= MAX_ROWS) break
+        }
+        if (rows.length >= MAX_ROWS) break
+      }
+    }
+
+    return header + '\n' + rows.join('\n') + (rows.length ? '\n' : '')
   }
 
   // ── LOCATIONS ──────────────────────────────────────────────
@@ -943,8 +1291,47 @@ export class AdminInventoryService {
   // ── STOCKTAKE ──────────────────────────────────────────────
 
   async startStocktake(warehouseId: string, categoryId: string | null, adminId: string) {
-    const where: any = { variant: { product: { deletedAt: null } } }
-    if (warehouseId) where.warehouseId = warehouseId
+    if (!warehouseId) {
+      throw new BadRequestException({
+        error: 'WarehouseRequired',
+        message: {
+          de: 'Bitte wähle ein Lager für die Inventur aus.',
+          en: 'Please pick a warehouse for the stocktake.',
+          ar: 'يرجى اختيار مستودع لعملية الجرد.',
+        },
+      })
+    }
+
+    // Make sure the warehouse exists + is active. We do NOT filter by
+    // isActive: false because an admin may need to stocktake a warehouse
+    // that was just deactivated in order to move the inventory out.
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id: warehouseId },
+      select: { id: true, name: true },
+    })
+    if (!warehouse) throw new NotFoundException('Warehouse not found')
+
+    // Guard: exactly one in-progress stocktake per warehouse. Running two
+    // in parallel would produce stale expectedQty snapshots on whichever
+    // one the admin completes second → ghost-stock bugs. Admin must
+    // finish or delete the existing one first.
+    const openInSameWarehouse = await this.prisma.stocktake.findFirst({
+      where: { warehouseId, status: 'in_progress' },
+      select: { id: true },
+    })
+    if (openInSameWarehouse) {
+      throw new ConflictException({
+        error: 'StocktakeAlreadyInProgress',
+        message: {
+          de: 'Für dieses Lager läuft bereits eine Inventur. Bitte schließe sie ab oder lösche sie, bevor du eine neue startest.',
+          en: 'A stocktake is already running for this warehouse. Finish or delete it before starting a new one.',
+          ar: 'يوجد جرد قيد التنفيذ لهذا المستودع. يرجى إنهاؤه أو حذفه قبل بدء جرد جديد.',
+        },
+        existingId: openInSameWarehouse.id,
+      })
+    }
+
+    const where: any = { warehouseId, variant: { product: { deletedAt: null } } }
     if (categoryId) {
       const subcats = await this.prisma.category.findMany({ where: { parentId: categoryId }, select: { id: true } })
       where.variant.product.categoryId = { in: [categoryId, ...subcats.map((c) => c.id)] }
@@ -963,14 +1350,146 @@ export class AdminInventoryService {
       include: { items: true },
     })
 
+    await this.audit.log({
+      adminId, action: 'STOCKTAKE_STARTED', entityType: 'stocktake', entityId: stocktake.id,
+      changes: { after: { warehouseId, warehouseName: warehouse.name, categoryId, itemCount: inventory.length } },
+      ipAddress: '',
+    })
+
     return stocktake
+  }
+
+  /**
+   * Start a correction stocktake from a completed one. The new stocktake
+   * uses the OLD stocktake's actualQty as its expectedQty baseline (NOT
+   * the current live quantityOnHand). This matches the admin's mental
+   * model: "I want to correct what I counted last time, starting from
+   * my previous count as the reference."
+   *
+   * The original stocktake is never modified — GoBD audit trail stays
+   * intact. The new stocktake is linked via the `notes` column with
+   * `correction_of:<sourceId>` so the frontend can render a "Korrektur
+   * von #xxxxxx" banner.
+   */
+  async startCorrectionStocktake(sourceId: string, adminId: string) {
+    const source = await this.prisma.stocktake.findUnique({
+      where: { id: sourceId },
+      include: { items: true },
+    })
+    if (!source) throw new NotFoundException('Source stocktake not found')
+    if (source.status !== 'completed') {
+      throw new BadRequestException({
+        error: 'CanOnlyCorrectCompleted',
+        message: {
+          de: 'Nur abgeschlossene Inventuren können korrigiert werden.',
+          en: 'Only completed stocktakes can be corrected.',
+          ar: 'يمكن تصحيح الجرد المكتمل فقط.',
+        },
+      })
+    }
+
+    // Guard: same one-per-warehouse rule as a normal stocktake. Leaves
+    // no room for a confused admin to create two concurrent corrections.
+    const openInSameWarehouse = await this.prisma.stocktake.findFirst({
+      where: { warehouseId: source.warehouseId, status: 'in_progress' },
+      select: { id: true },
+    })
+    if (openInSameWarehouse) {
+      throw new ConflictException({
+        error: 'StocktakeAlreadyInProgress',
+        message: {
+          de: 'Für dieses Lager läuft bereits eine Inventur. Bitte schließe sie ab oder lösche sie, bevor du eine Korrektur startest.',
+          en: 'A stocktake is already running for this warehouse. Finish or delete it before starting a correction.',
+          ar: 'يوجد جرد قيد التنفيذ لهذا المستودع. يرجى إنهاؤه قبل بدء التصحيح.',
+        },
+        existingId: openInSameWarehouse.id,
+      })
+    }
+
+    // Seed expectedQty from the source's actualQty (fallback to its own
+    // expectedQty if the admin never filled an actual — shouldn't happen
+    // on a completed stocktake but defensively handled).
+    const correction = await this.prisma.stocktake.create({
+      data: {
+        warehouseId: source.warehouseId,
+        categoryId: source.categoryId,
+        adminId,
+        status: 'in_progress',
+        notes: `correction_of:${sourceId}`,
+        items: {
+          create: source.items.map((it) => ({
+            variantId: it.variantId,
+            expectedQty: it.actualQty ?? it.expectedQty,
+          })),
+        },
+      },
+      include: { items: true },
+    })
+
+    await this.audit.log({
+      adminId, action: 'STOCKTAKE_CORRECTION_STARTED', entityType: 'stocktake', entityId: correction.id,
+      changes: { after: { sourceId, warehouseId: source.warehouseId, itemCount: source.items.length } },
+      ipAddress: '',
+    })
+
+    return correction
+  }
+
+  /**
+   * Delete an in-progress stocktake. The cascade on StocktakeItem wipes
+   * the items automatically. Completed stocktakes are NEVER deletable
+   * (GoBD audit trail requirement) — the admin must start a correction
+   * stocktake instead.
+   */
+  async deleteStocktake(stocktakeId: string, adminId: string, ipAddress: string) {
+    const st = await this.prisma.stocktake.findUnique({
+      where: { id: stocktakeId },
+      include: { _count: { select: { items: true } } },
+    })
+    if (!st) throw new NotFoundException('Stocktake not found')
+
+    if (st.status !== 'in_progress') {
+      throw new BadRequestException({
+        error: 'CanOnlyDeleteInProgress',
+        message: {
+          de: 'Abgeschlossene Inventuren können nicht gelöscht werden. Starte stattdessen eine Korrektur-Inventur.',
+          en: 'Completed stocktakes cannot be deleted. Start a correction stocktake instead.',
+          ar: 'لا يمكن حذف الجرد المكتمل. ابدأ جرد تصحيحي بدلاً من ذلك.',
+        },
+      })
+    }
+
+    await this.prisma.stocktake.delete({ where: { id: stocktakeId } })
+
+    await this.audit.log({
+      adminId, action: 'STOCKTAKE_DELETED', entityType: 'stocktake', entityId: stocktakeId,
+      changes: { before: { warehouseId: st.warehouseId, categoryId: st.categoryId, itemCount: st._count.items } },
+      ipAddress,
+    })
+
+    return { deleted: true }
   }
 
   async getStocktakes(limit = 20) {
     return this.prisma.stocktake.findMany({
-      include: { _count: { select: { items: true } } },
+      include: {
+        _count: { select: { items: true } },
+        // Joined so the list row can show "Hamburg Lager" / "Berlin Laden"
+        // without a second network round-trip.
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
+    }).then(async (rows) => {
+      const warehouseIds = Array.from(new Set(rows.map((r) => r.warehouseId)))
+      const warehouses = await this.prisma.warehouse.findMany({
+        where: { id: { in: warehouseIds } },
+        select: { id: true, name: true, type: true },
+      })
+      const wMap = new Map(warehouses.map((w) => [w.id, w]))
+      return rows.map((r) => ({
+        ...r,
+        warehouse: wMap.get(r.warehouseId) ?? null,
+      }))
     })
   }
 
@@ -987,6 +1506,14 @@ export class AdminInventoryService {
     })
     if (!st) throw new NotFoundException('Stocktake not found')
 
+    // Join warehouse so the detail view can render the "Hamburg Lager"
+    // header badge without a second round-trip. Same shape as
+    // getStocktakes() so the frontend can treat them uniformly.
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id: st.warehouseId },
+      select: { id: true, name: true, type: true },
+    })
+
     // Get variant info
     const variantIds = st.items.map((i) => i.variantId)
     const variants = await this.prisma.productVariant.findMany({
@@ -1000,6 +1527,7 @@ export class AdminInventoryService {
 
     return {
       ...st,
+      warehouse,
       items: st.items.map((item) => {
         const v = variantMap.get(item.variantId)
         return { ...item, variant: v }

@@ -9,7 +9,7 @@ import {
   Search, Package, AlertTriangle, XCircle, ArrowLeftRight,
   ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, Check,
   Download, Upload, ScanBarcode, ClipboardList, PackagePlus, PackageMinus,
-  Minus, Plus, RotateCcw, Eye, X, LayoutList, Layers, ArrowRightLeft,
+  Minus, Plus, RotateCcw, Eye, X, LayoutList, LayoutGrid, Layers, ArrowRightLeft, Lock,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
@@ -427,18 +427,47 @@ export default function InventoryPage() {
   const fmtDate = (d: string | null) => formatShortDate(d, locale)
   const getName = (ts: any[]) => getProductName(ts, locale)
 
-  const handleExport = async () => {
+  // CSV export — supports two modes:
+  //  - 'existing' (default, matches old behavior): one row per existing
+  //    Inventory record. Variants without stock in a location do NOT show up.
+  //  - 'matrix': one row per (variant × warehouse) combination. Missing
+  //    combos come through with quantity 0 so the admin can see exactly
+  //    where stock is missing.
+  const handleExport = async (mode: 'existing' | 'matrix' = 'existing') => {
     const params = new URLSearchParams()
     if (warehouseId) params.set('warehouseId', warehouseId)
     if (categoryId) params.set('categoryId', categoryId)
     if (status) params.set('status', status)
+    params.set('mode', mode)
+    // Admin endpoints need the admin JWT — not the customer one. The
+    // earlier version read `accessToken` (customer), got a 401, and
+    // wrote the JSON error into the "csv" file on disk.
+    const store = (await import('@/store/auth-store')).useAuthStore.getState()
+    const token = store.adminAccessToken || store.accessToken
+    if (!token) {
+      alert(locale === 'ar' ? 'يرجى تسجيل الدخول كمسؤول أولاً' : locale === 'en' ? 'Please log in as admin first' : 'Bitte als Admin einloggen')
+      return
+    }
     const res = await fetch(`${API_BASE_URL}/api/v1/admin/inventory/export?${params}`, {
-      headers: { Authorization: `Bearer ${(await import('@/store/auth-store')).useAuthStore.getState().accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
     })
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      console.error('[inventory export] HTTP', res.status, errText)
+      alert(locale === 'ar' ? `فشل التصدير (${res.status})` : locale === 'en' ? `Export failed (${res.status})` : `Export fehlgeschlagen (${res.status})`)
+      return
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'bestand.csv'; a.click(); URL.revokeObjectURL(url)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = mode === 'matrix' ? 'bestand-matrix.csv' : 'bestand.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    setExportMenuOpen(false)
   }
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
 
   const statCards = [
     { key: 'total', label: t('inventory.totalStock'), value: `${stats?.totalUnits ?? 0}`, sub: `${stats?.totalItems ?? 0} ${t('inventory.variant')}`, icon: Package, color: 'bg-blue-50 text-blue-600' },
@@ -481,7 +510,61 @@ export default function InventoryPage() {
         <Button size="sm" variant="outline" className="rounded-xl gap-2 lg:hidden" onClick={() => setCameraBatchOpen(true)}>
           <Camera className="h-4 w-4" />{locale === 'ar' ? 'ماسح الكاميرا' : 'Kamera-Scanner'}
         </Button>
-        <Button size="sm" variant="outline" className="rounded-xl gap-2" onClick={handleExport}><Download className="h-4 w-4" />{t('inventory.export')}</Button>
+        {/* Export dropdown — 2 modes: existing (fast, old behavior)
+            vs matrix (variant × warehouse with zeros for missing combos) */}
+        <div className="relative">
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-2"
+            onClick={() => setExportMenuOpen((v) => !v)}
+          >
+            <Download className="h-4 w-4" />{t('inventory.export')}
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </Button>
+          {exportMenuOpen && (
+            <>
+              {/* Click-outside scrim. The scrim sits underneath the menu
+                  via z-index so an outside click closes without eating
+                  the menu-item click event. */}
+              <div className="fixed inset-0 z-40" onClick={() => setExportMenuOpen(false)} />
+              <div className="absolute end-0 top-full mt-1 z-50 w-72 rounded-xl border bg-background shadow-xl overflow-hidden">
+                <button
+                  onClick={() => handleExport('existing')}
+                  className="w-full text-start px-4 py-3 hover:bg-muted/60 transition-colors border-b"
+                >
+                  <div className="text-sm font-semibold flex items-center gap-2">
+                    <Download className="h-4 w-4 text-muted-foreground" />
+                    {locale === 'ar' ? 'الموجود فقط' : locale === 'en' ? 'Existing only' : 'Nur vorhandene'}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                    {locale === 'ar'
+                      ? 'سطر واحد لكل سجل مخزون. لا تظهر المتغيرات بدون رصيد.'
+                      : locale === 'en'
+                      ? 'One row per existing stock record. Variants without stock are not listed.'
+                      : 'Eine Zeile pro vorhandenem Bestand. Varianten ohne Bestand werden nicht gelistet.'}
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleExport('matrix')}
+                  className="w-full text-start px-4 py-3 hover:bg-muted/60 transition-colors"
+                >
+                  <div className="text-sm font-semibold flex items-center gap-2">
+                    <LayoutGrid className="h-4 w-4 text-[#d4a853]" />
+                    {locale === 'ar' ? 'المصفوفة الكاملة' : locale === 'en' ? 'Full matrix' : 'Komplett-Matrix'}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                    {locale === 'ar'
+                      ? 'كل متغير × كل مستودع، مع الصفر للمواقع الفارغة.'
+                      : locale === 'en'
+                      ? 'Every variant × every warehouse, with zero for empty locations.'
+                      : 'Jede Variante × jedes Lager, mit 0 für leere Standorte.'}
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Category Chips */}
@@ -553,7 +636,7 @@ export default function InventoryPage() {
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-2 text-xs">
             <span className="font-medium text-primary">{selectedIds.size} {t('inventory.selected')}</span>
-            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg gap-1" onClick={handleExport}><Download className="h-3 w-3" />{t('inventory.bulkExport')}</Button>
+            <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg gap-1" onClick={() => handleExport('existing')}><Download className="h-3 w-3" />{t('inventory.bulkExport')}</Button>
           </div>
         )}
       </div>
@@ -639,6 +722,17 @@ export default function InventoryPage() {
                                   <span className={`font-bold text-sm min-w-[28px] text-center ${stock <= 0 ? 'text-red-600' : stock <= (inv?.reorderPoint ?? 5) ? 'text-orange-600' : 'text-green-600'}`}>{stock}</span>
                                   {inv && <button onClick={(e) => { e.stopPropagation(); quickAdjustMut.mutate({ id: inv.id, delta: 1 }) }} className="h-6 w-6 rounded bg-muted hover:bg-green-100 flex items-center justify-center transition-colors"><Plus className="h-3 w-3" /></button>}
                                   {!inv && <span className="text-xs text-red-400">0</span>}
+                                  {inv && inv.quantityReserved > 0 && (
+                                    <Link
+                                      href={`/${locale}/admin/inventory/reservations?variantId=${v.id}&warehouseId=${inv.warehouseId}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      title={locale === 'ar' ? `${inv.quantityReserved} محجوز` : locale === 'en' ? `${inv.quantityReserved} reserved` : `${inv.quantityReserved} reserviert`}
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 ring-1 ring-orange-200 text-[10px] font-bold tabular-nums hover:bg-orange-100 transition-colors ltr:ml-1 rtl:mr-1"
+                                    >
+                                      <Lock className="h-2.5 w-2.5" />
+                                      {inv.quantityReserved}
+                                    </Link>
+                                  )}
                                 </div>
                               </td>
                               <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{inv?.reorderPoint ?? '—'}</td>

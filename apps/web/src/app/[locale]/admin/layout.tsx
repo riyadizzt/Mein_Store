@@ -12,7 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone, Layers,
-  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert,
+  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert, Lock,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -39,6 +39,7 @@ const NAV_GROUPS = [
       { key: 'products', labelKey: 'products', href: '/admin/products', icon: Package, permission: 'products.view' },
       { key: 'categories', labelKey: 'categories', href: '/admin/categories', icon: Tag, permission: 'categories.view' },
       { key: 'inventory', labelKey: 'inventory', href: '/admin/inventory', icon: Warehouse, badgeKey: 'lowStock', permission: 'inventory.view' },
+      { key: 'reservations', labelKey: 'reservations', href: '/admin/inventory/reservations', icon: Lock, permission: 'inventory.view' },
       { key: 'etiketten', labelKey: 'etiketten', href: '/admin/etiketten', icon: Layers, permission: 'inventory.view' },
       { key: 'masterBoxes', labelKey: 'masterBoxes', href: '/admin/master-boxes', icon: PackageOpen, permission: 'inventory.view' },
       { key: 'sizing', labelKey: 'sizing', href: '/admin/sizing', icon: Ruler, permission: 'products.view' },
@@ -448,7 +449,7 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
       const translated = translateNotif(lastNotification)
       const n = new Notification(translated.title, {
         body: translated.body,
-        icon: '/favicon.ico',
+        icon: '/favicon.svg',
         tag: lastNotification.id,
       })
       n.onclick = () => { window.focus(); navRouter.push(`/${locale}/admin/orders/${lastNotification.entityId}`) }

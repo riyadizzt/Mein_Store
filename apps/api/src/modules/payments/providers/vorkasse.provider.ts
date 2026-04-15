@@ -85,15 +85,24 @@ export class VorkasseProvider implements IPaymentProvider {
 
     const get = (key: string) => settings.find((s) => s.key === key)?.value ?? ''
 
+    // Admin UI exposes only `vorkasse_deadline_days`. Treat it as the
+    // single source of truth: auto-cancel happens at the deadline, and
+    // a reminder is sent earlier (legacy `vorkasse_cancel_days` and
+    // `vorkasse_reminder_days` remain as overrides if explicitly set).
+    const deadlineDays = parseInt(get('vorkasse_deadline_days')) || 7
+    const cancelDays = parseInt(get('vorkasse_cancel_days')) || deadlineDays
+    const reminderDays =
+      parseInt(get('vorkasse_reminder_days')) || Math.max(1, cancelDays - 3)
+
     return {
       enabled: get('vorkasse_enabled') === 'true',
       accountHolder: get('vorkasse_account_holder'),
       iban: get('vorkasse_iban'),
       bic: get('vorkasse_bic'),
       bankName: get('vorkasse_bank_name'),
-      paymentDeadlineDays: parseInt(get('vorkasse_deadline_days')) || 7,
-      reminderDays: parseInt(get('vorkasse_reminder_days')) || 7,
-      cancelDays: parseInt(get('vorkasse_cancel_days')) || 10,
+      paymentDeadlineDays: deadlineDays,
+      reminderDays,
+      cancelDays,
     }
   }
 

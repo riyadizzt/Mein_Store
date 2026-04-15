@@ -133,7 +133,18 @@ export class OrderEmailListener {
       const order = await this.prisma.order.findFirst({
         where: { id: event.orderId },
         include: {
-          user: { select: { email: true, firstName: true, preferredLang: true, passwordHash: true } },
+          user: {
+            select: {
+              email: true, firstName: true, preferredLang: true, passwordHash: true,
+              // isVerified + oauthAccounts let us distinguish Google/Facebook
+              // users (who legitimately have no passwordHash) from real
+              // stub-guests. A Google user has an oauthAccounts entry (post
+              // 14.04.2026 fix) OR is marked isVerified (legacy pre-14.04
+              // social login). Only real stub-guests fail ALL three checks.
+              isVerified: true,
+              oauthAccounts: { select: { id: true }, take: 1 },
+            },
+          },
           shipment: { select: { trackingNumber: true, trackingUrl: true, carrier: true } },
           items: {
             select: {
@@ -156,11 +167,18 @@ export class OrderEmailListener {
 
       // Guest invite email — fires when the order is first confirmed.
       //
-      // Detection: a "guest" in this codebase is a User with passwordHash=null
-      // (stub account created by orders.service.ts for guest checkouts). The
-      // old check `!order.userId && order.guestEmail` never matched any real
-      // order because userId is always set, so no guest ever got the invite.
-      const isStubGuest = order?.user && !order.user.passwordHash && !!order.user.email
+      // Detection: a "stub-guest" is a User with NO passwordHash AND
+      // NO OAuth link AND NOT marked as verified. The previous check
+      // only looked at `!passwordHash` which accidentally matched
+      // Google/Facebook users too (they legitimately have no
+      // passwordHash) → they received a bogus "create your account"
+      // email even though they were already logged in via OAuth.
+      //
+      // The 3-signal check matches the one in admin-users.service.ts:218
+      // so both the admin customer list and this listener agree on who
+      // is a real guest.
+      const u = order?.user
+      const isStubGuest = !!u && !u.passwordHash && (u.oauthAccounts?.length ?? 0) === 0 && !u.isVerified && !!u.email
       const isPureGuest = !order?.userId && !!order?.guestEmail
       if (event.toStatus === 'confirmed' && (isStubGuest || isPureGuest)) {
         try {

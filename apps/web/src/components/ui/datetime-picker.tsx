@@ -108,11 +108,11 @@ export function DateTimePicker({ value, onChange, placeholder, showTime = true }
             <div className="flex-1 p-3">
               <div className="flex items-center justify-between mb-2">
                 <button type="button" onClick={prevMonth} className="h-7 w-7 rounded-lg hover:bg-muted flex items-center justify-center">
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
                 </button>
                 <span className="text-sm font-bold">{monthNames[viewMonth]} {viewYear}</span>
                 <button type="button" onClick={nextMonth} className="h-7 w-7 rounded-lg hover:bg-muted flex items-center justify-center">
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4 rtl:rotate-180" />
                 </button>
               </div>
 

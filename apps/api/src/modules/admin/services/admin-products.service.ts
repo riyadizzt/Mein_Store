@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
+import { ensureVariantBarcode } from '../../../common/helpers/variant-barcode'
 
 // Map color names (DE/EN/AR) to SKU-safe 3-letter codes
 const COLOR_SKU_MAP: Record<string, string> = {
@@ -452,7 +453,9 @@ export class AdminProductsService {
         data: {
           productId,
           sku,
-          barcode: data.barcode || null,
+          // Guard: barcode is mandatory on every variant. Defaults to
+          // the generated SKU if the admin didn't supply an EAN.
+          barcode: ensureVariantBarcode({ sku, barcode: data.barcode }),
           color: data.color,
           colorHex: data.colorHex,
           size,
@@ -524,6 +527,10 @@ export class AdminProductsService {
       const variant = await this.prisma.productVariant.create({
         data: {
           productId, sku,
+          // Guard: barcode must never be null. addSize() didn't set
+          // this field at all before — every size-variant landed in
+          // the DB with barcode=null. Now defaults to SKU.
+          barcode: ensureVariantBarcode({ sku }),
           color, colorHex: colorHexMap.get(color) ?? '#999999',
           size: data.size, priceModifier: data.priceModifier ?? 0,
         },
@@ -583,7 +590,13 @@ export class AdminProductsService {
 
     const updateData: any = {}
     if (data.priceModifier !== undefined) updateData.priceModifier = data.priceModifier
-    if (data.barcode !== undefined) updateData.barcode = data.barcode || null
+    // Guard: barcode is invariant-required. If the admin sends an
+    // empty string or whitespace, we fall back to SKU (the default).
+    // Clearing the field to null is not allowed — the helper enforces
+    // it. Sending an explicit EAN overrides SKU as usual.
+    if (data.barcode !== undefined) {
+      updateData.barcode = ensureVariantBarcode({ sku: variant.sku, barcode: data.barcode })
+    }
 
     const updated = await this.prisma.productVariant.update({ where: { id: variantId }, data: updateData })
 
@@ -752,6 +765,123 @@ export class AdminProductsService {
       // eslint-disable-next-line no-console
       console.error(`[softDelete revalidate] HTTP ${res.status} ${res.statusText}`)
     }
+  }
+
+  /**
+   * HARD delete a product. Only allowed when:
+   *   1. The product is already soft-deleted (deletedAt IS NOT NULL).
+   *   2. No order_items reference any of its variants (GoBD: orders
+   *      must keep their line items readable forever).
+   *   3. No product_reviews, coupons, or promotions reference it
+   *      (these columns have NO cascade — they would RESTRICT the
+   *      delete at the DB level).
+   *
+   * If any blocker is found we throw a ConflictException with a
+   * 3-lang message + a `blockers` object the frontend uses to render
+   * a helpful error modal ("verknüpft mit 3 Bestellungen").
+   *
+   * On success the DB cascade wipes translations, variants,
+   * inventory, stock reservations, product_images, wishlist_items,
+   * and channel_product_listings automatically.
+   */
+  async hardDelete(productId: string, adminId: string, ipAddress: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        translations: { where: { language: 'de' }, select: { name: true } },
+        variants: { select: { id: true } },
+      },
+    })
+    if (!product) throw new NotFoundException('Product not found')
+
+    if (!product.deletedAt) {
+      // Defense-in-depth: the frontend should not offer the button
+      // for non-deleted products, but a direct API call would.
+      throw new BadRequestException({
+        error: 'ProductMustBeSoftDeletedFirst',
+        message: {
+          de: 'Produkt muss zuerst in den Papierkorb verschoben werden, bevor es endgültig gelöscht werden kann.',
+          en: 'Product must be soft-deleted before it can be permanently removed.',
+          ar: 'يجب حذف المنتج أولاً قبل أن يتم حذفه نهائياً.',
+        },
+      })
+    }
+
+    const variantIds = product.variants.map((v) => v.id)
+
+    const [orderItems, reviews, coupons, promotions] = await Promise.all([
+      variantIds.length
+        ? this.prisma.orderItem.count({ where: { variantId: { in: variantIds } } })
+        : Promise.resolve(0),
+      this.prisma.productReview.count({ where: { productId } }),
+      this.prisma.coupon.count({ where: { appliesToProductId: productId } }),
+      this.prisma.promotion.count({ where: { productId } }),
+    ])
+
+    if (orderItems > 0 || reviews > 0 || coupons > 0 || promotions > 0) {
+      // Build a human-readable list of what is blocking. Only non-zero
+      // categories show up in the message so the admin gets a concise
+      // reason instead of a wall of zeros.
+      const partsDe: string[] = []
+      const partsEn: string[] = []
+      const partsAr: string[] = []
+      if (orderItems > 0) {
+        partsDe.push(`${orderItems} Bestellung${orderItems === 1 ? '' : 'en'}`)
+        partsEn.push(`${orderItems} order${orderItems === 1 ? '' : 's'}`)
+        partsAr.push(`${orderItems} طلب`)
+      }
+      if (reviews > 0) {
+        partsDe.push(`${reviews} Bewertung${reviews === 1 ? '' : 'en'}`)
+        partsEn.push(`${reviews} review${reviews === 1 ? '' : 's'}`)
+        partsAr.push(`${reviews} تقييم`)
+      }
+      if (coupons > 0) {
+        partsDe.push(`${coupons} Gutschein${coupons === 1 ? '' : 'e'}`)
+        partsEn.push(`${coupons} coupon${coupons === 1 ? '' : 's'}`)
+        partsAr.push(`${coupons} قسيمة`)
+      }
+      if (promotions > 0) {
+        partsDe.push(`${promotions} Promotion${promotions === 1 ? '' : 'en'}`)
+        partsEn.push(`${promotions} promotion${promotions === 1 ? '' : 's'}`)
+        partsAr.push(`${promotions} عرض`)
+      }
+      throw new ConflictException({
+        error: 'ProductHasReferences',
+        message: {
+          de: `Dieses Produkt kann nicht endgültig gelöscht werden — es ist mit ${partsDe.join(', ')} verknüpft.`,
+          en: `This product cannot be permanently deleted — it is linked to ${partsEn.join(', ')}.`,
+          ar: `لا يمكن حذف هذا المنتج نهائياً — مرتبط بـ ${partsAr.join('، ')}.`,
+        },
+        blockers: { orderItems, reviews, coupons, promotions },
+      })
+    }
+
+    const slug = product.slug
+    const name = product.translations[0]?.name ?? slug
+
+    // The DB handles cascading to translations / variants / inventory /
+    // stock_reservations / product_images / wishlist_items /
+    // channel_product_listings via ON DELETE CASCADE on their FKs.
+    await this.prisma.product.delete({ where: { id: productId } })
+
+    await this.audit.log({
+      adminId,
+      action: 'PRODUCT_HARD_DELETED',
+      entityType: 'product',
+      entityId: productId,
+      changes: { before: { name, slug } },
+      ipAddress,
+    })
+
+    // Fire-and-forget cache invalidation (same pattern as softDelete).
+    // The DB row is gone at this point; cache staleness is just a
+    // cosmetic issue, not a data-integrity one.
+    this.revalidateStorefront(slug).catch((e) => {
+      // eslint-disable-next-line no-console
+      console.error('[hardDelete] storefront revalidation failed:', e?.message ?? e)
+    })
+
+    return { hardDeleted: true, name }
   }
 
   async restore(productId: string, adminId: string, ipAddress: string) {

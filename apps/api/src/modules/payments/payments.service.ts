@@ -17,7 +17,7 @@ import { PaymentFailedException } from './exceptions/payment-failed.exception'
 import { InvoiceService } from './invoice.service'
 import { EmailService } from '../email/email.service'
 import { VorkasseProvider } from './providers/vorkasse.provider'
-import { ORDER_EVENTS, OrderStatusChangedEvent } from '../orders/events/order.events'
+import { ORDER_EVENTS, OrderStatusChangedEvent, OrderConfirmedEvent } from '../orders/events/order.events'
 
 // Map PaymentMethod enum → PaymentProvider
 const METHOD_TO_PROVIDER: Record<string, string> = {
@@ -102,6 +102,41 @@ export class PaymentsService {
           correlationId: 'payment-confirm',
         })
       } catch {}
+
+      // Confirm inventory: convert the RESERVED stock rows into SOLD so
+      // quantityOnHand actually decrements. Mirrors what
+      // handlePaymentSuccess does for the auto-webhook path. Previously
+      // this branch (manual Vorkasse admin confirm) was missing —
+      // Vorkasse orders got paid but their reservations stayed RESERVED
+      // until the expiry cron swept them, and the stock was never
+      // deducted. See incident 15.04.2026.
+      //
+      // existingNotes is the PRE-write snapshot, captured before we
+      // added confirmationToken+inviteToken — reservationIds (if any)
+      // are already there because orders.service.create persisted them.
+      const reservationIds: string[] = Array.isArray(existingNotes.reservationIds)
+        ? existingNotes.reservationIds.filter((id: unknown): id is string => typeof id === 'string')
+        : []
+      if (reservationIds.length > 0) {
+        try {
+          this.eventEmitter.emit(
+            ORDER_EVENTS.CONFIRMED,
+            new OrderConfirmedEvent(
+              orderId,
+              currentOrder.orderNumber,
+              'payment-confirm',
+              reservationIds,
+            ),
+          )
+        } catch (err) {
+          this.logger.error(`Failed to emit ORDER_CONFIRMED from markAsCaptured for ${orderId}`, err)
+        }
+      } else {
+        this.logger.warn(
+          `markAsCaptured: order ${currentOrder.orderNumber} has no reservationIds in notes — stock will NOT be auto-decremented. ` +
+          `This is expected for legacy orders created before the 15.04.2026 fix.`,
+        )
+      }
     }
 
     this.logger.log(`Confirmation token for order ${orderId}: ${confirmationToken}`)
@@ -454,7 +489,15 @@ export class PaymentsService {
     // `user` is included so we can detect stub guest accounts:
     // orders.service.ts creates a User with passwordHash=null for every guest
     // checkout (stub-user pattern), which means order.userId is ALWAYS set.
-    // The only reliable "is this a guest" signal is user.passwordHash === null.
+    // We need THREE signals to distinguish real stub-guests from OAuth users
+    // (Google/Facebook) who legitimately have no passwordHash:
+    //   1. passwordHash === null (no password set)
+    //   2. oauthAccounts empty (no Google/Facebook link, post 14.04.2026)
+    //   3. isVerified === false (catches legacy OAuth users from before
+    //      oauthAccounts rows were written — Google login auto-marks verified)
+    // Matches the detection in admin-users.service.ts:218 and
+    // order-email.listener.ts. See the 15.04.2026 Bug-Hunt for the
+    // incident that exposed the original single-signal check.
     const include = {
       order: {
         select: {
@@ -464,7 +507,14 @@ export class PaymentsService {
           notes: true,
           userId: true,
           guestEmail: true,
-          user: { select: { passwordHash: true, email: true } },
+          user: {
+            select: {
+              passwordHash: true,
+              email: true,
+              isVerified: true,
+              oauthAccounts: { select: { id: true }, take: 1 },
+            },
+          },
         },
       },
     } as const
@@ -518,9 +568,12 @@ export class PaymentsService {
     // Guest orders need a one-time invite token so the confirmation email
     // can offer "create an account" to claim this stub user. This codebase
     // creates a stub User (passwordHash=null) for every guest checkout, so
-    // userId is ALWAYS set and the old "!userId && guestEmail" check never
-    // fired. The correct signal is user.passwordHash === null — only a real
-    // (claimed) account has a password.
+    // userId is ALWAYS set.
+    //
+    // The 3-signal check matches order-email.listener.ts and
+    // admin-users.service.ts — OAuth users (Google/Facebook) must NOT
+    // receive an invite token because they already have an account via
+    // their provider. See incident 15.04.2026.
     let mergedNotes: any = {}
     try {
       mergedNotes = JSON.parse(payment.order.notes ?? '{}')
@@ -528,7 +581,12 @@ export class PaymentsService {
       // keep empty object on malformed notes
     }
     const orderUser: any = (payment.order as any).user
-    const isStubGuestUser = orderUser && !orderUser.passwordHash && !!orderUser.email
+    const isStubGuestUser =
+      !!orderUser &&
+      !orderUser.passwordHash &&
+      (orderUser.oauthAccounts?.length ?? 0) === 0 &&
+      !orderUser.isVerified &&
+      !!orderUser.email
     const hasNoUserAtAll =
       !(payment.order as any).userId && !!(payment.order as any).guestEmail
     const isGuest = isStubGuestUser || hasNoUserAtAll

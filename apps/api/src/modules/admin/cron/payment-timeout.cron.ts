@@ -30,23 +30,31 @@ export class PaymentTimeoutCron {
     const cutoff = new Date()
     cutoff.setMinutes(cutoff.getMinutes() - 10)
 
-    // Find pending/pending_payment orders older than 30 minutes with no successful payment
+    // Find pending/pending_payment orders older than 10 minutes with no successful payment.
+    // VORKASSE orders are excluded — they have their own dedicated cron (vorkasse.cron.ts)
+    // that respects the customer's bank-transfer deadline (days, not minutes).
     const staleOrders = await this.prisma.order.findMany({
       where: {
         status: { in: ['pending', 'pending_payment'] },
         createdAt: { lt: cutoff },
         deletedAt: null,
+        OR: [
+          { payment: null },
+          { payment: { provider: { not: 'VORKASSE' } } },
+        ],
       },
       include: {
-        payment: { select: { status: true } },
+        payment: { select: { status: true, provider: true } },
         items: { select: { variantId: true, quantity: true } },
       },
       take: 50,
     })
 
-    // Filter: only orders with NO successful payment
+    // Filter: only orders with NO successful payment.
+    // Defensive: also drop any VORKASSE that slipped through (e.g. data shape changes).
     const unpaidOrders = staleOrders.filter((o) =>
-      !o.payment || !['captured', 'authorized'].includes(o.payment.status),
+      o.payment?.provider !== 'VORKASSE' &&
+      (!o.payment || !['captured', 'authorized'].includes(o.payment.status)),
     )
 
     if (unpaidOrders.length === 0) return

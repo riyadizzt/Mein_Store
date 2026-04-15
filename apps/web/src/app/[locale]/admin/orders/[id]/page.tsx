@@ -43,6 +43,168 @@ const PROVIDER_COLORS: Record<string, string> = {
   klarna: 'bg-pink-100 text-pink-800',
 }
 
+// ── Vorkasse Countdown ───────────────────────────────────────
+//
+// Two-stage visualisation of the Vorkasse cron deadline:
+//
+//   • variant="banner"  — red prominent banner at the top of the
+//                          order detail, shown ONLY when less than
+//                          24 hours are left or the deadline has
+//                          already passed (cron about to auto-cancel).
+//   • variant="inline"  — small status line inside the existing
+//                          Vorkasse-confirmation card. Always shown
+//                          for VORKASSE+pending orders. Colour shifts
+//                          muted → amber → red as the deadline gets
+//                          closer.
+//
+// The component is purely read-only: no mutations, no backend
+// writes, no side effects. It reads `vorkasse_cancel_days` and
+// `vorkasse_reminder_days` from the existing `/admin/settings`
+// endpoint (5-min React-Query cache) and ticks a `setInterval`
+// once per minute so the "X hours Y minutes left" text stays
+// fresh without a full page reload.
+//
+// Hard guard: returns null unless the order is a pending VORKASSE
+// order with status pending/pending_payment, so the component is
+// a no-op for every other order type.
+function VorkasseCountdown({
+  order,
+  variant,
+  locale,
+  t3,
+}: {
+  order: any
+  variant: 'banner' | 'inline'
+  locale: string
+  t3: (d: string, e: string, a: string) => string
+}) {
+  // Settings query — cached 5 min, no extra backend work
+  const { data: settings } = useQuery({
+    queryKey: ['admin-settings-vorkasse-countdown'],
+    queryFn: async () => {
+      const { data } = await api.get('/admin/settings')
+      return data
+    },
+    staleTime: 5 * 60 * 1000,
+    // Only run the query if the order is actually a pending Vorkasse
+    // one — otherwise the component renders null anyway.
+    enabled:
+      order?.payment?.provider === 'VORKASSE' &&
+      order?.payment?.status === 'pending' &&
+      ['pending', 'pending_payment'].includes(order?.status),
+  })
+
+  // Tick every 60s so the remaining-time text refreshes
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const i = setInterval(() => setTick((t) => t + 1), 60_000)
+    return () => clearInterval(i)
+  }, [])
+
+  // Guard: only Vorkasse+pending orders with pending status
+  if (order?.payment?.provider !== 'VORKASSE') return null
+  if (order?.payment?.status !== 'pending') return null
+  if (!['pending', 'pending_payment'].includes(order?.status)) return null
+
+  // Resolve deadline — admin UI exposes `vorkasse_deadline_days` as the
+  // single source of truth. Fall back to legacy `vorkasse_cancel_days`
+  // for backwards-compat with installs that set it directly.
+  const cancelDays = Number(
+    settings?.vorkasse_deadline_days ?? settings?.vorkasse_cancel_days ?? 10,
+  )
+  const createdAt = new Date(order.createdAt)
+  const deadline = new Date(createdAt.getTime() + cancelDays * 24 * 60 * 60 * 1000)
+  const msLeft = deadline.getTime() - Date.now()
+
+  const isPast = msLeft < 0
+  const absMs = Math.abs(msLeft)
+  const daysLeft = Math.floor(absMs / (24 * 60 * 60 * 1000))
+  const hoursLeft = Math.floor(absMs / (60 * 60 * 1000)) % 24
+  const isCritical = !isPast && msLeft < 24 * 60 * 60 * 1000
+  const isWarning = !isPast && !isCritical && msLeft < 3 * 24 * 60 * 60 * 1000
+
+  // Reminder-sent info (stored by vorkasse.cron.ts in payment.metadata)
+  const metadata = (order.payment?.metadata ?? {}) as Record<string, unknown>
+  const reminderSent = metadata.reminderSent === true
+  const reminderSentAt =
+    typeof metadata.reminderSentAt === 'string' ? metadata.reminderSentAt : null
+
+  // ── Banner variant (critical only) ──
+  if (variant === 'banner') {
+    if (!isCritical && !isPast) return null
+    return (
+      <div
+        className="mb-4 bg-red-50 border-2 border-red-500 rounded-2xl p-4 flex items-start gap-3 shadow-sm"
+        style={{ animation: 'fadeSlideUp 300ms ease-out' }}
+      >
+        <AlertTriangle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5 animate-pulse" />
+        <div className="flex-1">
+          <h3 className="text-sm font-bold text-red-900 mb-1">
+            {isPast
+              ? t3(
+                  'Vorkasse-Frist abgelaufen',
+                  'Vorkasse deadline passed',
+                  'انتهت مهلة الدفع المسبق',
+                )
+              : t3(
+                  'Weniger als 24 Stunden bis zur automatischen Stornierung',
+                  'Less than 24 hours until auto-cancel',
+                  'أقل من 24 ساعة حتى الإلغاء التلقائي',
+                )}
+          </h3>
+          <p className="text-xs text-red-800 leading-relaxed">
+            {isPast
+              ? t3(
+                  'Diese Vorkasse-Bestellung wird beim nächsten Cron-Lauf (jede Stunde) automatisch storniert und der Bestand freigegeben.',
+                  'This Vorkasse order will be auto-cancelled at the next cron run (every hour) and its stock released.',
+                  'سيتم إلغاء هذا الطلب تلقائياً عند التشغيل التالي (كل ساعة) والإفراج عن المخزون.',
+                )
+              : t3(
+                  `Noch ${hoursLeft} Stunde${hoursLeft === 1 ? '' : 'n'} bis zum automatischen Storno. Wenn du weißt dass der Kunde bezahlt hat, bestätige die Zahlung jetzt.`,
+                  `${hoursLeft} hour${hoursLeft === 1 ? '' : 's'} left until auto-cancel. If you know the customer has paid, confirm the payment now.`,
+                  `متبقي ${hoursLeft} ساعة حتى الإلغاء التلقائي. إذا كنت تعلم أن العميل قد دفع، فأكد الدفع الآن.`,
+                )}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Inline variant ──
+  const colorClass = isPast || isCritical
+    ? 'text-red-600'
+    : isWarning
+      ? 'text-amber-600'
+      : 'text-muted-foreground'
+
+  return (
+    <div className="mb-3 pb-3 border-b border-[#d4a853]/20">
+      <div className={`flex items-center gap-1.5 text-xs font-semibold ${colorClass}`}>
+        <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+        <span>
+          {isPast
+            ? t3('Frist abgelaufen', 'Deadline passed', 'انتهت المهلة')
+            : t3(
+                `Noch ${daysLeft} Tag${daysLeft === 1 ? '' : 'e'}, ${hoursLeft} Stunde${hoursLeft === 1 ? '' : 'n'} bis zur automatischen Stornierung`,
+                `${daysLeft} day${daysLeft === 1 ? '' : 's'}, ${hoursLeft} hour${hoursLeft === 1 ? '' : 's'} until auto-cancel`,
+                `متبقي ${daysLeft} يوم و ${hoursLeft} ساعة حتى الإلغاء التلقائي`,
+              )}
+        </span>
+      </div>
+      {reminderSent && reminderSentAt && (
+        <div className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <Send className="h-3 w-3 flex-shrink-0" />
+          {t3(
+            `Zahlungserinnerung versendet am ${formatDate(reminderSentAt, locale)}`,
+            `Payment reminder sent on ${formatDate(reminderSentAt, locale)}`,
+            `تم إرسال تذكير الدفع في ${formatDate(reminderSentAt, locale)}`,
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AdminOrderDetailPage({ params: { id } }: { params: { id: string; locale: string } }) {
   const locale = useLocale()
   const queryClient = useQueryClient()
@@ -279,6 +441,9 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
           {/* Products */}
           {/* Refund Status Banner */}
           <RefundStatusBanner order={order} locale={locale} />
+
+          {/* Vorkasse critical countdown banner — only shown when <24h left or deadline already passed */}
+          <VorkasseCountdown order={order} variant="banner" locale={locale} t3={t3} />
 
           <div className="bg-background border rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 100ms both' }}>
             <div className="flex items-center justify-between mb-4">
@@ -687,13 +852,20 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
             </div>
           </div>
 
-          {/* Vorkasse: Confirm Payment */}
-          {order.payment?.provider === 'VORKASSE' && order.payment?.status === 'pending' && (
+          {/* Vorkasse: Confirm Payment — only show if the order is still
+              in a confirmable state. Also excludes cancelled orders where
+              the payment row might still say "pending" due to historical
+              drift. */}
+          {order.payment?.provider === 'VORKASSE'
+            && order.payment?.status === 'pending'
+            && ['pending', 'pending_payment', 'confirmed', 'processing'].includes(order.status) && (
             <div className="bg-[#d4a853]/5 border-2 border-[#d4a853]/30 rounded-2xl p-5 shadow-sm" style={{ animation: 'fadeSlideUp 300ms ease-out 400ms both' }}>
               <h3 className="text-sm font-bold text-[#d4a853] mb-3 flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
                 {t3('Vorkasse — Zahlung bestätigen', 'Bank Transfer — Confirm Payment', 'تحويل بنكي — تأكيد الدفع')}
               </h3>
+              {/* Deadline countdown — updates every 60s, turns red <24h */}
+              <VorkasseCountdown order={order} variant="inline" locale={locale} t3={t3} />
               <p className="text-sm text-muted-foreground mb-4">
                 {t3(
                   'Bestätige den Zahlungseingang per Banküberweisung. Die Bestellung wird dann automatisch bearbeitet und eine Rechnung erstellt.',
@@ -733,6 +905,11 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                           : 'Zahlungsbestätigung fehlgeschlagen'
                         )
                       )
+                      // Always refetch on error — if the 400 came from
+                      // "Payment already confirmed" or "does not use
+                      // Vorkasse", the local cache is stale and the
+                      // button should disappear after refresh.
+                      queryClient.invalidateQueries({ queryKey: ['admin-order'] })
                     }
                   }
                 }}
