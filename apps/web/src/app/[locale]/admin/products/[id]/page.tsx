@@ -428,13 +428,18 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
           })()}
         </div>
         <div className="divide-y">
-          {/* Column headers */}
-          <div className="flex items-center gap-3 px-5 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-            <span className="w-6">{locale === 'ar' ? 'مقاس' : 'Gr.'}</span>
-            <span className="flex-1">SKU</span>
-            <span>{locale === 'ar' ? 'السعر النهائي' : 'Endpreis'}</span>
-            <span className="w-16 text-center">{locale === 'ar' ? 'تعديل ±' : 'Aufpreis ±'}</span>
-            <span className="w-16" />
+          {/* Column headers — mirrors the data row structure below so each
+              title sits centered above its column. Arabic "مقاس" and
+              "السعر النهائي" are wider than their data cells, so we give
+              them fixed centered widths matching the data widths exactly. */}
+          <div className="flex items-center gap-3 px-5 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <span className="w-6 text-center">{locale === 'ar' ? 'مقاس' : 'Gr.'}</span>
+            <span className="flex-1 text-center">SKU</span>
+            <div className="flex items-center gap-2">
+              <span className="w-20 text-center">{locale === 'ar' ? 'السعر النهائي' : 'Endpreis'}</span>
+              <span className="w-16 text-center">{locale === 'ar' ? 'تعديل ±' : 'Aufpreis ±'}</span>
+            </div>
+            <span className="w-32 text-center">{locale === 'ar' ? 'إجراءات' : locale === 'en' ? 'Actions' : 'Aktionen'}</span>
           </div>
           {[...colorGroups.entries()].map(([color, variants]) => {
             const hex = variants[0]?.colorHex ?? '#999'
@@ -454,11 +459,11 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                   const customerPrice = (salePrice ?? basePrice) + Number(v.priceModifier ?? 0)
                   return (
                     <div key={v.id} className="flex items-center gap-3 px-5 py-2 group hover:bg-muted/10 transition-colors">
-                      <span className="inline-flex items-center justify-center h-6 w-6 rounded-lg bg-muted text-[11px] font-bold">{v.size}</span>
-                      <span className="font-mono text-[11px] text-muted-foreground flex-1 truncate">{v.sku}</span>
+                      <span className="inline-flex items-center justify-center h-6 w-6 rounded-lg bg-muted text-[11px] font-bold flex-shrink-0">{v.size}</span>
+                      <span className="font-mono text-[11px] text-muted-foreground flex-1 truncate text-center">{v.sku}</span>
                       <div className="flex items-center gap-2">
-                        <div className="text-end">
-                          <span className="text-xs font-medium">€{customerPrice.toFixed(2)}</span>
+                        <div className="w-20 text-center">
+                          <span className="text-xs font-medium tabular-nums">€{customerPrice.toFixed(2)}</span>
                           {salePrice && <span className="text-[9px] text-muted-foreground line-through ml-1">€{basePrice.toFixed(2)}</span>}
                         </div>
                         <input
@@ -478,17 +483,19 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                         />
                       </div>
-                      <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: customerPrice, stock }} productName={getProductName(product.translations, 'de')} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
-                      <HaengetikettenButton variant={{ sku: v.sku, color: v.color ?? '', size: v.size ?? '', price: customerPrice }} productName={getProductName(product.translations, 'de')} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
-                      {(() => {
-                        const colorImg = productImages.find((img: any) => img.colorName?.toLowerCase() === (v.color ?? '').toLowerCase())
-                        const primaryImg = productImages.find((img: any) => img.isPrimary)
-                        const imgUrl = colorImg?.url ?? primaryImg?.url ?? productImages[0]?.url ?? null
-                        const catName = (product.category?.translations?.find((t: any) => t.language === 'de')?.name ?? '').toLowerCase()
-                        const stripe: 'herren' | 'damen' | 'kinder' | 'unisex' = catName.includes('herren') || catName.includes('männer') || catName.includes('jungen') ? 'herren' : catName.includes('damen') || catName.includes('frauen') || catName.includes('mädchen') ? 'damen' : catName.includes('kinder') || catName.includes('baby') ? 'kinder' : 'unisex'
-                        return <FotoEtikettButton variant={{ sku: v.sku, color: v.color ?? '', colorHex: v.colorHex ?? '#999', size: v.size ?? '', price: customerPrice, imageUrl: imgUrl }} productName={getProductName(product.translations, 'de')} categoryStripe={stripe} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
-                      })()}
-                      <button onClick={async () => { const ok = await confirmDialog({ title: t('inventory.deleteVariant'), description: t('inventory.deleteVariantConfirm'), variant: 'danger', confirmLabel: t('categories.delete'), cancelLabel: t('categories.cancel') }); if (ok) deleteMut.mutate(v.id) }} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <div className="w-32 flex items-center justify-center gap-1 flex-shrink-0">
+                        <PrintLabelButton variant={{ sku: v.sku, barcode: v.barcode, color: v.color, size: v.size, price: customerPrice, stock }} productName={getProductName(product.translations, 'de')} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
+                        <HaengetikettenButton variant={{ sku: v.sku, color: v.color ?? '', size: v.size ?? '', price: customerPrice }} productName={getProductName(product.translations, 'de')} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
+                        {(() => {
+                          const colorImg = productImages.find((img: any) => img.colorName?.toLowerCase() === (v.color ?? '').toLowerCase())
+                          const primaryImg = productImages.find((img: any) => img.isPrimary)
+                          const imgUrl = colorImg?.url ?? primaryImg?.url ?? productImages[0]?.url ?? null
+                          const catName = (product.category?.translations?.find((t: any) => t.language === 'de')?.name ?? '').toLowerCase()
+                          const stripe: 'herren' | 'damen' | 'kinder' | 'unisex' = catName.includes('herren') || catName.includes('männer') || catName.includes('jungen') ? 'herren' : catName.includes('damen') || catName.includes('frauen') || catName.includes('mädchen') ? 'damen' : catName.includes('kinder') || catName.includes('baby') ? 'kinder' : 'unisex'
+                          return <FotoEtikettButton variant={{ sku: v.sku, color: v.color ?? '', colorHex: v.colorHex ?? '#999', size: v.size ?? '', price: customerPrice, imageUrl: imgUrl }} productName={getProductName(product.translations, 'de')} categoryStripe={stripe} className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-all" />
+                        })()}
+                        <button onClick={async () => { const ok = await confirmDialog({ title: t('inventory.deleteVariant'), description: t('inventory.deleteVariantConfirm'), variant: 'danger', confirmLabel: t('categories.delete'), cancelLabel: t('categories.cancel') }); if (ok) deleteMut.mutate(v.id) }} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
                     </div>
                   )
                 })}
