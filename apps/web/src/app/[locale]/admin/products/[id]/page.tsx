@@ -21,7 +21,7 @@ import { AiDescriptionButton } from '@/components/admin/ai-description-button'
 import { BatchHaengetikettenButton } from '@/components/admin/haengetikett/BatchHaengetikettenButton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useCategories } from '@/hooks/use-categories'
+import { useAdminCategories } from '@/hooks/use-categories'
 
 const LANGS = [
   { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
@@ -55,7 +55,10 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   // subcategory's parentId. subCategoryId is the leaf we'll PUT on save.
   const [parentCategoryId, setParentCategoryId] = useState<string>('')
   const [subCategoryId, setSubCategoryId] = useState<string>('')
-  const { data: allCategories } = useCategories()
+  // Admin variant → returns ALL translations per category (de/en/ar),
+  // not filtered to one language, so the dropdown can fall back cleanly
+  // AR → DE → EN → slug when a translation row is missing in the DB.
+  const { data: allCategories } = useAdminCategories()
   const [showAddColor, setShowAddColor] = useState(false)
   const [showAddSize, setShowAddSize] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -326,6 +329,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                   {allCategories.map((cat: any) => {
                     const label = cat.translations?.find((t: any) => t.language === locale)?.name
                       ?? cat.translations?.find((t: any) => t.language === 'de')?.name
+                      ?? cat.translations?.find((t: any) => t.language === 'en')?.name
                       ?? cat.slug
                     return <option key={cat.id} value={cat.id}>{label}</option>
                   })}
@@ -348,6 +352,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                     return children.map((sub: any) => {
                       const label = sub.translations?.find((t: any) => t.language === locale)?.name
                         ?? sub.translations?.find((t: any) => t.language === 'de')?.name
+                        ?? sub.translations?.find((t: any) => t.language === 'en')?.name
                         ?? sub.slug
                       return <option key={sub.id} value={sub.id}>{label}</option>
                     })

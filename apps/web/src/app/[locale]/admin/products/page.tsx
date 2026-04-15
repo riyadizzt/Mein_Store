@@ -15,7 +15,7 @@ import { translateColor, getProductName, getCategoryName, formatCurrency } from 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
-import { useCategories } from '@/hooks/use-categories'
+import { useAdminCategories } from '@/hooks/use-categories'
 
 const STOCK_BADGE: Record<string, string> = {
   in_stock: 'bg-green-100 text-green-800',
@@ -44,7 +44,9 @@ export default function AdminProductsPage() {
   const [showCategorizeModal, setShowCategorizeModal] = useState(false)
   const [bulkParentCategoryId, setBulkParentCategoryId] = useState('')
   const [bulkSubCategoryId, setBulkSubCategoryId] = useState('')
-  const { data: allCategoriesTree } = useCategories()
+  // Admin variant — all translations per category, not language-filtered.
+  // Lets the dropdown labels fall back AR → DE → EN → slug cleanly.
+  const { data: allCategoriesTree } = useAdminCategories()
 
   // Data
   const { data: departments } = useQuery({
@@ -544,6 +546,7 @@ export default function AdminProductsPage() {
                   {(allCategoriesTree ?? []).map((cat: any) => {
                     const label = cat.translations?.find((t: any) => t.language === locale)?.name
                       ?? cat.translations?.find((t: any) => t.language === 'de')?.name
+                      ?? cat.translations?.find((t: any) => t.language === 'en')?.name
                       ?? cat.slug
                     return <option key={cat.id} value={cat.id}>{label}</option>
                   })}
@@ -566,6 +569,7 @@ export default function AdminProductsPage() {
                     return children.map((sub: any) => {
                       const label = sub.translations?.find((t: any) => t.language === locale)?.name
                         ?? sub.translations?.find((t: any) => t.language === 'de')?.name
+                        ?? sub.translations?.find((t: any) => t.language === 'en')?.name
                         ?? sub.slug
                       return <option key={sub.id} value={sub.id}>{label}</option>
                     })
