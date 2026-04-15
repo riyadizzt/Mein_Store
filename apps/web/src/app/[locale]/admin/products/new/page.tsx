@@ -480,7 +480,7 @@ export default function NewProductPage() {
                     <div className="h-8 w-8 rounded-full border-2 border-white shadow" style={getColorStyle(color.hex)} />
                     <div className="flex-1">
                       <span className="text-sm font-semibold">{translateColor(color.name, locale)}</span>
-                      <span className="text-xs text-muted-foreground ml-2">
+                      <span className="text-xs text-muted-foreground ms-2">
                         {colorImgs.length > 0 ? `${colorImgs.length} ${locale === 'ar' ? 'صور' : 'Bilder'}` : (locale === 'ar' ? 'بدون صور — عيّن صوراً من المعرض' : 'Keine Bilder — weise Bilder aus der Galerie zu')}
                       </span>
                     </div>
