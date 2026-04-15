@@ -15,6 +15,7 @@ import { translateColor, getProductName, getCategoryName, formatCurrency } from 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { useCategories } from '@/hooks/use-categories'
 
 const STOCK_BADGE: Record<string, string> = {
   in_stock: 'bg-green-100 text-green-800',
@@ -39,6 +40,11 @@ export default function AdminProductsPage() {
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Bulk re-categorize modal state
+  const [showCategorizeModal, setShowCategorizeModal] = useState(false)
+  const [bulkParentCategoryId, setBulkParentCategoryId] = useState('')
+  const [bulkSubCategoryId, setBulkSubCategoryId] = useState('')
+  const { data: allCategoriesTree } = useCategories()
 
   // Data
   const { data: departments } = useQuery({
@@ -81,6 +87,21 @@ export default function AdminProductsPage() {
     mutationFn: ({ ids, channel, enabled }: { ids: string[]; channel: string; enabled: boolean }) =>
       api.post('/admin/products/bulk/channels', { productIds: ids, channel, enabled }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-products'] }); setSelected(new Set()) },
+  })
+
+  // Bulk re-categorize — moves N selected products to a new category id.
+  // The modal state is kept local to this page; target category is the
+  // leaf (sub) category id chosen from the cascading parent → sub picker.
+  const categorizeMut = useMutation({
+    mutationFn: ({ ids, categoryId }: { ids: string[]; categoryId: string }) =>
+      api.post('/admin/products/bulk/categorize', { productIds: ids, categoryId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-products'] })
+      setSelected(new Set())
+      setShowCategorizeModal(false)
+      setBulkParentCategoryId('')
+      setBulkSubCategoryId('')
+    },
   })
 
   const toggleStatusMut = useMutation({
@@ -213,6 +234,16 @@ export default function AdminProductsPage() {
             <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'google', enabled: false })}>{locale === 'ar' ? '− جوجل' : '− Google'}</Button>
             <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg text-green-600 border-green-200" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'whatsapp', enabled: true })}>{locale === 'ar' ? '+ واتساب' : '+ WhatsApp'}</Button>
             <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => channelMut.mutate({ ids: [...selected], channel: 'whatsapp', enabled: false })}>{locale === 'ar' ? '− واتساب' : '− WhatsApp'}</Button>
+            <span className="w-px h-5 bg-border" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs rounded-lg text-amber-700 border-amber-200"
+              onClick={() => setShowCategorizeModal(true)}
+            >
+              <Package className="h-3 w-3 mr-1 rtl:mr-0 rtl:ml-1" />
+              {locale === 'ar' ? 'نقل إلى فئة...' : locale === 'en' ? 'Move to category…' : 'In Kategorie verschieben…'}
+            </Button>
             <span className="w-px h-5 bg-border" />
             <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg text-red-600 border-red-200" onClick={() => bulkMut.mutate({ action: 'delete', ids: [...selected] })}><Trash2 className="h-3 w-3 mr-1" />{t('products.bulkDelete')}</Button>
           </div>
@@ -474,6 +505,99 @@ export default function AdminProductsPage() {
                 className="bg-red-500 hover:bg-red-600 text-white"
               >
                 {deleteMut.isPending ? '...' : locale === 'ar' ? 'حذف' : locale === 'en' ? 'Delete' : 'Löschen'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BULK RE-CATEGORIZE MODAL ── */}
+      {showCategorizeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+              <Package className="h-5 w-5 text-amber-600" />
+              {locale === 'ar' ? 'نقل المنتجات إلى فئة' : locale === 'en' ? 'Move products to category' : 'Produkte in Kategorie verschieben'}
+            </h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              {locale === 'ar'
+                ? `سيتم نقل ${selected.size} منتج إلى الفئة المحددة. هذا الإجراء يمكن عكسه بتغيير الفئة مرة أخرى.`
+                : locale === 'en'
+                ? `${selected.size} products will be moved to the selected category. Reversible — you can change the category again later.`
+                : `${selected.size} Produkte werden in die gewählte Kategorie verschoben. Reversibel — du kannst die Kategorie später wieder ändern.`}
+            </p>
+
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">
+                  {locale === 'ar' ? 'الفئة الرئيسية' : locale === 'en' ? 'Main Category' : 'Hauptkategorie'}
+                </label>
+                <select
+                  value={bulkParentCategoryId}
+                  onChange={(e) => {
+                    setBulkParentCategoryId(e.target.value)
+                    setBulkSubCategoryId('')
+                  }}
+                  className="w-full h-10 px-3 rounded-xl border bg-background text-sm"
+                >
+                  <option value="">—</option>
+                  {(allCategoriesTree ?? []).map((cat: any) => {
+                    const label = cat.translations?.find((t: any) => t.language === locale)?.name
+                      ?? cat.translations?.find((t: any) => t.language === 'de')?.name
+                      ?? cat.slug
+                    return <option key={cat.id} value={cat.id}>{label}</option>
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">
+                  {locale === 'ar' ? 'الفئة الفرعية' : locale === 'en' ? 'Sub Category' : 'Unterkategorie'}
+                </label>
+                <select
+                  value={bulkSubCategoryId}
+                  onChange={(e) => setBulkSubCategoryId(e.target.value)}
+                  disabled={!bulkParentCategoryId}
+                  className="w-full h-10 px-3 rounded-xl border bg-background text-sm disabled:opacity-50"
+                >
+                  <option value="">—</option>
+                  {(() => {
+                    const parent = (allCategoriesTree ?? []).find((c: any) => c.id === bulkParentCategoryId)
+                    const children = parent?.children ?? []
+                    return children.map((sub: any) => {
+                      const label = sub.translations?.find((t: any) => t.language === locale)?.name
+                        ?? sub.translations?.find((t: any) => t.language === 'de')?.name
+                        ?? sub.slug
+                      return <option key={sub.id} value={sub.id}>{label}</option>
+                    })
+                  })()}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCategorizeModal(false)
+                  setBulkParentCategoryId('')
+                  setBulkSubCategoryId('')
+                }}
+                disabled={categorizeMut.isPending}
+              >
+                {locale === 'ar' ? 'إلغاء' : locale === 'en' ? 'Cancel' : 'Abbrechen'}
+              </Button>
+              <Button
+                onClick={() => categorizeMut.mutate({ ids: [...selected], categoryId: bulkSubCategoryId })}
+                disabled={!bulkSubCategoryId || categorizeMut.isPending}
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                {categorizeMut.isPending
+                  ? '...'
+                  : locale === 'ar'
+                  ? `نقل ${selected.size}`
+                  : locale === 'en'
+                  ? `Move ${selected.size}`
+                  : `${selected.size} verschieben`}
               </Button>
             </div>
           </div>

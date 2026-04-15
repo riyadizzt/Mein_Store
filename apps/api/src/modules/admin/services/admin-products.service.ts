@@ -645,6 +645,46 @@ export class AdminProductsService {
     return { updated: result.count }
   }
 
+  async bulkUpdateCategory(
+    productIds: string[],
+    categoryId: string,
+    adminId: string,
+    ipAddress: string,
+  ) {
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return { updated: 0 }
+    }
+    // Validate the target category exists + is active. Fail fast with a
+    // clear message rather than silently leaving productIds in an
+    // inconsistent state.
+    const target = await this.prisma.category.findFirst({
+      where: { id: categoryId, isActive: true },
+      select: { id: true, slug: true },
+    })
+    if (!target) throw new NotFoundException('Target category not found or inactive')
+
+    const result = await this.prisma.product.updateMany({
+      where: { id: { in: productIds }, deletedAt: null },
+      data: { categoryId },
+    })
+
+    await this.audit.log({
+      adminId,
+      action: 'PRODUCTS_CATEGORY_CHANGED',
+      entityType: 'product',
+      entityId: productIds.join(','),
+      changes: {
+        after: {
+          categoryId,
+          categorySlug: target.slug,
+          count: result.count,
+        },
+      },
+      ipAddress,
+    })
+    return { updated: result.count, categoryId, categorySlug: target.slug }
+  }
+
   async softDelete(productId: string, adminId: string, ipAddress: string) {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, deletedAt: null },

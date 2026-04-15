@@ -822,6 +822,18 @@ export class AdminController {
     return this.products.bulkUpdateChannels(productIds, channel, enabled, req.user.id, ip)
   }
 
+  @Post('products/bulk/categorize')
+  @RequirePermission(PERMISSIONS.PRODUCTS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  bulkUpdateProductCategory(
+    @Body('productIds') productIds: string[],
+    @Body('categoryId') categoryId: string,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    return this.products.bulkUpdateCategory(productIds, categoryId, req.user.id, ip)
+  }
+
   @Delete('products/:id')
   @RequirePermission(PERMISSIONS.PRODUCTS_DELETE)
   @HttpCode(HttpStatus.OK)
