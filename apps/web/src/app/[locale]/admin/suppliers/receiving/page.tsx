@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { PackageOpen, Search, Plus, Trash2, Check, Printer, Package, Camera } from 'lucide-react'
+import { PackageOpen, Search, Plus, Trash2, Check, Printer, Package, Camera, ImagePlus } from 'lucide-react'
 import { api } from '@/lib/api'
+import { API_BASE_URL } from '@/lib/env'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { LabelPrinter } from '@/components/admin/label-printer'
@@ -68,6 +69,47 @@ interface NewProduct {
   purchasePrice: number
   salePrice: number
   quantities: Record<string, number>
+  // Pre-compressed File objects. Uploaded to /admin/products/:id/images/upload
+  // AFTER the delivery POST succeeds and returns the created product id.
+  // First image becomes the primary (backend addImageUrl uses count === 0).
+  images?: File[]
+}
+
+// Client-side JPEG compression. Canvas downscale + toBlob(quality=0.85).
+// Typical 5–10MB phone photo → 200–500KB, fast enough to run inline before
+// every upload. Falls through to the original File on any error so an
+// exotic format never blocks the upload.
+async function compressImage(
+  file: File,
+  maxDim = 1600,
+  quality = 0.85,
+): Promise<File> {
+  if (typeof window === 'undefined') return file
+  if (!file.type.startsWith('image/')) return file
+  if (file.size < 500_000) return file // already small, skip
+  try {
+    const bitmap = await createImageBitmap(file)
+    const ratio = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+    const w = Math.round(bitmap.width * ratio)
+    const h = Math.round(bitmap.height * ratio)
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+    ctx.drawImage(bitmap, 0, 0, w, h)
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', quality),
+    )
+    if (!blob) return file
+    return new File(
+      [blob],
+      file.name.replace(/\.[^.]+$/, '.jpg'),
+      { type: 'image/jpeg' },
+    )
+  } catch {
+    return file
+  }
 }
 
 export default function ReceivingPage() {
@@ -91,6 +133,9 @@ export default function ReceivingPage() {
   const [selectedColors, setSelectedColors] = useState<string[]>([])
   const [selectedSizes, setSelectedSizes] = useState<string[]>([])
   const [sizePreset, setSizePreset] = useState('')
+  // Photos staged for the current in-progress new product (compressed already).
+  // Reset on addNewProduct() same as the other form fields.
+  const [npFormImages, setNpFormImages] = useState<File[]>([])
 
   // Result
   const [result, setResult] = useState<any>(null)
@@ -169,7 +214,48 @@ export default function ReceivingPage() {
       }
 
       const { data } = await api.post('/admin/suppliers/deliveries', body)
-      return data
+
+      // After the delivery is persisted, upload any staged photos per new
+      // product. The backend returns createdProducts in the same order as
+      // dto.newProducts, so we can match by index. Uses the same admin
+      // token pattern + pre-existing endpoint the /admin/products/[id]
+      // edit page uses — no new backend surface. First image uploaded for
+      // each product becomes primary automatically (addImageUrl flags
+      // sortOrder === 0 as isPrimary).
+      const createdProducts: { id: string; name: string }[] = data?.createdProducts ?? []
+      let imageUploadFailed = 0
+      if (createdProducts.length > 0) {
+        const store = (await import('@/store/auth-store')).useAuthStore.getState()
+        const token = store.adminAccessToken || store.accessToken
+        for (let i = 0; i < newProducts.length; i++) {
+          const np = newProducts[i]
+          const productId = createdProducts[i]?.id
+          if (!productId || !np.images || np.images.length === 0) continue
+          for (const img of np.images) {
+            try {
+              const fd = new FormData()
+              fd.append('file', img)
+              const res = await fetch(`${API_BASE_URL}/api/v1/admin/products/${productId}/images/upload`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                credentials: 'include',
+                body: fd,
+              })
+              if (!res.ok) {
+                imageUploadFailed++
+                // eslint-disable-next-line no-console
+                console.error(`[receiving] image upload failed for ${productId}: ${res.status} ${res.statusText}`)
+              }
+            } catch (e: any) {
+              imageUploadFailed++
+              // eslint-disable-next-line no-console
+              console.error('[receiving] image upload threw:', e?.message ?? e)
+            }
+          }
+        }
+      }
+
+      return { ...data, imageUploadFailed }
     },
     onSuccess: (data) => {
       setResult(data)
@@ -253,10 +339,27 @@ export default function ReceivingPage() {
       purchasePrice: parseFloat(npForm.purchasePrice),
       salePrice: parseFloat(npForm.salePrice),
       quantities,
+      images: npFormImages.length > 0 ? [...npFormImages] : undefined,
     }])
     setNpForm({ productName: '', productNameDe: '', categoryId: npForm.categoryId, purchasePrice: '', salePrice: '' })
     setSelectedColors([])
     setSelectedSizes([])
+    setNpFormImages([])
+  }
+
+  // Append new files to the current form's image staging area.
+  // Filters out non-image mime types, compresses each one to ~1600px
+  // JPEG before storing, so that network upload later is fast even
+  // when the admin is on a phone with a slow connection.
+  const addImagesToForm = async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'))
+    if (arr.length === 0) return
+    const compressed = await Promise.all(arr.map((f) => compressImage(f)))
+    setNpFormImages((prev) => [...prev, ...compressed])
+  }
+
+  const removeImageFromForm = (idx: number) => {
+    setNpFormImages((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const getColorName = (c: typeof COLORS_LIST[0]) => c.name[locale as 'de' | 'en' | 'ar'] ?? c.name.de
@@ -633,6 +736,69 @@ export default function ReceivingPage() {
                       <label className="text-[11px] font-medium text-muted-foreground">{t3(locale, 'VK-Preis (€) *', 'Price (€) *', 'سعر البيع *')}</label>
                       <input type="number" step="0.01" value={npForm.salePrice} onChange={(e) => setNpForm({ ...npForm, salePrice: e.target.value })} className="w-full h-10 px-3 rounded-xl border bg-background text-sm mt-1 tabular-nums" />
                     </div>
+                  </div>
+
+                  {/* Compact photo staging — optional, visual reference only.
+                      First uploaded image becomes primary on the backend. */}
+                  <div className="mt-4">
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">
+                      {t3(locale, 'Fotos (optional)', 'Photos (optional)', 'صور (اختياري)')}
+                      {npFormImages.length > 0 && (
+                        <span className="ms-2 text-[#d4a853] font-semibold">({npFormImages.length})</span>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 flex items-center justify-center gap-2 h-10 rounded-xl border-2 border-dashed border-muted-foreground/20 hover:border-[#d4a853] hover:bg-[#d4a853]/5 cursor-pointer transition-all text-xs text-muted-foreground">
+                        <ImagePlus className="h-4 w-4" />
+                        {t3(locale, 'Bilder wählen', 'Choose images', 'اختر صور')}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files) addImagesToForm(e.target.files)
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
+                      <label className="flex items-center justify-center gap-2 h-10 px-4 rounded-xl border border-[#d4a853]/30 bg-[#d4a853]/10 hover:bg-[#d4a853]/20 cursor-pointer transition-all text-xs font-medium text-[#d4a853]">
+                        <Camera className="h-4 w-4" />
+                        {t3(locale, 'Kamera', 'Camera', 'كاميرا')}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files) addImagesToForm(e.target.files)
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
+                    </div>
+                    {npFormImages.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {npFormImages.map((f, i) => (
+                          <div key={i} className="relative h-14 w-14 rounded-lg overflow-hidden border border-muted bg-muted/20 group flex-shrink-0">
+                            <img src={URL.createObjectURL(f)} alt="" className="h-full w-full object-cover" />
+                            {i === 0 && (
+                              <div className="absolute inset-x-0 top-0 bg-[#d4a853] text-[#0f1419] text-[8px] font-bold text-center py-0.5 leading-none">
+                                {t3(locale, 'HAUPT', 'MAIN', 'رئيسي')}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeImageFromForm(i)}
+                              aria-label={t3(locale, 'Entfernen', 'Remove', 'إزالة')}
+                              className="absolute top-0.5 right-0.5 rtl:right-auto rtl:left-0.5 h-4 w-4 rounded-full bg-red-500/90 text-white text-[11px] leading-none font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
