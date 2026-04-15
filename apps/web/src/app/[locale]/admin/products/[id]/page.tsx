@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Loader2, Plus, Trash2, Save, Upload, Star, X,
-  Image as ImageIcon, Globe, ShoppingBag,
+  Image as ImageIcon, Globe, ShoppingBag, ChevronRight, Sparkles,
 } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
@@ -61,6 +61,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   const { data: allCategories } = useAdminCategories()
   const [showAddColor, setShowAddColor] = useState(false)
   const [showAddSize, setShowAddSize] = useState(false)
+  const [showSeo, setShowSeo] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -296,6 +297,173 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
               />
             </div>
           </div>
+
+          {/* ── SEO / Google Meta fields — collapsible per-language editor ── */}
+          {(() => {
+            const metaTitle = translations[activeLang]?.metaTitle ?? ''
+            const metaDesc = translations[activeLang]?.metaDesc ?? ''
+            const titleLen = metaTitle.length
+            const descLen = metaDesc.length
+            const titleLimit = 60
+            const descLimit = 160
+            const seoFilled = titleLen > 0 || descLen > 0
+            return (
+              <div className="rounded-xl border border-border/60 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSeo((v) => !v)}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-muted/20 hover:bg-muted/40 transition-colors text-start"
+                >
+                  <ChevronRight
+                    className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${showSeo ? 'rotate-90' : ''} rtl:rotate-180 ${showSeo ? 'rtl:rotate-90' : ''}`}
+                  />
+                  <Sparkles className="h-4 w-4 text-[#d4a853]" />
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold">
+                      {locale === 'ar'
+                        ? 'إعدادات SEO (محركات البحث)'
+                        : locale === 'en'
+                        ? 'SEO settings (search engines)'
+                        : 'SEO-Einstellungen (Suchmaschinen)'}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {locale === 'ar'
+                        ? 'ما يظهر في نتائج Google والمشاركات على وسائل التواصل الاجتماعي'
+                        : locale === 'en'
+                        ? 'What appears in Google search results and social media shares'
+                        : 'Was in Google-Suchergebnissen und Social-Media-Vorschauen erscheint'}
+                    </div>
+                  </div>
+                  {seoFilled && (
+                    <span className="text-[10px] font-medium text-[#d4a853] bg-[#d4a853]/10 px-2 py-0.5 rounded-full">
+                      {locale === 'ar' ? 'مكتمل' : locale === 'en' ? 'filled' : 'gefüllt'}
+                    </span>
+                  )}
+                </button>
+                {showSeo && (
+                  <div className="p-4 space-y-4 bg-background">
+                    {/* Meta Title */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-sm font-medium">
+                          {locale === 'ar'
+                            ? `عنوان Google (${activeLang.toUpperCase()})`
+                            : locale === 'en'
+                            ? `Google Title (${activeLang.toUpperCase()})`
+                            : `Google-Titel (${activeLang.toUpperCase()})`}
+                        </label>
+                        <span
+                          className={`text-[11px] tabular-nums ${
+                            titleLen > titleLimit
+                              ? 'text-red-600 font-semibold'
+                              : titleLen > titleLimit - 10
+                              ? 'text-amber-600'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          {titleLen} / {titleLimit}
+                        </span>
+                      </div>
+                      <Input
+                        value={metaTitle}
+                        onChange={(e) =>
+                          setTranslations((p) => ({
+                            ...p,
+                            [activeLang]: { ...p[activeLang], metaTitle: e.target.value },
+                          }))
+                        }
+                        className="rounded-xl"
+                        dir={activeLang === 'ar' ? 'rtl' : 'ltr'}
+                        placeholder={
+                          locale === 'ar'
+                            ? 'مثال: تي شيرت رجالي أسود — ملبوسات ملك'
+                            : locale === 'en'
+                            ? 'e.g. Men\'s Black T-Shirt Organic Cotton | Malak'
+                            : 'z.B. Herren T-Shirt Schwarz Bio-Baumwolle | Malak'
+                        }
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {locale === 'ar'
+                          ? 'الرابط الأزرق القابل للنقر في نتائج Google. الطول المُوصى به 55-60 حرفاً.'
+                          : locale === 'en'
+                          ? 'The blue clickable link in Google results. 55–60 characters recommended.'
+                          : 'Der blaue anklickbare Link in Google-Ergebnissen. 55–60 Zeichen empfohlen.'}
+                      </p>
+                    </div>
+
+                    {/* Meta Description */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-sm font-medium">
+                          {locale === 'ar'
+                            ? `وصف Google (${activeLang.toUpperCase()})`
+                            : locale === 'en'
+                            ? `Google Description (${activeLang.toUpperCase()})`
+                            : `Google-Beschreibung (${activeLang.toUpperCase()})`}
+                        </label>
+                        <span
+                          className={`text-[11px] tabular-nums ${
+                            descLen > descLimit
+                              ? 'text-red-600 font-semibold'
+                              : descLen > descLimit - 20
+                              ? 'text-amber-600'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          {descLen} / {descLimit}
+                        </span>
+                      </div>
+                      <textarea
+                        value={metaDesc}
+                        onChange={(e) =>
+                          setTranslations((p) => ({
+                            ...p,
+                            [activeLang]: { ...p[activeLang], metaDesc: e.target.value },
+                          }))
+                        }
+                        className="w-full h-20 px-4 py-2.5 rounded-xl border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        dir={activeLang === 'ar' ? 'rtl' : 'ltr'}
+                        placeholder={
+                          locale === 'ar'
+                            ? 'مثال: تي شيرت رجالي من القطن العضوي 100%. قصة كلاسيكية. شحن مجاني من 100€.'
+                            : locale === 'en'
+                            ? 'e.g. Premium Men\'s T-Shirt from 100% organic cotton. Classic cut. Free shipping from €100.'
+                            : 'z.B. Premium Herren T-Shirt aus 100% Bio-Baumwolle. Klassischer Schnitt. Versand ab €100 gratis.'
+                        }
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {locale === 'ar'
+                          ? 'النص الرمادي أسفل الرابط الأزرق في Google. الطول المُوصى به 150-160 حرفاً.'
+                          : locale === 'en'
+                          ? 'The gray text below the blue link in Google. 150–160 characters recommended.'
+                          : 'Der graue Text unter dem blauen Link in Google. 150–160 Zeichen empfohlen.'}
+                      </p>
+                    </div>
+
+                    {/* Google preview card */}
+                    {(metaTitle || metaDesc) && (
+                      <div className="mt-2 p-3 rounded-lg bg-muted/20 border border-border/40">
+                        <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                          {locale === 'ar' ? 'معاينة Google' : locale === 'en' ? 'Google preview' : 'Google-Vorschau'}
+                        </div>
+                        <div dir={activeLang === 'ar' ? 'rtl' : 'ltr'}>
+                          <div className="text-[13px] text-[#4d5156] truncate">
+                            malak-bekleidung.com › produkt › {product?.slug ?? '...'}
+                          </div>
+                          <div className="text-[18px] text-[#1a0dab] leading-snug hover:underline cursor-pointer truncate">
+                            {metaTitle || translations[activeLang]?.name || '—'}
+                          </div>
+                          <div className="text-[13px] text-[#4d5156] leading-snug line-clamp-2 mt-0.5">
+                            {metaDesc || translations[activeLang]?.description || '—'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.basePrice')}</label><Input type="number" min={0} step={0.01} value={basePrice || ''} onChange={(e) => setBasePrice(+e.target.value)} className="rounded-xl" /></div>
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.salePrice')}</label><Input type="number" min={0} step={0.01} value={salePrice ?? ''} onChange={(e) => setSalePrice(e.target.value ? +e.target.value : null)} className="rounded-xl" /></div>
