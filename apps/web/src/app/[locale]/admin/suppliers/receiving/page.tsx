@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { LabelPrinter } from '@/components/admin/label-printer'
 import { TranslateButton } from '@/components/admin/translate-button'
-import { COLOR_PRESETS, type ColorPreset } from '@/lib/color-presets'
+import { COLOR_PRESETS, type ColorPreset, findColorPreset, getColorStyle, getColorLabel } from '@/lib/color-presets'
 
 const CameraBarcodeScannerOverlay = lazy(() => import('@/components/admin/camera-barcode-scanner').then((m) => ({ default: m.CameraBarcodeScannerOverlay })))
 
@@ -454,14 +454,33 @@ export default function ReceivingPage() {
                   <th className="text-end px-4 py-2 text-sm font-medium">{t3(locale, 'Menge', 'Qty', 'الكمية')}</th>
                 </tr></thead>
                 <tbody>
-                  {labelItems.map((item: any, idx: number) => (
-                    <tr key={idx} className="border-t border-border/20">
-                      <td className="text-start px-4 py-2 font-mono text-xs">{item.sku}</td>
-                      <td className="text-start px-4 py-2 text-xs">{item.productName}</td>
-                      <td className="px-4 py-2 text-center text-xs text-muted-foreground">{[item.color, item.size].filter(Boolean).join(' / ') || '—'}</td>
-                      <td className="px-4 py-2 text-end tabular-nums font-semibold">{item.stock}</td>
-                    </tr>
-                  ))}
+                  {labelItems.map((item: any, idx: number) => {
+                    const preset = findColorPreset(item.color)
+                    const hex = preset?.hex ?? '#cccccc'
+                    const colorLabel = item.color ? getColorLabel(item.color, locale) : ''
+                    return (
+                      <tr key={idx} className="border-t border-border/20">
+                        <td className="text-start px-4 py-2 font-mono text-xs">{item.sku}</td>
+                        <td className="text-start px-4 py-2 text-xs">{item.productName}</td>
+                        <td className="px-4 py-2 text-xs">
+                          <div className="flex items-center justify-center gap-2">
+                            {item.color && (
+                              <span
+                                className="h-4 w-4 rounded-full ring-1 ring-border/40 flex-shrink-0"
+                                style={getColorStyle(hex)}
+                                title={colorLabel}
+                                aria-label={colorLabel}
+                              />
+                            )}
+                            <span className="text-muted-foreground">
+                              {[colorLabel, item.size].filter(Boolean).join(' / ') || '—'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-end tabular-nums font-semibold">{item.stock}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
