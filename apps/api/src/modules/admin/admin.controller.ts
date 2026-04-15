@@ -729,6 +729,7 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: {
       basePrice?: number; salePrice?: number | null;
+      categoryId?: string;
       channelFacebook?: boolean; channelTiktok?: boolean; channelGoogle?: boolean; channelWhatsapp?: boolean;
       excludeFromReturns?: boolean; returnExclusionReason?: string | null;
       translations?: { language: string; name: string; description?: string; metaTitle?: string; metaDesc?: string }[]
@@ -740,6 +741,17 @@ export class AdminController {
     const data: any = {}
     if (body.basePrice !== undefined) data.basePrice = body.basePrice
     if (body.salePrice !== undefined) data.salePrice = body.salePrice
+    // Category re-categorize: only accept the new id when it actually
+    // differs from the current one AND the target category exists +
+    // isn't soft-deleted. Silent no-op on identical id so repeat saves
+    // don't spam the audit log with noise.
+    if (body.categoryId !== undefined && body.categoryId !== product.categoryId) {
+      const target = await this.prisma.category.findFirst({
+        where: { id: body.categoryId, isActive: true },
+      })
+      if (!target) throw new NotFoundException('Target category not found or inactive')
+      data.categoryId = body.categoryId
+    }
     if (body.channelFacebook !== undefined) data.channelFacebook = body.channelFacebook
     if (body.channelTiktok !== undefined) data.channelTiktok = body.channelTiktok
     if (body.channelGoogle !== undefined) data.channelGoogle = body.channelGoogle

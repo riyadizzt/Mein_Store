@@ -21,6 +21,7 @@ import { AiDescriptionButton } from '@/components/admin/ai-description-button'
 import { BatchHaengetikettenButton } from '@/components/admin/haengetikett/BatchHaengetikettenButton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useCategories } from '@/hooks/use-categories'
 
 const LANGS = [
   { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
@@ -48,6 +49,13 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
   const [channelWhatsapp, setChannelWhatsapp] = useState(false)
   const [excludeFromReturns, setExcludeFromReturns] = useState(false)
   const [returnExclusionReason, setReturnExclusionReason] = useState<string | null>(null)
+  // Category re-categorize: two cascading dropdowns.
+  // parentCategoryId is the top-level category (Herren/Damen/...) derived
+  // from either a direct parent selection or by walking up from the current
+  // subcategory's parentId. subCategoryId is the leaf we'll PUT on save.
+  const [parentCategoryId, setParentCategoryId] = useState<string>('')
+  const [subCategoryId, setSubCategoryId] = useState<string>('')
+  const { data: allCategories } = useCategories()
   const [showAddColor, setShowAddColor] = useState(false)
   const [showAddSize, setShowAddSize] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -76,6 +84,15 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
     setChannelWhatsapp(product.channelWhatsapp ?? false)
     setExcludeFromReturns(product.excludeFromReturns ?? false)
     setReturnExclusionReason(product.returnExclusionReason ?? null)
+    // Pre-fill the category dropdowns. product.categoryId is the LEAF
+    // category. We also need its parent (top-level) so the cascading UI
+    // can highlight both rows. product.category.parentId is included in
+    // the response from GET /admin/products/:id.
+    if (product.categoryId) {
+      setSubCategoryId(product.categoryId)
+      const parentId = product.category?.parentId ?? null
+      setParentCategoryId(parentId ?? product.categoryId) // if it IS a top-level, treat as parent
+    }
   }, [product?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteMut = useMutation({
@@ -87,6 +104,12 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
     mutationFn: async () => {
       await api.put(`/admin/products/${id}`, {
         basePrice, salePrice,
+        // Only send categoryId when the user actually picked something;
+        // sending undefined leaves the existing value untouched on the
+        // backend (Prisma partial-update semantic). Defensive fallback
+        // to the original product.categoryId so we never accidentally
+        // null it out on save.
+        categoryId: subCategoryId || product?.categoryId,
         channelFacebook, channelTiktok, channelGoogle, channelWhatsapp,
         excludeFromReturns, returnExclusionReason: excludeFromReturns ? returnExclusionReason : null,
         translations: Object.entries(translations)
@@ -275,6 +298,73 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.salePrice')}</label><Input type="number" min={0} step={0.01} value={salePrice ?? ''} onChange={(e) => setSalePrice(e.target.value ? +e.target.value : null)} className="rounded-xl" /></div>
             <div><label className="text-sm font-medium mb-1.5 block">{t('wizard.taxRate')}</label><Input value={19} readOnly className="rounded-xl bg-muted" /></div>
           </div>
+
+          {/* Category re-categorize — two cascading dropdowns.
+              Picks the parent (Herren/Damen/Kinder/Baby) first, then the
+              leaf (Pyjamas/T-Shirts/...). The leaf is the value that ends
+              up on the saved product. Shown only when the categories list
+              finished loading, otherwise the dropdowns would render empty
+              and confuse the user. */}
+          {allCategories && allCategories.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-border/40">
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">
+                  {locale === 'ar' ? 'الفئة الرئيسية' : locale === 'en' ? 'Main Category' : 'Hauptkategorie'}
+                </label>
+                <select
+                  value={parentCategoryId}
+                  onChange={(e) => {
+                    const newParent = e.target.value
+                    setParentCategoryId(newParent)
+                    // Clear the sub-selection when the parent changes so the
+                    // user is forced to make a conscious leaf choice.
+                    setSubCategoryId('')
+                  }}
+                  className="w-full h-10 px-3 rounded-xl border bg-background text-sm"
+                >
+                  <option value="">—</option>
+                  {allCategories.map((cat: any) => {
+                    const label = cat.translations?.find((t: any) => t.language === locale)?.name
+                      ?? cat.translations?.find((t: any) => t.language === 'de')?.name
+                      ?? cat.slug
+                    return <option key={cat.id} value={cat.id}>{label}</option>
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">
+                  {locale === 'ar' ? 'الفئة الفرعية' : locale === 'en' ? 'Sub Category' : 'Unterkategorie'}
+                </label>
+                <select
+                  value={subCategoryId}
+                  onChange={(e) => setSubCategoryId(e.target.value)}
+                  disabled={!parentCategoryId}
+                  className="w-full h-10 px-3 rounded-xl border bg-background text-sm disabled:opacity-50"
+                >
+                  <option value="">—</option>
+                  {(() => {
+                    const parent = allCategories.find((c: any) => c.id === parentCategoryId)
+                    const children = parent?.children ?? []
+                    return children.map((sub: any) => {
+                      const label = sub.translations?.find((t: any) => t.language === locale)?.name
+                        ?? sub.translations?.find((t: any) => t.language === 'de')?.name
+                        ?? sub.slug
+                      return <option key={sub.id} value={sub.id}>{label}</option>
+                    })
+                  })()}
+                </select>
+                {subCategoryId && subCategoryId !== product?.categoryId && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5">
+                    {locale === 'ar'
+                      ? '⚠ سيتم نقل المنتج إلى فئة جديدة عند الحفظ'
+                      : locale === 'en'
+                      ? '⚠ Product will be moved to the new category on save'
+                      : '⚠ Produkt wird beim Speichern in die neue Kategorie verschoben'}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
