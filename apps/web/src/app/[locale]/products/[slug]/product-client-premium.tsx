@@ -2,7 +2,6 @@
 
 import { useMemo, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
   Truck, Heart, MessageCircle, Minus, Plus,
@@ -299,14 +298,14 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
     },
     {
       id: 'shipping',
-      label: t('shippingAndReturns'),
+      // Label intentionally "Shipping" only — the full return policy lives
+      // in the footer (Widerrufsbelehrung / Widerruf legal page), customers
+      // don't need a second copy on every PDP tab.
+      label: t3('Versand', 'Shipping', 'الشحن'),
       content: (
         <div className="text-sm font-light leading-relaxed text-[#0f1419]/60 max-w-2xl space-y-3">
           <p>{t('shippingInfo')}</p>
           <p>{t('freeShippingInfo')}</p>
-          <div className="h-px bg-[#e5e5e5] my-4" />
-          <p>{t('returnInfo')}</p>
-          <p>{t('freeReturnInfo')}</p>
           {product.excludeFromReturns && (
             <p className="text-[#b45309] mt-4">
               {product.returnExclusionReason === 'hygiene'
@@ -316,11 +315,6 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                   : t3('Versiegelte Ware kann nach dem Öffnen nicht zurückgegeben werden.', 'Sealed items cannot be returned once opened.', 'المنتجات المختومة غير قابلة للإرجاع بعد فتحها.')}
             </p>
           )}
-          <p className="mt-4">
-            <Link href={`/${locale}/legal/widerruf`} className="underline underline-offset-4 decoration-[#0f1419]/20 hover:decoration-[#0f1419]/40 transition-colors">
-              {t3('Widerrufsbelehrung', 'Cancellation policy', 'سياسة الإلغاء')}
-            </Link>
-          </p>
         </div>
       ),
     },
