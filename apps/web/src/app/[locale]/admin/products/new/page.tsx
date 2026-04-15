@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { translateColor, getProductName } from '@/lib/locale-utils'
+import { COLOR_PRESETS, getColorStyle } from '@/lib/color-presets'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
@@ -22,17 +23,15 @@ const LANGS = [
   { code: 'ar', label: 'العربية', flag: '🇸🇦' },
 ]
 
-const PRESET_COLORS = [
-  { name: 'Schwarz', hex: '#000000' }, { name: 'Weiß', hex: '#ffffff' },
-  { name: 'Blau', hex: '#2563eb' }, { name: 'Rot', hex: '#dc2626' },
-  { name: 'Grün', hex: '#16a34a' }, { name: 'Grau', hex: '#6b7280' },
-  { name: 'Beige', hex: '#d2b48c' }, { name: 'Navy', hex: '#1e3a5f' },
-  { name: 'Braun', hex: '#8b4513' }, { name: 'Rosa', hex: '#ec4899' },
-  { name: 'Gelb', hex: '#eab308' }, { name: 'Orange', hex: '#f97316' },
-  { name: 'Lila', hex: '#9333ea' }, { name: 'Türkis', hex: '#06b6d4' },
-  { name: 'Bordeaux', hex: '#7f1d1d' }, { name: 'Khaki', hex: '#a3a23a' },
-  { name: 'Silber', hex: '#c0c0c0' }, { name: 'Gold', hex: '#d4a853' },
-]
+// Flattened preset list backed by the shared COLOR_PRESETS source of truth.
+// We keep the DE name as the canonical identifier (`name`) so existing
+// variants saved with e.g. `color: 'Schwarz'` still match on re-edit, but
+// we also expose `labels` so the picker can render in the admin's locale.
+const PRESET_COLORS = COLOR_PRESETS.map((c) => ({
+  name: c.name.de,
+  hex: c.hex,
+  labels: c.name,
+}))
 
 const SIZE_PRESETS: Record<string, { label: string; icon: any; sizes: string[] }> = {
   clothing: { label: 'Kleidung', icon: Shirt, sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'] },
@@ -458,7 +457,8 @@ export default function NewProductPage() {
                 {PRESET_COLORS.filter((c) => !colors.some((cc) => cc.name === c.name)).map((c) => (
                   <button key={c.name} onClick={() => { addColor(c.name, c.hex); setShowColorPicker(false) }}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-muted-foreground/15 hover:border-primary/40 hover:bg-primary/5 transition-all text-xs">
-                    <div className="h-4 w-4 rounded-full border border-white shadow-sm" style={{ backgroundColor: c.hex }} />{translateColor(c.name, locale)}
+                    <div className="h-4 w-4 rounded-full border border-white shadow-sm" style={getColorStyle(c.hex)} />
+                    {locale === 'ar' ? c.labels.ar : locale === 'en' ? c.labels.en : c.labels.de}
                   </button>
                 ))}
               </div>
@@ -477,7 +477,7 @@ export default function NewProductPage() {
                 const colorImgs = getColorImages(color.name)
                 return (
                   <div key={color.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border hover:border-primary/20 transition-all group" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
-                    <div className="h-8 w-8 rounded-full border-2 border-white shadow" style={{ backgroundColor: color.hex }} />
+                    <div className="h-8 w-8 rounded-full border-2 border-white shadow" style={getColorStyle(color.hex)} />
                     <div className="flex-1">
                       <span className="text-sm font-semibold">{translateColor(color.name, locale)}</span>
                       <span className="text-xs text-muted-foreground ml-2">

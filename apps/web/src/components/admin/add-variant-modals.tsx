@@ -8,18 +8,15 @@ import { api } from '@/lib/api'
 import { translateColor } from '@/lib/locale-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { COLOR_PRESETS, getColorStyle } from '@/lib/color-presets'
 
-const PRESET_COLORS = [
-  { name: 'Schwarz', hex: '#000000' }, { name: 'Weiß', hex: '#ffffff' },
-  { name: 'Blau', hex: '#2563eb' }, { name: 'Rot', hex: '#dc2626' },
-  { name: 'Grün', hex: '#16a34a' }, { name: 'Grau', hex: '#6b7280' },
-  { name: 'Beige', hex: '#d2b48c' }, { name: 'Navy', hex: '#1e3a5f' },
-  { name: 'Braun', hex: '#8b4513' }, { name: 'Rosa', hex: '#ec4899' },
-  { name: 'Gelb', hex: '#eab308' }, { name: 'Orange', hex: '#f97316' },
-  { name: 'Lila', hex: '#9333ea' }, { name: 'Türkis', hex: '#06b6d4' },
-  { name: 'Bordeaux', hex: '#800020' }, { name: 'Khaki', hex: '#bdb76b' },
-  { name: 'Silber', hex: '#c0c0c0' }, { name: 'Gold', hex: '#d4a853' },
-]
+// Flattened from the shared preset list — canonical DE name stays as the
+// identifier so existing variants keep matching on re-edit.
+const PRESET_COLORS = COLOR_PRESETS.map((c) => ({
+  name: c.name.de,
+  hex: c.hex,
+  labels: c.name,
+}))
 
 const SIZE_SYSTEMS: Record<string, string[]> = {
   clothing: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
@@ -136,7 +133,7 @@ export function AddColorModal({ productId, onClose, onSuccess }: AddColorModalPr
             onClick={() => { setShowDropdown(true); setTimeout(() => searchRef.current?.focus(), 50) }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all text-start"
           >
-            <div className="h-8 w-8 rounded-full shadow-md border-2 border-white" style={{ backgroundColor: activeHex }} />
+            <div className="h-8 w-8 rounded-full shadow-md border-2 border-white" style={getColorStyle(activeHex)} />
             <div className="flex-1">
               <div className="text-sm font-semibold">{translateColor(activeColor, locale)}</div>
               <div className="text-[10px] text-muted-foreground font-mono">{activeHex}</div>
@@ -166,8 +163,10 @@ export function AddColorModal({ productId, onClose, onSuccess }: AddColorModalPr
                     onClick={() => selectPreset(color)}
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors text-start"
                   >
-                    <div className="h-6 w-6 rounded-full shadow-sm border" style={{ backgroundColor: color.hex }} />
-                    <span className="text-sm font-medium flex-1">{translateColor(color.name, locale)}</span>
+                    <div className="h-6 w-6 rounded-full shadow-sm border" style={getColorStyle(color.hex)} />
+                    <span className="text-sm font-medium flex-1">
+                      {locale === 'ar' ? color.labels.ar : locale === 'en' ? color.labels.en : color.labels.de}
+                    </span>
                     <span className="text-[10px] text-muted-foreground font-mono">{color.hex}</span>
                   </button>
                 ))}
@@ -253,7 +252,7 @@ export function AddColorModal({ productId, onClose, onSuccess }: AddColorModalPr
       {/* ── Preview ── */}
       {canSave && (
         <div className="mb-4 p-3 rounded-xl bg-muted/20 border border-muted flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full border-2 border-white shadow" style={{ backgroundColor: activeHex }} />
+          <div className="h-8 w-8 rounded-full border-2 border-white shadow" style={getColorStyle(activeHex)} />
           <div>
             <div className="text-sm font-semibold">{translateColor(activeColor, locale)}</div>
             <div className="text-[11px] text-muted-foreground">{selectedSizes.size} {t('inventory.variant')}: {[...selectedSizes].sort().join(', ')}</div>
@@ -358,7 +357,7 @@ export function AddSizeModal({ productId, onClose, onSuccess }: AddSizeModalProp
             {(options?.colors ?? []).map((color: any) => (
               <button key={color.name} onClick={() => toggleColor(color.name)}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs transition-all ${selectedColors.has(color.name) ? 'border-primary bg-primary/5' : 'border-muted-foreground/15'}`}>
-                <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: color.hex }} />
+                <div className="h-4 w-4 rounded-full border" style={getColorStyle(color.hex)} />
                 {translateColor(color.name, locale)}
                 {selectedColors.has(color.name) && <Check className="h-3 w-3 text-primary" />}
               </button>
@@ -376,7 +375,7 @@ export function AddSizeModal({ productId, onClose, onSuccess }: AddSizeModalProp
               const hex = (options?.colors ?? []).find((c: any) => c.name === color)?.hex ?? '#999'
               return (
                 <div key={color} className="flex items-center gap-3">
-                  <div className="h-5 w-5 rounded-full border" style={{ backgroundColor: hex }} />
+                  <div className="h-5 w-5 rounded-full border" style={getColorStyle(hex)} />
                   <span className="text-xs font-medium flex-1">{translateColor(color, locale)}</span>
                   <Input type="number" min={0} value={stock[color] ?? ''} onChange={(e) => setStock({ ...stock, [color]: +e.target.value })}
                     className="w-20 rounded-lg text-center h-8 text-sm" placeholder="0" />
@@ -475,7 +474,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                 <tr key={color as string} className="border-t hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
-                      <div className="h-4 w-4 rounded-full border flex-shrink-0" style={{ backgroundColor: hex as string }} />
+                      <div className="h-4 w-4 rounded-full border flex-shrink-0" style={getColorStyle(hex as string)} />
                       <span className="text-xs font-medium">{translateColor(color as string, locale)}</span>
                     </div>
                   </td>
@@ -509,7 +508,7 @@ export function VariantMatrix({ productId, variants, locale }: VariantMatrixProp
                 <tr key={`${color}-hdr`} className="border-t bg-muted/30">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-5 w-5 rounded-full border-2 border-white shadow-sm flex-shrink-0" style={{ backgroundColor: hex as string }} />
+                      <div className="h-5 w-5 rounded-full border-2 border-white shadow-sm flex-shrink-0" style={getColorStyle(hex as string)} />
                       <span className="text-sm font-bold text-foreground">{translateColor(color as string, locale)}</span>
                       <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 rounded bg-muted/50">{locale === 'ar' ? 'المجموع' : 'Gesamt'}</span>
                     </div>

@@ -9,37 +9,16 @@ import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { LabelPrinter } from '@/components/admin/label-printer'
 import { TranslateButton } from '@/components/admin/translate-button'
+import { COLOR_PRESETS, type ColorPreset } from '@/lib/color-presets'
 
 const CameraBarcodeScannerOverlay = lazy(() => import('@/components/admin/camera-barcode-scanner').then((m) => ({ default: m.CameraBarcodeScannerOverlay })))
 
 const t3 = (locale: string, d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 
-let COLORS_LIST: { name: { de: string; en: string; ar: string }; hex: string }[] = [
-  { name: { de: 'Schwarz', en: 'Black', ar: 'أسود' }, hex: '#000000' },
-  { name: { de: 'Weiß', en: 'White', ar: 'أبيض' }, hex: '#FFFFFF' },
-  { name: { de: 'Grau', en: 'Gray', ar: 'رمادي' }, hex: '#808080' },
-  { name: { de: 'Rot', en: 'Red', ar: 'أحمر' }, hex: '#DC2626' },
-  { name: { de: 'Blau', en: 'Blue', ar: 'أزرق' }, hex: '#2563EB' },
-  { name: { de: 'Navy', en: 'Navy', ar: 'كحلي' }, hex: '#1E3A5F' },
-  { name: { de: 'Grün', en: 'Green', ar: 'أخضر' }, hex: '#16A34A' },
-  { name: { de: 'Gelb', en: 'Yellow', ar: 'أصفر' }, hex: '#EAB308' },
-  { name: { de: 'Orange', en: 'Orange', ar: 'برتقالي' }, hex: '#EA580C' },
-  { name: { de: 'Pink', en: 'Pink', ar: 'وردي' }, hex: '#EC4899' },
-  { name: { de: 'Rosa', en: 'Rose', ar: 'زهري' }, hex: '#F9A8D4' },
-  { name: { de: 'Lila', en: 'Purple', ar: 'بنفسجي' }, hex: '#9333EA' },
-  { name: { de: 'Braun', en: 'Brown', ar: 'بني' }, hex: '#92400E' },
-  { name: { de: 'Beige', en: 'Beige', ar: 'بيج' }, hex: '#D2B48C' },
-  { name: { de: 'Creme', en: 'Cream', ar: 'كريمي' }, hex: '#FFFDD0' },
-  { name: { de: 'Gold', en: 'Gold', ar: 'ذهبي' }, hex: '#D4A853' },
-  { name: { de: 'Silber', en: 'Silver', ar: 'فضي' }, hex: '#C0C0C0' },
-  { name: { de: 'Bordeaux', en: 'Burgundy', ar: 'خمري' }, hex: '#722F37' },
-  { name: { de: 'Khaki', en: 'Khaki', ar: 'كاكي' }, hex: '#BDB76B' },
-  { name: { de: 'Türkis', en: 'Turquoise', ar: 'فيروزي' }, hex: '#06B6D4' },
-  { name: { de: 'Hellblau', en: 'Light Blue', ar: 'أزرق فاتح' }, hex: '#93C5FD' },
-  { name: { de: 'Dunkelgrün', en: 'Dark Green', ar: 'أخضر غامق' }, hex: '#14532D' },
-  { name: { de: 'Anthrazit', en: 'Charcoal', ar: 'فحمي' }, hex: '#374151' },
-  { name: { de: 'Multicolor', en: 'Multicolor', ar: 'متعدد' }, hex: 'multi' },
-]
+// Runtime-extensible copy of the shared preset list — the "add custom
+// color" button at the bottom of the picker pushes into this local array
+// so per-session custom colors persist while the page is open.
+let COLORS_LIST: ColorPreset[] = [...COLOR_PRESETS]
 
 const SIZE_PRESETS: Record<string, string[]> = {
   'damen-ober': ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'],
