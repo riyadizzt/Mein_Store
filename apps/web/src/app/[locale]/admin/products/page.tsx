@@ -390,9 +390,30 @@ export default function AdminProductsPage() {
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${STOCK_BADGE[p.stockStatus]}`}>{p.totalStock}</span>
                       </td>
-                      {/* Status */}
+                      {/* Status — toggle disabled on soft-deleted products
+                          so the admin can't accidentally re-flip isActive
+                          back to true while deletedAt is still set. That
+                          combination would leave the row in a contradictory
+                          state ("deleted" + "active") and the storefront
+                          filter would still exclude it, but the admin UI
+                          would look wrong. */}
                       <td className="px-3 py-3 text-center">
-                        <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleStatusMut.mutate({ id: p.id, isActive: !p.isActive }) }} className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-all hover:ring-2 hover:ring-offset-1 ${p.isActive ? 'bg-green-100 text-green-800 hover:ring-green-300' : 'bg-gray-100 text-gray-600 hover:ring-gray-300'}`} title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}>{p.isActive ? t('products.active') : t('products.inactive')}</button>
+                        {p.deletedAt ? (
+                          <span
+                            className="inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-400 cursor-not-allowed"
+                            title={locale === 'ar' ? 'استعد المنتج أولاً لتفعيله' : locale === 'en' ? 'Restore the product first to activate it' : 'Produkt erst wiederherstellen, dann aktivieren'}
+                          >
+                            {t('products.inactive')}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); toggleStatusMut.mutate({ id: p.id, isActive: !p.isActive }) }}
+                            className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold cursor-pointer transition-all hover:ring-2 hover:ring-offset-1 ${p.isActive ? 'bg-green-100 text-green-800 hover:ring-green-300' : 'bg-gray-100 text-gray-600 hover:ring-gray-300'}`}
+                            title={p.isActive ? t('products.activeTooltip') : t('products.inactiveTooltip')}
+                          >
+                            {p.isActive ? t('products.active') : t('products.inactive')}
+                          </button>
+                        )}
                       </td>
                       {/* Actions */}
                       <td className="px-3 py-3">
