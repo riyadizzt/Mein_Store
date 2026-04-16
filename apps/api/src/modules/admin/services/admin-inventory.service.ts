@@ -962,9 +962,27 @@ export class AdminInventoryService {
     if (query.warehouseId) where.warehouseId = query.warehouseId
     if (query.type) where.type = query.type
     if (query.search) {
+      const s = query.search.trim()
+      // InventoryMovement has no Prisma `variant` relation — only variantId
+      // as a plain string. To search by SKU/barcode/product name, we first
+      // resolve matching variant IDs and then filter movements by those IDs.
+      const matchingVariants = await this.prisma.productVariant.findMany({
+        where: {
+          OR: [
+            { sku: { contains: s, mode: 'insensitive' } },
+            { barcode: { contains: s, mode: 'insensitive' } },
+            { product: { translations: { some: { name: { contains: s, mode: 'insensitive' } } } } },
+          ],
+        },
+        select: { id: true },
+        take: 200,
+      })
+      const variantIds = matchingVariants.map((v) => v.id)
+
       where.OR = [
-        { notes: { contains: query.search, mode: 'insensitive' } },
-        { referenceId: { contains: query.search, mode: 'insensitive' } },
+        { notes: { contains: s, mode: 'insensitive' } },
+        { referenceId: { contains: s, mode: 'insensitive' } },
+        ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
       ]
     }
 

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, API_BASE_URL } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import {
@@ -174,6 +174,23 @@ export default function AdminFinancePage() {
       {tab === 'monthly' && (
         <MonthlyTabV2 data={monthly.data} isLoading={monthly.isLoading}
           year={monthYear} setYear={setMonthYear} month={monthMonth} setMonth={setMonthMonth} t3={t3}
+          onPdfExport={async () => {
+            try {
+              const store = useAuthStore.getState()
+              const token = store.adminAccessToken || store.accessToken
+              const base = API_BASE_URL + '/api/v1'
+              const res = await fetch(`${base}/admin/finance/monthly/pdf?year=${monthYear}&month=${monthMonth}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                credentials: 'include',
+              })
+              if (!res.ok) throw new Error(`HTTP ${res.status}`)
+              const blob = await res.blob()
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url; a.download = `Monatsbericht-${monthYear}-${String(monthMonth).padStart(2, '0')}.pdf`; a.click()
+              URL.revokeObjectURL(url)
+            } catch (e: any) { alert(t3('PDF-Download fehlgeschlagen', 'PDF download failed', 'فشل تحميل PDF') + (e?.message ? `: ${e.message}` : '')) }
+          }}
           onCsvExport={() => {
             const cur = monthly.data?.currentMonth ?? {}
             const daily: any[] = monthly.data?.dailyBreakdown ?? []
@@ -282,20 +299,23 @@ function ExportButtons({ onCsv }: { t3: T3; onCsv?: () => void }) {
   )
 }
 
-/* ── Overview ────────────────────────────────────────────────────────── */
+/* ── Overview (Premium Redesign) ─────────────────────────────────────── */
 function OverviewTab({ data, isLoading, t3 }: { data: any; isLoading: boolean; t3: T3 }) {
   if (isLoading) return <Skeleton />
   const today = data?.todaySales ?? {}
   const yesterday = data?.yesterdaySales ?? {}
   const lastWeek = data?.lastWeekSameDaySales ?? {}
+  const refunds = data?.refunds ?? {}
   const hourly: any[] = data?.hourlyBreakdown ?? []
   const methods: any[] = data?.byPaymentMethod ?? []
   const topProducts: any[] = data?.topProducts ?? []
   const channels: any[] = data?.byChannel ?? []
+  const CHANNEL_LABELS: Record<string, string> = { website: 'Webshop', mobile: 'Mobile App', pos: 'POS', facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp' }
+  const MEDAL = ['#d4a853', '#94a3b8', '#b45309']
 
   return (
-    <div className="space-y-6">
-      {/* KPI Cards */}
+    <div className="space-y-5">
+      {/* ── Row 1: KPI Cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard title={t3('Umsatz heute', 'Revenue Today', 'إيرادات اليوم')}
           value={fmt(today.gross)} icon={<Euro className="h-5 w-5" />}
@@ -310,105 +330,156 @@ function OverviewTab({ data, isLoading, t3 }: { data: any; isLoading: boolean; t
           value={fmt(today.net)} icon={<Receipt className="h-5 w-5" />} />
       </div>
 
-      {/* Comparison: Yesterday + Last Week */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-background border rounded-xl p-4">
-          <p className="text-xs text-muted-foreground mb-1">{t3('Gestern', 'Yesterday', 'أمس')}</p>
-          <p className="text-lg font-bold tabular-nums">{fmt(yesterday.gross)}</p>
-          <p className="text-xs text-muted-foreground">{yesterday.orderCount ?? 0} {t3('Bestellungen', 'orders', 'طلبات')}</p>
+      {/* ── Row 2: Comparison Cards (richer) ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-background border rounded-2xl p-5 relative overflow-hidden">
+          <div className="absolute top-0 ltr:left-0 rtl:right-0 w-1 h-full bg-muted-foreground/20 rounded-full" />
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t3('Gestern', 'Yesterday', 'أمس')}</p>
+          <p className="text-2xl font-bold tabular-nums">{fmt(yesterday.gross)}</p>
+          <p className="text-xs text-muted-foreground mt-1">{yesterday.orderCount ?? 0} {t3('Bestellungen', 'orders', 'طلبات')} · Ø {fmt(yesterday.avgOrderValue)}</p>
         </div>
-        <div className="bg-background border rounded-xl p-4">
-          <p className="text-xs text-muted-foreground mb-1">{t3('Gleicher Tag letzte Woche', 'Same Day Last Week', 'نفس اليوم الأسبوع الماضي')}</p>
-          <p className="text-lg font-bold tabular-nums">{fmt(lastWeek.gross)}</p>
-          <p className="text-xs text-muted-foreground">{lastWeek.orderCount ?? 0} {t3('Bestellungen', 'orders', 'طلبات')}</p>
+        <div className="bg-background border rounded-2xl p-5 relative overflow-hidden">
+          <div className="absolute top-0 ltr:left-0 rtl:right-0 w-1 h-full bg-[#d4a853]/40 rounded-full" />
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t3('Gleicher Tag letzte Woche', 'Same Day Last Week', 'نفس اليوم الأسبوع الماضي')}</p>
+          <p className="text-2xl font-bold tabular-nums">{fmt(lastWeek.gross)}</p>
+          <p className="text-xs text-muted-foreground mt-1">{lastWeek.orderCount ?? 0} {t3('Bestellungen', 'orders', 'طلبات')} · Ø {fmt(lastWeek.avgOrderValue)}</p>
+        </div>
+        <div className="bg-background border rounded-2xl p-5 relative overflow-hidden">
+          <div className="absolute top-0 ltr:left-0 rtl:right-0 w-1 h-full bg-red-400/40 rounded-full" />
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t3('Erstattungen', 'Refunds', 'المرتجعات')}</p>
+          <p className="text-2xl font-bold tabular-nums text-red-500">{Number(refunds.total ?? 0) > 0 ? `- ${fmt(refunds.total)}` : '€0,00'}</p>
+          <p className="text-xs text-muted-foreground mt-1">{refunds.count ?? 0} {t3('Erstattung(en)', 'refund(s)', 'مرتجع(ات)')}</p>
         </div>
       </div>
 
-      {/* Hourly Chart + Payment Methods */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Hourly Revenue */}
-        <div className="bg-background border rounded-xl p-5">
-          <h3 className="text-sm font-semibold mb-3">{t3('Umsatz nach Stunde', 'Hourly Revenue', 'الإيرادات حسب الساعة')}</h3>
-          {hourly.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={hourly}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-                <XAxis dataKey="hour" tick={{ fill: '#888', fontSize: 10 }} tickFormatter={(h) => `${h}:00`} />
-                <YAxis tick={{ fill: '#888', fontSize: 10 }} tickFormatter={(v) => `€${v}`} width={50} />
-                <Tooltip formatter={(v: any) => [`€${Number(v).toFixed(2)}`, t3('Umsatz', 'Revenue', 'إيرادات')]} />
-                <Bar dataKey="gross" fill="#d4a853" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <p className="text-sm text-muted-foreground text-center py-12">{t3('Keine Daten', 'No data', 'لا توجد بيانات')}</p>}
+      {/* ── Row 3: Hourly Chart (full width, taller) ── */}
+      <div className="bg-background border rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="h-1 w-4 rounded-full bg-[#d4a853]" />
+            <h3 className="text-sm font-bold">{t3('Umsatz nach Stunde', 'Hourly Revenue', 'الإيرادات حسب الساعة')}</h3>
+          </div>
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{t3('Heute', 'Today', 'اليوم')}</span>
         </div>
+        {hourly.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={hourly} barSize={16}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" vertical={false} />
+              <XAxis dataKey="hour" tick={{ fill: '#888', fontSize: 10 }} tickFormatter={(h) => `${h}:00`} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#888', fontSize: 10 }} tickFormatter={(v) => `€${v}`} width={50} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{ fill: 'rgba(212,168,83,0.08)' }} contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', fontSize: 12 }} formatter={(v: any) => [`€${Number(v).toFixed(2)}`, t3('Umsatz', 'Revenue', 'إيرادات')]} />
+              <Bar dataKey="gross" fill="#d4a853" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : <p className="text-sm text-muted-foreground text-center py-16">{t3('Keine Daten', 'No data', 'لا توجد بيانات')}</p>}
+      </div>
 
+      {/* ── Row 4: Payment Methods + Channels (side by side, richer) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Payment Methods */}
-        <div className="bg-background border rounded-xl p-5">
-          <h3 className="text-sm font-semibold mb-3">{t3('Zahlungsarten', 'Payment Methods', 'طرق الدفع')}</h3>
+        <div className="bg-background border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-1 w-4 rounded-full bg-blue-500" />
+            <h3 className="text-sm font-bold">{t3('Zahlungsarten', 'Payment Methods', 'طرق الدفع')}</h3>
+          </div>
           {methods.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {methods.sort((a: any, b: any) => Number(b.gross) - Number(a.gross)).map((m: any) => {
                 const total = methods.reduce((s: number, x: any) => s + Number(x.gross ?? 0), 0)
-                const pctVal = total > 0 ? (Number(m.gross) / total * 100).toFixed(0) : '0'
+                const pctVal = total > 0 ? (Number(m.gross) / total * 100) : 0
                 const pm = PAYMENT_LABELS[m.method]
                 return (
-                  <div key={m.method} className="flex items-center gap-3">
-                    <span className="text-sm w-24 truncate">{pm?.label ?? m.method}</span>
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-[#d4a853] rounded-full" style={{ width: `${pctVal}%` }} />
+                  <div key={m.method} className="group">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold ${pm?.color ?? 'bg-muted text-muted-foreground border-muted'} border`}>
+                          {pm?.icon} {pm?.label ?? m.method}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{m.count} {t3('Zahlung(en)', 'payment(s)', 'عملية')}</span>
+                      </div>
+                      <span className="text-sm tabular-nums font-bold">{fmt(m.gross)}</span>
                     </div>
-                    <span className="text-xs tabular-nums font-medium w-16 text-end">{fmt(m.gross)}</span>
-                    <span className="text-[10px] text-muted-foreground w-8 text-end">{pctVal}%</span>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-[#d4a853] rounded-full transition-all duration-500" style={{ width: `${pctVal}%` }} />
+                    </div>
+                    <div className="text-end mt-0.5">
+                      <span className="text-[10px] text-muted-foreground tabular-nums">{pctVal.toFixed(0)}%</span>
+                    </div>
                   </div>
                 )
               })}
             </div>
-          ) : <p className="text-sm text-muted-foreground text-center py-12">{t3('Keine Daten', 'No data', 'لا توجد بيانات')}</p>}
+          ) : <p className="text-sm text-muted-foreground text-center py-10">{t3('Keine Zahlungen', 'No payments', 'لا توجد مدفوعات')}</p>}
+        </div>
+
+        {/* Channels */}
+        <div className="bg-background border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-1 w-4 rounded-full bg-emerald-500" />
+            <h3 className="text-sm font-bold">{t3('Verkaufskanäle', 'Sales Channels', 'قنوات البيع')}</h3>
+          </div>
+          {channels.length > 0 ? (
+            <div className="space-y-3">
+              {channels.sort((a: any, b: any) => Number(b.gross) - Number(a.gross)).map((c: any) => {
+                const total = channels.reduce((s: number, x: any) => s + Number(x.gross ?? 0), 0)
+                const pctVal = total > 0 ? (Number(c.gross) / total * 100) : 0
+                return (
+                  <div key={c.channel} className="group">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm font-semibold">{CHANNEL_LABELS[c.channel] ?? c.channel}</span>
+                        <span className="text-xs text-muted-foreground">{c.count} {t3('Bestell.', 'orders', 'طلب')}</span>
+                      </div>
+                      <span className="text-sm tabular-nums font-bold">{fmt(c.gross)}</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${pctVal}%` }} />
+                    </div>
+                    <div className="text-end mt-0.5">
+                      <span className="text-[10px] text-muted-foreground tabular-nums">{pctVal.toFixed(1)}% · Ø {fmt(c.avgOrderValue)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : <p className="text-sm text-muted-foreground text-center py-10">{t3('Keine Kanäle', 'No channels', 'لا توجد قنوات')}</p>}
         </div>
       </div>
 
-      {/* Top Products + Channels */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Products */}
-        {topProducts.length > 0 && (
-          <div className="bg-background border rounded-xl p-5">
-            <h3 className="text-sm font-semibold mb-3">{t3('Top Produkte heute', 'Top Products Today', 'أفضل المنتجات اليوم')}</h3>
-            <div className="space-y-2">
-              {topProducts.slice(0, 5).map((p: any, i: number) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground w-5 text-end text-xs">{i + 1}</span>
-                  <span className="flex-1 truncate">{p.name ?? p.sku}</span>
-                  <span className="tabular-nums font-medium">{fmt(p.revenue)}</span>
-                  <span className="text-xs text-muted-foreground">{p.quantity}×</span>
-                </div>
-              ))}
-            </div>
+      {/* ── Row 5: Top Products (premium cards with rank medals) ── */}
+      {topProducts.length > 0 && (
+        <div className="bg-background border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-1 w-4 rounded-full bg-[#d4a853]" />
+            <h3 className="text-sm font-bold">{t3('Top Produkte heute', 'Top Products Today', 'أفضل المنتجات اليوم')}</h3>
           </div>
-        )}
-
-        {/* Channels */}
-        {channels.length > 0 && (
-          <div className="bg-background border rounded-xl p-5">
-            <h3 className="text-sm font-semibold mb-3">{t3('Kanäle heute', 'Channels Today', 'القنوات اليوم')}</h3>
-            <div className="space-y-2">
-              {channels.sort((a: any, b: any) => Number(b.gross) - Number(a.gross)).map((c: any) => {
-                const total = channels.reduce((s: number, x: any) => s + Number(x.gross ?? 0), 0)
-                const pctVal = total > 0 ? (Number(c.gross) / total * 100).toFixed(0) : '0'
-                return (
-                  <div key={c.channel} className="flex items-center gap-3">
-                    <span className="text-sm w-20 truncate capitalize">{c.channel}</span>
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-[#d4a853] rounded-full" style={{ width: `${pctVal}%` }} />
-                    </div>
-                    <span className="text-xs tabular-nums font-medium w-16 text-end">{fmt(c.gross)}</span>
-                    <span className="text-[10px] text-muted-foreground w-6 text-end">{c.count}</span>
+          <div className="space-y-2">
+            {topProducts.slice(0, 5).map((p: any, i: number) => {
+              const maxRev = Number(topProducts[0]?.revenue ?? 1)
+              const barW = maxRev > 0 ? (Number(p.revenue) / maxRev * 100) : 0
+              return (
+                <div key={i} className="flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-muted/40 transition-colors">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full text-xs font-bold flex-shrink-0"
+                    style={{ backgroundColor: i < 3 ? `${MEDAL[i]}20` : '#f1f5f9', color: i < 3 ? MEDAL[i] : '#64748b' }}>
+                    {i + 1}
                   </div>
-                )
-              })}
-            </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{p.name ?? p.sku}</p>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-1.5">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${barW}%`, backgroundColor: i < 3 ? MEDAL[i] : '#94a3b8' }} />
+                    </div>
+                  </div>
+                  <div className="text-end flex-shrink-0">
+                    <p className="text-sm font-bold tabular-nums">{fmt(p.revenue)}</p>
+                    <p className="text-[10px] text-muted-foreground">{p.quantity}× {t3('verkauft', 'sold', 'مبيع')}</p>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -27,6 +27,7 @@ export interface CreateReturnLabelInput {
   country: string
   weight: number
   orderId: string
+  returnNumber?: string  // e.g. RET-2026-00032 — used as DHL Sendungsreferenz
 }
 
 export interface ReturnLabelResult {

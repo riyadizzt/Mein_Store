@@ -1,12 +1,18 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { OrderStatus, SalesChannel } from '@prisma/client'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const PDFDocument = require('pdfkit')
 
 // All customer-facing channels — exclude POS (offline/Shopify)
 const ONLINE_CHANNELS: SalesChannel[] = ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp']
 
-// Only countable statuses — exclude pending, cancelled, refunded
-const COUNTABLE_STATUSES: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'delivered']
+// Countable statuses: every order that WAS paid counts as revenue.
+// 'returned' is included because the payment was captured — the refund
+// is subtracted separately via the Refund table. Excluding 'returned'
+// would cause double-subtraction (order drops from gross AND refund
+// subtracts from it again → negative net revenue).
+const COUNTABLE_STATUSES: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded']
 
 /** Shared where-clause for all finance queries */
 const ORDER_FILTER = {
@@ -16,8 +22,11 @@ const ORDER_FILTER = {
 }
 
 interface SalesSummary {
-  gross: string
-  net: string
+  gross: string          // totalAmount = what customer actually paid (Brutto)
+  net: string            // gross - tax = revenue without tax (Netto für Finanzamt)
+  tax: string            // taxAmount from DB = MwSt rausgerechnet
+  discount: string       // discountAmount = Rabatt/Gutscheine
+  shipping: string       // shippingCost = Versandkosten
   orderCount: number
   avgOrderValue: string
 }
@@ -116,17 +125,23 @@ export class FinanceReportsService {
         ...ORDER_FILTER,
         createdAt: { gte: start, lte: end },
       },
-      _sum: { totalAmount: true, subtotal: true },
+      _sum: { totalAmount: true, taxAmount: true, discountAmount: true, shippingCost: true },
       _count: true,
     })
 
     const gross = Number(result._sum?.totalAmount ?? 0)
-    const net = Number(result._sum?.subtotal ?? 0)
+    const tax = Number(result._sum?.taxAmount ?? 0)
+    const discount = Number(result._sum?.discountAmount ?? 0)
+    const shipping = Number(result._sum?.shippingCost ?? 0)
+    const net = gross - tax // Netto = Brutto minus enthaltene MwSt
     const count = result._count
 
     return {
       gross: gross.toFixed(2),
       net: net.toFixed(2),
+      tax: tax.toFixed(2),
+      discount: discount.toFixed(2),
+      shipping: shipping.toFixed(2),
       orderCount: count,
       avgOrderValue: count > 0 ? (gross / count).toFixed(2) : '0.00',
     }
@@ -223,7 +238,7 @@ export class FinanceReportsService {
       LEFT JOIN product_translations pt ON pt.product_id = pv.product_id AND pt.language = 'de'
       WHERE o.created_at >= ${start} AND o.created_at <= ${end}
         AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
+        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
       GROUP BY product_name, oi.snapshot_sku
       ORDER BY revenue DESC
@@ -311,19 +326,15 @@ export class FinanceReportsService {
       month,
       currentMonth: {
         ...currentMonth,
-        taxTotal: (grossNum - Number(currentMonth.net)).toFixed(2),
+        taxTotal: currentMonth.tax,
       },
       previousMonth: {
         ...previousMonth,
-        taxTotal: (
-          Number(previousMonth.gross) - Number(previousMonth.net)
-        ).toFixed(2),
+        taxTotal: previousMonth.tax,
       },
       sameMonthLastYear: {
         ...sameMonthLastYear,
-        taxTotal: (
-          Number(sameMonthLastYear.gross) - Number(sameMonthLastYear.net)
-        ).toFixed(2),
+        taxTotal: sameMonthLastYear.tax,
       },
       refundsTotal: refundsTotal.toFixed(2),
       refundCount: refundDetails.refundCount,
@@ -343,17 +354,23 @@ export class FinanceReportsService {
         ...ORDER_FILTER,
         createdAt: { gte: start, lte: end },
       },
-      _sum: { totalAmount: true, subtotal: true },
+      _sum: { totalAmount: true, taxAmount: true, discountAmount: true, shippingCost: true },
       _count: true,
     })
 
     const gross = Number(result._sum?.totalAmount ?? 0)
-    const net = Number(result._sum?.subtotal ?? 0)
+    const tax = Number(result._sum?.taxAmount ?? 0)
+    const discount = Number(result._sum?.discountAmount ?? 0)
+    const shipping = Number(result._sum?.shippingCost ?? 0)
+    const net = gross - tax
     const count = result._count
 
     return {
       gross: gross.toFixed(2),
       net: net.toFixed(2),
+      tax: tax.toFixed(2),
+      discount: discount.toFixed(2),
+      shipping: shipping.toFixed(2),
       orderCount: count,
       avgOrderValue: count > 0 ? (gross / count).toFixed(2) : '0.00',
     }
@@ -374,9 +391,9 @@ export class FinanceReportsService {
     return Number(result._sum.amount ?? 0)
   }
 
-  private async getDailyBreakdownForMonth(year: number, month: number): Promise<Array<{ date: string; gross: string; net: string; orderCount: number }>> {
+  private async getDailyBreakdownForMonth(year: number, month: number): Promise<Array<{ date: string; gross: string; net: string; tax: string; discount: string; orderCount: number }>> {
     const daysInMonth = new Date(year, month, 0).getDate()
-    const rows: Array<{ date: string; gross: string; net: string; orderCount: number }> = []
+    const rows: Array<{ date: string; gross: string; net: string; tax: string; discount: string; orderCount: number }> = []
 
     const allOrders = await this.prisma.order.findMany({
       where: {
@@ -386,15 +403,17 @@ export class FinanceReportsService {
           lte: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)),
         },
       },
-      select: { totalAmount: true, subtotal: true, createdAt: true },
+      select: { totalAmount: true, taxAmount: true, discountAmount: true, createdAt: true },
     })
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
       const dayOrders = allOrders.filter((o) => o.createdAt.toISOString().slice(0, 10) === dateStr)
       const gross = dayOrders.reduce((s, o) => s + Number(o.totalAmount), 0)
-      const net = dayOrders.reduce((s, o) => s + Number(o.subtotal), 0)
-      rows.push({ date: dateStr, gross: gross.toFixed(2), net: net.toFixed(2), orderCount: dayOrders.length })
+      const tax = dayOrders.reduce((s, o) => s + Number(o.taxAmount), 0)
+      const discount = dayOrders.reduce((s, o) => s + Number(o.discountAmount), 0)
+      const net = gross - tax
+      rows.push({ date: dateStr, gross: gross.toFixed(2), net: net.toFixed(2), tax: tax.toFixed(2), discount: discount.toFixed(2), orderCount: dayOrders.length })
     }
 
     return rows
@@ -431,7 +450,7 @@ export class FinanceReportsService {
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
         AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
+        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
       GROUP BY pv.product_id, pt.name, oi.snapshot_name
       ORDER BY revenue DESC
@@ -499,7 +518,7 @@ export class FinanceReportsService {
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
         AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
+        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
       GROUP BY oi.tax_rate
       ORDER BY oi.tax_rate DESC
@@ -571,7 +590,7 @@ export class FinanceReportsService {
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
         AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
+        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
       GROUP BY pt.name, oi.snapshot_name, pv.sku
       ORDER BY quantity_sold DESC
@@ -624,7 +643,7 @@ export class FinanceReportsService {
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
         AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
+        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
         AND o.user_id IS NOT NULL
       GROUP BY u.id, u.first_name, u.last_name, u.email
@@ -663,7 +682,7 @@ export class FinanceReportsService {
           MIN(o.created_at) AS first_order_date
         FROM orders o
         WHERE o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-          AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
+          AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND o.deleted_at IS NULL
           AND o.user_id IS NOT NULL
         GROUP BY o.user_id
@@ -674,7 +693,7 @@ export class FinanceReportsService {
         WHERE o.created_at >= ${start}
           AND o.created_at <= ${end}
           AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-          AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered')
+          AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND o.deleted_at IS NULL
           AND o.user_id IS NOT NULL
       )
@@ -748,5 +767,281 @@ export class FinanceReportsService {
       return `"${field.replace(/"/g, '""')}"`
     }
     return field
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  MONTHLY REVENUE PDF — for Finanzamt / Steuerberater
+  // ══════════════════════════════════════════════════════════════
+  //
+  //  Premium A4 PDF matching the invoice design (same colors, fonts,
+  //  layout). Contains everything the Finanzamt needs:
+  //    - Company header with USt-IdNr
+  //    - Monthly summary: Brutto, Erstattungen, Netto, MwSt
+  //    - Daily breakdown table
+  //    - Channel breakdown
+  //    - Bank details footer
+  //
+  //  Uses pdfkit directly (same as invoice.service.ts).
+
+  async generateMonthlyReportPdf(year: number, month: number): Promise<Buffer> {
+    const data = await this.getMonthlyReport(year, month)
+    const co = await this.getCompanyDataForPdf()
+
+    const GOLD = '#d4a853'
+    const DARK = '#1a1a2e'
+    const MUTED = '#6b7280'
+    const ZEBRA = '#f8f8f8'
+
+    const MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+    const monthName = MONTH_NAMES[month - 1]
+    const dateStr = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+    const fmt = (v: string | number) => {
+      const n = typeof v === 'string' ? parseFloat(v) : v
+      return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+    }
+
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 })
+      const chunks: Buffer[] = []
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+      doc.on('end', () => resolve(Buffer.concat(chunks)))
+      doc.on('error', reject)
+
+      let y = 50
+
+      // ── Header ──────────────────────────────────────────────
+      doc.font('Helvetica-Bold').fontSize(14).fillColor(DARK)
+        .text(co.name, 50, y)
+      y += 18
+      doc.font('Helvetica').fontSize(7.5).fillColor(MUTED)
+        .text(co.address, 50, y)
+      y += 10
+      if (co.phone || co.email) {
+        doc.text(`${co.phone ? 'Tel. ' + co.phone + ' | ' : ''}${co.email}`, 50, y)
+        y += 10
+      }
+
+      // Title: MONATSBERICHT
+      doc.font('Helvetica-Bold').fontSize(24).fillColor(DARK)
+        .text('MONATSBERICHT', 300, 50, { width: 245, align: 'right' })
+
+      // Gold separator
+      y = 95
+      doc.moveTo(50, y).lineTo(545, y).lineWidth(2).strokeColor(GOLD).stroke()
+      y += 12
+
+      // USt-IdNr + Berichtszeitraum
+      if (co.vatId) {
+        doc.font('Helvetica').fontSize(7).fillColor(MUTED)
+          .text(`USt-IdNr.: ${co.vatId}`, 50, y)
+      }
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(DARK)
+        .text(`${monthName} ${year}`, 350, y, { width: 195, align: 'right' })
+      y += 12
+      doc.font('Helvetica').fontSize(7).fillColor(MUTED)
+        .text(`Erstellt am ${dateStr}`, 350, y, { width: 195, align: 'right' })
+      y += 25
+
+      // ══════════════════════════════════════════════════════════
+      //  SECTION 1: Monatszusammenfassung
+      // ══════════════════════════════════════════════════════════
+      doc.font('Helvetica-Bold').fontSize(11).fillColor(DARK)
+        .text('Monatszusammenfassung', 50, y)
+      y += 18
+
+      const summaryRows: [string, string, string][] = [
+        ['Brutto-Umsatz (Einnahmen)', fmt(data.currentMonth.gross), ''],
+        ['Gewährte Rabatte / Gutscheine', '- ' + fmt(data.currentMonth.discount), MUTED],
+        ['Versandkosten (vereinnahmt)', fmt(data.currentMonth.shipping), ''],
+        ['', '', ''], // spacer
+        ['Erstattungen (Retouren)', '- ' + fmt(data.refundsTotal), '#dc2626'],
+        ['', '', ''], // spacer
+        ['Netto-Umsatz (nach Erstattungen)', fmt(data.netRevenue), ''],
+        ['', '', ''], // spacer
+        ['Enthaltene MwSt. 19% (Umsatzsteuer)', fmt(data.currentMonth.tax), ''],
+        ['Umsatz ohne MwSt. (Netto)', fmt(data.currentMonth.net), ''],
+      ]
+
+      for (const [label, value, color] of summaryRows) {
+        if (!label && !value) { y += 6; continue }
+        const isTotal = label.startsWith('Netto-Umsatz') || label.startsWith('Enthaltene MwSt') || label.startsWith('Umsatz ohne MwSt')
+        if (isTotal) {
+          doc.moveTo(50, y - 2).lineTo(545, y - 2).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
+        }
+        doc.font(isTotal ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(isTotal ? 9.5 : 8.5)
+          .fillColor(color || DARK)
+          .text(label, 58, y, { width: 340 })
+        doc.font(isTotal ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(isTotal ? 9.5 : 8.5)
+          .fillColor(color || DARK)
+          .text(value, 400, y, { width: 140, align: 'right' })
+        y += isTotal ? 18 : 15
+      }
+
+      // Gold line under summary
+      y += 4
+      doc.moveTo(50, y).lineTo(545, y).lineWidth(1.5).strokeColor(GOLD).stroke()
+      y += 6
+
+      // Finanzamt-Zeile
+      doc.rect(50, y, 495, 22).fill('#fef3c7')
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#92400e')
+        .text('An das Finanzamt abzuführende Umsatzsteuer', 58, y + 5, { width: 340 })
+        .text(fmt(data.currentMonth.tax), 400, y + 5, { width: 140, align: 'right' })
+      y += 32
+
+      // Bestellungen-Info
+      doc.font('Helvetica').fontSize(8).fillColor(MUTED)
+        .text(`${data.currentMonth.orderCount} Bestellungen  ·  Ø ${fmt(data.currentMonth.avgOrderValue)} pro Bestellung  ·  ${data.refundCount} Erstattung${data.refundCount === 1 ? '' : 'en'}`, 50, y)
+      y += 25
+
+      // ══════════════════════════════════════════════════════════
+      //  SECTION 2: Tagesübersicht
+      // ══════════════════════════════════════════════════════════
+      if (y > 600) { doc.addPage(); y = 50 }
+
+      doc.font('Helvetica-Bold').fontSize(11).fillColor(DARK)
+        .text('Tagesübersicht', 50, y)
+      y += 16
+
+      // Table header
+      doc.rect(50, y - 4, 495, 20).fill(DARK)
+      doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff')
+      doc.text('DATUM', 58, y, { width: 70 })
+      doc.text('BESTELL.', 130, y, { width: 45, align: 'center' })
+      doc.text('BRUTTO', 178, y, { width: 80, align: 'right' })
+      doc.text('MWST 19%', 262, y, { width: 70, align: 'right' })
+      doc.text('NETTO', 336, y, { width: 70, align: 'right' })
+      doc.text('RABATT', 410, y, { width: 65, align: 'right' })
+      y += 20
+
+      // Table rows — only show days with orders
+      let rowIdx = 0
+      let totalGross = 0, totalTax = 0, totalNet = 0, totalDiscount = 0, totalOrders = 0
+
+      for (const day of data.dailyBreakdown) {
+        if (day.orderCount === 0) continue
+        if (y > 720) { doc.addPage(); y = 50 }
+
+        if (rowIdx % 2 === 0) doc.rect(50, y - 3, 495, 16).fill(ZEBRA)
+        const gross = parseFloat(day.gross)
+        const tax = parseFloat(day.tax)
+        const net = gross - tax
+        const discount = parseFloat(day.discount)
+        totalGross += gross; totalTax += tax; totalNet += net; totalDiscount += discount; totalOrders += day.orderCount
+
+        const dayDate = new Date(day.date + 'T12:00:00')
+        const dayStr = dayDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+        doc.font('Helvetica').fontSize(7.5).fillColor(DARK)
+        doc.text(dayStr, 58, y, { width: 70 })
+        doc.text(String(day.orderCount), 130, y, { width: 45, align: 'center' })
+        doc.text(fmt(gross), 178, y, { width: 80, align: 'right' })
+        doc.text(fmt(tax), 262, y, { width: 70, align: 'right' })
+        doc.text(fmt(net), 336, y, { width: 70, align: 'right' })
+        doc.fillColor(discount > 0 ? '#16a34a' : MUTED)
+          .text(discount > 0 ? '- ' + fmt(discount) : '—', 410, y, { width: 65, align: 'right' })
+        y += 16
+        rowIdx++
+      }
+
+      // Table footer (sum row)
+      y += 2
+      doc.moveTo(50, y).lineTo(545, y).lineWidth(1).strokeColor(DARK).stroke()
+      y += 6
+      doc.font('Helvetica-Bold').fontSize(8).fillColor(DARK)
+      doc.text('SUMME', 58, y, { width: 70 })
+      doc.text(String(totalOrders), 130, y, { width: 45, align: 'center' })
+      doc.text(fmt(totalGross), 178, y, { width: 80, align: 'right' })
+      doc.text(fmt(totalTax), 262, y, { width: 70, align: 'right' })
+      doc.text(fmt(totalNet), 336, y, { width: 70, align: 'right' })
+      doc.fillColor(totalDiscount > 0 ? '#16a34a' : MUTED)
+        .text(totalDiscount > 0 ? '- ' + fmt(totalDiscount) : '—', 410, y, { width: 65, align: 'right' })
+      y += 25
+
+      // ══════════════════════════════════════════════════════════
+      //  SECTION 3: Kanal-Aufschlüsselung
+      // ══════════════════════════════════════════════════════════
+      if (y > 680) { doc.addPage(); y = 50 }
+
+      if (data.byChannel?.length > 0) {
+        doc.font('Helvetica-Bold').fontSize(11).fillColor(DARK)
+          .text('Umsatz nach Verkaufskanal', 50, y)
+        y += 16
+
+        doc.rect(50, y - 4, 495, 20).fill(DARK)
+        doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff')
+        doc.text('KANAL', 58, y, { width: 120 })
+        doc.text('BESTELLUNGEN', 180, y, { width: 80, align: 'center' })
+        doc.text('UMSATZ (BRUTTO)', 264, y, { width: 100, align: 'right' })
+        doc.text('Ø WERT', 368, y, { width: 80, align: 'right' })
+        doc.text('ANTEIL', 452, y, { width: 85, align: 'right' })
+        y += 20
+
+        const channelTotal = data.byChannel.reduce((s: number, c: any) => s + parseFloat(c.gross), 0)
+        const CHANNEL_LABELS: Record<string, string> = {
+          website: 'Webshop', mobile: 'Mobile App', facebook: 'Facebook Shop',
+          instagram: 'Instagram Shop', tiktok: 'TikTok Shop', google: 'Google Shopping', whatsapp: 'WhatsApp',
+        }
+
+        data.byChannel.forEach((ch: any, i: number) => {
+          if (y > 750) { doc.addPage(); y = 50 }
+          if (i % 2 === 0) doc.rect(50, y - 3, 495, 16).fill(ZEBRA)
+          const gross = parseFloat(ch.gross)
+          const pct = channelTotal > 0 ? ((gross / channelTotal) * 100).toFixed(1) + '%' : '—'
+          doc.font('Helvetica').fontSize(7.5).fillColor(DARK)
+          doc.text(CHANNEL_LABELS[ch.channel] ?? ch.channel, 58, y, { width: 120 })
+          doc.text(String(ch.count), 180, y, { width: 80, align: 'center' })
+          doc.text(fmt(gross), 264, y, { width: 100, align: 'right' })
+          doc.text(fmt(ch.avgOrderValue), 368, y, { width: 80, align: 'right' })
+          doc.text(pct, 452, y, { width: 85, align: 'right' })
+          y += 16
+        })
+        y += 15
+      }
+
+      // ══════════════════════════════════════════════════════════
+      //  FOOTER: Bank + Legal
+      // ══════════════════════════════════════════════════════════
+      if (y > 710) { doc.addPage(); y = 50 }
+
+      y = Math.max(y, 730)
+      doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(GOLD).stroke()
+      y += 8
+
+      const footerParts: string[] = []
+      if (co.bankName) footerParts.push(`Bankverbindung: ${co.bankName}`)
+      if (co.iban) footerParts.push(`IBAN: ${co.iban}`)
+      if (co.bic) footerParts.push(`BIC: ${co.bic}`)
+      if (footerParts.length > 0) {
+        doc.font('Helvetica').fontSize(6.5).fillColor('#9ca3af')
+          .text(footerParts.join('  ·  '), 50, y, { width: 495, align: 'center' })
+        y += 10
+      }
+      doc.font('Helvetica').fontSize(6).fillColor('#9ca3af')
+        .text(`${co.name}  ·  ${co.address}${co.vatId ? '  ·  USt-IdNr.: ' + co.vatId : ''}`, 50, y, { width: 495, align: 'center' })
+
+      doc.end()
+    })
+  }
+
+  /** Load company data from ShopSettings (same source as invoice.service.ts) */
+  private async getCompanyDataForPdf() {
+    const settings = await this.prisma.shopSetting.findMany()
+    const db: Record<string, string> = {}
+    for (const s of settings) db[s.key] = s.value
+    return {
+      name: db.companyName || 'Malak Bekleidung',
+      address: db.companyAddress || '',
+      vatId: db.companyVatId || '',
+      phone: db.companyPhone || '',
+      email: db.companyEmail || 'info@malak-bekleidung.com',
+      bankName: db.bankName || '',
+      iban: db.bankIban || '',
+      bic: db.bankBic || '',
+    }
   }
 }

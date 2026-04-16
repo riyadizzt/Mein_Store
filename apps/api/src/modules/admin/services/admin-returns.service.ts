@@ -285,6 +285,7 @@ export class AdminReturnsService {
         const userName = `${ret.order.user?.firstName ?? ''} ${ret.order.user?.lastName ?? ''}`.trim() || 'Kunde'
         const result = await this.dhlProvider.createReturnLabel({
           orderId: ret.orderId,
+          returnNumber: returnNumber,
           originalTrackingNumber: ret.returnTrackingNumber ?? '',
           senderName: addr ? `${addr.firstName} ${addr.lastName}` : userName,
           street: addr?.street ?? '',
@@ -414,6 +415,21 @@ export class AdminReturnsService {
         rejectionReason: reason.trim(),
       },
     })
+
+    // Safety: if the order was wrongly set to 'returned' at request time
+    // (historical bug, fixed now), restore it to 'delivered' on rejection.
+    try {
+      const order = await this.prisma.order.findUnique({ where: { id: ret.orderId }, select: { status: true } })
+      if (order?.status === 'returned') {
+        await this.prisma.order.update({
+          where: { id: ret.orderId },
+          data: { status: 'delivered' },
+        })
+        this.logger.log(`Order ${ret.order.orderNumber} restored to 'delivered' after return rejection`)
+      }
+    } catch (e: any) {
+      this.logger.error(`Failed to restore order status: ${e.message}`)
+    }
 
     // Side effects (safe)
     try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'rejected', adminId }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
@@ -798,6 +814,18 @@ export class AdminReturnsService {
         refundedAt: new Date(),
       },
     })
+
+    // NOW move the order to 'returned' — only at this point is the return
+    // truly complete (money refunded). Previously this happened at request
+    // time, which was wrong.
+    try {
+      await this.prisma.order.update({
+        where: { id: ret.orderId },
+        data: { status: 'returned' },
+      })
+    } catch (e: any) {
+      this.logger.error(`Failed to update order status to returned: ${e.message}`)
+    }
 
     try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'refunded', adminId, refundAmount: refundAmountEur }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
 

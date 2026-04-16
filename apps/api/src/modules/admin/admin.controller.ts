@@ -2026,6 +2026,24 @@ export class AdminController {
     return this.finance.getMonthlyReport(parseInt(year) || new Date().getFullYear(), parseInt(month) || new Date().getMonth() + 1)
   }
 
+  @Get('finance/monthly/pdf')
+  @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
+  async getMonthlyReportPdf(
+    @Query('year') year: string, @Query('month') month: string,
+    @Res() res: any,
+  ) {
+    const y = parseInt(year) || new Date().getFullYear()
+    const m = parseInt(month) || new Date().getMonth() + 1
+    const buffer = await this.finance.generateMonthlyReportPdf(y, m)
+    const monthStr = String(m).padStart(2, '0')
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Monatsbericht-${y}-${monthStr}.pdf"`,
+      'Content-Length': buffer.length.toString(),
+    })
+    res.end(buffer)
+  }
+
   @Get('finance/profit')
   @RequirePermission(PERMISSIONS.FINANCE_REVENUE)
   getProfitReport(@Query('from') from: string, @Query('to') to: string) {
@@ -2083,10 +2101,20 @@ export class AdminController {
       if (to) where.createdAt.lte = new Date(`${to}T23:59:59.999Z`)
     }
     if (search) {
+      const s = search.trim()
+      const parts = s.split(/\s+/).filter(Boolean)
       where.OR = [
-        { invoiceNumber: { contains: search, mode: 'insensitive' } },
-        { order: { orderNumber: { contains: search, mode: 'insensitive' } } },
+        { invoiceNumber: { contains: s, mode: 'insensitive' } },
+        { order: { orderNumber: { contains: s, mode: 'insensitive' } } },
+        { order: { user: { firstName: { contains: s, mode: 'insensitive' } } } },
+        { order: { user: { lastName: { contains: s, mode: 'insensitive' } } } },
+        { order: { user: { email: { contains: s, mode: 'insensitive' } } } },
+        { order: { guestEmail: { contains: s, mode: 'insensitive' } } },
       ]
+      // Full name search: "Max Müller" → firstName~Max AND lastName~Müller
+      if (parts.length >= 2) {
+        where.OR.push({ order: { user: { AND: [{ firstName: { contains: parts[0], mode: 'insensitive' } }, { lastName: { contains: parts.slice(1).join(' '), mode: 'insensitive' } }] } } })
+      }
     }
 
     const [invoices, total] = await Promise.all([

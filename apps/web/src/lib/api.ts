@@ -6,7 +6,10 @@ const BASE = `${API_URL}/api/v1`
 
 export { API_BASE_URL }
 
-let isRefreshing = false
+// Shared refresh promise — all concurrent 401s wait on the same refresh
+// call instead of racing or skipping. Keyed by token type so admin and
+// customer refreshes don't collide.
+let refreshPromise: Record<string, Promise<boolean>> = {}
 
 function isAdminPath(path: string): boolean {
   return path.includes('/admin/') || (typeof window !== 'undefined' && window.location.pathname.includes('/admin'))
@@ -15,44 +18,50 @@ function isAdminPath(path: string): boolean {
 function getHeaders(path: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const store = useAuthStore.getState()
-  // Use admin token for admin routes, customer token for everything else
   const token = isAdminPath(path) ? store.adminAccessToken : store.accessToken
   if (token) headers.Authorization = `Bearer ${token}`
   return headers
 }
 
-async function handleResponse(res: Response, path: string, skipAuthRetry = false) {
-  if (res.status === 401 && !skipAuthRetry && !isRefreshing && typeof window !== 'undefined') {
-    isRefreshing = true
-    const admin = isAdminPath(path)
-    try {
-      const refreshRes = await fetch(`${BASE}/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tokenType: admin ? 'admin' : 'customer' }),
-      })
-      if (refreshRes.ok) {
-        const data = await refreshRes.json()
-        const newToken = data?.data?.accessToken
-        if (newToken) {
-          if (admin) {
-            useAuthStore.getState().setAdminAccessToken(newToken)
-          } else {
-            useAuthStore.getState().setAccessToken(newToken)
-          }
-          isRefreshing = false
-          return null // signal retry
-        }
+async function doRefresh(admin: boolean): Promise<boolean> {
+  try {
+    const refreshRes = await fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokenType: admin ? 'admin' : 'customer' }),
+    })
+    if (refreshRes.ok) {
+      const data = await refreshRes.json()
+      const newToken = data?.data?.accessToken
+      if (newToken) {
+        if (admin) useAuthStore.getState().setAdminAccessToken(newToken)
+        else useAuthStore.getState().setAccessToken(newToken)
+        return true
       }
-    } catch { /* ignore */ }
-    isRefreshing = false
-    // Only logout the affected session
-    if (admin) {
-      useAuthStore.getState().adminLogout()
-    } else {
-      useAuthStore.getState().logout()
     }
+  } catch { /* network error — treat as refresh failed */ }
+  return false
+}
+
+async function handleResponse(res: Response, path: string, skipAuthRetry = false) {
+  if (res.status === 401 && !skipAuthRetry && typeof window !== 'undefined') {
+    const admin = isAdminPath(path)
+    const key = admin ? 'admin' : 'customer'
+
+    // If a refresh is already in progress for this token type, wait on
+    // the same promise. Otherwise start one. This prevents the thundering
+    // herd: 5 simultaneous 401s all wait on 1 refresh, then all retry.
+    if (!refreshPromise[key]) {
+      refreshPromise[key] = doRefresh(admin).finally(() => { delete refreshPromise[key] })
+    }
+    const ok = await refreshPromise[key]
+
+    if (ok) return null // signal retry — the caller re-fires the request
+
+    // Refresh failed — session is truly dead
+    if (admin) useAuthStore.getState().adminLogout()
+    else useAuthStore.getState().logout()
     return { _authFailed: true }
   }
   if (!res.ok) {

@@ -234,18 +234,22 @@ describe('ReservationService', () => {
 
   describe('release', () => {
     it('gibt aktive Reservierung frei und verringert quantityReserved', async () => {
+      // updateMany returns count=1 (reservation was RESERVED → now RELEASED)
+      prisma.stockReservation.updateMany = jest.fn().mockResolvedValue({ count: 1 })
       prisma.stockReservation.findUnique.mockResolvedValue({
         id: 'res1',
         variantId: 'v1',
         warehouseId: 'wh1',
         quantity: 3,
-        status: 'RESERVED',
+        status: 'RELEASED', // after updateMany it's now RELEASED
       })
 
       const service = await makeService(prisma)
-      const result = await service.release('res1', 'customer-cancel')
+      await service.release('res1', 'customer-cancel')
 
-      expect(result.success).toBe(true)
+      expect(prisma.stockReservation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'res1', status: 'RESERVED' } }),
+      )
       expect(prisma.inventory.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { quantityReserved: { decrement: 3 } },
@@ -253,13 +257,15 @@ describe('ReservationService', () => {
       )
     })
 
-    it('wirft BadRequestException wenn Reservierung schon RELEASED', async () => {
-      prisma.stockReservation.findUnique.mockResolvedValue({
-        id: 'res1',
-        status: 'RELEASED',
-      })
+    it('überspringt doppelten Release (Idempotenz)', async () => {
+      // updateMany returns count=0 (already released by a racing event)
+      prisma.stockReservation.updateMany = jest.fn().mockResolvedValue({ count: 0 })
+
       const service = await makeService(prisma)
-      await expect(service.release('res1')).rejects.toThrow(BadRequestException)
+      // Should NOT throw — just skip silently
+      await service.release('res1')
+
+      expect(prisma.inventory.update).not.toHaveBeenCalled()
     })
   })
 })

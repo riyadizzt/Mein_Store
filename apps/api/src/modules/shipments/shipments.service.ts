@@ -512,11 +512,10 @@ export class ShipmentsService {
       },
     })
 
-    // Update order status
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: { status: 'returned' },
-    })
+    // NOTE: Order status stays as-is (typically 'delivered') at this point.
+    // It only moves to 'returned' when the refund is actually processed.
+    // Previously this set status='returned' immediately on request, which
+    // was wrong — a rejected return left the order stuck in 'returned'.
 
     // Send return confirmation email
     if (order.user?.email) {

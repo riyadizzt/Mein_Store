@@ -101,7 +101,7 @@ export function Header({ locale }: { locale: string }) {
             <nav className="hidden lg:flex items-center gap-4 mx-8">
               <Link
                 href={`/${locale}`}
-                className="px-3 py-2 text-[15px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                className="px-3 py-2 text-base font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 {t('home')}
               </Link>
@@ -119,7 +119,7 @@ export function Header({ locale }: { locale: string }) {
                 >
                   <Link
                     href={`/${locale}/products?department=${dept.slug}`}
-                    className={`flex items-center gap-1.5 px-3 py-2 text-[15px] font-medium transition-colors ${
+                    className={`flex items-center gap-1.5 px-3 py-2 text-base font-medium transition-colors ${
                       hoveredDept === dept.id
                         ? 'text-foreground'
                         : 'text-muted-foreground hover:text-foreground'

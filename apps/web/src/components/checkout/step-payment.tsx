@@ -430,7 +430,35 @@ function StepPaymentInner() {
     } catch (err: any) {
       console.error('Checkout error:', err?.response?.data ?? err?.message)
       const status = err?.response?.status
+      const errCode = err?.response?.data?.error
       const msg = err?.response?.data?.message
+
+      // If the backend says "GuestEmailRequired" but the user IS logged in,
+      // the JWT access token has silently expired (JwtOptionalGuard sets
+      // user=null instead of returning 401). Try a silent token refresh
+      // and tell the user to retry — much better than a confusing error.
+      if (errCode === 'GuestEmailRequired' && isAuthenticated) {
+        try {
+          await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tokenType: 'customer' }),
+          }).then(async (r) => {
+            if (r.ok) {
+              const data = await r.json()
+              if (data.accessToken) useAuthStore.getState().setAccessToken(data.accessToken)
+            }
+          })
+        } catch {}
+        setError(
+          locale === 'ar' ? 'انتهت صلاحية الجلسة. يرجى الضغط على زر الدفع مرة أخرى.' :
+          locale === 'en' ? 'Session expired. Please click Pay again.' :
+          'Sitzung abgelaufen. Bitte erneut auf Bezahlen klicken.',
+        )
+        setProcessing(false)
+        return
+      }
+
       let errorMsg: string
       if (Array.isArray(msg)) errorMsg = msg.join(', ')
       else if (typeof msg === 'object' && msg !== null) errorMsg = msg[locale] ?? msg.de ?? msg.en ?? JSON.stringify(msg)

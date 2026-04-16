@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useLocale } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
@@ -47,6 +47,22 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; ring: string; la
   CONFIRMED: { bg: 'bg-blue-50',    text: 'text-blue-700',    ring: 'ring-blue-200',    label: { de: 'Bestätigt (wartet Versand)', en: 'Confirmed (awaiting ship)', ar: 'مؤكد (بانتظار الشحن)' } },
   EXPIRED:   { bg: 'bg-red-50',     text: 'text-red-700',     ring: 'ring-red-200',     label: { de: 'Abgelaufen (Zombie)', en: 'Expired (zombie)', ar: 'منتهي (شبح)' } },
   RELEASED:  { bg: 'bg-slate-100',  text: 'text-slate-600',   ring: 'ring-slate-200',   label: { de: 'Freigegeben', en: 'Released', ar: 'تم الإفراج' } },
+}
+
+const ORDER_STATUS_LABELS: Record<string, Record<string, string>> = {
+  pending:          { de: 'Ausstehend',           en: 'Pending',            ar: 'قيد الانتظار' },
+  pending_payment:  { de: 'Warte auf Zahlung',    en: 'Awaiting payment',   ar: 'بانتظار الدفع' },
+  confirmed:        { de: 'Bestätigt',             en: 'Confirmed',          ar: 'مؤكد' },
+  processing:       { de: 'In Bearbeitung',        en: 'Processing',         ar: 'قيد المعالجة' },
+  shipped:          { de: 'Versendet',             en: 'Shipped',            ar: 'تم الشحن' },
+  delivered:        { de: 'Zugestellt',            en: 'Delivered',          ar: 'تم التوصيل' },
+  cancelled:        { de: 'Storniert',             en: 'Cancelled',          ar: 'ملغي' },
+  returned:         { de: 'Retourniert',           en: 'Returned',           ar: 'مُرتجع' },
+  refunded:         { de: 'Erstattet',             en: 'Refunded',           ar: 'مُسترد' },
+}
+
+function orderStatusLabel(status: string, locale: string): string {
+  return ORDER_STATUS_LABELS[status]?.[locale] ?? ORDER_STATUS_LABELS[status]?.de ?? status
 }
 
 export default function ReservationsPage() {
@@ -218,9 +234,54 @@ export default function ReservationsPage() {
               : null}
           </p>
         </div>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((r) => {
+      ) : (() => {
+        // Group reservations by order number for cleaner display
+        const grouped = useMemo(() => {
+          const map = new Map<string, Reservation[]>()
+          for (const r of rows) {
+            const key = r.order?.orderNumber ?? r.id
+            if (!map.has(key)) map.set(key, [])
+            map.get(key)!.push(r)
+          }
+          return [...map.entries()]
+        }, [rows])
+
+        return (
+        <div className="space-y-3">
+          {grouped.map(([orderKey, groupRows]) => {
+            const isGroup = groupRows.length > 1
+            const firstOrder = groupRows[0].order
+            return (
+              <div key={orderKey} className={`${isGroup ? 'border rounded-2xl overflow-hidden' : ''}`}>
+                {/* Group header — only for multi-item orders */}
+                {isGroup && firstOrder && (
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40 border-b">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => router.push(`/${locale}/admin/orders/${firstOrder.id}`)}
+                        className="font-mono text-sm font-bold hover:text-[#d4a853] transition-colors"
+                      >
+                        {firstOrder.orderNumber}
+                      </button>
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold">{orderStatusLabel(firstOrder.status, locale)}</span>
+                      {firstOrder.customerName && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <UserIcon className="h-3 w-3" />
+                          {firstOrder.customerName}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{groupRows.length} {t3('Varianten', 'variants', 'متغيرات')}</span>
+                      <div className="px-2 py-1 rounded-lg bg-orange-50 text-orange-700 ring-1 ring-orange-200 text-sm font-bold tabular-nums">
+                        −{groupRows.reduce((s, r) => s + r.quantity, 0)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Reservation rows */}
+                <div className={isGroup ? 'divide-y divide-border/30' : 'space-y-2'}>
+          {groupRows.map((r) => {
             const cfg = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.RESERVED
             const name = getProductName(r.variant.productTranslations, locale) || r.variant.sku
             const isExpired = r.status === 'EXPIRED'
@@ -286,7 +347,7 @@ export default function ReservationsPage() {
                         <ArrowRight className="h-3 w-3 rtl:rotate-180" />
                       </button>
                       <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-semibold">
-                        {r.order.status}
+                        {orderStatusLabel(r.order.status, locale)}
                       </span>
                       {orderShipped && r.status === 'RESERVED' && (
                         <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-semibold inline-flex items-center gap-0.5">
@@ -334,8 +395,13 @@ export default function ReservationsPage() {
               </div>
             )
           })}
+                </div>
+              </div>
+            )
+          })}
         </div>
-      )}
+        )
+      })()}
 
       {/* ── Pagination ── */}
       {total > pageSize && (

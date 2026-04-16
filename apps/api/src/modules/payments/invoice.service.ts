@@ -374,10 +374,10 @@ export class InvoiceService implements OnModuleInit {
       const details: [string, string][] = [
         ['Rechnungsnummer', invoiceNumber],
         ['Bestellnummer', order.orderNumber],
-        ['Rechnungsdatum', new Date().toLocaleDateString('de-DE')],
+        ['Rechnungsdatum', new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })],
       ]
       if (order.payment?.paidAt) {
-        details.push(['Zahlungsdatum', new Date(order.payment.paidAt).toLocaleDateString('de-DE')])
+        details.push(['Zahlungsdatum', new Date(order.payment.paidAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })])
       }
       if (order.payment?.method) {
         details.push(['Zahlungsart', PAYMENT_METHOD_LABELS[order.payment.method] || order.payment.method])
@@ -470,7 +470,8 @@ export class InvoiceService implements OnModuleInit {
       y += 16
 
       if (discount > 0) {
-        doc.fillColor('#16a34a').text('Rabatt', totX, y, { width: totW, align: 'right' })
+        const couponLabel = order.couponCode ? `Rabatt (${order.couponCode})` : 'Rabatt'
+        doc.fillColor('#16a34a').text(couponLabel, totX, y, { width: totW, align: 'right' })
         doc.text(`-${discount.toFixed(2)} €`, totValX, y, { width: valW, align: 'right' })
         y += 16
       }
@@ -501,7 +502,7 @@ export class InvoiceService implements OnModuleInit {
         doc.roundedRect(50, y - 4, 250, 22, 4).fill('#f0fdf4')
         doc.font('Helvetica-Bold').fontSize(8).fillColor('#16a34a')
         const method = PAYMENT_METHOD_LABELS[order.payment.method] || order.payment.method
-        doc.text(`✓ Bezahlt via ${method} am ${new Date(order.payment.paidAt).toLocaleDateString('de-DE')}`, 62, y + 2)
+        doc.text(`✓ Bezahlt via ${method} am ${new Date(order.payment.paidAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`, 62, y + 2)
       }
 
       // ── BANK DETAILS ───────────────────────────────
@@ -585,7 +586,7 @@ export class InvoiceService implements OnModuleInit {
         ['Gutschrift-Nr.', creditNoteNumber],
         ['Zu Rechnung', originalInvoiceNumber],
         ['Bestellnummer', order.orderNumber],
-        ['Datum', new Date().toLocaleDateString('de-DE')],
+        ['Datum', new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })],
       ]
       details.forEach(([label, value], i) => {
         doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(label, rx, dy0 + i * dg)
@@ -714,7 +715,7 @@ export class InvoiceService implements OnModuleInit {
       doc.font('Helvetica').fontSize(8).fillColor(MUTED).text('Bestellnummer', rx, addrBoxY + 4)
       doc.font('Helvetica-Bold').fontSize(8.5).fillColor(DARK).text(order.orderNumber, rx + 110, addrBoxY + 4, { width: 95, align: 'right' })
       doc.font('Helvetica').fontSize(8).fillColor(MUTED).text('Datum', rx, addrBoxY + 18)
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(DARK).text(new Date().toLocaleDateString('de-DE'), rx + 110, addrBoxY + 18, { width: 95, align: 'right' })
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(DARK).text(new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }), rx + 110, addrBoxY + 18, { width: 95, align: 'right' })
       doc.font('Helvetica').fontSize(8).fillColor(MUTED).text('Artikel gesamt', rx, addrBoxY + 32)
       const totalQty = order.items.reduce((sum: number, item: any) => sum + item.quantity, 0)
       doc.font('Helvetica-Bold').fontSize(8.5).fillColor(DARK).text(`${totalQty} Stück`, rx + 110, addrBoxY + 32, { width: 95, align: 'right' })

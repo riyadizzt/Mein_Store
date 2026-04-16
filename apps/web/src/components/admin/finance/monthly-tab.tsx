@@ -6,9 +6,9 @@ function fmtNum(v: number): string {
   return v.toFixed(2).replace('.', ',') + ' €'
 }
 
-export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, t3, onCsvExport }: {
+export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, t3, onCsvExport, onPdfExport }: {
   data: any; isLoading: boolean; year: number; setYear: (v: number) => void
-  month: number; setMonth: (v: number) => void; t3: T3; onCsvExport: () => void
+  month: number; setMonth: (v: number) => void; t3: T3; onCsvExport: () => void; onPdfExport?: () => void
 }) {
   if (isLoading) return <div className="space-y-4">{[1, 2, 3].map((i) => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}</div>
 
@@ -36,7 +36,10 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
             {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
           </select>
         </div>
-        <button onClick={onCsvExport} className="h-9 px-4 rounded-lg border bg-background text-sm hover:bg-muted transition-colors">CSV</button>
+        <div className="flex gap-2">
+          <button onClick={onCsvExport} className="h-9 px-4 rounded-lg border bg-background text-sm hover:bg-muted transition-colors">CSV</button>
+          {onPdfExport && <button onClick={onPdfExport} className="h-9 px-4 rounded-lg bg-[#d4a853] text-white text-sm font-semibold hover:bg-[#c49843] transition-colors">PDF</button>}
+        </div>
       </div>
 
       {/* Title */}

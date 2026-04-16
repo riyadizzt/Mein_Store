@@ -37,16 +37,36 @@ export class AdminUsersService {
     // Default: hide anonymized (GDPR) users. Opt-in via filter=anonymized.
     if (query.filter !== 'anonymized') where.anonymizedAt = null
 
-    // Search: name, email, phone, order number
+    // Search: name, email, phone, order number.
+    // When the input contains a space (e.g. "fd df"), also try matching
+    // firstName+lastName separately so full-name search works.
     if (query.search) {
-      const s = query.search
-      where.OR = [
+      const s = query.search.trim()
+      const conditions: any[] = [
         { email: { contains: s, mode: 'insensitive' } },
         { firstName: { contains: s, mode: 'insensitive' } },
         { lastName: { contains: s, mode: 'insensitive' } },
         { phone: { contains: s, mode: 'insensitive' } },
         { orders: { some: { orderNumber: { contains: s, mode: 'insensitive' } } } },
       ]
+      // Split by space: "fd df" → match firstName~"fd" AND lastName~"df"
+      const parts = s.split(/\s+/).filter(Boolean)
+      if (parts.length >= 2) {
+        conditions.push({
+          AND: [
+            { firstName: { contains: parts[0], mode: 'insensitive' } },
+            { lastName: { contains: parts.slice(1).join(' '), mode: 'insensitive' } },
+          ],
+        })
+        // Also try reverse order (lastName first, e.g. Arabic names)
+        conditions.push({
+          AND: [
+            { lastName: { contains: parts[0], mode: 'insensitive' } },
+            { firstName: { contains: parts.slice(1).join(' '), mode: 'insensitive' } },
+          ],
+        })
+      }
+      where.OR = conditions
     }
 
     // Filters

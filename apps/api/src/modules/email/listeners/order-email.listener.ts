@@ -287,6 +287,15 @@ export class OrderEmailListener {
 
   @OnEvent(ORDER_EVENTS.CANCELLED)
   async handleOrderCancelled(event: OrderCancelledEvent): Promise<void> {
+    // Skip email for user-initiated payment aborts (e.g. switching from
+    // PayPal to card). The customer is still in the checkout flow and
+    // will place a new order — a cancellation email would be confusing.
+    // Only send for admin/system cancellations (manual cancel, timeout).
+    if (event.reason === 'user_abort') {
+      this.logger.log(`Skipping cancellation email for ${event.orderId}: user_abort (payment method switch)`)
+      return
+    }
+
     try {
       const order = await this.prisma.order.findFirst({
         where: { id: event.orderId },

@@ -13,7 +13,7 @@ function ColorSwatch({ name, hex, checked, onChange }: { name: string; hex: stri
   return (
     <button
       onClick={onChange}
-      className="flex items-center gap-3 py-1.5 text-sm group transition-colors text-start w-full"
+      className="flex items-center gap-3 py-2 text-base group transition-colors text-start w-full"
       type="button"
     >
       <span
@@ -125,9 +125,9 @@ function FilterGroup({ title, defaultOpen = true, children }: { title: string; d
     <div className="border-b border-border/40 pb-4 last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full py-2 text-sm font-semibold tracking-wide hover:text-foreground transition-colors"
+        className="flex items-center justify-between w-full py-2 text-base font-semibold tracking-wide hover:text-foreground transition-colors"
       >
-        <span className="uppercase text-xs">{title}</span>
+        <span className="uppercase text-sm">{title}</span>
         <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-300 ease-out ${open ? 'rotate-180' : ''}`} />
       </button>
       <div
@@ -145,7 +145,7 @@ function FilterGroup({ title, defaultOpen = true, children }: { title: string; d
 /* ── Premium Checkbox ── */
 function PremiumCheckbox({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return (
-    <label className="flex items-center gap-3 py-1.5 text-sm cursor-pointer group transition-colors">
+    <label className="flex items-center gap-3 py-2 text-base cursor-pointer group transition-colors">
       <span
         className={`relative h-[18px] w-[18px] rounded-[4px] border-[1.5px] flex items-center justify-center transition-all duration-200 ${
           checked
@@ -302,7 +302,7 @@ export function FilterSidebar() {
             <button
               key={opt.value}
               onClick={() => updateParams('sort', opt.value || null)}
-              className={`w-full text-start px-3 py-2 rounded-lg text-sm transition-colors ${
+              className={`w-full text-start px-3 py-2.5 rounded-lg text-base transition-colors ${
                 activeSort === opt.value
                   ? 'bg-foreground/5 text-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'

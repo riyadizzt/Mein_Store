@@ -289,7 +289,7 @@ export class DHLProvider implements IShipmentProvider {
         {
           product: 'V01PAK',
           billingNumber: this.accountNumberNational, // Returns always go to DE
-          refNo: `RET-${input.orderId.slice(-8)}`,
+          refNo: input.returnNumber || `RET-${input.orderId.slice(-8)}`,
           shipper: {
             name1: input.senderName,
             addressStreet: input.street,

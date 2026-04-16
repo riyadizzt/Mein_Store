@@ -449,7 +449,7 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
       const translated = translateNotif(lastNotification)
       const n = new Notification(translated.title, {
         body: translated.body,
-        icon: '/favicon.svg',
+        icon: '/favicon.png',
         tag: lastNotification.id,
       })
       n.onclick = () => { window.focus(); navRouter.push(`/${locale}/admin/orders/${lastNotification.entityId}`) }

@@ -68,8 +68,11 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
       : null
   const returnsEnabled = shopSettings?.returnsEnabled !== false && shopSettings?.returnsEnabled !== 'false'
   const daysLeft = deliveredAt ? Math.max(0, 14 - Math.floor((Date.now() - deliveredAt.getTime()) / 86400000)) : 0
-  const hasActiveReturn = (order.returns ?? []).some((r: any) => !['rejected'].includes(r.status))
-  const canReturn = returnsEnabled && order.status === 'delivered' && deliveredAt && daysLeft > 0 && !hasActiveReturn
+  // Hide return button if ANY return exists for this order — whether
+  // active, rejected, or refunded. A rejected return means the admin
+  // already reviewed and decided. Customer can contact support if needed.
+  const hasAnyReturn = (order.returns ?? []).length > 0
+  const canReturn = returnsEnabled && order.status === 'delivered' && deliveredAt && daysLeft > 0 && !hasAnyReturn
 
   const handleReorder = () => {
     for (const item of order.items ?? []) {
@@ -361,10 +364,13 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
 
       {/* Items */}
       {(() => {
-        const ret0 = order.returns?.[0]
+        // Only consider non-rejected returns — a rejected return should
+        // not mark items as "returned" or show strike-through styling.
+        const activeReturns = (order.returns ?? []).filter((r: any) => r.status !== 'rejected')
+        const ret0 = activeReturns[0]
         const returnItems = (ret0?.returnItems ?? []) as any[]
         const returnedVariantMap = new Map(returnItems.map((ri: any) => [ri.variantId, ri.quantity ?? 1]))
-        const hasReturn = order.returns?.length > 0
+        const hasReturn = activeReturns.length > 0
         // Full cancellation: returnItems is empty but return exists → all items are returned
         const isFullReturn = hasReturn && returnItems.length === 0
         return (
@@ -424,6 +430,15 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
         return (
       <div className="border rounded-lg p-5 mb-6 space-y-2 text-base">
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{Number(order.subtotal).toFixed(2)}</span></div>
+        {Number(order.discountAmount) > 0 && (
+          <div className="flex justify-between text-green-600">
+            <span className="flex items-center gap-1.5">
+              {locale === 'ar' ? 'خصم' : locale === 'en' ? 'Discount' : 'Rabatt'}
+              {order.couponCode && <span className="text-[11px] font-mono bg-green-50 text-green-700 px-1.5 py-0.5 rounded" dir="ltr">{order.couponCode}</span>}
+            </span>
+            <span>- &euro;{Number(order.discountAmount).toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>&euro;{Number(order.shippingCost).toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('tax')}</span><span>&euro;{Number(order.taxAmount).toFixed(2)}</span></div>
         <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{Number(order.totalAmount).toFixed(2)}</span></div>

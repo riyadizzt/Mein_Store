@@ -132,25 +132,28 @@ export class ReservationService {
   // ── Release: Manuell (Abbruch) ───────────────────────────────
 
   async release(reservationId: string, reason?: string) {
-    const reservation = await this.prisma.stockReservation.findUnique({
-      where: { id: reservationId },
-    })
-
-    if (!reservation) {
-      throw new NotFoundException(`Reservierung "${reservationId}" nicht gefunden`)
-    }
-
-    if (reservation.status !== 'RESERVED') {
-      throw new BadRequestException(
-        `Reservierung hat Status "${reservation.status}" und kann nicht freigegeben werden`,
-      )
-    }
-
+    // Use a conditional updateMany INSIDE the transaction to prevent the
+    // double-release race condition. Two concurrent events can both read
+    // status=RESERVED via findUnique before either writes RELEASED.
+    // updateMany with { status: 'RESERVED' } filter returns count=0 if
+    // the row was already flipped by a racing event → safe skip.
     await this.prisma.$transaction(async (tx) => {
-      await tx.stockReservation.update({
-        where: { id: reservationId },
+      const updated = await tx.stockReservation.updateMany({
+        where: { id: reservationId, status: 'RESERVED' },
         data: { status: 'RELEASED' },
       })
+
+      // Another event already released this reservation → skip silently
+      if (updated.count === 0) {
+        this.logger.warn(`Release skipped (already released): reservationId=${reservationId}`)
+        return
+      }
+
+      // Fetch the reservation data for the decrement + movement
+      const reservation = await tx.stockReservation.findUnique({
+        where: { id: reservationId },
+      })
+      if (!reservation) return
 
       await tx.inventory.update({
         where: {

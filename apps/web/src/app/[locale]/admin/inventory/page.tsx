@@ -706,9 +706,10 @@ export default function InventoryPage() {
                         const invList = v.inventory?.length > 0 ? v.inventory : [null]
                         return invList.map((inv: any, invIdx: number) => {
                           const stock = inv ? inv.quantityOnHand - (inv.quantityReserved ?? 0) : 0
+                          const isSearchMatch = search && v.sku?.toLowerCase().includes(search.toLowerCase())
                           return (
-                            <tr key={`${v.id}-${inv?.id ?? invIdx}`} className={`border-b border-border/40 hover:bg-muted/30 transition-colors group ${stock <= 0 ? 'bg-red-50/20' : stock <= (inv?.reorderPoint ?? 5) ? 'bg-orange-50/10' : 'bg-muted/5'}`} style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
-                              <td className="py-2.5 ltr:border-l-2 rtl:border-r-2 border-primary/20"></td>
+                            <tr key={`${v.id}-${inv?.id ?? invIdx}`} className={`border-b border-border/40 hover:bg-muted/30 transition-colors group ${isSearchMatch ? 'bg-sky-50 ring-1 ring-sky-300 ring-inset' : stock <= 0 ? 'bg-red-50/20' : stock <= (inv?.reorderPoint ?? 5) ? 'bg-orange-50/10' : 'bg-muted/5'}`} style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                              <td className={`py-2.5 ltr:border-l-2 rtl:border-r-2 ${isSearchMatch ? 'border-sky-500' : 'border-primary/20'}`}></td>
                               <td className="px-3 py-2.5 ltr:pl-10 rtl:pr-10">
                                 <div className="flex items-center gap-2.5">
                                   {v.colorHex && <div className="h-4 w-4 rounded-full border shadow-sm flex-shrink-0" style={{ backgroundColor: v.colorHex }} />}

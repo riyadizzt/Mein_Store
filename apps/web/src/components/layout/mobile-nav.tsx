@@ -23,31 +23,31 @@ export function MobileNav({ locale }: { locale: string }) {
       <div className="grid grid-cols-4 h-16">
         <Link
           href={`/${locale}`}
-          className={`flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors ${
+          className={`flex flex-col items-center justify-center gap-0.5 text-xs transition-colors ${
             isActive('') && !isActive('/products') && !isActive('/account')
               ? 'text-accent'
               : 'text-muted-foreground'
           }`}
         >
-          <Home className="h-[22px] w-[22px]" />
+          <Home className="h-6 w-6" />
           {t('home')}
         </Link>
 
         <Link
           href={`/${locale}/products`}
-          className={`flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors ${
+          className={`flex flex-col items-center justify-center gap-0.5 text-xs transition-colors ${
             isActive('/products') ? 'text-accent' : 'text-muted-foreground'
           }`}
         >
-          <Grid3X3 className="h-[22px] w-[22px]" />
+          <Grid3X3 className="h-6 w-6" />
           {t('products')}
         </Link>
 
         <button
           onClick={openDrawer}
-          className="flex flex-col items-center justify-center gap-0.5 text-[11px] text-muted-foreground relative"
+          className="flex flex-col items-center justify-center gap-0.5 text-xs text-muted-foreground relative"
         >
-          <ShoppingBag className="h-[22px] w-[22px]" />
+          <ShoppingBag className="h-6 w-6" />
           {mounted && itemCount > 0 && (
             <span className="absolute top-1.5 right-1/4 h-4 w-4 rounded-full bg-accent text-accent-foreground text-[9px] font-bold flex items-center justify-center">
               {itemCount > 99 ? '99+' : itemCount}
@@ -58,11 +58,11 @@ export function MobileNav({ locale }: { locale: string }) {
 
         <Link
           href={`/${locale}/account`}
-          className={`flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors ${
+          className={`flex flex-col items-center justify-center gap-0.5 text-xs transition-colors ${
             isActive('/account') ? 'text-accent' : 'text-muted-foreground'
           }`}
         >
-          <User className="h-[22px] w-[22px]" />
+          <User className="h-6 w-6" />
           {t('account')}
         </Link>
       </div>
