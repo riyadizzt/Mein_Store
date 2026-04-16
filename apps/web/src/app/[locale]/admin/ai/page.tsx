@@ -96,7 +96,7 @@ export default function AdminAiPage() {
   // Inventory
   const [invResult, setInvResult] = useState('')
   const invMut = useMutation({
-    mutationFn: async () => { const { data } = await api.post('/admin/ai/inventory-suggestions'); return data },
+    mutationFn: async () => { const { data } = await api.post('/admin/ai/inventory-suggestions', { lang: locale }); return data },
     onSuccess: (data) => setInvResult(data.suggestions),
     onError: () => setToast({ type: 'error', text: t3(locale, 'Fehler bei der Analyse', 'خطأ في التحليل') }),
   })

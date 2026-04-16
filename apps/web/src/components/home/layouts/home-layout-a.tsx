@@ -63,14 +63,14 @@ export function HomeLayoutA({ locale }: { locale: string }) {
       </div>
 
       {/* 3. Category Showcase — asymmetric grid */}
-      <section className="py-24 lg:py-32">
+      <section className="py-12 lg:py-16">
         <CategoryShowcase />
       </section>
 
       <GoldDivider />
 
       {/* 4. Bestsellers — horizontal scroll */}
-      <section className="py-20 lg:py-28">
+      <section className="py-12 lg:py-16">
         <FeaturedProducts
           title={t('bestsellers')}
           eyebrow={locale === 'ar' ? 'الأكثر مبيعاً' : locale === 'en' ? 'Most Popular' : 'Am beliebtesten'}
@@ -80,12 +80,12 @@ export function HomeLayoutA({ locale }: { locale: string }) {
       </section>
 
       {/* 5. Editorial — emotional break */}
-      <section className="py-20 lg:py-28">
+      <section className="py-12 lg:py-16">
         <EditorialBanner locale={locale} />
       </section>
 
       {/* 6. New Arrivals — on paper bg */}
-      <section className="py-20 lg:py-28">
+      <section className="py-12 lg:py-16">
         <FeaturedProducts
           title={t('newArrivals')}
           eyebrow={locale === 'ar' ? 'وصل حديثاً' : locale === 'en' ? 'Just Arrived' : 'Neu eingetroffen'}
@@ -98,7 +98,7 @@ export function HomeLayoutA({ locale }: { locale: string }) {
       <GoldDivider />
 
       {/* 7. Newsletter */}
-      <section className="py-20 lg:py-28">
+      <section className="py-12 lg:py-16">
         <NewsletterSection />
       </section>
     </div>

@@ -30,12 +30,14 @@ DATEN:
 - Nenne KEINE internen Daten (Einkaufspreise, Margen, Mitarbeiter).
 
 SPRACHE:
-- Antworte in der Sprache des Kunden. Arabisch → Arabisch. Deutsch → Deutsch.
-- DIALEKT: Kopiere EXAKT den Stil des Kunden. Benutze die gleichen Wörter die er benutzt:
-  - Wenn er "شو" sagt → du sagst "شو"/"في" (Syrisch/Levantinisch)
-  - Wenn er "ايش" sagt → du sagst "ايش"/"ابغى" (Khaliji/Golf)
-  - Wenn er "عايز" sagt → du sagst "عايز"/"كده" (Ägyptisch)
-  - Wenn er Hocharabisch schreibt → antworte Hocharabisch
+- Antworte IMMER in der Sprache des Kunden. Erkenne die Sprache automatisch und antworte in derselben.
+- Du sprichst ALLE Sprachen: Deutsch, Englisch, Arabisch, Türkisch, Französisch, Spanisch, Russisch, Polnisch, Italienisch, und jede andere Sprache die der Kunde benutzt.
+- Sage NIEMALS "Ich kann nur X Sprachen". Antworte einfach in der Sprache des Kunden.
+- ARABISCHE DIALEKTE: Kopiere EXAKT den Stil des Kunden:
+  - "شو" → Syrisch/Levantinisch
+  - "ايش" → Khaliji/Golf
+  - "عايز" → Ägyptisch
+  - Hocharabisch → Hocharabisch
   - Mische NIEMALS Dialekte. Bleib bei EINEM Dialekt pro Gespräch.
 - Auf Deutsch: freundlich, Du-Form, locker aber professionell.`
 
@@ -380,8 +382,9 @@ WICHTIG: Antworte NUR mit einem gültigen JSON-Objekt. Kein Markdown, kein Code-
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.OK)
-  async inventorySuggestions(@Req() req: any) {
+  async inventorySuggestions(@Req() req: any, @Body() body?: { lang?: string }) {
     if (!(await this.ai.isEnabled('inventory_suggestions'))) throw new ForbiddenException('Inventory AI is disabled')
+    const lang = body?.lang || 'de'
 
     // Gather data
     const [lowStock, topSellers, slowMovers] = await Promise.all([
@@ -419,10 +422,20 @@ WICHTIG: Antworte NUR mit einem gültigen JSON-Objekt. Kein Markdown, kein Code-
 \nTop-Seller (letzte 30 Tage):\n${topSellers.map((r: any) => `- ${r.name}: ${Number(r.qty)} verkauft`).join('\n')}
 \nLangsame Produkte (0 Verkäufe in 30 Tagen):\n${slowMovers.map((r: any) => `- ${r.name}`).join('\n')}`
 
+    const systemPrompts: Record<string, string> = {
+      de: 'Du bist ein Inventar-Berater für einen Modeshop. Gib konkrete, actionable Empfehlungen auf Deutsch.',
+      en: 'You are an inventory advisor for a fashion shop. Give concrete, actionable recommendations in English.',
+      ar: 'أنت مستشار مخزون لمتجر أزياء. قدّم توصيات عملية وملموسة باللغة العربية.',
+    }
+    const userPrompts: Record<string, string> = {
+      de: 'Analysiere diese Bestandsdaten und gib Empfehlungen:',
+      en: 'Analyze this inventory data and give recommendations:',
+      ar: 'حلّل بيانات المخزون التالية وقدّم توصيات:',
+    }
     const response = await this.ai.adminChat([
-      { role: 'system', content: 'Du bist ein Inventar-Berater für einen Modeshop. Gib konkrete, actionable Empfehlungen auf Deutsch.' },
-      { role: 'user', content: `Analysiere diese Bestandsdaten und gib Empfehlungen:\n\n${dataContext}` },
-    ], 800, req.user?.id, 'de')
+      { role: 'system', content: systemPrompts[lang] ?? systemPrompts.de },
+      { role: 'user', content: `${userPrompts[lang] ?? userPrompts.de}\n\n${dataContext}` },
+    ], 800, req.user?.id, lang)
 
     return { suggestions: response.content, data: { lowStock: lowStock.length, topSellers: topSellers.length, slowMovers: slowMovers.length }, provider: response.provider }
   }
