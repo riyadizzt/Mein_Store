@@ -27,8 +27,8 @@ export function TrustSignals() {
               transition={{ delay: i * 0.1, duration: 0.4 }}
               className="flex items-center gap-3 justify-center group"
             >
-              <div className="h-9 w-9 rounded-full bg-brand-gold/8 flex items-center justify-center flex-shrink-0 transition-colors duration-300 group-hover:bg-brand-gold/15">
-                <signal.icon className="h-4 w-4 text-brand-gold" strokeWidth={1.5} />
+              <div className="h-9 w-9 rounded-full bg-[#d4a853]/10 flex items-center justify-center flex-shrink-0 transition-colors duration-300 group-hover:bg-[#d4a853]/20">
+                <signal.icon className="h-4 w-4 text-[#d4a853]" strokeWidth={1.5} />
               </div>
               <span className="text-xs sm:text-sm font-medium text-ink/70">{signal.label}</span>
             </motion.div>

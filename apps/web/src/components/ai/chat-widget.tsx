@@ -4,7 +4,7 @@ import { API_BASE_URL } from '@/lib/env'
 import { useState, useRef, useEffect } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { X, Send, Loader2, Bot } from 'lucide-react'
+import { X, Send, Loader2, MessageSquareText } from 'lucide-react'
 
 const t3 = (l: string, d: string, a: string) => l === 'ar' ? a : d
 
@@ -75,14 +75,18 @@ export function AiChatWidget() {
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating Button — Zalando-style: mid-right, compact square */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-24 ltr:right-5 rtl:left-5 z-40 w-14 h-14 rounded-full bg-[#1a1a2e] text-white shadow-xl flex items-center justify-center hover:scale-105 transition-transform"
+          className="fixed top-1/2 -translate-y-1/2 ltr:right-0 rtl:left-0 z-40 h-12 w-11 rounded-s-xl bg-[#0f1419] text-white shadow-lg flex items-center justify-center hover:bg-[#1a1a2e] transition-colors duration-200 group"
           aria-label="Chat"
         >
-          <Bot className="h-6 w-6" />
+          {/* Zalando AI assistant icon — speech bubble + sparkle with hover animation */}
+          <svg className="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13.4733 5H21V18.2102L16.14 22V18.2102H6V12.2941" />
+            <path d="M10 5C7.743 5 6 3.257 6 1C6 3.257 4.257 5 2 5C4.257 5 6 6.743 6 9C6 6.743 7.743 5 10 5Z" className="origin-[6px_5px] group-hover:scale-125 transition-transform duration-300" />
+          </svg>
         </button>
       )}
 
@@ -95,8 +99,11 @@ export function AiChatWidget() {
           {/* Header */}
           <div className="bg-[#1a1a2e] text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[#d4a853]/20 flex items-center justify-center">
-                <Bot className="h-4 w-4 text-[#d4a853]" />
+              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13.4733 5H21V18.2102L16.14 22V18.2102H6V12.2941" />
+                  <path d="M10 5C7.743 5 6 3.257 6 1C6 3.257 4.257 5 2 5C4.257 5 6 6.743 6 9C6 6.743 7.743 5 10 5Z" />
+                </svg>
               </div>
               <div>
                 <p className="text-sm font-semibold">Malak {t3(locale, 'Kundenservice', 'خدمة العملاء')}</p>
@@ -110,7 +117,7 @@ export function AiChatWidget() {
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
             {messages.length === 0 && (
               <div className="text-center py-8">
-                <Bot className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+                <MessageSquareText className="h-10 w-10 mx-auto mb-3 text-gray-300" strokeWidth={1} />
                 <p className="text-sm text-gray-500">{t3(locale, 'Hallo! Wie kann ich dir helfen?', 'مرحباً! كيف يمكنني مساعدتك؟')}</p>
                 <div className="flex flex-wrap justify-center gap-2 mt-4">
                   {[
@@ -166,7 +173,7 @@ export function AiChatWidget() {
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || chatMut.isPending}
-                className="w-10 h-10 rounded-xl bg-[#d4a853] text-white flex items-center justify-center disabled:opacity-40 hover:bg-[#c49b4a] transition-colors flex-shrink-0"
+                className="w-10 h-10 rounded-xl bg-[#0f1419] text-white flex items-center justify-center disabled:opacity-40 hover:bg-[#1a1a2e] transition-colors flex-shrink-0"
               >
                 {chatMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>

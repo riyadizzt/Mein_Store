@@ -271,55 +271,73 @@ export function Header({ locale }: { locale: string }) {
                 {t('home')}
               </Link>
 
-              {departments.map((dept) => (
+              {departments.map((dept) => {
+                const hasChildren = dept.children?.length > 0
+                const isExpanded = expandedMobile === dept.id
+                return (
                 <div key={dept.id}>
                   <div className="flex items-center">
-                    <Link
-                      href={`/${locale}/products?department=${dept.slug}`}
-                      className="flex-1 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-muted transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      {getName(dept)}
-                    </Link>
-                    {dept.children?.length > 0 && (
+                    {hasChildren ? (
                       <button
-                        onClick={() =>
-                          setExpandedMobile(
-                            expandedMobile === dept.id ? null : dept.id,
-                          )
-                        }
+                        onClick={() => setExpandedMobile(isExpanded ? null : dept.id)}
+                        className="flex-1 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-muted transition-colors text-start"
+                      >
+                        {getName(dept)}
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/${locale}/products?department=${dept.slug}`}
+                        className="flex-1 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-muted transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        {getName(dept)}
+                      </Link>
+                    )}
+                    {hasChildren && (
+                      <button
+                        onClick={() => setExpandedMobile(isExpanded ? null : dept.id)}
                         className="p-2.5 hover:bg-muted rounded-lg"
                       >
                         <ChevronDown
                           className={`h-4 w-4 transition-transform duration-200 ${
-                            expandedMobile === dept.id ? 'rotate-180' : ''
+                            isExpanded ? 'rotate-180' : ''
                           }`}
                         />
                       </button>
                     )}
                   </div>
 
-                  {expandedMobile === dept.id && dept.children?.length > 0 && (
-                    <div className="ml-4 rtl:ml-0 rtl:mr-4 border-l rtl:border-l-0 rtl:border-r pl-2 rtl:pl-0 rtl:pr-2 mb-1">
-                      {dept.children.map((sub: any) => (
-                        <Link
-                          key={sub.id ?? sub.slug}
-                          href={`/${locale}/products?department=${dept.slug}&category=${sub.slug}`}
-                          className="flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          <CategoryIcon
-                            iconKey={sub.iconKey}
-                            slug={sub.slug}
-                            className="h-[18px] w-[18px] flex-shrink-0 text-muted-foreground"
-                          />
-                          <span className="truncate">{getName(sub)}</span>
-                        </Link>
-                      ))}
+                  {isExpanded && hasChildren && (
+                    <div className="px-2 pb-2 pt-1">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {dept.children.map((sub: any) => (
+                          <Link
+                            key={sub.id ?? sub.slug}
+                            href={`/${locale}/products?department=${dept.slug}&category=${sub.slug}`}
+                            className="flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted rounded-xl transition-colors"
+                            onClick={() => setMobileMenuOpen(false)}
+                          >
+                            <CategoryIcon
+                              iconKey={sub.iconKey}
+                              slug={sub.slug}
+                              className="h-4 w-4 flex-shrink-0"
+                            />
+                            <span className="truncate">{getName(sub)}</span>
+                          </Link>
+                        ))}
+                      </div>
+                      <Link
+                        href={`/${locale}/products?department=${dept.slug}`}
+                        className="block text-center mt-2 py-2 text-xs font-semibold text-[#d4a853] hover:underline transition-colors"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        {locale === 'ar' ? `عرض الكل ←` : locale === 'en' ? `View all →` : `Alle anzeigen →`}
+                      </Link>
                     </div>
                   )}
                 </div>
-              ))}
+                )
+              })}
 
               {!isAuthenticated && (
                 <div className="border-t mt-2 pt-2">

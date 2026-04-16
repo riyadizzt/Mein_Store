@@ -56,12 +56,12 @@ export function PremiumRecentlyViewed({ currentProductId, locale }: Props) {
         {products.map(p => (
           <div key={p.id} className="flex-shrink-0 w-[170px] sm:w-[200px] group relative">
             <Link href={`/${locale}/products/${p.slug}`}>
-              <div className="relative aspect-[3/4] bg-[#f5f5f5] overflow-hidden mb-3 flex items-center justify-center">
+              <div className="relative aspect-[3/4] bg-[#f5f5f5] overflow-hidden rounded-xl mb-3 flex items-center justify-center">
                 {p.imageUrl ? (
                   <img
                     src={p.imageUrl}
                     alt={p.name}
-                    className="w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] group-hover:scale-[1.03]"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)] group-hover:scale-[1.03]"
                     loading="lazy"
                   />
                 ) : (

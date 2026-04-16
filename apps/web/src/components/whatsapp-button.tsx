@@ -1,12 +1,20 @@
 'use client'
 
 import { API_BASE_URL } from '@/lib/env'
+import { useState, useEffect } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery } from '@tanstack/react-query'
 import { MessageCircle } from 'lucide-react'
 
 export function WhatsAppButton() {
   const locale = useLocale()
+  const [isHome, setIsHome] = useState(false)
+
+  useEffect(() => {
+    // Show only on homepage on mobile
+    const path = window.location.pathname
+    setIsHome(path === `/${locale}` || path === `/${locale}/` || path === '/')
+  }, [locale])
 
   const { data } = useQuery({
     queryKey: ['whatsapp-settings'],
@@ -33,7 +41,7 @@ export function WhatsAppButton() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label={locale === 'ar' ? 'تواصل معنا عبر واتساب' : 'WhatsApp Chat'}
-      className="fixed bottom-6 ltr:right-6 rtl:left-6 z-40 min-w-[56px] min-h-[56px] w-14 h-14 rounded-full bg-[#d4a853] hover:bg-[#c49b4a] shadow-lg hover:shadow-xl flex items-center justify-center transition-all hover:scale-110 group"
+      className={`fixed bottom-[8.5rem] lg:bottom-6 ltr:right-6 rtl:left-6 z-40 min-w-[56px] min-h-[56px] w-14 h-14 rounded-full bg-[#d4a853] hover:bg-[#c49b4a] shadow-lg hover:shadow-xl items-center justify-center transition-all hover:scale-110 group ${isHome ? 'flex' : 'hidden lg:flex'}`}
       title="WhatsApp"
     >
       <MessageCircle className="h-6 w-6 text-black" />

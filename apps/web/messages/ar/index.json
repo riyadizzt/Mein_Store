@@ -225,7 +225,7 @@
       "tax": "الضريبة",
       "total": "الإجمالي",
       "deliveryAddress": "عنوان التوصيل",
-      "deliveryTime": "التوصيل المتوقع: ٢-٤ أيام عمل",
+      "deliveryTime": "التوصيل المتوقع: 2-4 أيام عمل",
       "paymentInfo": "الدفع",
       "paymentMethod": "طريقة الدفع",
       "paid": "تم الدفع",
@@ -239,7 +239,7 @@
       "print": "طباعة",
       "trustReturn": "خدمة عملاء شخصية",
       "trustSecure": "دفع آمن",
-      "trustShipping": "شحن مجاني من €١٠٠",
+      "trustShipping": "شحن مجاني من €100",
       "cardPayment": "بطاقة ائتمان",
       "trackOrder": "تتبع الطلب",
       "invite": {
@@ -460,14 +460,14 @@
     "phone": "الهاتف",
     "address": "العنوان",
     "hours": "ساعات العمل",
-    "hoursValue": "الاثنين - الجمعة ٩:٠٠ - ١٨:٠٠",
+    "hoursValue": "الاثنين - الجمعة 9:00 - 18:00",
     "name": "الاسم",
     "emailField": "البريد الإلكتروني",
     "subject": "الموضوع",
     "message": "الرسالة",
     "send": "إرسال الرسالة",
     "sent": "تم إرسال الرسالة!",
-    "sentMessage": "سنرد عليك خلال ٢٤ ساعة."
+    "sentMessage": "سنرد عليك خلال 24 ساعة."
   },
   "tracking": {
     "title": "تتبع طلبك",

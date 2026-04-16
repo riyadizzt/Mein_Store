@@ -108,7 +108,7 @@ function SettingsModal({ locale }: { locale: string }) {
 
         <div className="px-6 py-4 border-t bg-muted/30 flex gap-3">
           <button onClick={() => { acceptEssentialOnly(); closeSettings() }} className="flex-1 h-11 rounded-xl border text-sm font-medium hover:bg-muted transition-colors">{copy.essentialOnly}</button>
-          <button onClick={() => { saveCustom(localAnalytics, localMarketing); closeSettings() }} className="flex-1 h-11 rounded-xl bg-brand-gold text-white text-sm font-semibold hover:bg-brand-gold-dark transition-colors btn-press">{copy.save}</button>
+          <button onClick={() => { saveCustom(localAnalytics, localMarketing); closeSettings() }} className="flex-1 h-11 rounded-xl bg-[#0f1419] text-white text-sm font-semibold hover:bg-[#1a1a2e] transition-colors btn-press">{copy.save}</button>
         </div>
       </motion.div>
     </>
@@ -147,7 +147,7 @@ export function CookieBanner() {
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2.5">
-                <button onClick={acceptAll} className="flex-1 h-10 rounded-xl bg-brand-gold text-white text-sm font-semibold hover:bg-brand-gold-dark transition-colors btn-press">{copy.acceptAll}</button>
+                <button onClick={acceptAll} className="flex-1 h-10 rounded-xl bg-[#0f1419] text-white text-sm font-semibold hover:bg-[#1a1a2e] transition-colors btn-press">{copy.acceptAll}</button>
                 <button onClick={acceptEssentialOnly} className="flex-1 h-10 rounded-xl border text-sm font-medium hover:bg-muted transition-colors">{copy.essentialOnly}</button>
                 <button onClick={openSettings} className="h-10 px-4 rounded-xl text-sm text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">{copy.settings}</button>
               </div>

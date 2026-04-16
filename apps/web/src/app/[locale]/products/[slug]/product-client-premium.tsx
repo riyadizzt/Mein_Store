@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback, useEffect, useState } from 'react'
+import { useMemo, useCallback, useEffect, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
@@ -214,7 +214,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
     }
     setCartDisabled(true)
     addCartItem({
-      variantId: selectedVariant.id, productId: product.id, name, sku: selectedVariant.sku,
+      variantId: selectedVariant.id, productId: product.id, slug: product.slug, name, sku: selectedVariant.sku,
       color: selectedVariant.color, size: selectedVariant.size, imageUrl: images[0]?.url,
       unitPrice: price, quantity: effectiveQty,
     })
@@ -335,10 +335,31 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   ]
 
   // ── Sticky add-to-cart (mobile) ──
+  // ── Sticky bar: show only when PHOTO visible AND CTA not visible ──
+  const galleryRef = useRef<HTMLDivElement>(null)
+  const ctaRef = useRef<HTMLDivElement>(null)
+  const [photoVisible, setPhotoVisible] = useState(false)
+  const [ctaVisible, setCtaVisible] = useState(true)
+  const showStickyBar = photoVisible && !ctaVisible
+
+  useEffect(() => {
+    if (!galleryRef.current) return
+    const obs = new IntersectionObserver(([e]) => setPhotoVisible(e.isIntersecting), { threshold: 0.1 })
+    obs.observe(galleryRef.current)
+    return () => obs.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!ctaRef.current) return
+    const obs = new IntersectionObserver(([e]) => setCtaVisible(e.isIntersecting), { threshold: 0 })
+    obs.observe(ctaRef.current)
+    return () => obs.disconnect()
+  }, [])
+
   const handleStickyAdd = () => {
     if (!selectedVariant || available <= 0) return
     addCartItem({
-      variantId: selectedVariant.id, productId: product.id, name, sku: selectedVariant.sku,
+      variantId: selectedVariant.id, productId: product.id, slug: product.slug, name, sku: selectedVariant.sku,
       color: selectedVariant.color, size: selectedVariant.size, imageUrl: images[0]?.url,
       unitPrice: price, quantity: 1,
     })
@@ -356,7 +377,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] lg:gap-12 xl:gap-16">
 
         {/* ─── LEFT: Gallery (55%) — shorter on mobile (4:5) for faster scroll to info ─── */}
-        <div className="order-1 max-h-[75vh] lg:max-h-none">
+        <div ref={galleryRef} className="order-1 -mx-4 sm:-mx-6 lg:mx-0 lg:max-h-none">
           {/* key forces remount on color change so the gallery jumps to the first
               image of the newly-selected color (which we put first in `images` above) */}
           <PremiumGallery key={selectedColor ?? 'all'} images={images} productName={name} isRTL={isRTL} />
@@ -367,7 +388,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Category */}
           {categoryName && (
-            <p className={`uppercase text-[#0f1419]/50 mb-5 ${isRTL ? 'text-[13px]' : 'text-[11px] tracking-[0.15em]'}`}>{categoryName}</p>
+            <p className={`uppercase text-[#0f1419]/50 mb-5 ${isRTL ? 'text-sm' : 'text-xs tracking-[0.15em]'}`}>{categoryName}</p>
           )}
 
           {/* Product Name */}
@@ -381,22 +402,22 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Price */}
           <div className="flex items-baseline gap-3 mb-2">
-            <span className="text-xl font-medium tabular-nums text-[#0f1419]">
+            <span className="text-2xl lg:text-xl font-semibold lg:font-medium tabular-nums text-[#0f1419]">
               &euro;{price.toFixed(2)}
             </span>
             {hasDiscount && (
               <>
-                <span className="text-sm text-[#0f1419]/45 line-through tabular-nums">&euro;{basePrice.toFixed(2)}</span>
-                <span className={`tracking-wide text-[#b45309] font-medium ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>-{discountPercent}%</span>
+                <span className="text-sm text-[#0f1419]/35 line-through tabular-nums">&euro;{basePrice.toFixed(2)}</span>
+                <span className={`tracking-wide text-[#b45309] font-semibold ${isRTL ? 'text-sm' : 'text-[13px]'}`}>-{discountPercent}%</span>
               </>
             )}
           </div>
-          <p className={`text-[#0f1419]/50 ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+          <p className={`text-[#0f1419]/50 mt-1 ${isRTL ? 'text-sm' : 'text-xs'}`}>
             {t('priceIncludesVat', { rate: Number(product.taxRate).toFixed(0) })}
           </p>
 
           {/* Mobile-only mini trust signals — directly under price for fast visibility */}
-          <div className="flex items-center gap-4 mt-4 mb-2 lg:hidden text-[11px] text-[#0f1419]/45">
+          <div className="flex items-center gap-4 mt-4 mb-4 lg:hidden text-xs text-[#0f1419]/45">
             <span className="flex items-center gap-1"><Truck className="h-3.5 w-3.5 text-[#d4a853]" />{t3('Ab €100 gratis', 'Free from €100', 'شحن مجاني من 100€')}</span>
             <span className="flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5 text-[#d4a853]" />{t3('Sicher bezahlen', 'Secure payment', 'دفع آمن')}</span>
           </div>
@@ -406,13 +427,13 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           {!colorOverride && (
             <div className="mt-5 mb-10">
               {available > 5 && (
-                <span className={`text-[#16a34a] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                <span className={`text-[#16a34a] ${isRTL ? 'text-sm' : 'text-xs tracking-wide'}`}>
                   {t('inStock')}
                 </span>
               )}
               {showLowStock && (
                 <div>
-                  <span className={`font-medium ${available <= 2 ? 'text-[#dc2626]' : 'text-[#b45309]'} ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                  <span className={`font-medium ${available <= 2 ? 'text-[#dc2626]' : 'text-[#b45309]'} ${isRTL ? 'text-sm' : 'text-xs tracking-wide'}`}>
                     {t('lowStock', { count: available })}
                   </span>
                   <div className="h-[3px] bg-[#f5f5f5] rounded-full overflow-hidden mt-2">
@@ -426,7 +447,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 </div>
               )}
               {available <= 0 && (
-                <span className={`text-[#dc2626] ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-wide'}`}>
+                <span className={`text-[#dc2626] ${isRTL ? 'text-sm' : 'text-xs tracking-wide'}`}>
                   {t('outOfStock')}
                 </span>
               )}
@@ -435,7 +456,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* Campaign Countdown (urgency - alternative) */}
           {showCampaign && countdown && (
-            <div className={`flex items-center gap-2 mb-10 text-[#0f1419]/60 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em]'}`}>
+            <div className={`flex items-center gap-2 mb-10 text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-xs tracking-[0.1em]'}`}>
               <span>{t3('Angebot endet in', 'Offer ends in', 'ينتهي العرض في')}</span>
               <span className="font-mono tabular-nums text-[#b45309]">{countdown}</span>
             </div>
@@ -451,7 +472,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* No-Return Notice */}
           {product.excludeFromReturns && (
-            <div className={`flex items-start gap-2.5 py-3 px-4 mb-8 border border-[#d97706]/20 text-[#b45309]/80 leading-relaxed ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+            <div className={`flex items-start gap-2.5 py-3 px-4 mb-8 border border-[#d97706]/20 text-[#b45309]/80 leading-relaxed ${isRTL ? 'text-sm' : 'text-xs'}`}>
               <span className="mt-0.5 flex-shrink-0">&#9888;</span>
               <span>{t3('Dieser Artikel ist vom Umtausch ausgeschlossen', 'This item cannot be returned', 'لا يمكن إرجاع هذا المنتج')}</span>
             </div>
@@ -459,15 +480,15 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* ═══ VARIANTS ═══ */}
           {variants.length > 1 && (
-            <div className="border-t border-[#e5e5e5] pt-8 pb-2 space-y-8">
+            <div className="border-t border-[#e5e5e5] pt-6 lg:pt-8 pb-2 space-y-6 lg:space-y-8">
 
               {/* Color Selector — premium round circles */}
               {colors.length > 0 && (
                 <div>
-                  <label className={`text-[#0f1419]/60 mb-4 block ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+                  <label className={`text-[#0f1419]/60 mb-4 block ${isRTL ? 'text-[15px]' : 'text-sm tracking-[0.08em]'}`}>
                     {t('color')}{selectedColor ? ` — ${translateColor(selectedColor, locale)}` : ''}
                   </label>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-2 lg:gap-3">
                     {colors.map(({ color, hex }: any) => {
                       const avail = isColorAvailable(color)
                       const sel = selectedColor === color
@@ -476,16 +497,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                           key={color}
                           onClick={() => {
                             if (!avail) return
-                            // Same color → no-op.
                             if (color === effectiveColor) return
-                            // Different color → just remember the choice. The size dropdown
-                            // resets to "Bitte Größe wählen" so the user actively picks a
-                            // size that exists in the new color (Zalando pattern).
                             setColorOverride(color)
                           }}
                           disabled={!avail}
                           title={avail ? translateColor(color, locale) : `${translateColor(color, locale)} — ${t('outOfStock')}`}
-                          className={`relative h-10 w-10 rounded-full transition-all duration-200 ${
+                          className={`relative h-10 w-10 lg:h-10 lg:w-10 rounded-full transition-all duration-200 ${
                             sel
                               ? 'ring-2 ring-[#d4a853] ring-offset-[3px]'
                               : avail
@@ -510,13 +527,13 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               {sizes.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <label className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+                    <label className={`text-[#0f1419]/60 ${isRTL ? 'text-[15px]' : 'text-sm tracking-[0.08em]'}`}>
                       {t('size')}
                       {effectiveSize && availableSizesForCurrentColor.length > 0 && (
                         <span className="ms-2 text-[#0f1419] font-medium">— {effectiveSize}</span>
                       )}
                     </label>
-                    <button onClick={() => setSizeGuideOpen(true)} className={`underline underline-offset-4 decoration-[#0f1419]/20 text-[#0f1419]/50 hover:text-[#0f1419]/70 transition-colors ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
+                    <button onClick={() => setSizeGuideOpen(true)} className={`underline underline-offset-4 decoration-[#0f1419]/20 text-[#0f1419]/50 hover:text-[#0f1419]/70 transition-colors ${isRTL ? 'text-sm' : 'text-xs'}`}>
                       {t('sizeGuide')}
                     </button>
                   </div>
@@ -550,7 +567,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                             }}
                             aria-pressed={isSelected}
                             aria-label={`${t('size')} ${size}${inStock ? '' : ' — ' + (locale === 'ar' ? 'غير متوفر' : locale === 'en' ? 'out of stock' : 'nicht verfügbar')}`}
-                            className={`relative h-12 min-w-[3rem] px-3 text-[14px] font-medium transition-all select-none ${
+                            className={`relative h-11 lg:h-12 min-w-[2.75rem] lg:min-w-[3rem] px-2.5 lg:px-3 text-sm lg:text-[15px] font-medium transition-all select-none ${
                               isSelected
                                 ? 'bg-[#0f1419] text-white ring-2 ring-[#d4a853] ring-offset-2 ring-offset-white'
                                 : inStock
@@ -564,7 +581,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                       })}
                     </div>
                   ) : (
-                    <p className="text-[13px] text-[#c43d3d]">
+                    <p className="text-sm text-[#c43d3d]">
                       {locale === 'ar'
                         ? 'لا توجد مقاسات متوفرة لهذا اللون'
                         : locale === 'en'
@@ -574,7 +591,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                   )}
 
                   {!effectiveSize && availableSizesForCurrentColor.length > 0 && (
-                    <p className="mt-3 text-[12px] text-[#0f1419]/50">
+                    <p className="mt-3 text-xs text-[#0f1419]/50">
                       {locale === 'ar'
                         ? 'اختر مقاسًا'
                         : locale === 'en'
@@ -592,7 +609,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
             {/* Quantity */}
             <div className="flex items-center gap-3">
-              <span className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
+              <span className={`text-[#0f1419]/60 ${isRTL ? 'text-[15px]' : 'text-sm tracking-[0.08em]'}`}>
                 {t3('Menge', 'Qty', 'الكمية')}
               </span>
               <div className="inline-flex items-center border border-[#e5e5e5]" dir="ltr">
@@ -622,8 +639,8 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
               </div>
             </div>
 
-            {/* CTA Row: Add to Cart + Wishlist */}
-            <div className="flex items-stretch gap-3">
+            {/* CTA Row: Add to Cart + Wishlist — ref for sticky bar visibility */}
+            <div ref={ctaRef} className="flex items-stretch gap-3">
               {(() => {
                 // Three CTA states:
                 //   needsSize → user picked a color but no size yet → "Bitte Größe wählen"
@@ -651,7 +668,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                           ? 'bg-[#1a1a2e]/90 text-white cursor-pointer hover:bg-[#1a1a2e]'
                           : outOfStock
                             ? 'bg-[#f5f5f5] text-[#0f1419]/25 cursor-not-allowed'
-                            : 'bg-[#d4a853] text-white hover:bg-[#c49b45]'
+                            : 'bg-[#0f1419] text-white hover:bg-[#1a1a2e]'
                     }`}
                     onClickCapture={(e) => {
                       // If they need to pick a size, scroll the pill grid into view.
@@ -709,7 +726,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
           {/* ═══ SHARE ═══ */}
           <div className="flex items-center gap-3 pt-6">
-            <span className={`text-[#0f1419]/50 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.08em] uppercase'}`}>{t('share')}</span>
+            <span className={`text-[#0f1419]/50 ${isRTL ? 'text-sm' : 'text-xs tracking-[0.08em] uppercase'}`}>{t('share')}</span>
             <a
               href={currentUrl ? getWhatsAppShareUrl(name, `€${price.toFixed(2)}`, currentUrl, locale) : '#'}
               target="_blank" rel="noopener noreferrer" aria-label="WhatsApp"
@@ -740,11 +757,11 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
 
       {/* ═══════════════ RELATED PRODUCTS ═══════════════ */}
       {similarProducts.length > 0 && (
-        <section className="py-16 border-t border-[#e5e5e5]">
-          <h2 className={`text-[#0f1419]/50 mb-10 ${isRTL ? 'text-lg font-semibold' : 'text-base tracking-[0.08em] uppercase'}`}>
+        <section className="py-12 lg:py-16 border-t border-[#e5e5e5]">
+          <h2 className={`text-[#0f1419]/50 mb-8 lg:mb-10 ${isRTL ? 'text-lg font-semibold' : 'text-sm lg:text-base tracking-[0.08em] uppercase'}`}>
             {t3('Das könnte dir auch gefallen', 'You may also like', 'قد يعجبك أيضاً')}
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
             {similarProducts.slice(0, 4).map((sp: any) => (
               <ProductCard key={sp.id} product={sp} />
             ))}
@@ -759,12 +776,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       <ProductReviews productId={product.id} />
 
       {/* ═══════════════ MOBILE STICKY BAR ═══════════════ */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#e5e5e5] px-4 py-2.5 lg:hidden safe-bottom">
+      <div className={`fixed bottom-16 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm border-t border-[#e5e5e5] px-4 py-2 lg:hidden transition-transform duration-300 ${showStickyBar ? 'translate-y-0' : 'translate-y-[calc(100%+4rem)]'}`}>
         {/* Row 1: Color swatches + Size pills (compact) */}
-        {colors.length > 1 || availableSizesForCurrentColor.length > 0 ? (
+        {colors.length > 0 || availableSizesForCurrentColor.length > 0 ? (
           <div className="flex items-center gap-3 mb-2">
             {/* Mini color swatches */}
-            {colors.length > 1 && (
+            {colors.length > 0 && (
               <div className="flex items-center gap-1.5">
                 {colors.map((c) => (
                   <button
@@ -782,7 +799,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 ))}
               </div>
             )}
-            {colors.length > 1 && availableSizesForCurrentColor.length > 0 && (
+            {colors.length > 0 && availableSizesForCurrentColor.length > 0 && (
               <div className="w-px h-5 bg-[#e5e5e5]" />
             )}
             {/* Mini size pills */}
@@ -819,7 +836,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           <button
             onClick={handleStickyAdd}
             disabled={available <= 0}
-            className={`flex-shrink-0 h-11 px-6 rounded-lg bg-[#d4a853] text-white font-medium hover:bg-[#c49b45] transition-colors disabled:bg-[#f5f5f5] disabled:text-[#0f1419]/25 flex items-center gap-2 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em] uppercase'}`}
+            className={`flex-shrink-0 h-11 px-6 rounded-lg bg-[#0f1419] text-white font-medium hover:bg-[#1a1a2e] transition-colors disabled:bg-[#f5f5f5] disabled:text-[#0f1419]/25 flex items-center gap-2 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em] uppercase'}`}
           >
             <ShoppingBag className="h-3.5 w-3.5" strokeWidth={1.5} />
             {available <= 0 ? t('outOfStock') : t('addToCart')}

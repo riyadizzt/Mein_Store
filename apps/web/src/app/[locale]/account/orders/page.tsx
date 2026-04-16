@@ -182,6 +182,8 @@ export default function OrdersPage() {
               const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
               const statusLabel = t(`orderStatus.${order.status}` as any, { defaultValue: order.status })
               const isWaiting = bucket === 'waiting_payment'
+              // Fix 5: Dim end-state orders (cancelled, refunded)
+              const isEndState = ['cancelled', 'refunded'].includes(order.status)
               return (
                 <Link
                   key={order.id}
@@ -190,21 +192,31 @@ export default function OrdersPage() {
                       ? `/${locale}/account/orders/${order.orderNumber}/retry-payment`
                       : `/${locale}/account/orders/${order.orderNumber}`
                   }
-                  className="block border rounded-2xl p-4 shadow-card hover:shadow-card-hover transition-all"
+                  className={`block border rounded-2xl p-4 shadow-card hover:shadow-card-hover transition-all ${
+                    isEndState ? 'opacity-60' : ''
+                  }`}
                 >
                   <div className="flex items-center gap-4">
+                    {/* Fix 1: Bigger thumbnails (56px) + Fix 2: Better placeholder */}
                     <div className="flex -space-x-2 flex-shrink-0">
-                      {(order.items ?? []).slice(0, 3).map((item: any, idx: number) => (
-                        <div key={idx} className="h-12 w-12 rounded-xl bg-muted border-2 border-background overflow-hidden">
-                          {item.variant?.product?.images?.[0]?.url ? (
-                            <img src={item.variant.product.images[0].url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-[8px] text-muted-foreground">{item.snapshotSku?.slice(0, 3)}</div>
-                          )}
-                        </div>
-                      ))}
+                      {(order.items ?? []).slice(0, 3).map((item: any, idx: number) => {
+                        const imgUrl = item.variant?.product?.images?.[0]?.url
+                        const itemName = item.snapshotName ?? item.variant?.product?.translations?.[0]?.name ?? ''
+                        const initial = (itemName || item.snapshotSku || 'M').charAt(0).toUpperCase()
+                        return (
+                          <div key={idx} className="h-14 w-14 rounded-xl bg-muted border-2 border-background overflow-hidden">
+                            {imgUrl ? (
+                              <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-[#f0ebe3] text-[#a09078] text-sm font-semibold select-none">
+                                {initial}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                       {(order.items ?? []).length > 3 && (
-                        <div className="h-12 w-12 rounded-xl bg-muted border-2 border-background flex items-center justify-center text-xs text-muted-foreground font-medium">
+                        <div className="h-14 w-14 rounded-xl bg-muted border-2 border-background flex items-center justify-center text-xs text-muted-foreground font-medium">
                           +{(order.items ?? []).length - 3}
                         </div>
                       )}
@@ -212,18 +224,24 @@ export default function OrdersPage() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <p className="font-mono font-semibold text-sm">{order.orderNumber}</p>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${statusColor}`}>
+                        {/* Fix 4: Shorter order number on mobile */}
+                        <p className="font-mono font-semibold text-sm">
+                          <span className="hidden sm:inline">{order.orderNumber}</span>
+                          <span className="sm:hidden">#{(order.orderNumber as string).split('-').pop()}</span>
+                        </p>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${statusColor}`}>
                           {statusLabel}
                         </span>
                       </div>
+                      {/* Fix 3: Date with leading zeros */}
                       <p className="text-xs text-muted-foreground">
-                        {new Date(order.createdAt).toLocaleDateString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'en' ? 'en-GB' : 'de-DE')} &middot; {t('orders.itemCount', { count: (order.items ?? []).length })}
+                        {new Date(order.createdAt).toLocaleDateString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'en' ? 'en-GB' : 'de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} &middot; {t('orders.itemCount', { count: (order.items ?? []).length })}
                       </p>
                     </div>
 
+                    {/* Fix 6: Price always visible */}
                     <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                      <p className="text-base font-bold">&euro;{Number(order.totalAmount).toFixed(2)}</p>
+                      <p className="text-base font-bold tabular-nums">&euro;{Number(order.totalAmount).toFixed(2)}</p>
                       {isWaiting && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
                           <CreditCard className="h-3 w-3" />

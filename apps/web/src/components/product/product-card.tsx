@@ -77,6 +77,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
     addItem({
       variantId: firstVariant.id,
       productId: product.id,
+      slug: product.slug,
       name,
       names,
       sku: firstVariant.sku,

@@ -113,7 +113,7 @@ export function MyMeasurements() {
       <button
         onClick={handleSave}
         disabled={saving}
-        className="mt-6 h-11 px-6 rounded-xl bg-[#d4a853] text-white font-medium hover:bg-[#c49b45] transition-colors disabled:opacity-50 flex items-center gap-2"
+        className="mt-6 h-11 px-6 rounded-xl bg-[#0f1419] text-white font-medium hover:bg-[#1a1a2e] transition-colors disabled:opacity-50 flex items-center gap-2"
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
         {saved ? t3(locale, 'Gespeichert!', 'Saved!', 'تم الحفظ!') : t3(locale, 'Speichern', 'Save', 'حفظ')}

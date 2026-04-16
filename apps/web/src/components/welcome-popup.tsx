@@ -156,8 +156,8 @@ export function WelcomePopup() {
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ delay: 0.1 }}
                     >
-                      <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-brand-gold/10 border border-brand-gold/20">
-                        <div className="text-2xl font-black text-brand-gold">10%</div>
+                      <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-[#0f1419]/5 border border-[#0f1419]/10">
+                        <div className="text-2xl font-black text-[#0f1419]">10%</div>
                         <p className="text-sm">
                           {t(
                             'Rabatt auf deine erste Bestellung! Melde dich für unseren Newsletter an.',
@@ -176,7 +176,7 @@ export function WelcomePopup() {
                             onChange={(e) => { setEmail(e.target.value); setError('') }}
                             onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                             placeholder={t('Deine E-Mail-Adresse', 'Your email address', 'بريدك الإلكتروني')}
-                            className="w-full h-12 ltr:pl-10 rtl:pr-10 ltr:pr-3 rtl:pl-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold transition-all"
+                            className="w-full h-12 ltr:pl-10 rtl:pr-10 ltr:pr-3 rtl:pl-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-[#0f1419]/20 focus:border-[#0f1419] transition-all"
                           />
                         </div>
                         {error && <p className="text-xs text-red-500">{error}</p>}
@@ -184,7 +184,7 @@ export function WelcomePopup() {
                           whileTap={{ scale: 0.97 }}
                           onClick={handleSubmit}
                           disabled={loading}
-                          className="w-full h-12 rounded-xl bg-brand-gold hover:bg-brand-gold-dark text-white font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                          className="w-full h-12 rounded-xl bg-[#0f1419] hover:bg-[#1a1a2e] text-white font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                           {loading ? (
                             <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
