@@ -740,12 +740,20 @@ export default function InventoryPage() {
                               <td className="px-3 py-2.5 text-xs">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-muted-foreground">{inv?.warehouse?.name ?? '—'}</span>
-                                  {inv?.location?.name?.startsWith('BOX-') && (
+                                  {/* Show ALL boxes this variant is in (from v.boxes batch query) */}
+                                  {(v as any).boxes?.length > 0 ? (
+                                    (v as any).boxes.map((box: any) => (
+                                      <Link key={box.boxNumber} href={`/${locale}/admin/master-boxes`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#d4a853]/15 text-[#d4a853] font-semibold hover:bg-[#d4a853]/25 transition-colors font-mono text-[10px]">
+                                        <Package className="h-3 w-3" />
+                                        {box.boxNumber} ({box.qty})
+                                      </Link>
+                                    ))
+                                  ) : inv?.location?.name?.startsWith('BOX-') ? (
                                     <Link href={`/${locale}/admin/master-boxes`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#d4a853]/15 text-[#d4a853] font-semibold hover:bg-[#d4a853]/25 transition-colors font-mono text-[10px]">
                                       <Package className="h-3 w-3" />
                                       {inv.location.name}
                                     </Link>
-                                  )}
+                                  ) : null}
                                 </div>
                               </td>
                               <td className="px-3 py-2.5 text-center">

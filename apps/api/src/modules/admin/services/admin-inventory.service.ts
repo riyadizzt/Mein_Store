@@ -418,6 +418,41 @@ export class AdminInventoryService {
       }
     })
 
+    // Batch-fetch box assignments for all variants so the frontend can show
+    // ALL box numbers (not just the single locationId on the inventory row).
+    // This handles variants that are split across multiple boxes.
+    const allVariantIds = result.flatMap((p) => p.variants.map((v: any) => v.id))
+    if (allVariantIds.length > 0) {
+      const boxItems = await this.prisma.boxItem.findMany({
+        where: { variantId: { in: allVariantIds } },
+        select: { variantId: true, boxId: true, quantity: true },
+      })
+      if (boxItems.length > 0) {
+        const boxIds = [...new Set(boxItems.map((bi) => bi.boxId))]
+        const manifests = await this.prisma.boxManifest.findMany({
+          where: { id: { in: boxIds } },
+          select: { id: true, boxNumber: true, status: true },
+        })
+        const manifestMap = new Map(manifests.map((m) => [m.id, m]))
+
+        // Build variantId → [{boxNumber, qty, status}]
+        const variantBoxes = new Map<string, Array<{ boxNumber: string; qty: number; status: string }>>()
+        for (const bi of boxItems) {
+          const m = manifestMap.get(bi.boxId)
+          if (!m) continue
+          if (!variantBoxes.has(bi.variantId)) variantBoxes.set(bi.variantId, [])
+          variantBoxes.get(bi.variantId)!.push({ boxNumber: m.boxNumber, qty: bi.quantity, status: m.status })
+        }
+
+        // Attach boxes to each variant
+        for (const p of result) {
+          for (const v of p.variants as any[]) {
+            v.boxes = variantBoxes.get(v.id) ?? []
+          }
+        }
+      }
+    }
+
     // If warehouse or location filter active, hide products with no matching inventory
     if (query.warehouseId || query.locationId) {
       result = result

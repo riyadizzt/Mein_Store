@@ -84,12 +84,21 @@ export class MasterBoxService {
       update: { quantity: { increment: 1 } },
     })
 
-    // Tag Inventory with locationId (for the badge in /admin/inventory)
-    // Best-effort only — doesn't affect box quantity
-    await this.prisma.inventory.updateMany({
-      where: { variantId: variant.id, warehouseId: manifest.warehouseId },
-      data: { locationId: manifest.locationId },
-    }).catch(() => { /* ignore */ })
+    // Tag Inventory with locationId (for the BOX badge in /admin/inventory).
+    // If no inventory row exists for this variant+warehouse, create one so the
+    // badge appears. This is best-effort — doesn't affect box quantity.
+    try {
+      const updated = await this.prisma.inventory.updateMany({
+        where: { variantId: variant.id, warehouseId: manifest.warehouseId },
+        data: { locationId: manifest.locationId },
+      })
+      if (updated.count === 0) {
+        // No inventory row in this warehouse — create one with 0 stock + location
+        await this.prisma.inventory.create({
+          data: { variantId: variant.id, warehouseId: manifest.warehouseId, quantityOnHand: 0, quantityReserved: 0, reorderPoint: 5, locationId: manifest.locationId },
+        }).catch(() => { /* unique constraint — row exists in another state */ })
+      }
+    } catch { /* ignore */ }
 
     const name = variant.product.translations.find((t) => t.language === 'de')?.name ?? sku
     const colorImg = variant.product.images.find((img) => img.colorName?.toLowerCase() === (variant.color ?? '').toLowerCase())
