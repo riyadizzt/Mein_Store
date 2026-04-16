@@ -48,7 +48,7 @@ export function BatchHaengetikettenButton({ items, buttonLabel, buttonClassName,
   )
 }
 
-function BatchHangTagModal({ items, onClose, uiVariant }: { items: BatchHangTagItem[]; onClose: () => void; uiVariant: 'default' | 'scanner' }) {
+function BatchHangTagModal({ items, onClose }: { items: BatchHangTagItem[]; onClose: () => void; uiVariant: 'default' | 'scanner' }) {
   const locale = useLocale()
   const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 
@@ -85,13 +85,11 @@ function BatchHangTagModal({ items, onClose, uiVariant }: { items: BatchHangTagI
     setQuantities((prev) => ({ ...prev, [sku]: Math.max(0, Math.min(100, (prev[sku] ?? 1) + delta)) }))
   }
 
-  const isDark = uiVariant === 'scanner'
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className={`bg-background rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[90vh] flex flex-col ${isDark ? 'bg-[#1a1a2e] text-white' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <div className="rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden max-h-[90vh] flex flex-col bg-[#1a1a2e] text-white" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-white/10' : ''}`}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-[#d4a853]" />
             <h3 className="text-lg font-bold">{t3('H\u00e4ngetiketten Batch-Druck', 'Hang Tags Batch Print', '\u0637\u0628\u0627\u0639\u0629 \u062f\u0641\u0639\u0629 \u0628\u0637\u0627\u0642\u0627\u062a \u0627\u0644\u062a\u0639\u0644\u064a\u0642')}</h3>
@@ -104,7 +102,7 @@ function BatchHangTagModal({ items, onClose, uiVariant }: { items: BatchHangTagI
           {SIZES.map((s) => (
             <button key={s.key} onClick={() => setSelectedSize(s.key)}
               className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold text-center transition-all ${
-                selectedSize === s.key ? 'bg-[#d4a853] text-white shadow-sm' : isDark ? 'bg-white/10 hover:bg-white/15 text-white/70' : 'bg-muted hover:bg-muted/80'
+                selectedSize === s.key ? 'bg-[#d4a853] text-white shadow-sm' : 'bg-white/10 hover:bg-white/15 text-white/70'
               }`}>
               {locale === 'ar' ? s.labelAr : s.label}<br />
               <span className="font-normal opacity-70">{s.desc} &middot; {s.perPage}/A4</span>
@@ -117,15 +115,15 @@ function BatchHangTagModal({ items, onClose, uiVariant }: { items: BatchHangTagI
           {items.map((item) => {
             const qty = quantities[item.sku] ?? 1
             return (
-              <div key={item.sku} className={`flex items-center gap-3 px-3 py-2 rounded-xl ${isDark ? 'bg-white/5' : 'bg-muted/30'} ${qty === 0 ? 'opacity-40' : ''}`}>
+              <div key={item.sku} className={`flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 ${qty === 0 ? 'opacity-40' : ''}`}>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold truncate">{item.productName}</p>
-                  <p className={`text-[10px] ${isDark ? 'text-white/40' : 'text-muted-foreground'}`}>{item.color} / {item.size} &middot; <span className="font-mono">{item.sku}</span> &middot; \u20ac{item.price.toFixed(2)}</p>
+                  <p className="text-[10px] text-white/50">{item.color} / {item.size} &middot; <span className="font-mono">{item.sku}</span> &middot; \u20ac{item.price.toFixed(2)}</p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button onClick={() => updateQty(item.sku, -1)} className={`h-6 w-6 rounded-lg flex items-center justify-center text-xs ${isDark ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-muted hover:bg-muted/80'}`}><Minus className="h-3 w-3" /></button>
+                  <button onClick={() => updateQty(item.sku, -1)} className="h-6 w-6 rounded-lg flex items-center justify-center text-xs bg-white/10 hover:bg-white/20 text-white"><Minus className="h-3 w-3" /></button>
                   <span className="w-6 text-center text-xs font-bold">{qty}</span>
-                  <button onClick={() => updateQty(item.sku, 1)} className={`h-6 w-6 rounded-lg flex items-center justify-center text-xs ${isDark ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-muted hover:bg-muted/80'}`}><Plus className="h-3 w-3" /></button>
+                  <button onClick={() => updateQty(item.sku, 1)} className="h-6 w-6 rounded-lg flex items-center justify-center text-xs bg-white/10 hover:bg-white/20 text-white"><Plus className="h-3 w-3" /></button>
                 </div>
               </div>
             )
@@ -133,8 +131,8 @@ function BatchHangTagModal({ items, onClose, uiVariant }: { items: BatchHangTagI
         </div>
 
         {/* Footer */}
-        <div className={`px-6 py-4 border-t ${isDark ? 'border-white/10' : ''}`}>
-          <div className={`flex items-center gap-2 mb-3 px-3 py-2 rounded-xl ${isDark ? 'bg-[#d4a853]/15 border border-[#d4a853]/20' : 'bg-[#d4a853]/10 border border-[#d4a853]/20'}`}>
+        <div className="px-6 py-4 border-t border-white/10">
+          <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-[#d4a853]/15 border border-[#d4a853]/20">
             <Printer className="h-3.5 w-3.5 text-[#d4a853] flex-shrink-0" />
             <p className="text-xs text-[#d4a853] font-medium">
               {t3(

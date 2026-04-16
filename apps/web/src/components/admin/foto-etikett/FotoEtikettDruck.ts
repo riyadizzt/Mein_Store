@@ -32,12 +32,14 @@ const STRIPE_COLORS: Record<string, string> = {
   unisex: '#6B7280',
 }
 
-function getPlaceholder(_color: string, colorHex: string, name: string): string {
-  const initial = name.charAt(0).toUpperCase()
-  return `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f5f5f5;">
-    <div style="width:60%;aspect-ratio:1;border-radius:50%;background:${colorHex || '#ccc'};display:flex;align-items:center;justify-content:center;">
-      <span style="font-size:14pt;font-weight:700;color:white;text-shadow:0 1px 2px rgba(0,0,0,0.3);">${initial}</span>
-    </div>
+function getPlaceholder(color: string, colorHex: string, name: string, size?: string): string {
+  const bg = colorHex || '#6B7280'
+  // Professional placeholder: colored background with product name + color + size
+  // Much more useful than a bare initial when printing labels without photos
+  return `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:${bg};padding:1.5mm;box-sizing:border-box;overflow:hidden;">
+    <div style="font-size:7pt;font-weight:800;color:white;text-align:center;line-height:1.2;text-shadow:0 1px 2px rgba(0,0,0,0.3);overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap;">${esc(name)}</div>
+    ${color ? `<div style="font-size:6pt;font-weight:600;color:rgba(255,255,255,0.85);text-align:center;margin-top:0.5mm;">${esc(color)}</div>` : ''}
+    ${size ? `<div style="font-size:10pt;font-weight:900;color:white;text-align:center;margin-top:0.5mm;text-shadow:0 1px 3px rgba(0,0,0,0.4);">${esc(size)}</div>` : ''}
   </div>`
 }
 
@@ -45,7 +47,7 @@ function generateKlein(d: FotoEtikettData): string {
   const stripe = STRIPE_COLORS[d.categoryStripe] || STRIPE_COLORS.unisex
   const photo = d.imageUrl
     ? `<img src="${d.imageUrl}" style="width:100%;height:14mm;object-fit:cover;display:block;">`
-    : `<div style="width:100%;height:14mm;">${getPlaceholder(d.color, d.colorHex, d.productName)}</div>`
+    : `<div style="width:100%;height:14mm;">${getPlaceholder(d.color, d.colorHex, d.productName, d.size)}</div>`
   return `<div class="etikett klein" style="border-left:2mm solid ${stripe};">
     ${photo}
     <div style="padding:0.5mm 1mm;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.3mm;overflow:hidden;">
@@ -62,7 +64,7 @@ function generateMittel(d: FotoEtikettData): string {
   const stripe = STRIPE_COLORS[d.categoryStripe] || STRIPE_COLORS.unisex
   const photo = d.imageUrl
     ? `<img src="${d.imageUrl}" style="width:100%;height:100%;object-fit:cover;display:block;">`
-    : getPlaceholder(d.color, d.colorHex, d.productName)
+    : getPlaceholder(d.color, d.colorHex, d.productName, d.size)
   return `<div class="etikett mittel" style="border-left:2mm solid ${stripe};overflow:hidden;">
     <div style="width:40%;height:100%;overflow:hidden;flex-shrink:0;">${photo}</div>
     <div style="flex:1;padding:1mm 1.5mm;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:0.3mm;overflow:hidden;min-width:0;">
@@ -81,7 +83,7 @@ function generateGross(d: FotoEtikettData): string {
   const price = d.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
   const photo = d.imageUrl
     ? `<img src="${d.imageUrl}" style="width:100%;height:100%;object-fit:cover;display:block;">`
-    : getPlaceholder(d.color, d.colorHex, d.productName)
+    : getPlaceholder(d.color, d.colorHex, d.productName, d.size)
   return `<div class="etikett gross" style="border-left:2.5mm solid ${stripe};overflow:hidden;">
     <div style="width:100%;height:50%;overflow:hidden;">${photo}</div>
     <div style="padding:1mm 2mm;text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:0.3mm;overflow:hidden;">
