@@ -431,23 +431,28 @@ export class AdminInventoryService {
         const boxIds = [...new Set(boxItems.map((bi) => bi.boxId))]
         const manifests = await this.prisma.boxManifest.findMany({
           where: { id: { in: boxIds } },
-          select: { id: true, boxNumber: true, status: true },
+          select: { id: true, boxNumber: true, status: true, warehouseId: true },
         })
         const manifestMap = new Map(manifests.map((m) => [m.id, m]))
 
-        // Build variantId → [{boxNumber, qty, status}]
-        const variantBoxes = new Map<string, Array<{ boxNumber: string; qty: number; status: string }>>()
+        // Build (variantId + warehouseId) → [{boxNumber, qty, status}]
+        // Keyed by variant+warehouse so the frontend shows badges only on
+        // the correct warehouse row (not on every row for this variant).
+        const variantWhBoxes = new Map<string, Array<{ boxNumber: string; qty: number; status: string }>>()
         for (const bi of boxItems) {
           const m = manifestMap.get(bi.boxId)
           if (!m) continue
-          if (!variantBoxes.has(bi.variantId)) variantBoxes.set(bi.variantId, [])
-          variantBoxes.get(bi.variantId)!.push({ boxNumber: m.boxNumber, qty: bi.quantity, status: m.status })
+          const key = `${bi.variantId}::${m.warehouseId}`
+          if (!variantWhBoxes.has(key)) variantWhBoxes.set(key, [])
+          variantWhBoxes.get(key)!.push({ boxNumber: m.boxNumber, qty: bi.quantity, status: m.status })
         }
 
-        // Attach boxes to each variant
+        // Attach boxes per inventory row (variant + warehouse)
         for (const p of result) {
           for (const v of p.variants as any[]) {
-            v.boxes = variantBoxes.get(v.id) ?? []
+            for (const inv of v.inventory as any[]) {
+              inv.boxes = variantWhBoxes.get(`${v.id}::${inv.warehouseId}`) ?? []
+            }
           }
         }
       }
