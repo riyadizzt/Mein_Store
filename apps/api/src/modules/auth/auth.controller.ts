@@ -90,6 +90,7 @@ export class AuthController {
   // ── Register (always customer) ──────────────────────────────
 
   @Post('register')
+  @Throttle({ short: { limit: 3, ttl: 600000 } }) // 3 registrations per 10 minutes per IP
   @ApiOperation({ summary: 'Neues Kundenkonto erstellen' })
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const tokens = await this.authService.register(dto)

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
   Truck, Heart, MessageCircle, Minus, Plus,
-  ShoppingBag, Check, Copy,
+  ShoppingBag, Check, Copy, ShieldCheck,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
@@ -355,8 +355,8 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       {/* ═══════════════ MAIN GRID ═══════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] lg:gap-12 xl:gap-16">
 
-        {/* ─── LEFT: Gallery (55%) — appears FIRST on mobile (order-1) and on desktop ─── */}
-        <div className="order-1 max-h-[700px] lg:max-h-none">
+        {/* ─── LEFT: Gallery (55%) — shorter on mobile (4:5) for faster scroll to info ─── */}
+        <div className="order-1 max-h-[75vh] lg:max-h-none">
           {/* key forces remount on color change so the gallery jumps to the first
               image of the newly-selected color (which we put first in `images` above) */}
           <PremiumGallery key={selectedColor ?? 'all'} images={images} productName={name} isRTL={isRTL} />
@@ -394,6 +394,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
           <p className={`text-[#0f1419]/50 ${isRTL ? 'text-[13px]' : 'text-[12px]'}`}>
             {t('priceIncludesVat', { rate: Number(product.taxRate).toFixed(0) })}
           </p>
+
+          {/* Mobile-only mini trust signals — directly under price for fast visibility */}
+          <div className="flex items-center gap-4 mt-4 mb-2 lg:hidden text-[11px] text-[#0f1419]/45">
+            <span className="flex items-center gap-1"><Truck className="h-3.5 w-3.5 text-[#d4a853]" />{t3('Ab €100 gratis', 'Free from €100', 'شحن مجاني من 100€')}</span>
+            <span className="flex items-center gap-1"><ShieldCheck className="h-3.5 w-3.5 text-[#d4a853]" />{t3('Sicher bezahlen', 'Secure payment', 'دفع آمن')}</span>
+          </div>
 
           {/* Stock indicator — hidden during color-override (user is mid-pick) so we
               don't show a misleading "Out of stock" while they haven't chosen a size yet. */}
@@ -753,16 +759,67 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
       <ProductReviews productId={product.id} />
 
       {/* ═══════════════ MOBILE STICKY BAR ═══════════════ */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#e5e5e5] px-4 py-3 lg:hidden safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#e5e5e5] px-4 py-2.5 lg:hidden safe-bottom">
+        {/* Row 1: Color swatches + Size pills (compact) */}
+        {colors.length > 1 || availableSizesForCurrentColor.length > 0 ? (
+          <div className="flex items-center gap-3 mb-2">
+            {/* Mini color swatches */}
+            {colors.length > 1 && (
+              <div className="flex items-center gap-1.5">
+                {colors.map((c) => (
+                  <button
+                    key={c.color}
+                    onClick={() => {
+                      const v = findStockedVariant(c.color) || findVariant(c.color)
+                      if (v) handleVariantSelect(v.id)
+                    }}
+                    className={`h-6 w-6 rounded-full border-2 transition-all ${
+                      selectedColor === c.color ? 'border-[#d4a853] scale-110' : 'border-[#e5e5e5]'
+                    }`}
+                    style={{ backgroundColor: c.hex || '#ccc' }}
+                    title={translateColor(c.color, locale)}
+                  />
+                ))}
+              </div>
+            )}
+            {colors.length > 1 && availableSizesForCurrentColor.length > 0 && (
+              <div className="w-px h-5 bg-[#e5e5e5]" />
+            )}
+            {/* Mini size pills */}
+            {availableSizesForCurrentColor.length > 0 && (
+              <div className="flex items-center gap-1 overflow-x-auto flex-1">
+                {availableSizesForCurrentColor.map((size) => {
+                  const isSelected = effectiveSize === size
+                  return (
+                    <button
+                      key={size}
+                      onClick={() => {
+                        const v = findStockedVariant(selectedColor, size) || findVariant(selectedColor, size)
+                        if (v) handleVariantSelect(v.id)
+                      }}
+                      className={`h-7 min-w-[2rem] px-2 rounded text-[11px] font-semibold transition-all flex-shrink-0 ${
+                        isSelected
+                          ? 'bg-[#0f1419] text-white'
+                          : 'bg-[#f5f5f5] text-[#0f1419]/70 hover:bg-[#e5e5e5]'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ) : null}
+        {/* Row 2: Price + Add to Cart */}
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <p className={`text-[#0f1419] truncate ${isRTL ? 'text-sm' : 'text-[13px] font-light'}`}>{name}</p>
-            <p className="text-[13px] tabular-nums text-[#0f1419]/60">&euro;{price.toFixed(2)}</p>
+            <p className="text-[15px] font-semibold tabular-nums text-[#0f1419]">&euro;{price.toFixed(2)}</p>
           </div>
           <button
             onClick={handleStickyAdd}
             disabled={available <= 0}
-            className={`flex-shrink-0 h-11 px-6 bg-[#d4a853] text-white font-medium hover:bg-[#c49b45] transition-colors disabled:bg-[#f5f5f5] disabled:text-[#0f1419]/25 flex items-center gap-2 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em] uppercase'}`}
+            className={`flex-shrink-0 h-11 px-6 rounded-lg bg-[#d4a853] text-white font-medium hover:bg-[#c49b45] transition-colors disabled:bg-[#f5f5f5] disabled:text-[#0f1419]/25 flex items-center gap-2 ${isRTL ? 'text-[13px]' : 'text-[12px] tracking-[0.1em] uppercase'}`}
           >
             <ShoppingBag className="h-3.5 w-3.5" strokeWidth={1.5} />
             {available <= 0 ? t('outOfStock') : t('addToCart')}
