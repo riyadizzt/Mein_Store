@@ -478,7 +478,7 @@ export class AdminInventoryService {
         order: {
           select: {
             orderNumber: true,
-            items: { select: { variantId: true, snapshotName: true, snapshotSku: true, quantity: true, unitPrice: true, variant: { select: { color: true, size: true, product: { select: { images: { select: { url: true }, take: 1 } } } } } } },
+            items: { select: { variantId: true, snapshotName: true, snapshotSku: true, quantity: true, unitPrice: true, variant: { select: { color: true, size: true, product: { select: { images: { select: { url: true, colorName: true, isPrimary: true }, orderBy: { sortOrder: 'asc' } } } } } } } },
           },
         },
       },
@@ -503,14 +503,23 @@ export class AdminInventoryService {
         unitPrice: item.unitPrice ?? Number(orderItem?.unitPrice ?? 0),
         color: orderItem?.variant?.color ?? '',
         size: orderItem?.variant?.size ?? '',
-        imageUrl: orderItem?.variant?.product?.images?.[0]?.url ?? null,
+        imageUrl: (() => {
+          const images = orderItem?.variant?.product?.images ?? []
+          const color = orderItem?.variant?.color
+          // 1. Color-specific image (exact match)
+          const colorImg = color ? images.find((img: any) => img.colorName?.toLowerCase() === color.toLowerCase()) : null
+          // 2. Primary image
+          const primaryImg = images.find((img: any) => img.isPrimary)
+          // 3. First image
+          return colorImg?.url ?? primaryImg?.url ?? images[0]?.url ?? null
+        })(),
       }
     })
 
     return { preview: true, returnNumber, orderNumber: ret.order.orderNumber, status: ret.status, items }
   }
 
-  async processReturnScan(returnNumber: string, adminId: string) {
+  async processReturnScan(returnNumber: string, adminId: string, targetWarehouseId?: string) {
     const ret = await this.prisma.return.findFirst({
       where: { returnNumber },
       include: {
@@ -546,10 +555,24 @@ export class AdminInventoryService {
       const qty = item.quantity ?? 1
       if (!variantId || qty <= 0) continue
 
-      const inv = await this.prisma.inventory.findFirst({
-        where: { variantId },
-        orderBy: { quantityOnHand: 'desc' },
-      })
+      // Use the admin's selected warehouse if provided, otherwise fall back
+      // to the inventory row with the highest stock (old behavior).
+      let inv = targetWarehouseId
+        ? await this.prisma.inventory.findFirst({ where: { variantId, warehouseId: targetWarehouseId } })
+        : null
+      // If no inventory row exists for this variant in the target warehouse, create one
+      if (!inv && targetWarehouseId) {
+        inv = await this.prisma.inventory.create({
+          data: { variantId, warehouseId: targetWarehouseId, quantityOnHand: 0, quantityReserved: 0, reorderPoint: 5 },
+        })
+      }
+      // Fallback: no warehouse specified → pick the row with most stock
+      if (!inv) {
+        inv = await this.prisma.inventory.findFirst({
+          where: { variantId },
+          orderBy: { quantityOnHand: 'desc' },
+        })
+      }
 
       if (inv) {
         await this.prisma.inventory.update({

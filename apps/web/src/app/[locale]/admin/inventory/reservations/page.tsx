@@ -106,6 +106,18 @@ export default function ReservationsPage() {
 
   const hasFilter = !!(warehouseFilter || search || variantId)
 
+  // Group reservations by order number for cleaner display (must be
+  // at component top-level — React hooks rule).
+  const grouped = useMemo(() => {
+    const map = new Map<string, Reservation[]>()
+    for (const r of rows) {
+      const key = r.order?.orderNumber ?? r.id
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(r)
+    }
+    return [...map.entries()]
+  }, [rows])
+
   return (
     <div className="min-h-screen bg-background p-6 max-w-[1440px] mx-auto">
       <AdminBreadcrumb
@@ -234,19 +246,7 @@ export default function ReservationsPage() {
               : null}
           </p>
         </div>
-      ) : (() => {
-        // Group reservations by order number for cleaner display
-        const grouped = useMemo(() => {
-          const map = new Map<string, Reservation[]>()
-          for (const r of rows) {
-            const key = r.order?.orderNumber ?? r.id
-            if (!map.has(key)) map.set(key, [])
-            map.get(key)!.push(r)
-          }
-          return [...map.entries()]
-        }, [rows])
-
-        return (
+      ) : (
         <div className="space-y-3">
           {grouped.map(([orderKey, groupRows]) => {
             const isGroup = groupRows.length > 1
@@ -400,8 +400,7 @@ export default function ReservationsPage() {
             )
           })}
         </div>
-        )
-      })()}
+      )}
 
       {/* ── Pagination ── */}
       {total > pageSize && (

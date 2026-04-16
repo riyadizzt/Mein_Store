@@ -1014,8 +1014,8 @@ export class AdminController {
   @Post('inventory/return-scan/:code')
   @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
-  processReturnScan(@Param('code') code: string, @Req() req: any) {
-    return this.inventory.processReturnScan(code, req.user.id)
+  processReturnScan(@Param('code') code: string, @Body() body: { warehouseId?: string }, @Req() req: any) {
+    return this.inventory.processReturnScan(code, req.user.id, body?.warehouseId)
   }
 
   @Get('inventory/reservations')

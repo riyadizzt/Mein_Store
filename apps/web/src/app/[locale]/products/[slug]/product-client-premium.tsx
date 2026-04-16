@@ -64,6 +64,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   const router = useRouter()
   const searchParams = useSearchParams()
   const addCartItem = useCartStore((s) => s.addItem)
+  const cartItems = useCartStore((s) => s.items)
   const openDrawer = useCartStore((s) => s.openDrawer)
   const { isInWishlist, toggle: toggleWishlist, isPending: wishPending, isAuthenticated } = useWishlist()
   const { campaign } = useActiveCampaign()
@@ -191,25 +192,38 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
   const [cartDisabled, setCartDisabled] = useState(false)
-  const maxQty = Math.max(1, Math.min(available, 10))
+  // Account for items already in the cart to prevent adding more than available
+  const alreadyInCart = cartItems.find((i) => i.variantId === selectedVariant?.id)?.quantity ?? 0
+  const maxQty = Math.max(0, Math.min(available - alreadyInCart, 10))
 
   useEffect(() => { setQty(1); setAdded(false) }, [selectedVariant?.id])
-  useEffect(() => { if (qty > maxQty) setQty(maxQty) }, [maxQty, qty])
+  useEffect(() => { if (qty > maxQty && maxQty > 0) setQty(maxQty) }, [maxQty, qty])
 
   const handleAddToCart = useCallback(() => {
     if (cartDisabled || available <= 0 || !selectedVariant) return
+    // Prevent adding more than available stock (accounting for cart quantity)
+    const effectiveQty = Math.min(qty, available - alreadyInCart)
+    if (effectiveQty <= 0) {
+      toast.info(t3(
+        `Du hast den letzten verfügbaren Artikel bereits im Warenkorb.`,
+        `You already have the last available item in your cart.`,
+        `لديك آخر قطعة متوفرة في سلة التسوق بالفعل.`,
+      ))
+      openDrawer()
+      return
+    }
     setCartDisabled(true)
     addCartItem({
       variantId: selectedVariant.id, productId: product.id, name, sku: selectedVariant.sku,
       color: selectedVariant.color, size: selectedVariant.size, imageUrl: images[0]?.url,
-      unitPrice: price, quantity: Math.min(qty, available),
+      unitPrice: price, quantity: effectiveQty,
     })
     const ev = { content_name: name, content_ids: [product.id], content_type: 'product', value: price * qty, currency: 'EUR' }
     trackMetaEvent('AddToCart', ev); trackTikTokEvent('AddToCart', ev)
     setAdded(true)
     openDrawer()
     setTimeout(() => { setAdded(false); setCartDisabled(false) }, 2500)
-  }, [cartDisabled, available, selectedVariant, addCartItem, product, name, images, price, qty, openDrawer])
+  }, [cartDisabled, available, alreadyInCart, selectedVariant, addCartItem, product, name, images, price, qty, openDrawer])
 
   // ── Wishlist ──
   const wishlisted = isInWishlist(product.id)
@@ -492,7 +506,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                   <div className="flex items-center justify-between mb-3">
                     <label className={`text-[#0f1419]/60 ${isRTL ? 'text-sm' : 'text-[13px] tracking-[0.08em]'}`}>
                       {t('size')}
-                      {effectiveSize && (
+                      {effectiveSize && availableSizesForCurrentColor.length > 0 && (
                         <span className="ms-2 text-[#0f1419] font-medium">— {effectiveSize}</span>
                       )}
                     </label>
@@ -611,9 +625,12 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                 //   ok → in stock → "In den Warenkorb"
                 const needsSize = !!effectiveColor && !effectiveSize
                 const outOfStock = !needsSize && available <= 0
+                const allInCart = !needsSize && !outOfStock && maxQty <= 0
                 const buttonLabel = needsSize
                   ? (locale === 'ar' ? 'اختر مقاسًا' : locale === 'en' ? 'Please select a size' : 'Bitte Größe wählen')
-                  : t('outOfStock')
+                  : allInCart
+                    ? (locale === 'ar' ? 'بالفعل في السلة' : locale === 'en' ? 'Already in cart' : 'Bereits im Warenkorb')
+                    : t('outOfStock')
                 return (
                   <motion.button
                     whileTap={!cartDisabled && available > 0 ? { scale: 0.98 } : undefined}
@@ -650,7 +667,7 @@ export function ProductClientPremium({ product, locale, computed, similarProduct
                         <motion.span key="ok" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} className="flex items-center gap-2">
                           <Check className="h-5 w-5" strokeWidth={2} />{t('added')}
                         </motion.span>
-                      ) : needsSize || outOfStock ? (
+                      ) : needsSize || outOfStock || allInCart ? (
                         <span>{buttonLabel}</span>
                       ) : (
                         <motion.span key="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2.5">

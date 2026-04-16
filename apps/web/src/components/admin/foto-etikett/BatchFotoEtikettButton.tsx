@@ -31,7 +31,7 @@ interface Props {
   variant?: 'default' | 'scanner'
 }
 
-export function BatchFotoEtikettButton({ items, buttonLabel, buttonClassName, variant = 'default' }: Props) {
+export function BatchFotoEtikettButton({ items, buttonLabel, buttonClassName }: Props) {
   const [open, setOpen] = useState(false)
   const locale = useLocale()
   const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
@@ -46,12 +46,12 @@ export function BatchFotoEtikettButton({ items, buttonLabel, buttonClassName, va
         <ImageIcon className="h-3.5 w-3.5" />
         {label}
       </button>
-      {open && <BatchFotoEtikettModal items={items} onClose={() => setOpen(false)} variant={variant} />}
+      {open && <BatchFotoEtikettModal items={items} onClose={() => setOpen(false)} />}
     </>
   )
 }
 
-function BatchFotoEtikettModal({ items, onClose }: { items: BatchItem[]; onClose: () => void; variant: 'default' | 'scanner' }) {
+function BatchFotoEtikettModal({ items, onClose }: { items: BatchItem[]; onClose: () => void }) {
   const locale = useLocale()
   const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 

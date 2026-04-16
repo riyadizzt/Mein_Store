@@ -321,7 +321,7 @@ export default function InventoryPage() {
     try {
       // Step 2: If there's a pending return, process it NOW (after admin confirmation)
       if (returnPending) {
-        await api.post(`/admin/inventory/return-scan/${encodeURIComponent(returnPending)}`)
+        await api.post(`/admin/inventory/return-scan/${encodeURIComponent(returnPending)}`, { warehouseId: warehouseId || undefined })
         setReturnPending(null)
       } else if (scannerMode === 'intake') {
         // Use /intake-scanner which routes via SKU + the currently-selected
@@ -1013,12 +1013,23 @@ export default function InventoryPage() {
             {/* ── Left Panel: Scan Input ── */}
             <div className="flex-1 flex flex-col p-5 min-w-0">
               {/* Search bar — always at the top */}
-              <div className="relative mb-4">
-                <ScanBarcode className="absolute ltr:left-4 rtl:right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#d4a853]" />
-                <input ref={scanRef} value={scanInput} onChange={(e) => setScanInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleBatchScan(scanInput) } }}
-                  placeholder={t('inventory.scannerReady')} autoFocus
-                  className="w-full h-14 ltr:pl-12 rtl:pr-12 ltr:pr-4 rtl:pl-4 rounded-2xl bg-white/10 border border-white/20 text-white text-lg font-mono placeholder:text-white/30 focus:outline-none focus:border-[#d4a853] focus:ring-2 focus:ring-[#d4a853]/20 transition-all" />
+              <div className="relative mb-4 flex gap-2">
+                <div className="relative flex-1">
+                  <ScanBarcode className="absolute ltr:left-4 rtl:right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#d4a853]" />
+                  <input ref={scanRef} value={scanInput} onChange={(e) => setScanInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleBatchScan(scanInput) } }}
+                    placeholder={t('inventory.scannerReady')} autoFocus
+                    className="w-full h-14 ltr:pl-12 rtl:pr-12 ltr:pr-4 rtl:pl-4 rounded-2xl bg-white/10 border border-white/20 text-white text-lg font-mono placeholder:text-white/30 focus:outline-none focus:border-[#d4a853] focus:ring-2 focus:ring-[#d4a853]/20 transition-all" />
+                </div>
+                {/* Camera button — visible on mobile, opens phone camera for barcode scanning */}
+                <button
+                  type="button"
+                  onClick={() => { setShowScannerOverlay(false); setCameraBatchOpen(true) }}
+                  className="lg:hidden h-14 w-14 flex-shrink-0 rounded-2xl bg-[#d4a853] flex items-center justify-center hover:bg-[#c49843] transition-colors"
+                  title={locale === 'ar' ? 'ماسح الكاميرا' : 'Kamera-Scanner'}
+                >
+                  <Camera className="h-6 w-6 text-white" />
+                </button>
               </div>
 
               {/* Flash feedback */}

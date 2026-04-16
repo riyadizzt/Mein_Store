@@ -406,9 +406,9 @@ export default function AdminReturnsPage() {
           )}
         </div>
 
-        {/* ── Detail Side Panel (slide-over) ─────────────── */}
+        {/* ── Detail Panel: full-screen overlay on mobile, side panel on desktop ── */}
         {selectedId && (
-          <div className="w-[480px] flex-shrink-0 bg-background border rounded-xl shadow-lg overflow-y-auto max-h-[calc(100vh-160px)]" style={{ animation: 'slideIn 200ms ease-out' }}>
+          <div className="fixed inset-0 z-40 bg-background overflow-y-auto lg:static lg:inset-auto lg:z-auto lg:w-[480px] lg:flex-shrink-0 lg:border lg:rounded-xl lg:shadow-lg lg:overflow-y-auto lg:max-h-[calc(100vh-160px)]" style={{ animation: 'slideIn 200ms ease-out' }}>
             {detailLoading ? (
               <div className="flex items-center justify-center py-20">
                 <div className="h-6 w-6 border-2 border-[#d4a853] border-t-transparent rounded-full animate-spin" />
@@ -430,8 +430,8 @@ export default function AdminReturnsPage() {
                         <Download className="h-4 w-4" />
                       </button>
                     )}
-                    <button onClick={closeDetail} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                      <X className="h-4 w-4" />
+                    <button onClick={closeDetail} className="p-2 rounded-lg hover:bg-muted transition-colors lg:p-2">
+                      <X className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
@@ -681,16 +681,39 @@ export default function AdminReturnsPage() {
                   )}
                 </div>
 
-                {/* Admin notes — übersetze Enum-Werte in lesbaren Text */}
-                {detail.notes && (
-                  <div className="text-xs text-muted-foreground border-t pt-3">
-                    <p className="font-medium mb-1">{t3('Kundennotiz', 'Customer Note', '\u0645\u0644\u0627\u062d\u0638\u0629 \u0627\u0644\u0639\u0645\u064a\u0644')}</p>
-                    <p>{detail.notes.split(' | ').map((part: string) => {
-                      const enumMatch = REASON_LABELS[part.trim() as ReturnReason]
-                      return enumMatch ? enumMatch[locale as 'de' | 'en' | 'ar'] : part
-                    }).join(' | ')}</p>
+                {/* Customer notes — translate enum keys AND display labels */}
+                {detail.notes && (() => {
+                  // Build a reverse map: any locale's display label → enum key
+                  const reverseMap = new Map<string, ReturnReason>()
+                  for (const [key, labels] of Object.entries(REASON_LABELS)) {
+                    reverseMap.set(key, key as ReturnReason)
+                    reverseMap.set(labels.de.toLowerCase(), key as ReturnReason)
+                    reverseMap.set(labels.en.toLowerCase(), key as ReturnReason)
+                    reverseMap.set(labels.ar, key as ReturnReason)
+                  }
+                  const parts = detail.notes.split(' | ').map((part: string) => {
+                    const trimmed = part.trim()
+                    const key = reverseMap.get(trimmed) ?? reverseMap.get(trimmed.toLowerCase())
+                    return key ? REASON_LABELS[key][locale as 'de' | 'en' | 'ar'] : trimmed
+                  })
+                  // Deduplicate + count for cleaner display
+                  const counts = new Map<string, number>()
+                  for (const p of parts) counts.set(p, (counts.get(p) ?? 0) + 1)
+
+                  return (
+                  <div className="text-xs border-t pt-3 mt-2">
+                    <p className="font-semibold text-muted-foreground mb-2">{t3('Kundennotiz', 'Customer Note', 'ملاحظة العميل')}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[...counts.entries()].map(([label, count]) => (
+                        <span key={label} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/50 text-xs">
+                          {label}
+                          {count > 1 && <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1 rounded">×{count}</span>}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                )}
+                  )
+                })()}
               </div>
             ) : null}
           </div>
