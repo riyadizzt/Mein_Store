@@ -77,8 +77,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 function StandardModal({ options, onConfirm, onCancel }: {
   options: ConfirmOptions; onConfirm: () => void; onCancel: () => void
 }) {
-  let locale = 'de'
-  try { locale = useLocale() } catch {}
+  // ConfirmProvider is mounted inside NextIntlClientProvider in the root
+  // [locale] layout, so useLocale() always resolves — no fallback needed.
+  const locale = useLocale()
   const isDanger = options.variant === 'danger'
 
   return (
@@ -122,8 +123,8 @@ function StandardModal({ options, onConfirm, onCancel }: {
 function DestructiveModal({ options, onConfirm, onCancel }: {
   options: ConfirmOptions; onConfirm: () => void; onCancel: () => void
 }) {
-  let locale = 'de'
-  try { locale = useLocale() } catch {}
+  // Same provider guarantee as StandardModal — see comment there.
+  const locale = useLocale()
   const [typed, setTyped] = useState('')
   const canConfirm = options.typeToConfirm ? typed === options.typeToConfirm : true
 

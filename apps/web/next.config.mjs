@@ -1,4 +1,5 @@
 import createNextIntlPlugin from 'next-intl/plugin'
+import { withSentryConfig } from '@sentry/nextjs'
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
@@ -38,4 +39,37 @@ const nextConfig = {
   },
 }
 
-export default withNextIntl(nextConfig)
+// Wrap with Sentry AFTER next-intl. withSentryConfig adds webpack-plugin
+// hooks for error-report routing + optional source-map upload.
+//
+// Graceful degradation:
+//   - Without SENTRY_AUTH_TOKEN: source-maps are NOT uploaded (silent
+//     no-op at build time). Sentry CLI is never invoked.
+//   - Without NEXT_PUBLIC_SENTRY_DSN: the Sentry SDK itself never
+//     initializes at runtime (see sentry.{client,server,edge}.config.ts).
+//
+// The shop builds + runs identically whether Sentry envs are set or not.
+export default withSentryConfig(withNextIntl(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+
+  // Suppress Sentry-CLI logs unless we're actually uploading sourcemaps
+  // (i.e. only in release builds with auth token).
+  silent: !process.env.SENTRY_AUTH_TOKEN,
+  disableLogger: true,
+
+  // Skip source-map upload when no auth token — the critical
+  // graceful-degradation switch for dev + CI without Sentry access.
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+  },
+
+  // We're not on Vercel.
+  automaticVercelMonitors: false,
+
+  // Opt-in; keep route table minimal.
+  tunnelRoute: undefined,
+
+  // Don't expose source-maps publicly.
+  hideSourceMaps: true,
+})
