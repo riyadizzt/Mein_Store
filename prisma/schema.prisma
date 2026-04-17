@@ -1730,3 +1730,62 @@ model BoxItem {
   @@index([variantId])
   @@map("box_items")
 }
+
+// ─────────────────────────────────────────────────────────────
+// Webhook outbound integration (n8n, Zapier, custom endpoints)
+// Plugin-artig: keine FK zu anderen Tabellen, reine String-Referenzen.
+// Entfernbar ohne Systemauswirkungen.
+// ─────────────────────────────────────────────────────────────
+
+model WebhookSubscription {
+  id                  String    @id @default(uuid())
+  url                 String
+  secret              String    // shared secret for HMAC-SHA256 signature
+  events              String[]  // event type whitelist, e.g. ['order.created', 'return.requested']
+  isActive            Boolean   @default(true) @map("is_active")
+  description         String?   // admin-friendly label
+
+  // Delivery statistics (updated on each delivery attempt)
+  totalDeliveries     Int       @default(0) @map("total_deliveries")
+  totalSuccesses      Int       @default(0) @map("total_successes")
+  totalFailures       Int       @default(0) @map("total_failures")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  lastDeliveryAt      DateTime? @map("last_delivery_at")
+  lastSuccessAt       DateTime? @map("last_success_at")
+  lastFailureAt       DateTime? @map("last_failure_at")
+
+  createdBy           String?   @map("created_by") // User.id — no FK
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("webhook_subscriptions")
+}
+
+model WebhookDeliveryLog {
+  id             String    @id @default(uuid())
+  subscriptionId String    @map("subscription_id") // WebhookSubscription.id — no FK
+  eventType      String    @map("event_type") // e.g. 'order.created'
+  eventId        String    @map("event_id") // uuid — X-Malak-Event-Id header, idempotency key
+  payload        Json      // full Stripe-style payload sent to n8n
+
+  // Result
+  status         String    @default("pending") // pending | success | failed
+  httpStatus     Int?      @map("http_status")
+  responseBody   String?   @map("response_body") @db.Text
+  errorMessage   String?   @map("error_message") @db.Text
+  attemptCount   Int       @default(0) @map("attempt_count")
+
+  // Timing
+  nextAttemptAt  DateTime? @map("next_attempt_at")
+  lastAttemptAt  DateTime? @map("last_attempt_at")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@unique([subscriptionId, eventId]) // prevent double-enqueue of same event to same sub
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("webhook_delivery_logs")
+}

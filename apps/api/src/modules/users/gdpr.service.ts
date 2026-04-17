@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { InvalidPasswordException } from './exceptions/invalid-password.exception'
 import { UserNotFoundException } from './exceptions/user-not-found.exception'
 import { NotificationService } from '../admin/services/notification.service'
+import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
 
 const ANONYMIZATION_DELAY_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
@@ -20,6 +21,8 @@ export class GdprService {
     // Optional: present in runtime (admin module exports it), absent in
     // unit tests that only provide Prisma + queue. Null-safe call below.
     @Optional() private readonly notificationService?: NotificationService,
+    // Same optional pattern for webhook dispatch — test-friendly.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
   ) {}
 
   // ── Data Export (Art. 20 DSGVO) ─────────────────────────────
@@ -129,7 +132,7 @@ export class GdprService {
   async scheduleAccountDeletion(userId: string, password: string): Promise<{ scheduledAt: Date }> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null, anonymizedAt: null },
-      select: { passwordHash: true, scheduledDeletionAt: true },
+      select: { passwordHash: true, scheduledDeletionAt: true, email: true },
     })
     if (!user) throw new UserNotFoundException(userId)
 
@@ -178,6 +181,16 @@ export class GdprService {
         data: { userId, scheduledAt: scheduledAt.toISOString() },
       })
       .catch((err) => this.logger.error(`Deletion notification failed: ${(err as Error).message}`))
+
+    // Fire-and-forget outbound webhook — never awaited, never throws.
+    this.webhookDispatcher
+      ?.emit('customer.deletion_requested', {
+        userId,
+        email: user.email,
+        scheduledDeletionAt: scheduledAt.toISOString(),
+        requestedAt: new Date().toISOString(),
+      })
+      .catch((err) => this.logger.warn(`customer.deletion_requested webhook failed: ${err?.message ?? err}`))
 
     return { scheduledAt }
   }

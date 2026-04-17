@@ -1,12 +1,14 @@
 import {
   Injectable,
   Logger,
+  Optional,
   Inject,
   NotFoundException,
   BadRequestException,
   ConflictException,
   UnauthorizedException,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { Cron } from '@nestjs/schedule'
 import { PrismaService } from '../../prisma/prisma.service'
@@ -18,6 +20,8 @@ import { DHLProvider } from './providers/dhl.provider'
 import { CreateShipmentDto } from './dto/create-shipment.dto'
 import { CreateReturnRequestDto } from './dto/return-request.dto'
 import { ORDER_EVENTS, OrderStatusChangedEvent } from '../orders/events/order.events'
+import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
+import { buildReturnPayloadBase } from '../webhooks/payload-builders/return'
 
 const WITHDRAWAL_DAYS = 14 // deutsches Widerrufsrecht
 
@@ -34,6 +38,9 @@ export class ShipmentsService {
     private readonly emailService: EmailService,
     private readonly dhlProvider: DHLProvider,
     @Inject(SHIPMENT_PROVIDERS) providers: IShipmentProvider[],
+    // Optional webhook wiring — null-safe, never required.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
+    @Optional() private readonly config?: ConfigService,
   ) {
     this.providerMap = new Map(providers.map((p) => [p.providerName, p]))
   }
@@ -539,6 +546,16 @@ export class ShipmentsService {
       reason: dto.reason,
       itemCount: dto.items?.length ?? 0,
     })
+
+    // Fire-and-forget outbound webhook — return.requested.
+    if (this.webhookDispatcher) {
+      const appUrl = this.config?.get<string>('APP_URL', 'https://malak-bekleidung.com') ?? 'https://malak-bekleidung.com'
+      buildReturnPayloadBase(this.prisma, returnRequest.id, appUrl)
+        .then((payload) =>
+          payload ? this.webhookDispatcher!.emit('return.requested', payload) : undefined,
+        )
+        .catch((err) => this.logger.warn(`return.requested webhook failed: ${err?.message ?? err}`))
+    }
 
     this.logger.log(
       `[${correlationId}] Return request: ${returnRequest.id} | order=${order.orderNumber} | reason=${dto.reason}`,

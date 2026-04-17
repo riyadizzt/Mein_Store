@@ -1,7 +1,8 @@
-import { Injectable, Logger, BadRequestException, ForbiddenException } from '@nestjs/common'
+import { Injectable, Logger, Optional, BadRequestException, ForbiddenException } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
 import { EmailService } from '../email/email.service'
 import { NotificationService } from '../admin/services/notification.service'
+import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
 import { CreateContactDto } from './dto/create-contact.dto'
 
 /**
@@ -22,6 +23,8 @@ export class ContactService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly notificationService: NotificationService,
+    // Optional for unit-test TestingModules that only need the core deps.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
   ) {}
 
   async submit(dto: CreateContactDto, meta: { ipAddress?: string; userAgent?: string }) {
@@ -133,6 +136,20 @@ export class ContactService {
         },
       })
       .catch((e) => this.logger.error(`Notification create failed: ${(e as Error).message}`))
+
+    // Fire-and-forget outbound webhook — never awaited, never throws.
+    this.webhookDispatcher
+      ?.emit('contact.message_received', {
+        messageId: row.id,
+        name: trimmed.name,
+        email: trimmed.email,
+        subject: trimmed.subject,
+        message: trimmed.message,
+        locale,
+        receivedAt: row.createdAt.toISOString(),
+        adminUrl: `${process.env.APP_URL ?? 'https://malak-bekleidung.com'}/de/admin/contact-messages`,
+      })
+      .catch((err) => this.logger.warn(`contact.message_received webhook failed: ${err?.message ?? err}`))
 
     return { ok: true, id: row.id }
   }

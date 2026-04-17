@@ -1,11 +1,13 @@
 import {
   Injectable,
   Logger,
+  Optional,
   NotFoundException,
   BadRequestException,
   Inject,
   forwardRef,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { PaymentsService } from '../../payments/payments.service'
@@ -13,6 +15,9 @@ import { NotificationService } from './notification.service'
 import { AuditService } from './audit.service'
 import { EmailService } from '../../email/email.service'
 import { DHLProvider } from '../../shipments/providers/dhl.provider'
+import { WebhookDispatcherService } from '../../webhooks/webhook-dispatcher.service'
+import { buildReturnPayloadBase } from '../../webhooks/payload-builders/return'
+import type { WebhookEventType } from '../../webhooks/events'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit')
@@ -72,7 +77,30 @@ export class AdminReturnsService {
     private readonly emailService: EmailService,
     private readonly eventEmitter: EventEmitter2,
     @Inject(forwardRef(() => DHLProvider)) private readonly dhlProvider: DHLProvider,
+    // Optional webhook wiring — null-safe, never required.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
+    @Optional() private readonly config?: ConfigService,
   ) {}
+
+  /**
+   * Fire-and-forget return-webhook emit — used by approve/received/refunded.
+   * Builds the base payload from the DB, merges event-specific extras, emits.
+   * Never awaited, never throws.
+   */
+  private emitReturnWebhook(
+    eventType: Extract<WebhookEventType, 'return.requested' | 'return.approved' | 'return.received' | 'return.refunded'>,
+    returnId: string,
+    extras: Record<string, unknown> = {},
+  ): void {
+    if (!this.webhookDispatcher) return
+    const appUrl = this.config?.get<string>('APP_URL', 'https://malak-bekleidung.com') ?? 'https://malak-bekleidung.com'
+    buildReturnPayloadBase(this.prisma, returnId, appUrl)
+      .then((base) => {
+        if (!base) return undefined
+        return this.webhookDispatcher!.emit(eventType, { ...base, ...extras } as any)
+      })
+      .catch((err) => this.logger.warn(`${eventType} webhook failed: ${err?.message ?? err}`))
+  }
 
   // ── 1. findAll ─────────────────────────────────────────────
 
@@ -362,6 +390,12 @@ export class AdminReturnsService {
       })
     } catch (e: any) { this.logger.error(`Audit failed: ${e.message}`) }
 
+    // Fire-and-forget outbound webhook — return.approved.
+    this.emitReturnWebhook('return.approved', id, {
+      approvedAt: new Date().toISOString(),
+      labelSent: sendLabel,
+    })
+
     return updated
   }
 
@@ -502,6 +536,15 @@ export class AdminReturnsService {
     }
 
     try { await this.audit.log({ adminId, action: 'RETURN_RECEIVED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'received' } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
+
+    // Fire-and-forget outbound webhook — return.received.
+    this.emitReturnWebhook('return.received', id, {
+      receivedAt: new Date().toISOString(),
+      // warehouseId unknown at this step — the inspect step is where the
+      // scanner picks a target warehouse. We pass empty string rather than
+      // null to keep the payload schema strict.
+      warehouseId: '',
+    })
 
     return updated
   }
@@ -688,6 +731,7 @@ export class AdminReturnsService {
                 orderId: true,
                 status: true,
                 amount: true,
+                provider: true,
               },
             },
           },
@@ -851,6 +895,12 @@ export class AdminReturnsService {
 
     try { await this.notificationService.createForAllAdmins({ type: 'return_refunded', title: `Erstattung ${returnNumber}`, body: `${refundAmountEur.toFixed(2)} EUR erstattet für Bestellung ${ret.order.orderNumber}.`, entityType: 'return', entityId: id, data: { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, returnNumber, refundAmount: refundAmountEur } }) } catch (e: any) { this.logger.error(`Notification: ${e.message}`) }
     try { await this.audit.log({ adminId, action: 'RETURN_REFUNDED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'refunded', refundAmount: refundAmountEur } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
+
+    // Fire-and-forget outbound webhook — return.refunded.
+    this.emitReturnWebhook('return.refunded', id, {
+      refundedAt: new Date().toISOString(),
+      paymentProvider: ret.order.payment?.provider ?? 'unknown',
+    })
 
     this.logger.log(
       `Return ${returnNumber} refunded: ${refundAmountEur.toFixed(2)} EUR | order=${ret.order.orderNumber} | by=${adminId}`,

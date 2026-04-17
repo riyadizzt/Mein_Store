@@ -4,6 +4,7 @@ export const QUEUE_NAMES = {
   INVENTORY_SYNC: 'inventory-sync',
   ORDER_PROCESSING: 'order-processing',
   GDPR: 'gdpr',
+  WEBHOOK_DELIVERY: 'webhook-delivery',
 } as const
 
 export const JOB_NAMES = {
@@ -31,4 +32,7 @@ export const JOB_NAMES = {
   // GDPR
   ANONYMIZE_USER: 'anonymize-user',
   DATA_EXPORT: 'data-export',
+
+  // Webhooks (outbound to n8n / Zapier / custom)
+  DELIVER_WEBHOOK: 'deliver-webhook',
 } as const

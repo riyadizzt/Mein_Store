@@ -12,7 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone, Layers,
-  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert, Lock,
+  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert, Lock, Webhook,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -94,6 +94,7 @@ const NAV_GROUPS = [
       { key: 'ai', labelKey: 'ai', href: '/admin/ai', icon: Bot, permission: 'settings.view' },
       { key: 'analytics', labelKey: 'analytics', href: '/admin/analytics', icon: BarChart3, permission: 'settings.view' },
       { key: 'maintenance', labelKey: 'maintenance', href: '/admin/maintenance', icon: Construction, permission: 'settings.edit' },
+      { key: 'webhooks', labelKey: 'webhooks', href: '/admin/webhooks', icon: Webhook, permission: 'settings.view' },
     ],
   },
 ]

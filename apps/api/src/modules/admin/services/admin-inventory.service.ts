@@ -1,14 +1,42 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common'
+import { Injectable, Logger, Optional, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
+import { WebhookDispatcherService } from '../../webhooks/webhook-dispatcher.service'
+import { buildInventoryRestockPayload } from '../../webhooks/payload-builders/inventory'
 
 @Injectable()
 export class AdminInventoryService {
+  private readonly logger = new Logger(AdminInventoryService.name)
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    // Optional so unit tests without the webhook module still resolve.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
   ) {}
+
+  /**
+   * Fire-and-forget outbound restock webhook.
+   * Never awaited, never throws — failures logged only.
+   * Shared by intake() and intakeBySku() to keep the emit shape consistent.
+   */
+  private emitRestockWebhook(params: {
+    variantId: string
+    warehouseId: string
+    delta: number
+    newQuantity: number
+    source: 'intake' | 'manual_correction' | 'return'
+    supplierId?: string | null
+  }): void {
+    if (!this.webhookDispatcher) return
+    buildInventoryRestockPayload(this.prisma, params)
+      .then((payload) =>
+        payload ? this.webhookDispatcher!.emit('inventory.restock', payload) : undefined,
+      )
+      .catch((err) =>
+        this.logger.warn(`inventory.restock webhook failed: ${err?.message ?? err}`),
+      )
+  }
 
   // ── STATS ──────────────────────────────────────────────────
 
@@ -752,6 +780,15 @@ export class AdminInventoryService {
         }),
       ])
       results.push({ inventoryId: item.inventoryId, before: inv.quantityOnHand, after: newQty, added: item.quantity })
+
+      // Fire-and-forget outbound webhook — enriches payload via DB and emits.
+      this.emitRestockWebhook({
+        variantId: inv.variantId,
+        warehouseId: inv.warehouseId,
+        delta: item.quantity,
+        newQuantity: newQty,
+        source: reason === 'return' ? 'return' : 'intake',
+      })
     }
 
     await this.audit.log({ adminId, action: 'INVENTORY_INTAKE', entityType: 'inventory',
@@ -803,6 +840,15 @@ export class AdminInventoryService {
         }),
       ])
       results.push({ sku: item.sku, before: inv.quantityOnHand, after: newQty, added: item.quantity })
+
+      // Fire-and-forget outbound webhook.
+      this.emitRestockWebhook({
+        variantId: inv.variantId,
+        warehouseId: inv.warehouseId,
+        delta: item.quantity,
+        newQuantity: newQty,
+        source: reason === 'return' ? 'return' : 'intake',
+      })
     }
 
     await this.audit.log({ adminId, action: 'INVENTORY_CSV_INTAKE', entityType: 'inventory',

@@ -48,6 +48,7 @@ const createQueueProvider = (token: string, queueName: string) => ({
     createQueueProvider('INVENTORY_SYNC_QUEUE', QUEUE_NAMES.INVENTORY_SYNC),
     createQueueProvider('ORDER_PROCESSING_QUEUE', QUEUE_NAMES.ORDER_PROCESSING),
     createQueueProvider('GDPR_QUEUE', QUEUE_NAMES.GDPR),
+    createQueueProvider('WEBHOOK_DELIVERY_QUEUE', QUEUE_NAMES.WEBHOOK_DELIVERY),
   ],
   exports: [
     'SHOPIFY_SYNC_QUEUE',
@@ -55,6 +56,7 @@ const createQueueProvider = (token: string, queueName: string) => ({
     'INVENTORY_SYNC_QUEUE',
     'ORDER_PROCESSING_QUEUE',
     'GDPR_QUEUE',
+    'WEBHOOK_DELIVERY_QUEUE',
   ],
 })
 export class QueueModule {}

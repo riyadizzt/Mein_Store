@@ -28,6 +28,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module'
 import { EmailModule } from './modules/email/email.module'
 import { StorageModule } from './common/services/storage.module'
 import { ContactModule } from './modules/contact/contact.module'
+import { WebhookModule } from './modules/webhooks/webhook.module'
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { ContactModule } from './modules/contact/contact.module'
     ReviewsModule,
     EmailModule,
     ContactModule,
+    WebhookModule,
   ],
 })
 export class AppModule implements NestModule {

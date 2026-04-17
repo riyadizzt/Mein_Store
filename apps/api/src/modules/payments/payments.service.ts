@@ -18,6 +18,7 @@ import { InvoiceService } from './invoice.service'
 import { EmailService } from '../email/email.service'
 import { VorkasseProvider } from './providers/vorkasse.provider'
 import { ORDER_EVENTS, OrderStatusChangedEvent, OrderConfirmedEvent } from '../orders/events/order.events'
+import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
 
 // Map PaymentMethod enum → PaymentProvider
 const METHOD_TO_PROVIDER: Record<string, string> = {
@@ -47,6 +48,8 @@ export class PaymentsService {
     // Optional: absent in unit tests that only provide the core deps, wired
     // in production via EmailModule. Null-safe call at the vorkasse site below.
     @Optional() private readonly emailService?: EmailService,
+    // Same optional pattern for outbound webhooks.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
   ) {
     this.providerMap = new Map(providers.map((p) => [p.providerName, p]))
   }
@@ -766,6 +769,21 @@ export class PaymentsService {
     this.logger.log(
       `[${correlationId}] Payment FAILED: ${payment.id} | order=${payment.order.orderNumber} → cancelled | reason=${failureReason}`,
     )
+
+    // Fire-and-forget outbound webhook — payment.failed.
+    // Only fires on the real-failure branch (fallback-hit returned above).
+    this.webhookDispatcher
+      ?.emit('payment.failed', {
+        paymentId: payment.id,
+        orderId: payment.order.id,
+        orderNumber: payment.order.orderNumber,
+        provider: payment.provider,
+        amount: { amount: Number(payment.amount).toFixed(2), currency: 'EUR' },
+        errorCode: null,
+        errorMessage: failureReason,
+        failedAt: new Date().toISOString(),
+      })
+      .catch((err) => this.logger.warn(`payment.failed webhook failed: ${err?.message ?? err}`))
   }
 
   // ── HANDLE DISPUTE (called from webhook) ───────────────────
@@ -794,6 +812,19 @@ export class PaymentsService {
         reason: `FALLBACK: ${disputeReason}`,
         correlationId,
       })
+      // Outbound webhook (fire-and-forget) — fallback-branch gets the
+      // FALLBACK-prefixed reason so automations can filter on it.
+      this.webhookDispatcher
+        ?.emit('payment.disputed', {
+          paymentId: payment.id,
+          orderId: payment.order.id,
+          orderNumber: payment.order.orderNumber,
+          provider: payment.provider,
+          amount: { amount: Number(payment.amount).toFixed(2), currency: 'EUR' },
+          reason: `FALLBACK: ${disputeReason}`,
+          disputedAt: new Date().toISOString(),
+        })
+        .catch((err) => this.logger.warn(`payment.disputed webhook failed: ${err?.message ?? err}`))
       return
     }
 
@@ -827,6 +858,18 @@ export class PaymentsService {
       reason: disputeReason,
       correlationId,
     })
+    // Outbound webhook (fire-and-forget) — real dispute branch.
+    this.webhookDispatcher
+      ?.emit('payment.disputed', {
+        paymentId: payment.id,
+        orderId: payment.order.id,
+        orderNumber: payment.order.orderNumber,
+        provider: payment.provider,
+        amount: { amount: Number(payment.amount).toFixed(2), currency: 'EUR' },
+        reason: disputeReason,
+        disputedAt: new Date().toISOString(),
+      })
+      .catch((err) => this.logger.warn(`payment.disputed webhook failed: ${err?.message ?? err}`))
   }
 
   // ── REFUND ─────────────────────────────────────────────────
@@ -938,6 +981,23 @@ export class PaymentsService {
       await this.invoiceService.generateCreditNote(payment.orderId, dto.amount / 100)
     } catch (err) {
       this.logger.error(`Credit note generation failed for payment ${payment.id}: ${err}`)
+    }
+
+    // Fire-and-forget outbound webhook — payment.refunded.
+    // Only emits if the provider refund succeeded (FAILED refunds stay silent).
+    if (refund.status === 'PROCESSED') {
+      this.webhookDispatcher
+        ?.emit('payment.refunded', {
+          paymentId: payment.id,
+          orderId: payment.orderId,
+          orderNumber: payment.order.orderNumber,
+          provider: payment.provider,
+          refundAmount: { amount: (dto.amount / 100).toFixed(2), currency: 'EUR' },
+          refundId: refundResult.providerRefundId ?? null,
+          fullyRefunded: isFullRefund,
+          refundedAt: new Date().toISOString(),
+        })
+        .catch((err) => this.logger.warn(`payment.refunded webhook failed: ${err?.message ?? err}`))
     }
 
     return refund

@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  Optional,
   ConflictException,
   UnauthorizedException,
   BadRequestException,
@@ -13,6 +14,7 @@ import * as crypto from 'crypto'
 import { randomUUID } from 'crypto'
 import { PrismaService } from '../../prisma/prisma.service'
 import { EmailService } from '../email/email.service'
+import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
 import { RegisterDto } from './dto/register.dto'
 import { LoginDto } from './dto/login.dto'
 import { AuthTokens } from '@omnichannel/types'
@@ -31,6 +33,10 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly emailService: EmailService,
     private readonly config: ConfigService,
+    // Optional so unit-test TestingModules that don't provide the
+    // webhook module still resolve AuthService. When undefined, the
+    // optional-chain calls below become no-ops.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -82,6 +88,22 @@ export class AuthService {
     await this.emailService.queueEmailVerification(user.email, lang, user.firstName, verifyUrl).catch(() => {})
 
     this.logger.log(`Email verification link for ${user.email}: ${verifyUrl}`)
+
+    // Fire-and-forget webhook emit — never awaited, never throws.
+    // Dispatcher has its own internal try/catch; we also guard with .catch()
+    // as belt-and-suspenders. If the webhook module isn't provided (unit
+    // tests), dispatcher is undefined and this is a no-op.
+    this.webhookDispatcher
+      ?.emit('customer.registered', {
+        userId: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        locale: (user.preferredLang as 'de' | 'en' | 'ar') ?? 'de',
+        provider: 'password',
+        registeredAt: user.createdAt.toISOString(),
+      })
+      .catch((err) => this.logger.warn(`customer.registered webhook failed: ${err?.message ?? err}`))
 
     return this.generateTokens(user.id, user.email, user.role)
   }

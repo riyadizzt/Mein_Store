@@ -534,6 +534,7 @@
       "supplierPayments": "Payments",
       "ai": "AI Assistant",
       "maintenance": "Maintenance",
+      "webhooks": "Webhooks",
       "logout": "Logout",
       "analytics": "Analytics",
       "campaigns": "Campaigns"

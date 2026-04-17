@@ -534,6 +534,7 @@
       "supplierPayments": "Zahlungen",
       "ai": "KI-Assistent",
       "maintenance": "Wartungsmodus",
+      "webhooks": "Webhooks",
       "logout": "Abmelden",
       "analytics": "Analytics",
       "campaigns": "Kampagnen"

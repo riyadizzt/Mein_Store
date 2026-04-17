@@ -1,13 +1,18 @@
 import {
   Injectable,
+  Logger,
+  Optional,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../../prisma/prisma.service'
 import { CreateProductDto } from './dto/create-product.dto'
 import { Language } from '@omnichannel/types'
 import { ensureVariantBarcode } from '../../common/helpers/variant-barcode'
 import { resolveUniqueSkus, SkuAdjustment } from '../../common/helpers/sku-resolver'
+import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
+import { buildProductCreatedPayload } from '../webhooks/payload-builders/product'
 
 export interface ProductFilters {
   lang?: Language
@@ -71,7 +76,14 @@ export function compareSizes(a: string, b: string): number {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ProductsService.name)
+
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional so unit-test TestingModules that only provide Prisma still resolve.
+    @Optional() private readonly webhookDispatcher?: WebhookDispatcherService,
+    @Optional() private readonly config?: ConfigService,
+  ) {}
 
   async create(dto: CreateProductDto) {
     const existing = await this.prisma.product.findUnique({
@@ -158,6 +170,19 @@ export class ProductsService {
         images: true,
       },
     })
+
+    // Fire-and-forget outbound webhook — product.created with full payload
+    // (3 languages + all images + variants + shop URLs) so n8n can auto-post
+    // to Instagram/Facebook/TikTok without any API callback. Not awaited.
+    // If builder or emit fails, swallow and log — never blocks product creation.
+    if (this.webhookDispatcher) {
+      const appUrl = this.config?.get<string>('APP_URL', 'https://malak-bekleidung.com') ?? 'https://malak-bekleidung.com'
+      buildProductCreatedPayload(this.prisma, product.id, appUrl)
+        .then((payload) =>
+          payload ? this.webhookDispatcher!.emit('product.created', payload) : undefined,
+        )
+        .catch((err) => this.logger.warn(`product.created webhook failed: ${err?.message ?? err}`))
+    }
 
     // Attach the adjustments list as a non-DB field on the response so
     // the frontend can show a "SKU was auto-renamed" toast without an
