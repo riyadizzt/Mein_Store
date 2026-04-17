@@ -553,12 +553,16 @@ export class ProductsService {
   private formatProduct(product: any) {
     const translation = product.translations?.[0]
     const primaryImage = product.images?.[0]
+    // Max-per-warehouse Semantik: der Checkout erwartet EIN Warehouse pro
+    // Cart-Line (orders.service.ts:649) → wir dürfen nie mehr versprechen
+    // als ein einzelnes Warehouse in einer Bestellung liefern kann.
+    // Pro Variante: max(available) über alle Warehouses. Produkt-total = Summe davon.
     const totalStock = product.variants?.reduce((sum: number, v: any) => {
-      const available = v.inventory?.reduce(
-        (s: number, i: any) => s + (i.quantityOnHand - i.quantityReserved),
+      const maxPerWh = v.inventory?.reduce(
+        (max: number, i: any) => Math.max(max, i.quantityOnHand - i.quantityReserved),
         0,
       ) ?? 0
-      return sum + available
+      return sum + maxPerWh
     }, 0) ?? 0
 
     return {
@@ -654,8 +658,12 @@ export class ProductsService {
         price: Number(product.basePrice) + Number(v.priceModifier),
         priceModifier: Number(v.priceModifier),
         weightGrams: v.weightGrams,
+        // stock = max-orderable-in-einer-Bestellung (= max pro Warehouse).
+        // Der Checkout weist genau ein Warehouse pro Cart-Line zu; wir dürfen
+        // also nie die Summe über alle Warehouses versprechen, sonst 409 bei
+        // gesplittetem Bestand. isInStock bleibt "any warehouse > 0".
         stock: v.inventory.reduce(
-          (s: number, i: any) => s + (i.quantityOnHand - i.quantityReserved),
+          (max: number, i: any) => Math.max(max, i.quantityOnHand - i.quantityReserved),
           0,
         ),
         isInStock: v.inventory.some(
