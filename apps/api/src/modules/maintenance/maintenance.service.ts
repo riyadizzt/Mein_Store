@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Cron } from '@nestjs/schedule'
+import { SafeCron } from '../../common/decorators/safe-cron.decorator'
 import { PrismaService } from '../../prisma/prisma.service'
 
 @Injectable()
@@ -90,7 +90,7 @@ export class MaintenanceService {
   }
 
   // Auto-disable cron — checks every minute
-  @Cron('* * * * *')
+  @SafeCron('* * * * *')
   async checkAutoDisable() {
     const settings = await this.getSettings()
     if (settings.maintenance_enabled !== 'true') return

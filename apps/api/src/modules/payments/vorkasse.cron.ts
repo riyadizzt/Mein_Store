@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Cron, CronExpression } from '@nestjs/schedule'
+import { CronExpression } from '@nestjs/schedule'
+import { SafeCron } from '../../common/decorators/safe-cron.decorator'
 import { PrismaService } from '../../prisma/prisma.service'
 // EmailService available via module if needed for template emails
 import { EventEmitter2 } from '@nestjs/event-emitter'
@@ -22,7 +23,7 @@ export class VorkasseCron {
     private readonly vorkasseProvider: VorkasseProvider,
   ) {}
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @SafeCron(CronExpression.EVERY_HOUR)
   async handleVorkasseDeadlines() {
     const config = await this.vorkasseProvider.getBankDetails()
     if (!config.enabled) return

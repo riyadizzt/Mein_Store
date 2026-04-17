@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Cron } from '@nestjs/schedule'
+import { SafeCron } from '../../../common/decorators/safe-cron.decorator'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { NotificationService } from '../services/notification.service'
 
@@ -25,7 +25,7 @@ export class PaymentTimeoutCron {
     private readonly notifications: NotificationService,
   ) {}
 
-  @Cron('*/5 * * * *') // Every 5 minutes
+  @SafeCron('*/5 * * * *') // Every 5 minutes
   async cleanupTimedOutOrders() {
     const cutoff = new Date()
     cutoff.setMinutes(cutoff.getMinutes() - 10)

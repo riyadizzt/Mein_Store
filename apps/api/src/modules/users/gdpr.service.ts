@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common'
-import { Cron, CronExpression } from '@nestjs/schedule'
+import { CronExpression } from '@nestjs/schedule'
+import { SafeCron } from '../../common/decorators/safe-cron.decorator'
 import { Inject } from '@nestjs/common'
 import { Queue } from 'bullmq'
 import * as bcrypt from 'bcrypt'
@@ -268,7 +269,7 @@ export class GdprService {
   // ── Daily Cron safety net ────────────────────────────────────
   // Catches any users where the BullMQ job was missed (e.g. Redis restart)
 
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  @SafeCron(CronExpression.EVERY_DAY_AT_4AM)
   async anonymizeOverdueUsers(): Promise<void> {
     const overdueUsers = await this.prisma.user.findMany({
       where: {

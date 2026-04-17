@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Cron, CronExpression } from '@nestjs/schedule'
+import { CronExpression } from '@nestjs/schedule'
+import { SafeCron } from '../../common/decorators/safe-cron.decorator'
 import { createHash } from 'crypto'
 import { PrismaService } from '../../prisma/prisma.service'
 
@@ -95,7 +96,7 @@ export class IdempotencyService {
 
   // ── Cron: abgelaufene Keys täglich um 03:00 löschen ──────────
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  @SafeCron(CronExpression.EVERY_DAY_AT_3AM)
   async cleanupExpiredKeys() {
     const result = await this.prisma.idempotencyKey.deleteMany({
       where: { expiresAt: { lt: new Date() } },

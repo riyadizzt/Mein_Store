@@ -36,6 +36,7 @@ const TYPE_CONFIG: Record<string, { Icon: typeof Bell; bg: string; fg: string; d
   account_deletion_requested: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
   admin_password_reset: { Icon: ShieldAlert, bg: 'bg-purple-100', fg: 'text-purple-600', dot: 'bg-purple-500' },
   maintenance_auto_ended: { Icon: Bell, bg: 'bg-teal-100', fg: 'text-teal-600', dot: 'bg-teal-500' },
+  cron_crashed: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-700' },
   // NOTE: 'low_stock' removed — backend never emits this type.
 }
 
@@ -57,6 +58,7 @@ const TYPE_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   contact_message: { de: 'Kontaktanfrage', en: 'Contact Request', ar: 'رسالة تواصل' },
   admin_password_reset: { de: 'Passwort zurückgesetzt', en: 'Password Reset', ar: 'إعادة تعيين كلمة المرور' },
   maintenance_auto_ended: { de: 'Wartungsende', en: 'Maintenance Ended', ar: 'نهاية الصيانة' },
+  cron_crashed: { de: 'Cron abgestürzt', en: 'Cron Crashed', ar: 'توقف Cron' },
 }
 
 const LIMIT = 20

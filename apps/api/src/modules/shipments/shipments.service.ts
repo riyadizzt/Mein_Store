@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { EventEmitter2 } from '@nestjs/event-emitter'
-import { Cron } from '@nestjs/schedule'
+import { SafeCron } from '../../common/decorators/safe-cron.decorator'
 import { PrismaService } from '../../prisma/prisma.service'
 import { IShipmentProvider, SHIPMENT_PROVIDERS } from './shipment-provider.interface'
 import { KlarnaProvider } from '../payments/providers/klarna.provider'
@@ -658,7 +658,7 @@ export class ShipmentsService {
   // ── DHL Tracking Polling (Cron: every 2 hours) ────────────
   // Polls DHL Tracking API for active shipments and updates status
 
-  @Cron('0 */2 * * *') // Every 2 hours
+  @SafeCron('0 */2 * * *') // Every 2 hours
   async pollTrackingUpdates(): Promise<void> {
     const activeShipments = await this.prisma.shipment.findMany({
       where: {

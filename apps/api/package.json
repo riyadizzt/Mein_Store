@@ -29,6 +29,7 @@
     "@nestjs/websockets": "^10.4.0",
     "@omnichannel/types": "workspace:*",
     "@prisma/client": "^5.20.0",
+    "@sentry/nestjs": "10.49.0",
     "@supabase/supabase-js": "^2.100.1",
     "@types/passport-facebook": "^3.0.4",
     "bcrypt": "^5.1.1",

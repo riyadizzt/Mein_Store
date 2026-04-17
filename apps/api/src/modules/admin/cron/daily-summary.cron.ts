@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Cron } from '@nestjs/schedule'
+import { SafeCron } from '../../../common/decorators/safe-cron.decorator'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { EmailService } from '../../email/email.service'
 
@@ -12,7 +12,7 @@ export class DailySummaryCron {
     private readonly emailService: EmailService,
   ) {}
 
-  @Cron('0 8 * * *') // Every day at 08:00
+  @SafeCron('0 8 * * *') // Every day at 08:00
   async sendDailySummary() {
     // Check if enabled
     const setting = await this.prisma.shopSetting.findUnique({ where: { key: 'notif_daily_summary' } })

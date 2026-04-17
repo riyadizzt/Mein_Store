@@ -249,6 +249,25 @@ export function translateNotification(
         ),
       }
     }
+    case 'cron_crashed': {
+      // Persisted by CronCrashAlertService when @SafeCron catches an
+      // exception. data.cronClass + data.method identify the failing
+      // method; data.errorMessage holds the short error string. The full
+      // 8-line stack snippet lives in data.stackSnippet (visible only via
+      // the notifications detail view, not rendered here).
+      const cls = d.cronClass ?? ''
+      const method = d.method ?? ''
+      const id = cls && method ? `${cls}.${method}` : (cls || method || '')
+      const errMsg = d.errorMessage ?? ''
+      return {
+        title: t(
+          `Cron-Job abgestürzt${id ? ': ' + id : ''}`,
+          `Cron job crashed${id ? ': ' + id : ''}`,
+          `توقف مهمة Cron${id ? ': ' + id : ''}`,
+        ),
+        body: errMsg,
+      }
+    }
     default:
       return { title: n.title ?? '', body: n.body ?? '' }
   }

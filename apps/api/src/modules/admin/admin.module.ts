@@ -26,6 +26,7 @@ import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
 import { AdminSuppliersService } from './services/admin-suppliers.service'
 import { TranslationService } from '../../common/services/translation.service'
 import { CampaignService } from './services/campaign.service'
+import { CronCrashAlertService } from './services/cron-crash-alert.service'
 
 @Module({
   imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule],
@@ -50,6 +51,7 @@ import { CampaignService } from './services/campaign.service'
     AdminSuppliersService,
     TranslationService,
     CampaignService,
+    CronCrashAlertService,
     PermissionGuard,
   ],
   exports: [AuditService, AdminMarketingService, NotificationService, AdminReturnsService, AdminInventoryService],

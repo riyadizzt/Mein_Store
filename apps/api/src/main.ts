@@ -1,3 +1,7 @@
+// Sentry MUST be the first import — it instruments later imports via Node's
+// require-cache. No-op when SENTRY_DSN is not set (graceful degradation).
+import './sentry.init'
+
 import { NestFactory } from '@nestjs/core'
 import { Logger, ValidationPipe } from '@nestjs/common'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'

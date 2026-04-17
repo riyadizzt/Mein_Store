@@ -1,8 +1,11 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common'
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core'
 import { ConfigModule } from '@nestjs/config'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { ScheduleModule } from '@nestjs/schedule'
 import { EventEmitterModule } from '@nestjs/event-emitter'
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup'
+import { SentryUserContextInterceptor } from './common/interceptors/sentry-user-context.interceptor'
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware'
 import { PrismaModule } from './prisma/prisma.module'
 import { QueueModule } from './queues/queue.module'
@@ -32,6 +35,12 @@ import { WebhookModule } from './modules/webhooks/webhook.module'
 
 @Module({
   imports: [
+    // Sentry — must be registered first so it can hook into NestJS internals
+    // (DI graph, exception handlers, route registration). When SENTRY_DSN
+    // is not set, sentry.init.ts skipped Sentry.init() entirely and this
+    // module is effectively a no-op.
+    SentryModule.forRoot(),
+
     // Config — lädt .env Datei
     ConfigModule.forRoot({
       isGlobal: true,
@@ -92,6 +101,25 @@ import { WebhookModule } from './modules/webhooks/webhook.module'
     EmailModule,
     ContactModule,
     WebhookModule,
+  ],
+  providers: [
+    // Catch-all exception filter that reports unhandled errors to Sentry.
+    // Extends NestJS BaseExceptionFilter so the default 500-response
+    // behaviour is preserved. Skips expected errors (HttpException with
+    // status < 500) and respects the beforeSend filter in sentry.init.ts.
+    // No-op when SENTRY_DSN is not set (Sentry.captureException becomes
+    // a no-op in that case).
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
+    // Attach authenticated user info (id, email, role) to the Sentry scope
+    // so errors are linked to the triggering user. Runs after JwtAuthGuard
+    // populates req.user. No-op when SENTRY_DSN is not set.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SentryUserContextInterceptor,
+    },
   ],
 })
 export class AppModule implements NestModule {

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Cron } from '@nestjs/schedule'
+import { SafeCron } from '../../../common/decorators/safe-cron.decorator'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { NotificationService } from '../services/notification.service'
 
@@ -12,7 +12,7 @@ export class ExpiryReminderCron {
     private readonly notificationService: NotificationService,
   ) {}
 
-  @Cron('0 9 * * *') // Every day at 09:00
+  @SafeCron('0 9 * * *') // Every day at 09:00
   async checkExpiringItems() {
     const in24h = new Date(Date.now() + 24 * 60 * 60 * 1000)
     const now = new Date()

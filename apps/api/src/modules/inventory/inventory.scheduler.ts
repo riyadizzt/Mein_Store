@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { Cron, CronExpression } from '@nestjs/schedule'
+import { CronExpression } from '@nestjs/schedule'
+import { SafeCron } from '../../common/decorators/safe-cron.decorator'
 import { ReservationService } from './reservation.service'
 
 @Injectable()
@@ -9,7 +10,7 @@ export class InventoryScheduler {
   constructor(private readonly reservationService: ReservationService) {}
 
   // Jede Minute: abgelaufene Reservierungen freigeben
-  @Cron(CronExpression.EVERY_MINUTE)
+  @SafeCron(CronExpression.EVERY_MINUTE)
   async releaseExpiredReservations() {
     try {
       const count = await this.reservationService.releaseExpired()
