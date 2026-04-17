@@ -621,13 +621,13 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                     </div>
                   </div>
                 ) : (
-                  <>
+                  <div dir="ltr" className="text-start">
                     <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
                     {order.shippingAddress.company && <p className="text-sm text-muted-foreground">{order.shippingAddress.company}</p>}
                     <p className="text-sm">{order.shippingAddress.street} {order.shippingAddress.houseNumber}</p>
                     <p className="text-sm">{order.shippingAddress.postalCode} {order.shippingAddress.city}</p>
                     <p className="text-sm text-muted-foreground">{order.shippingAddress.country}</p>
-                  </>
+                  </div>
                 )}
               </div>
             )}

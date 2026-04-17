@@ -61,22 +61,30 @@ export function Footer({ locale }: { locale: string }) {
               <p className="mt-4 text-sm text-white/65 leading-relaxed max-w-[220px]">
                 {t('tagline')}
               </p>
-              <div className="flex gap-2.5 mt-6">
-                {[
-                  { label: 'Instagram', icon: <Instagram className="h-5 w-5" /> },
-                  { label: 'Facebook', icon: <Facebook className="h-5 w-5" /> },
-                  { label: 'TikTok', icon: <TikTokIcon /> },
-                ].map(({ label, icon }) => (
-                  <a
-                    key={label}
-                    href="#"
-                    aria-label={label}
-                    className="h-11 w-11 rounded-full border border-white/10 flex items-center justify-center text-white/35 transition-all duration-300 hover:border-brand-gold/40 hover:text-brand-gold"
-                  >
-                    {icon}
-                  </a>
-                ))}
-              </div>
+              {(() => {
+                const socials = [
+                  { label: 'Instagram', icon: <Instagram className="h-5 w-5" />, href: shopSettings?.social?.instagram?.trim() || '' },
+                  { label: 'Facebook', icon: <Facebook className="h-5 w-5" />, href: shopSettings?.social?.facebook?.trim() || '' },
+                  { label: 'TikTok', icon: <TikTokIcon />, href: shopSettings?.social?.tiktok?.trim() || '' },
+                ].filter((s) => s.href)
+                if (socials.length === 0) return null
+                return (
+                  <div className="flex gap-2.5 mt-6">
+                    {socials.map(({ label, icon, href }) => (
+                      <a
+                        key={label}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={label}
+                        className="h-11 w-11 rounded-full border border-white/10 flex items-center justify-center text-white/35 transition-all duration-300 hover:border-brand-gold/40 hover:text-brand-gold"
+                      >
+                        {icon}
+                      </a>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* 3 Link columns — side by side on mobile */}

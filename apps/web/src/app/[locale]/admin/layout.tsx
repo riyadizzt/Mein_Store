@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 import { useNotificationStream } from '@/hooks/use-notification-stream'
 import { useNotificationSound } from '@/hooks/use-notification-sound'
 import {
@@ -165,33 +165,53 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [isAuthenticated, user, router, locale, isLoginPage])
 
-  // Notifications polling
-  const { data: notifications } = useQuery({
-    queryKey: ['admin-notifications'],
-    queryFn: async () => {
-      const [{ data: dash }, { data: unread }, contact] = await Promise.all([
-        api.get('/admin/dashboard'),
-        api.get('/admin/notifications/unread'),
-        api.get('/contact/admin/unread').catch(() => ({ data: { count: 0 } })),
-      ])
-      return {
-        // Orders that need admin attention: unpaid-in-flight + paid-waiting-to-ship.
-        // pending_payment is included so the admin sees incoming checkouts even
-        // before the customer completes the payment (cleaned up after 10min by
-        // the payment-timeout cron, so this count stays small and meaningful).
-        openOrders: dash?.ordersByStatus
-          ?.filter((s: any) => ['pending', 'pending_payment', 'confirmed', 'processing'].includes(s.status))
-          .reduce((sum: number, s: any) => sum + s.count, 0) ?? 0,
-        lowStock: dash?.lowStock?.length ?? 0,
-        disputes: dash?.disputes?.count ?? 0,
-        pendingReturns: dash?.pendingReturns?.count ?? 0,
-        unreadNotifications: unread?.count ?? 0,
-        unreadContactMessages: (contact as any)?.data?.count ?? 0,
-      }
-    },
-    refetchInterval: 30000,
-    enabled: isAuthenticated,
+  // Notifications polling — 3 INDEPENDENT queries so one failure doesn't
+  // wipe all badges. Each keeps its own last-known-good value via
+  // placeholderData, so a transient 401/slow-API shows stale-but-correct
+  // counts instead of blanking everything to zero.
+  const [dashQ, unreadQ, contactQ] = useQueries({
+    queries: [
+      {
+        queryKey: ['admin-notif-dashboard'],
+        queryFn: async () => (await api.get('/admin/dashboard')).data,
+        refetchInterval: 30000,
+        enabled: isAuthenticated,
+        placeholderData: (prev: any) => prev,
+        retry: 2,
+      },
+      {
+        queryKey: ['admin-notif-unread'],
+        queryFn: async () => (await api.get('/admin/notifications/unread')).data,
+        refetchInterval: 30000,
+        enabled: isAuthenticated,
+        placeholderData: (prev: any) => prev,
+        retry: 2,
+      },
+      {
+        queryKey: ['admin-notif-contact'],
+        queryFn: async () => (await api.get('/contact/admin/unread')).data,
+        refetchInterval: 30000,
+        enabled: isAuthenticated,
+        placeholderData: (prev: any) => prev,
+        retry: 2,
+      },
+    ],
   })
+
+  const dash: any = dashQ.data
+  const unread: any = unreadQ.data
+  const contact: any = contactQ.data
+
+  const notifications = {
+    openOrders: dash?.ordersByStatus
+      ?.filter((s: any) => ['pending', 'pending_payment', 'confirmed', 'processing'].includes(s.status))
+      .reduce((sum: number, s: any) => sum + s.count, 0) ?? 0,
+    lowStock: dash?.lowStock?.length ?? 0,
+    disputes: dash?.disputes?.count ?? 0,
+    pendingReturns: dash?.pendingReturns?.count ?? 0,
+    unreadNotifications: unread?.count ?? 0,
+    unreadContactMessages: contact?.count ?? 0,
+  }
 
   const totalNotifications = (notifications?.disputes ?? 0) + (notifications?.pendingReturns ?? 0)
 

@@ -253,9 +253,23 @@ export function validateAddressOffline(address: {
         }
       }
     }
-  } else if (['AT', 'CH', 'BE', 'NL'].includes(country)) {
-    if (!/^\d{4,5}$/.test(plz)) {
-      warnings.push({ field: 'postalCode', message: { de: 'PLZ ungültig', en: 'Invalid postal code', ar: 'الرمز البريدي غير صالح' } })
+  } else if (['AT', 'CH', 'BE'].includes(country)) {
+    // AT/CH/BE: exactly 4 digits
+    if (!/^\d{4}$/.test(plz)) {
+      warnings.push({ field: 'postalCode', message: { de: 'PLZ ungültig (4 Ziffern)', en: 'Invalid postal code (4 digits)', ar: 'الرمز البريدي غير صالح (4 أرقام)' } })
+    }
+  } else if (country === 'NL') {
+    // NL: 4 digits + optional space + 2 uppercase letters (e.g. "1073 KJ" or "1073KJ")
+    if (!/^\d{4}\s?[A-Za-z]{2}$/.test(plz)) {
+      warnings.push({ field: 'postalCode', message: { de: 'PLZ ungültig (Format: 1234 AB)', en: 'Invalid postal code (format: 1234 AB)', ar: 'الرمز البريدي غير صالح (الصيغة: 1234 AB)' } })
+    }
+  } else if (country === 'FR') {
+    if (!/^\d{5}$/.test(plz)) {
+      warnings.push({ field: 'postalCode', message: { de: 'PLZ ungültig (5 Ziffern)', en: 'Invalid postal code (5 digits)', ar: 'الرمز البريدي غير صالح (5 أرقام)' } })
+    }
+  } else if (country === 'IT') {
+    if (!/^\d{5}$/.test(plz)) {
+      warnings.push({ field: 'postalCode', message: { de: 'PLZ ungültig (5 Ziffern)', en: 'Invalid postal code (5 digits)', ar: 'الرمز البريدي غير صالح (5 أرقام)' } })
     }
   }
 

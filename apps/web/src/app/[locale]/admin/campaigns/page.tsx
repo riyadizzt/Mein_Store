@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useConfirm } from '@/components/ui/confirm-modal'
@@ -45,18 +46,119 @@ const TEMPLATES = [
   { id: 'custom', label: { de: 'Eigenes Design', ar: 'تصميم مخصص' }, icon: Sparkles, colors: 'from-[#1a1a2e] to-[#d4a853]', heroBg: '' },
 ]
 
+// ─── AI Marketing Studio → Campaign prefill converter ─────────────────
+// Takes the structured payload that the Marketing Studio writes to
+// sessionStorage and maps it to Campaign form fields. Returns null if
+// the payload shape is unrecognized — caller falls back to empty editor.
+//
+// Expected input shape:
+//   { format: 'hero' | 'popup' | 'bar', occasion?: string,
+//     variant: { de: {...}, en: {...}, ar: {...} } }
+//
+// Each variant's per-language object depends on format:
+//   hero:  { headline, subtitle, cta }
+//   popup: { headline, description, cta }
+//   bar:   { text }
+//
+// Only fields we KNOW map cleanly are copied. Unknown keys are ignored.
+function convertAiPrefillToCampaignFields(raw: any): Record<string, any> | null {
+  if (!raw || typeof raw !== 'object') return null
+  const { format, variant, occasion } = raw
+  if (!variant || typeof variant !== 'object') return null
+  if (!['hero', 'popup', 'bar'].includes(format)) return null
+
+  const name = typeof occasion === 'string' && occasion.trim()
+    ? `${occasion.trim()} — ${format}`.slice(0, 80)
+    : ''
+
+  const base: Record<string, any> = { name }
+
+  const pickStr = (langObj: any, key: string): string => {
+    const v = langObj?.[key]
+    return typeof v === 'string' ? v : ''
+  }
+
+  if (format === 'hero') {
+    base.heroBannerEnabled = true
+    base.heroTitleDe = pickStr(variant.de, 'headline')
+    base.heroTitleEn = pickStr(variant.en, 'headline')
+    base.heroTitleAr = pickStr(variant.ar, 'headline')
+    base.heroSubtitleDe = pickStr(variant.de, 'subtitle')
+    base.heroSubtitleEn = pickStr(variant.en, 'subtitle')
+    base.heroSubtitleAr = pickStr(variant.ar, 'subtitle')
+    const ctaDe = pickStr(variant.de, 'cta')
+    const ctaEn = pickStr(variant.en, 'cta')
+    const ctaAr = pickStr(variant.ar, 'cta')
+    if (ctaDe) base.heroCtaDe = ctaDe
+    if (ctaEn) base.heroCtaEn = ctaEn
+    if (ctaAr) base.heroCtaAr = ctaAr
+  } else if (format === 'popup') {
+    base.popupEnabled = true
+    // Popup only has ONE text field; combine headline + description
+    const combine = (lang: any) => [pickStr(lang, 'headline'), pickStr(lang, 'description')]
+      .filter(Boolean).join('\n\n')
+    base.popupTextDe = combine(variant.de)
+    base.popupTextEn = combine(variant.en)
+    base.popupTextAr = combine(variant.ar)
+  } else if (format === 'bar') {
+    base.announcementEnabled = true
+    base.announcementTextDe = pickStr(variant.de, 'text')
+    base.announcementTextEn = pickStr(variant.en, 'text')
+    base.announcementTextAr = pickStr(variant.ar, 'text')
+  }
+
+  return base
+}
+
 export default function CampaignsPage() {
   const locale = useLocale()
   const qc = useQueryClient()
   const confirm = useConfirm()
   const [editing, setEditing] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  // Prefill arriving from the AI Marketing Studio (?autoOpen=1).
+  // null = no prefill / already consumed; object = apply to next CampaignEditor mount.
+  const [pendingPrefill, setPendingPrefill] = useState<Record<string, any> | null>(null)
 
   const { data: campaigns, isLoading } = useQuery({
     queryKey: ['admin-campaigns'],
     queryFn: async () => { const { data } = await api.get('/admin/campaigns'); return data },
     refetchInterval: 30000,
   })
+
+  // ─── AI Marketing Studio deeplink handler ────────────────────────
+  // Only fires when:
+  //   1. URL contains ?autoOpen=1  (explicit opt-in)
+  //   2. Admin is NOT already in create or edit flow (don't clobber work)
+  //   3. sessionStorage['campaign-prefill'] exists AND is valid JSON
+  // On any error path, silently fall through to the normal empty editor.
+  // sessionStorage entry is always cleared after read (one-shot).
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (searchParams.get('autoOpen') !== '1') return
+    if (creating || editing) return
+    try {
+      const raw = window.sessionStorage.getItem('campaign-prefill')
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      // Convert AI output shape → Campaign field shape
+      const converted = convertAiPrefillToCampaignFields(parsed)
+      // Always clear the entry — one-shot, never re-apply
+      window.sessionStorage.removeItem('campaign-prefill')
+      if (converted) {
+        setPendingPrefill(converted)
+        setCreating(true)
+      }
+      // Strip ?autoOpen=1 so a browser refresh doesn't try again
+      router.replace(pathname)
+    } catch {
+      // Bad data — silently fail, user sees empty editor as normal
+      try { window.sessionStorage.removeItem('campaign-prefill') } catch { /* ignore */ }
+    }
+  }, [searchParams, creating, editing, router, pathname])
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.delete(`/admin/campaigns/${id}`),
@@ -161,7 +263,12 @@ export default function CampaignsPage() {
       {creating && (
         <div className="bg-[#1a1a2e] rounded-2xl border border-[#d4a853]/30 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">{t3(locale, 'Neue Kampagne erstellen', 'إنشاء حملة جديدة')}</h3>
-          <CampaignEditor locale={locale} onSaved={() => { setCreating(false); qc.invalidateQueries({ queryKey: ['admin-campaigns'] }) }} onCancel={() => setCreating(false)} />
+          <CampaignEditor
+            locale={locale}
+            prefill={pendingPrefill}
+            onSaved={() => { setCreating(false); setPendingPrefill(null); qc.invalidateQueries({ queryKey: ['admin-campaigns'] }) }}
+            onCancel={() => { setCreating(false); setPendingPrefill(null) }}
+          />
         </div>
       )}
     </div>
@@ -169,11 +276,15 @@ export default function CampaignsPage() {
 }
 
 /* ── Campaign Editor (Create + Edit) ── */
-function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
+function CampaignEditor({ campaign, locale, onSaved, onCancel, prefill }: {
   campaign?: any; locale: string; onSaved: () => void; onCancel?: () => void
+  // Optional prefill payload from AI Marketing Studio. Only applied on
+  // initial mount for NEW campaigns (isNew === true). Ignored for edits.
+  prefill?: Record<string, any> | null
 }) {
   const isNew = !campaign
-  const [form, setForm] = useState<Record<string, any>>(campaign ?? {
+  // Default state for a new campaign — unchanged.
+  const defaultNew = {
     name: '', type: 'sale', template: 'custom', status: 'draft',
     startAt: '', endAt: '',
     heroBannerEnabled: true, heroTitleDe: '', heroTitleEn: '', heroTitleAr: '',
@@ -186,7 +297,12 @@ function CampaignEditor({ campaign, locale, onSaved, onCancel }: {
     popupEnabled: false, popupTrigger: 'delay_5s', popupOncePerVisitor: true,
     popupImageUrl: '', popupTextDe: '', popupTextEn: '', popupTextAr: '', popupCouponCode: '',
     saleBadgeEnabled: true, saleBadgeColor: 'red',
-  })
+  } as Record<string, any>
+  // Merge order: defaults < prefill. Prefill is only applied for new campaigns;
+  // edits use the original campaign object untouched.
+  const [form, setForm] = useState<Record<string, any>>(
+    campaign ?? (prefill ? { ...defaultNew, ...prefill } : defaultNew),
+  )
 
   const updateForm = (key: string, value: any) => setForm((f) => ({ ...f, [key]: value }))
 

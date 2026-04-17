@@ -13,6 +13,12 @@ import { PrismaService } from '../../prisma/prisma.service'
 
 const CUSTOMER_SYSTEM_PROMPT = `Du bist ein professioneller Modeberater für Malak Bekleidung, einen Online-Modeshop in Deutschland.
 
+MARKENNAME (wichtig):
+- Auf Deutsch/Englisch/Latin-Sprachen: "Malak Bekleidung"
+- Auf Arabisch lautet der Name exakt: ملبوسات ملك
+- "ملبوسات ملك" ist ein fester Eigenname, KEINE wörtliche Übersetzung von "Bekleidung". Nicht Wort-für-Wort ins Arabische übersetzen.
+- Standard: Nenne den Markennamen nur wenn der Kunde explizit danach fragt. Die meisten Antworten brauchen den Shopnamen nicht.
+
 VERHALTEN:
 - Du bist wie ein freundlicher Verkäufer in einem Geschäft. Stelle Rückfragen bevor du Produkte empfiehlst.
 - Wenn der Kunde allgemein fragt (z.B. "habt ihr Hosen?"), frage zuerst: Für wen? (Herren/Damen/Kinder) Welche Größe? Welche Farbe bevorzugt?
@@ -447,13 +453,25 @@ WICHTIG: Antworte NUR mit einem gültigen JSON-Objekt. Kein Markdown, kein Code-
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.OK)
   async generateMarketingText(
-    @Body() body: { occasion: string; target?: string; discount?: string },
+    @Body() body: {
+      occasion: string
+      // v2 params — all optional for backwards compatibility
+      format?: 'hero' | 'popup' | 'bar' | 'newsletter' | 'social'
+      target?: string
+      tone?: 'elegant' | 'playful' | 'urgent' | 'luxury' | 'seasonal'
+      discount?: string
+      validUntil?: string
+      languages?: Array<'de' | 'en' | 'ar'>
+      variants?: number
+    },
     @Req() req: any,
   ) {
     if (!body.occasion) throw new BadRequestException('Occasion required')
     if (!(await this.ai.isEnabled('marketing_text'))) throw new ForbiddenException('Marketing AI is disabled')
 
-    const prompt = `Generiere einen Marketing-Text für Malak Bekleidung.
+    // ── Legacy path: no `format` → preserve old endpoint behavior exactly ──
+    if (!body.format) {
+      const prompt = `Generiere einen Marketing-Text für Malak Bekleidung.
 
 Anlass: ${body.occasion}
 ${body.target ? `Zielgruppe: ${body.target}` : ''}
@@ -471,17 +489,141 @@ BETREFF_AR: [...]
 BODY_DE: [...]
 BODY_AR: [...]`
 
+      const response = await this.ai.adminChat([
+        { role: 'system', content: 'Du bist ein E-Mail-Marketing-Experte für einen Premium-Modeshop.' },
+        { role: 'user', content: prompt },
+      ], 600, req.user?.id, 'de')
+
+      const text = response.content
+      return {
+        subjectDe: text.match(/BETREFF_DE:\s*(.*?)(?=BETREFF_AR:|$)/s)?.[1]?.trim() ?? '',
+        subjectAr: text.match(/BETREFF_AR:\s*(.*?)(?=BODY_DE:|$)/s)?.[1]?.trim() ?? '',
+        bodyDe: text.match(/BODY_DE:\s*(.*?)(?=BODY_AR:|$)/s)?.[1]?.trim() ?? '',
+        bodyAr: text.match(/BODY_AR:\s*(.*?)$/s)?.[1]?.trim() ?? '',
+        raw: text,
+        provider: response.provider,
+      }
+    }
+
+    // ── v2 path: structured marketing studio ───────────────────────────
+    const format = body.format
+    const languages = (body.languages && body.languages.length > 0 ? body.languages : ['de', 'en', 'ar']) as Array<'de' | 'en' | 'ar'>
+    const variantCount = Math.min(Math.max(body.variants ?? 3, 1), 3)
+    const tone = body.tone ?? 'elegant'
+
+    const LANG_NAME: Record<'de' | 'en' | 'ar', string> = {
+      de: 'German',
+      en: 'English',
+      ar: 'Arabic',
+    }
+
+    // Per-format field schema — tells AI exactly which labels to emit AND
+    // gives the parser what to look for. Char limits are hints; AI treats
+    // them as soft targets.
+    const FORMAT_SCHEMA: Record<string, Array<{ key: string; label: string; maxChars?: number }>> = {
+      hero: [
+        { key: 'headline', label: 'HEADLINE', maxChars: 60 },
+        { key: 'subtitle', label: 'SUBTITLE', maxChars: 120 },
+        { key: 'cta', label: 'CTA', maxChars: 25 },
+      ],
+      popup: [
+        { key: 'headline', label: 'HEADLINE', maxChars: 50 },
+        { key: 'description', label: 'DESCRIPTION', maxChars: 150 },
+        { key: 'cta', label: 'CTA', maxChars: 25 },
+      ],
+      bar: [
+        { key: 'text', label: 'TEXT', maxChars: 80 },
+      ],
+      newsletter: [
+        { key: 'subject', label: 'SUBJECT', maxChars: 70 },
+        { key: 'preheader', label: 'PREHEADER', maxChars: 100 },
+        { key: 'body', label: 'BODY', maxChars: 400 },
+      ],
+      social: [
+        { key: 'caption', label: 'CAPTION', maxChars: 300 },
+        { key: 'hashtags', label: 'HASHTAGS', maxChars: 150 },
+      ],
+    }
+
+    const schema = FORMAT_SCHEMA[format]
+    if (!schema) throw new BadRequestException(`Invalid format: ${format}`)
+
+    const fieldList = schema.map(f => `${f.label}${f.maxChars ? ` (max ${f.maxChars} chars)` : ''}`).join(', ')
+
+    const toneDescription: Record<string, string> = {
+      elegant: 'elegant, refined, premium — like a luxury boutique',
+      playful: 'playful, warm, friendly — with a smile',
+      urgent: 'urgent, action-driving — creates FOMO',
+      luxury: 'exclusive, aspirational, sophisticated',
+      seasonal: 'seasonal, atmospheric, evocative of the time of year',
+    }
+
+    const systemPrompt = `You are a senior copywriter for a premium fashion brand from Berlin. You produce concise, brand-consistent marketing copy in multiple languages. You ALWAYS follow the requested output format exactly.
+
+BRAND:
+- Name in German/English/Latin: "Malak Bekleidung"
+- Name in Arabic: ملبوسات ملك (fixed proper noun, never translated word-by-word)
+- Tone: premium but approachable, never tacky or salesy
+
+RULES:
+- No ALL-CAPS spam.
+- No clickbait ("YOU WON'T BELIEVE!").
+- No false urgency unless validUntil is provided.
+- Character limits are soft — stay close to them.
+- Match the customer's dialect in Arabic only if Arabic is requested (default: clear Modern Standard Arabic).`
+
+    const userPrompt = `Generate ${variantCount} marketing copy variant${variantCount > 1 ? 's' : ''} for the following context:
+
+Occasion: ${body.occasion}
+Format: ${format}
+Tone: ${toneDescription[tone] ?? toneDescription.elegant}
+${body.target ? `Target audience: ${body.target}` : ''}
+${body.discount ? `Discount: ${body.discount}` : ''}
+${body.validUntil ? `Valid until: ${body.validUntil}` : ''}
+
+Languages: ${languages.map(l => LANG_NAME[l]).join(', ')}
+
+Fields per language: ${fieldList}
+
+OUTPUT FORMAT (strict — use these exact labels; one label per line; value immediately after colon):
+${Array.from({ length: variantCount }, (_, i) => {
+  const v = i + 1
+  return languages.map(lang => {
+    const langLabel = lang.toUpperCase()
+    return schema.map(f => `VARIANT_${v}_${langLabel}_${f.label}: <text in ${LANG_NAME[lang]}>`).join('\n')
+  }).join('\n')
+}).join('\n')}`.trim()
+
     const response = await this.ai.adminChat([
-      { role: 'system', content: 'Du bist ein E-Mail-Marketing-Experte für einen Premium-Modeshop.' },
-      { role: 'user', content: prompt },
-    ], 600, req.user?.id, 'de')
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ], 1500, req.user?.id, 'de')
 
     const text = response.content
+
+    // Parse the flat label output into a structured shape:
+    // variants: [{ de: { headline, subtitle, cta }, en: {...}, ar: {...} }, ...]
+    const variants: Array<Record<string, Record<string, string>>> = []
+    for (let v = 1; v <= variantCount; v++) {
+      const variantObj: Record<string, Record<string, string>> = {}
+      for (const lang of languages) {
+        const langLabel = lang.toUpperCase()
+        const langObj: Record<string, string> = {}
+        for (const f of schema) {
+          const re = new RegExp(`VARIANT_${v}_${langLabel}_${f.label}:\\s*([\\s\\S]*?)(?=\\n*VARIANT_|$)`, 'i')
+          const m = text.match(re)
+          langObj[f.key] = (m?.[1] ?? '').trim()
+        }
+        variantObj[lang] = langObj
+      }
+      variants.push(variantObj)
+    }
+
     return {
-      subjectDe: text.match(/BETREFF_DE:\s*(.*?)(?=BETREFF_AR:|$)/s)?.[1]?.trim() ?? '',
-      subjectAr: text.match(/BETREFF_AR:\s*(.*?)(?=BODY_DE:|$)/s)?.[1]?.trim() ?? '',
-      bodyDe: text.match(/BODY_DE:\s*(.*?)(?=BODY_AR:|$)/s)?.[1]?.trim() ?? '',
-      bodyAr: text.match(/BODY_AR:\s*(.*?)$/s)?.[1]?.trim() ?? '',
+      format,
+      languages,
+      tone,
+      variants,
       raw: text,
       provider: response.provider,
     }
@@ -494,30 +636,188 @@ BODY_AR: [...]`
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.OK)
   async socialReply(
-    @Body() body: { customerMessage: string; platform: string; lang?: string },
+    @Body() body: {
+      customerMessage: string
+      platform: string
+      // 'auto' = AI detects customer message language and replies in same language.
+      // Explicit BCP-47 codes (de, en, ar, fr, tr, es, it, nl, ru, ...) work too.
+      lang?: 'auto' | string
+      tone?: 'friendly' | 'professional' | 'apologetic' | 'grateful'
+      variants?: number
+    },
     @Req() req: any,
   ) {
     if (!body.customerMessage) throw new BadRequestException('Customer message required')
     if (!(await this.ai.isEnabled('social_reply'))) throw new ForbiddenException('Social reply AI is disabled')
 
-    const lang = body.lang ?? 'de'
-    const prompt = `Ein Kunde hat auf ${body.platform} folgende Nachricht geschrieben:
+    const lang = body.lang ?? 'auto'
+    const tone = body.tone ?? 'friendly'
+    const variants = Math.min(Math.max(body.variants ?? 1, 1), 3)
+
+    // ── Fetch active shop categories so the AI can suggest the right
+    //    category link when the customer asks about a product type.
+    //    One query, lightweight: parents + children, translations only.
+    //    Silently falls back to empty list if the DB is slow/unavailable —
+    //    the reply still works, just without category links.
+    //
+    // IMPORTANT: for social media replies we MUST use the production domain.
+    // APP_URL may be http://localhost:3000 in dev — posting that as a reply
+    // would send real customers to dead links. Use SHOP_PUBLIC_URL (new,
+    // explicitly for public-facing links) and fall back to the hardcoded
+    // production domain. Never allow localhost here.
+    const rawUrl = process.env.SHOP_PUBLIC_URL ?? process.env.APP_URL ?? ''
+    const isLocal = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(rawUrl)
+    const appUrl = (isLocal || !rawUrl) ? 'https://malak-bekleidung.com' : rawUrl.replace(/\/$/, '')
+    let categoryContext = ''
+    try {
+      const parents = await this.prisma.category.findMany({
+        where: { isActive: true, parentId: null },
+        include: {
+          translations: true,
+          children: { where: { isActive: true }, include: { translations: true } },
+        },
+        orderBy: { sortOrder: 'asc' },
+      })
+
+      const nameFor = (translations: Array<{ language: string; name: string }>): { de: string; en?: string; ar?: string } => {
+        const de = translations.find(t => t.language === 'de')?.name
+        const en = translations.find(t => t.language === 'en')?.name
+        const ar = translations.find(t => t.language === 'ar')?.name
+        return { de: de ?? '', en, ar }
+      }
+
+      // Build a compact, ASCII-cheap reference the model can match against.
+      // Format per line:  SLUG | DE / EN / AR | URL
+      const lines: string[] = []
+      for (const p of parents) {
+        const pn = nameFor(p.translations as any)
+        const pUrl = `${appUrl}/de/products?department=${p.slug}`
+        lines.push(`- ${p.slug} | ${pn.de}${pn.en ? ' / ' + pn.en : ''}${pn.ar ? ' / ' + pn.ar : ''} → ${pUrl}`)
+        for (const c of (p.children as any[])) {
+          const cn = nameFor(c.translations)
+          const cUrl = `${appUrl}/de/products?department=${p.slug}&category=${c.slug}`
+          lines.push(`  - ${c.slug} | ${cn.de}${cn.en ? ' / ' + cn.en : ''}${cn.ar ? ' / ' + cn.ar : ''} → ${cUrl}`)
+        }
+      }
+      if (lines.length > 0) {
+        categoryContext = `\n\nSHOP CATEGORIES (use ONLY these exact URLs — never invent links):\n${lines.join('\n')}\n\nGeneral shop link: ${appUrl}/de/products`
+      }
+    } catch {
+      // ignore — reply still works without links
+    }
+
+    // Map common BCP-47 codes to full English language names for the AI prompt.
+    // For unknown codes we pass the code through — most LLMs understand ISO codes.
+    const LANG_NAMES: Record<string, string> = {
+      de: 'German', en: 'English', ar: 'Arabic', fr: 'French', es: 'Spanish',
+      it: 'Italian', tr: 'Turkish', nl: 'Dutch', pt: 'Portuguese', ru: 'Russian',
+      pl: 'Polish', ja: 'Japanese', zh: 'Chinese', ko: 'Korean',
+    }
+    const langName = lang === 'auto' ? null : (LANG_NAMES[lang.toLowerCase()] ?? lang)
+    const languageInstruction = lang === 'auto'
+      ? 'Detect the language of the customer message and write your reply in EXACTLY that same language. If the customer wrote in German, reply in German. If Arabic, reply in Arabic. If French, reply in French. Match their language precisely.'
+      : `Write your reply in ${langName}. Do NOT use any other language. Even if the customer wrote in a different language, your reply MUST be in ${langName}.`
+
+    const toneLabel: Record<string, string> = {
+      friendly: 'friendly and approachable',
+      professional: 'professional and formal',
+      apologetic: 'apologetic and understanding',
+      grateful: 'grateful and appreciative',
+    }
+
+    // System prompt — brand name baked in strongly, no negative examples
+    // (those can paradoxically prime the model to use them).
+    const systemPrompt = `You are a social media manager for a premium fashion shop from Berlin. You ALWAYS follow the response format exactly and you ALWAYS reply in the language requested by the user.
+
+BRAND:
+- The shop is called "Malak Bekleidung" in German, English, and all Latin-script languages.
+- In Arabic the shop's name is EXACTLY: ملبوسات ملك
+- "ملبوسات ملك" is a FIXED proper noun, not a translation of "Bekleidung". Do not translate word-by-word.
+- Default behavior: do NOT mention the brand name in replies unless the customer explicitly asks about the brand. Most social media replies are better without mentioning the shop name — just answer the customer.
+
+ARABIC DIALECT MATCHING:
+- If the customer writes in an Arabic dialect, reply in EXACTLY the same dialect. Do not default to Modern Standard Arabic (فصحى).
+- Dialect signals:
+  - "شو / هلأ / منيح / كتير" → Syrian / Levantine
+  - "ايش / وش / زين / كذا" → Gulf / Khaleeji
+  - "عايز / ازيك / ايه الاخبار / يلا" → Egyptian
+  - "واش / بزاف / كيداير" → Maghrebi (Moroccan/Algerian)
+  - "ماكو / شكو / زين" → Iraqi
+  - Formal/no dialect markers → Modern Standard Arabic
+- Stay in ONE dialect per reply. Do not mix.`
+
+    const userPrompt = `A customer wrote the following message on ${body.platform}:
 
 "${body.customerMessage}"
 
-Generiere eine professionelle, freundliche Antwort auf ${lang === 'ar' ? 'Arabisch' : 'Deutsch'}.
-Die Antwort soll:
-- Höflich und hilfreich sein
-- Zum Stil von Malak Bekleidung passen (Premium-Modeshop)
-- Kurz sein (1-3 Sätze, passend für Social Media)
-- Keine internen Informationen preisgeben`
+LANGUAGE REQUIREMENT (MANDATORY):
+${languageInstruction}
+${categoryContext}
+
+CATEGORY LINK RULE:
+- If the customer asks about a specific product type/category (e.g. "pyjamas", "suits", "dresses"),
+  include EXACTLY ONE matching category URL in the variant, integrated naturally (e.g. "hier findest du sie: URL" — not raw pasted).
+- Include a link in AT LEAST 2 of the 3 variants when the customer asks about a product type.
+  The third variant may be purely conversational without a link.
+- Pick the MOST SPECIFIC category that fits (subcategory beats parent). If the customer's group is
+  unclear (e.g. "Pyjamas" — could be men/women/kids), pick ONE best guess per variant or use
+  the general /products link.
+- If you are genuinely unsure which category fits → use the general shop link instead of guessing wrong.
+- If customer is NOT asking about a product (general praise, shipping question, complaint, returns),
+  do NOT include any link in any variant.
+- NEVER invent, shorten, truncate, or modify URLs. Use them EXACTLY as listed above, character-for-character.
+- NEVER use URLs that contain "localhost", "127.0.0.1", or any development/test domain.
+  All URLs must start with "https://malak-bekleidung.com" or the domain shown in the list above.
+- Maximum: 1 link per variant.
+
+TASK 1 — Sentiment analysis:
+Classify the customer message as exactly one of: "positive" | "neutral" | "negative" | "question"
+
+TASK 2 — Generate ${variants} different reply variant${variants > 1 ? 's' : ''}:
+Tone: ${toneLabel[tone]}.
+Each reply must:
+- Sound like a real person, not a corporate template
+- Be short (1–3 sentences, suitable for social media; slightly longer if a link is included)
+- NOT mention the brand name unless absolutely needed
+- Match the customer's dialect/register exactly (see ARABIC DIALECT MATCHING in system prompt)
+- Not reveal internal information
+- Not make concrete promises (prices, delivery dates) that cannot be kept
+
+OUTPUT FORMAT (strict — use these exact English labels, content in the target language):
+SENTIMENT: <positive|neutral|negative|question>
+VARIANTE_1: <reply in target language>
+${variants >= 2 ? 'VARIANTE_2: <reply in target language>' : ''}
+${variants >= 3 ? 'VARIANTE_3: <reply in target language>' : ''}`.trim()
 
     const response = await this.ai.adminChat([
-      { role: 'system', content: 'Du bist ein Social-Media-Manager für einen Premium-Modeshop. Deine Antworten sind professionell, freundlich und markenkonform.' },
-      { role: 'user', content: prompt },
-    ], 300, req.user?.id, lang)
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ], 600, req.user?.id, lang === 'auto' ? 'de' : lang)
 
-    return { reply: response.content, platform: body.platform, provider: response.provider }
+    const text = response.content
+    const sentimentMatch = text.match(/SENTIMENT:\s*(positive|neutral|negative|question)/i)
+    const sentiment = (sentimentMatch?.[1]?.toLowerCase() as 'positive' | 'neutral' | 'negative' | 'question' | undefined) ?? 'neutral'
+
+    const parsedVariants: string[] = []
+    for (let i = 1; i <= variants; i++) {
+      const m = text.match(new RegExp(`VARIANTE_${i}:\\s*([\\s\\S]*?)(?=\\nVARIANTE_|$)`, 'i'))
+      const v = m?.[1]?.trim()
+      if (v) parsedVariants.push(v)
+    }
+
+    // Fallback: if parser failed entirely, return whole text as single variant
+    // so old callers still get SOMETHING back.
+    const finalVariants = parsedVariants.length > 0 ? parsedVariants : [text.trim()]
+
+    return {
+      reply: finalVariants[0],
+      variants: finalVariants,
+      sentiment,
+      platform: body.platform,
+      tone,
+      lang,
+      provider: response.provider,
+    }
   }
 
   // ── Admin: Logs & Stats ─────────────────────────────────────

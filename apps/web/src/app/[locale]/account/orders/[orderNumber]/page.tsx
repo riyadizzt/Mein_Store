@@ -197,9 +197,11 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
       {order.shippingAddress && (
         <div className="border rounded-lg p-4 mb-6">
           <p className="text-sm font-medium text-muted-foreground mb-1">{t('shippingAddress')}</p>
-          <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
-          <p className="text-sm text-muted-foreground">{order.shippingAddress.street} {order.shippingAddress.houseNumber}</p>
-          <p className="text-sm text-muted-foreground">{order.shippingAddress.postalCode} {order.shippingAddress.city}, {order.shippingAddress.country}</p>
+          <div dir="ltr" className="text-start">
+            <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
+            <p className="text-sm text-muted-foreground">{order.shippingAddress.street} {order.shippingAddress.houseNumber}</p>
+            <p className="text-sm text-muted-foreground">{order.shippingAddress.postalCode} {order.shippingAddress.city}, {order.shippingAddress.country}</p>
+          </div>
         </div>
       )}
 

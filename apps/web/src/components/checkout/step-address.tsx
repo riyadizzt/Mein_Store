@@ -85,32 +85,72 @@ export function StepAddress() {
     setStep('shipping')
   }
 
-  const validate = (): boolean => {
+  // Normalize postal code per country — collapses whitespace, uppercases
+  // letters for NL, etc. Called before validation so "1073 kj " → "1073 KJ".
+  const normalizePostalCode = (plz: string, country: string): string => {
+    const trimmed = plz.trim().replace(/\s+/g, ' ')
+    if (country === 'NL') {
+      // NL: "1073 kj" / "1073KJ" / "1073 KJ " → "1073 KJ"
+      const m = trimmed.match(/^(\d{4})\s?([A-Za-z]{2})$/)
+      if (m) return `${m[1]} ${m[2].toUpperCase()}`
+    }
+    // DE/AT/CH/BE/FR/IT: just strip all whitespace (pure digits)
+    if (['DE', 'AT', 'CH', 'BE', 'FR', 'IT'].includes(country)) {
+      return trimmed.replace(/\s/g, '')
+    }
+    return trimmed
+  }
+
+  // Trim all text fields AND normalize postal code. Returns the cleaned form
+  // and writes it back to state so the user sees the corrections.
+  const cleanForm = (): CheckoutAddress => {
+    const cleaned: CheckoutAddress = {
+      ...form,
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      street: form.street.trim(),
+      houseNumber: form.houseNumber.trim(),
+      city: form.city.trim(),
+      postalCode: normalizePostalCode(form.postalCode, form.country),
+    }
+    // Only write back if something actually changed
+    if (JSON.stringify(cleaned) !== JSON.stringify(form)) {
+      setForm(cleaned)
+    }
+    return cleaned
+  }
+
+  const validate = (f: CheckoutAddress): boolean => {
     const e: Record<string, string> = {}
-    if (!form.firstName.trim()) e.firstName = tAuth('errors.required')
-    if (!form.lastName.trim()) e.lastName = tAuth('errors.required')
-    if (!form.street.trim()) e.street = tAuth('errors.required')
-    if (!form.houseNumber.trim()) e.houseNumber = tAuth('errors.required')
-    if (!form.city.trim()) e.city = tAuth('errors.required')
-    if (!form.postalCode.trim()) e.postalCode = tAuth('errors.required')
-    if (form.country === 'DE' && !/^\d{5}$/.test(form.postalCode)) e.postalCode = tErr('plzInvalid', { digits: '5' })
-    if (['AT', 'CH', 'BE', 'NL'].includes(form.country) && !/^\d{4}/.test(form.postalCode)) e.postalCode = tErr('plzInvalidGeneric')
+    if (!f.firstName) e.firstName = tAuth('errors.required')
+    if (!f.lastName) e.lastName = tAuth('errors.required')
+    if (!f.street) e.street = tAuth('errors.required')
+    if (!f.houseNumber) e.houseNumber = tAuth('errors.required')
+    if (!f.city) e.city = tAuth('errors.required')
+    if (!f.postalCode) e.postalCode = tAuth('errors.required')
+    if (f.country === 'DE' && !/^\d{5}$/.test(f.postalCode)) e.postalCode = tErr('plzInvalid', { digits: '5' })
+    if (['AT', 'CH', 'BE'].includes(f.country) && !/^\d{4}$/.test(f.postalCode)) e.postalCode = tErr('plzInvalidGeneric')
+    if (f.country === 'NL' && !/^\d{4}\s[A-Z]{2}$/.test(f.postalCode)) e.postalCode = tErr('plzInvalidGeneric')
     setErrors(e)
     return Object.keys(e).length === 0
   }
 
-  const proceedToShipping = () => {
-    setShippingAddress(form)
+  const proceedToShipping = (addr: CheckoutAddress = form) => {
+    setShippingAddress(addr)
     setSavedAddressId(null)
     if (billingSameAsShipping) setBillingAddress(null)
     setStep('shipping')
   }
 
   const handleContinue = async () => {
-    if (!validate()) return
+    // Step 0: Auto-clean (trim + normalize postal code) before any validation.
+    // This catches "1073 kj " → "1073 KJ" so users don't get hit with
+    // "Invalid postal code" for trailing spaces they can't even see.
+    const cleaned = cleanForm()
+    if (!validate(cleaned)) return
 
     // Step 1: Offline PLZ + field validation
-    const offline = validateAddressOffline(form)
+    const offline = validateAddressOffline(cleaned)
     if (!offline.valid && !bypassWarning) {
       let msg = offline.warnings.map(w => w.message[locale as 'de' | 'en' | 'ar'] ?? w.message.de).join('\n')
       if (offline.suggestion?.city) {
@@ -124,11 +164,11 @@ export function StepAddress() {
     setValidating(true)
     try {
       const { data } = await api.post('/address/validate', {
-        street: form.street,
-        houseNumber: form.houseNumber,
-        postalCode: form.postalCode,
-        city: form.city,
-        country: form.country,
+        street: cleaned.street,
+        houseNumber: cleaned.houseNumber,
+        postalCode: cleaned.postalCode,
+        city: cleaned.city,
+        country: cleaned.country,
       })
       setValidating(false)
 
@@ -146,10 +186,10 @@ export function StepAddress() {
       setValidating(false)
     }
 
-    // All checks passed → proceed
+    // All checks passed → proceed with CLEANED data
     setAddrWarning(null)
     setBypassWarning(false)
-    proceedToShipping()
+    proceedToShipping(cleaned)
   }
 
   const updateField = (field: keyof CheckoutAddress, value: string) => {

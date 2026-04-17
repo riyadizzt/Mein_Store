@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 
 interface FeedProduct {
   id: string
+  itemGroupId: string | null
   title: string
   description: string
   link: string
@@ -117,6 +118,7 @@ export class FeedsService {
 
           products.push({
             id: `${p.id}_${v.id}`,
+            itemGroupId: p.id,
             title: translation.name + (v.color ? ` - ${v.color}` : '') + (v.size ? ` ${v.size}` : ''),
             description: translation.description ?? translation.name,
             link: `${appUrl}/${lang}/products/${slug}`,
@@ -137,6 +139,7 @@ export class FeedsService {
       } else {
         products.push({
           id: p.id,
+          itemGroupId: null,
           title: translation.name,
           description: translation.description ?? translation.name,
           link: `${appUrl}/${lang}/products/${slug}`,
@@ -177,6 +180,7 @@ export class FeedsService {
     for (const p of products) {
       xml += `<item>\n`
       xml += `  <g:id>${this.escapeXml(p.id)}</g:id>\n`
+      if (p.itemGroupId) xml += `  <g:item_group_id>${this.escapeXml(p.itemGroupId)}</g:item_group_id>\n`
       xml += `  <g:title>${this.escapeXml(p.title)}</g:title>\n`
       xml += `  <g:description>${this.escapeXml(p.description)}</g:description>\n`
       xml += `  <g:link>${p.link}?${utmParams}</g:link>\n`
@@ -239,6 +243,7 @@ export class FeedsService {
     for (const p of products) {
       xml += `<item>\n`
       xml += `  <g:id>${this.escapeXml(p.sku)}</g:id>\n`
+      if (p.itemGroupId) xml += `  <g:item_group_id>${this.escapeXml(p.itemGroupId)}</g:item_group_id>\n`
       xml += `  <title>${this.escapeXml(p.title)}</title>\n`
       xml += `  <description>${this.escapeXml(p.description)}</description>\n`
       xml += `  <link>${p.link}?${utmParams}</link>\n`

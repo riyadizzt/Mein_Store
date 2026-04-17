@@ -16,6 +16,8 @@ interface ProductOGProps {
 export function generateProductOGTags(product: ProductOGProps['product'], locale: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const url = `${appUrl}/${locale}/products/${product.slug}`
+  const fallbackImage = `${appUrl}/logo.png`
+  const imageUrl = product.image || fallbackImage
 
   return {
     title: product.name,
@@ -25,7 +27,7 @@ export function generateProductOGTags(product: ProductOGProps['product'], locale
       description: product.description ?? product.name,
       url,
       type: 'website',
-      images: product.image ? [{ url: product.image, width: 800, height: 800, alt: product.name }] : [],
+      images: [{ url: imageUrl, width: 800, height: 800, alt: product.name }],
       siteName: 'Malak Bekleidung',
       locale: locale === 'ar' ? 'ar_EG' : locale === 'en' ? 'en_US' : 'de_DE',
     },
@@ -33,7 +35,7 @@ export function generateProductOGTags(product: ProductOGProps['product'], locale
       card: 'summary_large_image',
       title: product.name,
       description: product.description ?? product.name,
-      images: product.image ? [product.image] : [],
+      images: [imageUrl],
     },
     other: {
       'product:price:amount': String(product.salePrice ?? product.price),

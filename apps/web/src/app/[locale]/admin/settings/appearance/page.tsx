@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { toast } from '@/store/toast-store'
 
 const LANGS = ['de', 'en', 'ar'] as const
 
@@ -37,8 +38,6 @@ export default function AppearancePage() {
     setForm({
       brandName: p?.brandName ?? s?.companyName ?? 'MALAK',
       logoUrl: s?.logoUrl ?? '',
-      faviconUrl: '',
-      accentColor: '',
       heroBannerImage: p?.heroBanner?.image ?? '',
       heroBannerTitle_de: p?.heroBanner?.title?.de ?? '',
       heroBannerTitle_en: p?.heroBanner?.title?.en ?? '',
@@ -63,7 +62,15 @@ export default function AppearancePage() {
       queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
       queryClient.invalidateQueries({ queryKey: ['shop-settings-public'] })
       setSaved(true)
+      toast.success(t3('Erscheinung gespeichert', 'تم حفظ المظهر'))
       setTimeout(() => setSaved(false), 3000)
+    },
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        t3('Speichern fehlgeschlagen', 'فشل الحفظ')
+      toast.error(typeof msg === 'string' ? msg : t3('Speichern fehlgeschlagen', 'فشل الحفظ'))
     },
   })
 
@@ -198,7 +205,17 @@ export default function AppearancePage() {
             </div>
             <div>
               <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('Logo URL', 'رابط الشعار')}</label>
-              <Input value={form.logoUrl ?? ''} onChange={(e) => u('logoUrl', e.target.value)} placeholder="https://..." />
+              <Input value={form.logoUrl ?? ''} onChange={(e) => u('logoUrl', e.target.value)} placeholder="https://..." dir="ltr" />
+              {form.logoUrl && (
+                <div className="mt-2 inline-flex items-center justify-center h-16 w-16 rounded-lg overflow-hidden bg-muted border">
+                  <img
+                    src={form.logoUrl}
+                    alt="Logo preview"
+                    className="max-h-full max-w-full object-contain"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -245,7 +262,7 @@ export default function AppearancePage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{t3('CTA-Link', 'رابط الزر')}</label>
-                <Input value={form.heroBannerCtaLink ?? ''} onChange={(e) => u('heroBannerCtaLink', e.target.value)} placeholder="/products" />
+                <Input value={form.heroBannerCtaLink ?? ''} onChange={(e) => u('heroBannerCtaLink', e.target.value)} placeholder="/products" dir="ltr" />
               </div>
             </div>
           </div>

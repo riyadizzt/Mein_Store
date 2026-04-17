@@ -821,187 +821,187 @@
    Schritt: Produkt-Edit → Bilder-Drop-Zone
    Erwartet: Upload zu R2/Cloudinary, Vorschau sichtbar
 
-⬜ **[Products] Bilder sortieren**
+✅ **[Products] Bilder sortieren**
    Schritt: Drag & Drop Bilder
    Erwartet: Reihenfolge gespeichert
 
-⬜ **[Products] Varianten erstellen (Größe × Farbe)**
+✅ **[Products] Varianten erstellen (Größe × Farbe)**
    Schritt: Edit → Varianten-Matrix generieren
    Erwartet: Alle Kombinationen erstellt mit eigenen SKUs
 
-⬜ **[Products] Übersetzungen DE/EN/AR**
+✅ **[Products] Übersetzungen DE/EN/AR**
    Schritt: Sprach-Tabs durchgehen
    Erwartet: Alle 3 Sprachen speicherbar
 
-⬜ **[Products] Kanal-Zuordnung togglen**
+✅ **[Products] Kanal-Zuordnung togglen**
    Schritt: Toggle Facebook AN
    Erwartet: Produkt erscheint nur noch im Facebook-Feed
 
-⬜ **[Products] AI-Beschreibung generieren**
+✅ **[Products] AI-Beschreibung generieren**
    Schritt: "KI-Beschreibung" Button → Bild wird analysiert
    Erwartet: 3-sprachige Beschreibung + SEO Meta generiert
 
-⬜ **[Products] AI-Übernahme funktioniert**
+✅ **[Products] AI-Übernahme funktioniert**
    Schritt: Generierte Beschreibung → "Übernehmen"
    Erwartet: Felder werden ausgefüllt, speicherbar
 
-⬜ **[Products] Soft Delete funktioniert**
+✅ **[Products] Soft Delete funktioniert**
    Schritt: "Löschen" → Bestätigen
    Erwartet: Status "deleted", Produkt nicht mehr im Shop
 
-⬜ **[Products] Restore funktioniert**
+✅ **[Products] Restore funktioniert**
    Schritt: Filter "Gelöscht" → "Wiederherstellen"
    Erwartet: Produkt wieder aktiv
 
-⬜ **[Products] excludeFromReturns-Toggle**
+✅ **[Products] excludeFromReturns-Toggle**
    Schritt: Toggle AN, speichern
    Erwartet: Produkt erscheint nicht im Retoure-Modal
 
 ## 2.5 Kategorien
 
-⬜ **[Categories] Baum-Struktur lädt**
+✅ **[Categories] Baum-Struktur lädt**
    Schritt: /admin/categories
    Erwartet: Hierarchische Struktur angezeigt
 
-⬜ **[Categories] Neue Kategorie erstellen**
+✅ **[Categories] Neue Kategorie erstellen**
    Schritt: "Neu" → Name DE/EN/AR → Bild → Speichern
    Erwartet: Kategorie in DB und Baum
 
-⬜ **[Categories] Sortierung mit Up/Down-Pfeilen**
+✅ **[Categories] Sortierung mit Up/Down-Pfeilen**
    Schritt: Pfeil-Button klicken
    Erwartet: Reihenfolge gespeichert
 
-⬜ **[Categories] Suche nach Kategorie**
+✅ **[Categories] Suche nach Kategorie**
    Schritt: Suchfeld "Schuhe"
    Erwartet: Treffer werden hervorgehoben
 
 ## 2.6 Inventar
 
-⬜ **[Inventory] Flat-View lädt**
+✅ **[Inventory] Flat-View lädt**
    Schritt: /admin/inventory
    Erwartet: Tabelle mit allen Varianten und Beständen
 
-⬜ **[Inventory] Grouped-View mit Matrix**
+✅ **[Inventory] Grouped-View mit Matrix**
    Schritt: "Gruppiert" Toggle
    Erwartet: Produkte mit Farb×Größen-Matrix, Lager-Spalten
 
-⬜ **[Inventory] Lager-Filter**
+✅ **[Inventory] Lager-Filter**
    Schritt: Filter "Hamburg"
    Erwartet: Nur Hamburg-Bestände
 
-⬜ **[Inventory] Standort-Filter (Box-Badges)**
+✅ **[Inventory] Standort-Filter (Box-Badges)**
    Schritt: Filter nach BOX-2026-W-001
    Erwartet: Nur Bestände dieser Box
 
-⬜ **[Inventory] Transfer zwischen Lagern**
+✅ **[Inventory] Transfer zwischen Lagern**
    Schritt: Variante → Transfer → Menge → Ziel-Lager
    Erwartet: Bestand korrekt verschoben, Audit-Log-Eintrag
 
-⬜ **[Inventory] Scanner öffnet (Kamera)**
+✅ **[Inventory] Scanner öffnet (Kamera)**
    Schritt: Scanner-Icon klicken
    Erwartet: Kamera-Zugriff, Scanning funktioniert
 
-⬜ **[Inventory] Scanner öffnet (USB-Handgerät)**
+✅ **[Inventory] Scanner öffnet (USB-Handgerät)**
    Schritt: USB-Scanner verwenden
    Erwartet: Barcode wird erkannt
 
-⬜ **[Inventory] Bestandswarnung ≤3**
+✅ **[Inventory] Bestandswarnung ≤3**
    Schritt: Scanner-Output bei Variante mit 2 Stück
    Erwartet: Rote Warnung bleibt bis manuell geschlossen
 
-⬜ **[Inventory] Buchungs-Vorprüfung**
+✅ **[Inventory] Buchungs-Vorprüfung**
    Schritt: Scanner-Output mit nicht-verfügbarem Artikel
    Erwartet: Roter Artikel markiert, Buchung blockiert
 
-⬜ **[Inventory] Wareneingang mit Farbpicker**
+✅ **[Inventory] Wareneingang mit Farbpicker**
    Schritt: /admin/suppliers/{id}/intake
    Erwartet: Farbpicker + Größenpresets funktionieren
 
-⬜ **[Inventory] DeepL-Übersetzung im Wareneingang**
+✅ **[Inventory] DeepL-Übersetzung im Wareneingang**
    Schritt: Produktname AR eingeben
    Erwartet: Auto-Übersetzung nach DE
 
-⬜ **[Inventory] CSV-Import**
+✅ **[Inventory] CSV-Import**
    Schritt: CSV hochladen
    Erwartet: Bestände korrekt importiert
 
-⬜ **[Inventory] Return-Barcode-Scan**
+✅ **[Inventory] Return-Barcode-Scan**
    Schritt: Return-Label scannen
    Erwartet: Retoure als "empfangen" markiert
 
-⬜ **[Inventory] Negative Mengen blockiert**
+✅ **[Inventory] Negative Mengen blockiert**
    Schritt: Intake mit qty=-5
    Erwartet: BadRequest, kein Bestand geändert
 
-⬜ **[Inventory] Max-Limit 10.000 pro Buchung**
+✅ **[Inventory] Max-Limit 10.000 pro Buchung**
    Schritt: Intake mit qty=20000
    Erwartet: BadRequest
 
-⬜ **[Inventory] Race-Condition abgesichert**
+✅ **[Inventory] Race-Condition abgesichert**
    Schritt: 2 parallele Output-Requests auf letzten Bestand
    Erwartet: Nur einer succeeded, andere BadRequest
 
 ## 2.7 Kunden
 
-⬜ **[Customers] Liste lädt**
+✅ **[Customers] Liste lädt**
    Schritt: /admin/customers
    Erwartet: Tabelle mit allen Kunden
 
-⬜ **[Customers] Suche nach Name/E-Mail**
+✅ **[Customers] Suche nach Name/E-Mail**
    Schritt: E-Mail eingeben
    Erwartet: Kunde gefunden
 
-⬜ **[Customers] Detail-Ansicht**
+✅ **[Customers] Detail-Ansicht**
    Schritt: Kunde anklicken
    Erwartet: Profil, Bestellungen, Adressen, Aktivitätslog
 
-⬜ **[Customers] DSGVO-Export triggern**
+✅ **[Customers] DSGVO-Export triggern**
    Schritt: "Daten exportieren"
    Erwartet: ZIP-Datei in Queue, E-Mail nach Generierung
 
-⬜ **[Customers] DSGVO-Löschung**
+✅ **[Customers] DSGVO-Löschung**
    Schritt: "Account löschen"
    Erwartet: Anonymisierung, GoBD-Daten behalten
 
 ## 2.8 Retouren
 
-⬜ **[Returns] Liste mit KPIs**
+✅ **[Returns] Liste mit KPIs**
    Schritt: /admin/returns
    Erwartet: KPI-Karten + Retouren-Tabelle
 
-⬜ **[Returns] Detail-Ansicht**
+✅ **[Returns] Detail-Ansicht**
    Schritt: Retoure öffnen
    Erwartet: Artikel, Grund, Status, Timeline
 
-⬜ **[Returns] Approve mit "Shop zahlt"**
+✅ **[Returns] Approve mit "Shop zahlt"**
    Schritt: "Genehmigen" → "Label senden"
    Erwartet: DHL-Label erstellt + als E-Mail-Anhang versendet
 
-⬜ **[Returns] Approve mit "Kunde zahlt"**
+✅ **[Returns] Approve mit "Kunde zahlt"**
    Schritt: "Genehmigen" → "Kunde zahlt Versand"
    Erwartet: Status in_transit, Kunde sieht Shop-Adresse
 
-⬜ **[Returns] Reject funktioniert**
+✅ **[Returns] Reject funktioniert**
    Schritt: "Ablehnen" → Grund → Bestätigen
    Erwartet: Status rejected, E-Mail an Kunde
 
-⬜ **[Returns] Inspect mit Item-Liste**
+✅ **[Returns] Inspect mit Item-Liste**
    Schritt: "Inspizieren" → Items prüfen
    Erwartet: Pro Item OK/Defekt markierbar
 
-⬜ **[Returns] refundAmount korrekt berechnet**
+✅ **[Returns] refundAmount korrekt berechnet**
    Schritt: Teilretoure 2 von 6
    Erwartet: refundAmount = 2× Item-Preis (nicht 6×)
 
-⬜ **[Returns] Refund verarbeiten**
+✅ **[Returns] Refund verarbeiten**
    Schritt: "Erstatten" → Betrag bestätigen
    Erwartet: Stripe/PayPal Refund, Gutschrift PDF erstellt
 
-⬜ **[Returns] Gutschrift PDF korrekt**
+✅ **[Returns] Gutschrift PDF korrekt**
    Schritt: Gutschrift herunterladen
    Erwartet: Artikel, Mengen, Preise, Bankdaten
 
-⬜ **[Returns] Timeline mit 5 Schritten**
+✅ **[Returns] Timeline mit 5 Schritten**
    Schritt: Retoure öffnen
    Erwartet: 5 Dots (Requested → Approved → In Transit → Received → Refunded)
 
@@ -1011,325 +1011,325 @@
 
 ## 2.9 Finanzen
 
-⬜ **[Finance] Dashboard lädt mit 7 Tabs**
+✅ **[Finance] Dashboard lädt mit 7 Tabs**
    Schritt: /admin/finance
    Erwartet: Tabs Tag/Monat/MwSt/Bestseller/Kunden/Gewinn/Export
 
-⬜ **[Finance] Tagesbericht mit Erstattungen**
+✅ **[Finance] Tagesbericht mit Erstattungen**
    Schritt: Tag mit Refund öffnen
    Erwartet: Umsatz minus Refunds korrekt berechnet
 
-⬜ **[Finance] Monatsbericht**
+✅ **[Finance] Monatsbericht**
    Schritt: Monat wählen
    Erwartet: Tagesaufschlüsselung, Gesamt
 
-⬜ **[Finance] MwSt-Bericht**
+✅ **[Finance] MwSt-Bericht**
    Schritt: MwSt-Tab
    Erwartet: 3 KPI-Karten (Brutto, MwSt, Netto)
 
-⬜ **[Finance] Kanal-Breakdown korrekt mit Refunds**
+✅ **[Finance] Kanal-Breakdown korrekt mit Refunds**
    Schritt: Kanal-Tab
    Erwartet: Refunds dem Original-Kanal zugeordnet
 
-⬜ **[Finance] CSV-Export funktioniert**
+✅ **[Finance] CSV-Export funktioniert**
    Schritt: "Exportieren"
    Erwartet: CSV-Download mit allen Zeilen
 
 ## 2.10 Rechnungen
 
-⬜ **[Invoices] Liste lädt**
+✅ **[Invoices] Liste lädt**
    Schritt: /admin/invoices
    Erwartet: Alle Rechnungen mit Nummer RE-2026-NNNNN
 
-⬜ **[Invoices] Filter nach Datum**
+✅ **[Invoices] Filter nach Datum**
    Schritt: Datumsbereich setzen
    Erwartet: Nur Rechnungen in Zeitraum
 
-⬜ **[Invoices] PDF-Download**
+✅ **[Invoices] PDF-Download**
    Schritt: Rechnung klicken
    Erwartet: PDF mit Gold-Akzent, Firmendaten, IBAN
 
-⬜ **[Invoices] CSV-Export**
+✅ **[Invoices] CSV-Export**
    Schritt: "CSV exportieren"
    Erwartet: Alle Rechnungen als CSV
 
-⬜ **[Invoices] Gutschriften fortlaufend**
+✅ **[Invoices] Gutschriften fortlaufend**
    Schritt: Gutschrift erstellen
    Erwartet: GS-2026-NNNNN, fortlaufend, ohne Lücken
 
-⬜ **[Invoices] GoBD: Rechnung kann nicht gelöscht werden**
+✅ **[Invoices] GoBD: Rechnung kann nicht gelöscht werden**
    Schritt: SQL DELETE versuchen
    Erwartet: PostgreSQL-Trigger blockiert
 
-⬜ **[Invoices] GoBD: Rechnung kann nicht geändert werden**
+✅ **[Invoices] GoBD: Rechnung kann nicht geändert werden**
    Schritt: SQL UPDATE versuchen
    Erwartet: Trigger blockiert
 
-⬜ **[Invoices] Rechnungsnummer ohne Lücken**
+✅ **[Invoices] Rechnungsnummer ohne Lücken**
    Schritt: 10 Rechnungen erstellen
    Erwartet: Fortlaufend, z.B. 1,2,3,...,10
 
 ## 2.11 Marketing
 
-⬜ **[Marketing] Coupon erstellen**
+✅ **[Marketing] Coupon erstellen**
    Schritt: /admin/marketing/coupons → "Neu"
    Erwartet: Code, Rabatt-Typ, Gültigkeit speicherbar
 
-⬜ **[Marketing] Coupon-Validierung (minOrder)**
+✅ **[Marketing] Coupon-Validierung (minOrder)**
    Schritt: Coupon mit Min-Order testen
    Erwartet: Coupon nur bei Erfüllung akzeptiert
 
-⬜ **[Marketing] Coupon-Abuse-Schutz (maxUses)**
+✅ **[Marketing] Coupon-Abuse-Schutz (maxUses)**
    Schritt: Coupon 5× nutzen, 6. Versuch
    Erwartet: "Maximal 5× nutzbar"
 
-⬜ **[Marketing] Stacking-Regeln**
+✅ **[Marketing] Stacking-Regeln**
    Schritt: 2 Coupons gleichzeitig versuchen
    Erwartet: Nur einer aktiv (oder Stacking laut Regel)
 
-⬜ **[Marketing] Gift Card erstellen (falls vorhanden)**
+✅ **[Marketing] Gift Card erstellen (falls vorhanden)**
    Schritt: Gift-Card-Modul
    Erwartet: Code + Guthaben erstellbar
 
-⬜ **[Marketing] Promotion (seasonal) läuft**
+✅ **[Marketing] Promotion (seasonal) läuft**
    Schritt: Seasonal-Promo erstellen + Aktivieren
    Erwartet: Auto-Rabatt im Shop sichtbar
 
-⬜ **[Marketing] Kampagne mit Hero erstellen**
+✅ **[Marketing] Kampagne mit Hero erstellen**
    Schritt: /admin/campaigns → "Neu" → Template → Felder
    Erwartet: Kampagne aktiv, Hero-Banner im Shop
 
-⬜ **[Marketing] Kampagne mit Popup**
+✅ **[Marketing] Kampagne mit Popup**
    Schritt: Kampagne mit Popup-Delay 3s
    Erwartet: Popup im Shop nach 3s
 
-⬜ **[Marketing] Kampagne mit Announcement Bar**
+✅ **[Marketing] Kampagne mit Announcement Bar**
    Schritt: Bar-Text + Farben setzen
    Erwartet: Bar oben im Shop
 
-⬜ **[Marketing] Kampagne Stats sichtbar**
+✅ **[Marketing] Kampagne Stats sichtbar**
    Schritt: Kampagnen-Detail
    Erwartet: Impressions, Klicks, Coupon-Nutzung
 
 ## 2.12 Lieferanten
 
-⬜ **[Suppliers] Liste lädt**
+✅ **[Suppliers] Liste lädt**
    Schritt: /admin/suppliers
    Erwartet: Alle Lieferanten
 
-⬜ **[Suppliers] Neuer Lieferant**
+✅ **[Suppliers] Neuer Lieferant**
    Schritt: "Neu" → Felder → Speichern
    Erwartet: Lieferant in DB
 
-⬜ **[Suppliers] Wareneingang buchen**
+✅ **[Suppliers] Wareneingang buchen**
    Schritt: Lieferant → "Wareneingang"
    Erwartet: Formular mit Produkten + Mengen + Farbpicker
 
-⬜ **[Suppliers] Zahlungen erfassen**
+✅ **[Suppliers] Zahlungen erfassen**
    Schritt: Lieferant → "Zahlungen" → Neu
    Erwartet: Zahlung gespeichert, Saldo aktualisiert
 
-⬜ **[Suppliers] Wareneingang-Storno**
+✅ **[Suppliers] Wareneingang-Storno**
    Schritt: Bestehenden Wareneingang stornieren
    Erwartet: Bestand reduziert, Status cancelled
 
 ## 2.13 Mitarbeiter
 
-⬜ **[Staff] Liste lädt**
+✅ **[Staff] Liste lädt**
    Schritt: /admin/staff
    Erwartet: Alle Mitarbeiter mit Rollen
 
-⬜ **[Staff] Mitarbeiter einladen**
+✅ **[Staff] Mitarbeiter einladen**
    Schritt: "Einladen" → E-Mail → Rolle
    Erwartet: Einladungs-E-Mail versendet
 
-⬜ **[Staff] Rollen-Preset anwenden**
+✅ **[Staff] Rollen-Preset anwenden**
    Schritt: Rolle "Warehouse" zuweisen
    Erwartet: Alle zugehörigen Permissions aktiv
 
-⬜ **[Staff] Custom Permissions setzen**
+✅ **[Staff] Custom Permissions setzen**
    Schritt: Einzelne Permissions togglen
    Erwartet: Permissions korrekt gespeichert
 
-⬜ **[Staff] scanner.view_prices Permission**
+✅ **[Staff] scanner.view_prices Permission**
    Schritt: Mitarbeiter ohne diese Permission → Scanner öffnen
    Erwartet: Preise ausgeblendet
 
-⬜ **[Staff] Super-Admin hat immer alle Rechte**
+✅ **[Staff] Super-Admin hat immer alle Rechte**
    Schritt: Super-Admin-Login
    Erwartet: Alle Module zugänglich
 
-⬜ **[Staff] Mitarbeiter deaktivieren**
+✅ **[Staff] Mitarbeiter deaktivieren**
    Schritt: Mitarbeiter → "Deaktivieren"
    Erwartet: Login nicht mehr möglich
 
 ## 2.14 Einstellungen
 
-⬜ **[Settings] 5 Tabs sichtbar**
+✅ **[Settings] 5 Tabs sichtbar**
    Schritt: /admin/settings
    Erwartet: Firma, Zahlungen, Marketing, Benachrichtigungen, E-Mail
 
-⬜ **[Settings] Firmendaten speichern**
+✅ **[Settings] Firmendaten speichern**
    Schritt: Firmendaten editieren → Speichern
    Erwartet: In ShopSettings gespeichert, in Rechnung sichtbar
 
-⬜ **[Settings] Zahlung Stripe AN/AUS**
+✅ **[Settings] Zahlung Stripe AN/AUS**
    Schritt: Stripe-Toggle AUS
    Erwartet: Stripe im Checkout nicht mehr sichtbar
 
-⬜ **[Settings] Homepage-Design auswählen**
+✅ **[Settings] Homepage-Design auswählen**
    Schritt: /admin/settings → Homepage A/B/C
    Erwartet: Auswahl gespeichert, im Shop sichtbar
 
-⬜ **[Settings] DHL-Konfiguration**
+✅ **[Settings] DHL-Konfiguration**
    Schritt: DHL-Status prüfen
    Erwartet: EKP-Nummer + Status angezeigt
 
-⬜ **[Settings] Tracking PostHog konfigurieren**
+✅ **[Settings] Tracking PostHog konfigurieren**
    Schritt: /admin/settings/tracking → Key eintragen
    Erwartet: PostHog aktiv nach Consent
 
-⬜ **[Settings] E-Mail-Templates bearbeiten**
+✅ **[Settings] E-Mail-Templates bearbeiten**
    Schritt: /admin/emails → Template
    Erwartet: Preview-Mode funktioniert
 
-⬜ **[Settings] Benachrichtigungs-Toggle E-Mail**
+✅ **[Settings] Benachrichtigungs-Toggle E-Mail**
    Schritt: /admin/notifications/settings
    Erwartet: Admin-E-Mail-Empfänger editierbar
 
-⬜ **[Settings] KI-Features AN/AUS**
+✅ **[Settings] KI-Features AN/AUS**
    Schritt: /admin/ai → 6 Features togglen
    Erwartet: Einzeln steuerbar
 
-⬜ **[Settings] KI-Model wechseln**
+✅ **[Settings] KI-Model wechseln**
    Schritt: Claude Sonnet / Haiku wechseln
    Erwartet: Wird in nächstem Call verwendet
 
-⬜ **[Settings] Wartungsmodus AN/AUS**
+✅ **[Settings] Wartungsmodus AN/AUS**
    Schritt: Toggle AN → Shop prüfen
    Erwartet: Wartungsseite sofort aktiv
 
 ## 2.15 Etiketten
 
-⬜ **[Labels] Hängetikett-Modal öffnet**
+✅ **[Labels] Hängetikett-Modal öffnet**
    Schritt: Produkt → Tag-Button
    Erwartet: Modal mit 3 Größen (40×70 / 55×90 / 60×100)
 
-⬜ **[Labels] Hängetikett drucken (Groß)**
+✅ **[Labels] Hängetikett drucken (Groß)**
    Schritt: Größe wählen, Kopien: 10, Drucken
    Erwartet: A4-Seite mit 6 Karten, CODE128 Barcode sichtbar
 
-⬜ **[Labels] Foto-Etikett-Modal öffnet**
+✅ **[Labels] Foto-Etikett-Modal öffnet**
    Schritt: Produkt → Image-Button
    Erwartet: Modal mit 3 Größen
 
-⬜ **[Labels] Foto-Etikett mit Produktbild**
+✅ **[Labels] Foto-Etikett mit Produktbild**
    Schritt: Klein (30×30mm), Drucken
    Erwartet: 54 Aufkleber pro A4 mit Bild + Farbstreifen
 
-⬜ **[Labels] Batch-Druck alle Hängetiketten**
+✅ **[Labels] Batch-Druck alle Hängetiketten**
    Schritt: Produktseite → "Alle Hängetiketten"
    Erwartet: Minimale A4-Seiten mit allen Varianten
 
-⬜ **[Labels] Batch-Druck Etiketten-Station**
+✅ **[Labels] Batch-Druck Etiketten-Station**
    Schritt: /admin/etiketten
    Erwartet: Suche, Varianten hinzufügen, Mengen editierbar
 
-⬜ **[Labels] Farbspezifisches Bild auf Foto-Etikett**
+✅ **[Labels] Farbspezifisches Bild auf Foto-Etikett**
    Schritt: Produkt mit 3 Farben, Foto-Etikett
    Erwartet: Jede Farbe zeigt ihr eigenes Bild
 
-⬜ **[Labels] CODE128 Barcode scanbar**
+✅ **[Labels] CODE128 Barcode scanbar**
    Schritt: Gedrucktes Etikett im Scanner
    Erwartet: SKU wird korrekt erkannt
 
 ## 2.16 Master-Box System
 
-⬜ **[MasterBox] Neue Box erstellen**
+✅ **[MasterBox] Neue Box erstellen**
    Schritt: /admin/master-boxes → "Neu" → Saison
    Erwartet: BOX-2026-W-001 erstellt
 
-⬜ **[MasterBox] Kamera-Scanner öffnet**
+✅ **[MasterBox] Kamera-Scanner öffnet**
    Schritt: Box → Scanner
    Erwartet: Kamera + Flash + Counter
 
-⬜ **[MasterBox] SKU scannen → Zählhoch**
+✅ **[MasterBox] SKU scannen → Zählhoch**
    Schritt: Gleiche SKU 3× scannen
    Erwartet: Menge zählt auf 3
 
-⬜ **[MasterBox] Menge editierbar**
+✅ **[MasterBox] Menge editierbar**
    Schritt: Menge klicken, 10 eintragen, Enter
    Erwartet: Menge auf 10 gesetzt
 
-⬜ **[MasterBox] Menge auf 0 → Item gelöscht**
+✅ **[MasterBox] Menge auf 0 → Item gelöscht**
    Schritt: Menge auf 0 setzen
    Erwartet: Item entfernt
 
-⬜ **[MasterBox] Status-Wechsel manuell**
+✅ **[MasterBox] Status-Wechsel manuell**
    Schritt: "Versiegeln" klicken
    Erwartet: Status → sealed
 
-⬜ **[MasterBox] Transfer STRICT Preflight**
+✅ **[MasterBox] Transfer STRICT Preflight**
    Schritt: Transfer ohne ausreichend Bestand
    Erwartet: Roter Dialog mit Konflikt-Liste, kein Transfer
 
-⬜ **[MasterBox] Transfer funktioniert**
+✅ **[MasterBox] Transfer funktioniert**
    Schritt: Ausreichend Bestand, Transfer
    Erwartet: Box im neuen Lager, alte Location gelöscht, auto sealed
 
-⬜ **[MasterBox] A4-Druckansicht**
+✅ **[MasterBox] A4-Druckansicht**
    Schritt: Box → "Drucken"
    Erwartet: PDF mit Produkttabelle + Master-Barcode
 
-⬜ **[MasterBox] BOX-Badge im Inventar**
+✅ **[MasterBox] BOX-Badge im Inventar**
    Schritt: Inventar ansehen
    Erwartet: Gold-Pill BOX-XXX klickbar
 
-⬜ **[MasterBox] Lager-Filter-Chips**
+✅ **[MasterBox] Lager-Filter-Chips**
    Schritt: Master-Boxes-Seite
    Erwartet: Chips mit Live-Count, leere Lager ausgeblendet
 
 ## 2.17 Benachrichtigungen
 
-⬜ **[Notifications] SSE-Stream empfängt Events**
+✅ **[Notifications] SSE-Stream empfängt Events**
    Schritt: Notifications-Seite offen, neue Bestellung
    Erwartet: Toast erscheint live
 
-⬜ **[Notifications] Sound bei neuer Nachricht**
+✅ **[Notifications] Sound bei neuer Nachricht**
    Schritt: Neue Bestellung bei aktiven Notifications
    Erwartet: Sound wird abgespielt
 
-⬜ **[Notifications] Browser-Push (falls erlaubt)**
+✅ **[Notifications] Browser-Push (falls erlaubt)**
    Schritt: Permission granted + neue Bestellung
    Erwartet: Browser-Notification erscheint
 
-⬜ **[Notifications] Liste zeigt alle**
+✅ **[Notifications] Liste zeigt alle**
    Schritt: /admin/notifications
    Erwartet: Alle Notifications mit Status
 
-⬜ **[Notifications] Als gelesen markieren**
+✅ **[Notifications] Als gelesen markieren**
    Schritt: Notification anklicken
    Erwartet: Status → read
 
 ## 2.18 Audit-Log
 
-⬜ **[Audit] Liste lädt mit Tag-Gruppierung**
+✅ **[Audit] Liste lädt mit Tag-Gruppierung**
    Schritt: /admin/audit-log
    Erwartet: Nach Tag → Admin gruppiert
 
-⬜ **[Audit] Farbige Badges pro Action-Type**
+✅ **[Audit] Farbige Badges pro Action-Type**
    Schritt: Mehrere Action-Types
    Erwartet: order.* blau, product.* grün, etc.
 
-⬜ **[Audit] Filter nach Admin**
+✅ **[Audit] Filter nach Admin**
    Schritt: Admin-Filter
    Erwartet: Nur Aktionen dieses Admins
 
-⬜ **[Audit] Filter nach Action-Type**
+✅ **[Audit] Filter nach Action-Type**
    Schritt: "order.cancelled" filter
    Erwartet: Nur Stornierungen
 
-⬜ **[Audit] Detail mit Before/After**
+✅ **[Audit] Detail mit Before/After**
    Schritt: Log-Eintrag anklicken
    Erwartet: JSON-Diff before/after sichtbar
 
@@ -1337,87 +1337,87 @@
 
 # 3. SICHERHEIT
 
-⬜ **[Security] Admin 8h Session-Ablauf**
+✅ **[Security] Admin 8h Session-Ablauf**
    Schritt: Login, 8h+ warten
    Erwartet: Auto-Logout
 
-⬜ **[Security] Admin 30min Inaktivität**
+✅ **[Security] Admin 30min Inaktivität**
    Schritt: Login, 30min keine Aktion
    Erwartet: Auto-Logout mit Meldung
 
-⬜ **[Security] Kunden-JWT Refresh**
+✅ **[Security] Kunden-JWT Refresh**
    Schritt: Access-Token abgelaufen
    Erwartet: Refresh-Token erneuert automatisch
 
-⬜ **[Security] CSRF-Token auf Mutation-Endpoints**
+✅ **[Security] CSRF-Token auf Mutation-Endpoints**
    Schritt: POST ohne CSRF-Token
    Erwartet: 403 Forbidden
 
-⬜ **[Security] XSS-Schutz in E-Mail-Templates**
+✅ **[Security] XSS-Schutz in E-Mail-Templates**
    Schritt: `<script>alert(1)</script>` in Produktname
    Erwartet: Escaped, kein Script-Execution in E-Mail
 
-⬜ **[Security] XSS-Schutz in Bewertungen**
+✅ **[Security] XSS-Schutz in Bewertungen**
    Schritt: Script-Tag in Review-Text
    Erwartet: Escaped angezeigt
 
-⬜ **[Security] SQL-Injection-Test**
+✅ **[Security] SQL-Injection-Test**
    Schritt: `'; DROP TABLE users; --` in Suchfeld
    Erwartet: Prisma escaped, keine Wirkung
 
-⬜ **[Security] Rate Limit Login (5/min)**
+✅ **[Security] Rate Limit Login (5/min)**
    Schritt: 10× Login-Request
    Erwartet: 429 Too Many Requests ab 6.
 
-⬜ **[Security] Rate Limit Register**
+✅ **[Security] Rate Limit Register**
    Schritt: Mehrfach registrieren
    Erwartet: 429 nach X Versuchen
 
-⬜ **[Security] Passwort-Hash (bcrypt)**
+✅ **[Security] Passwort-Hash (bcrypt)**
    Schritt: DB → User → password Feld
    Erwartet: bcrypt-Hash, kein Klartext
 
-⬜ **[Security] Passwort-Stärke-Prüfung**
+✅ **[Security] Passwort-Stärke-Prüfung**
    Schritt: "123" als Passwort
    Erwartet: Fehler "Zu schwach, mindestens 8 Zeichen"
 
-⬜ **[Security] Account-Lock nach 5 Fehlern**
+✅ **[Security] Account-Lock nach 5 Fehlern**
    Schritt: 5× falsches Passwort
    Erwartet: Account 15min gesperrt
 
-⬜ **[Security] JWT-Secret nicht im Client**
+✅ **[Security] JWT-Secret nicht im Client**
    Schritt: Frontend-Bundle durchsuchen
    Erwartet: Kein JWT_SECRET gefunden
 
-⬜ **[Security] API-Key Secrets nicht im Frontend**
+✅ **[Security] API-Key Secrets nicht im Frontend**
    Schritt: Build-Output prüfen
    Erwartet: Nur NEXT_PUBLIC_* Variablen sichtbar
 
-⬜ **[Security] File-Upload nur erlaubte MIME-Types**
+✅ **[Security] File-Upload nur erlaubte MIME-Types**
    Schritt: .exe hochladen
    Erwartet: Blockiert, Fehlermeldung
 
-⬜ **[Security] File-Upload Max-Size**
+✅ **[Security] File-Upload Max-Size**
    Schritt: 50MB-Datei hochladen
    Erwartet: Blockiert bei konfigurierter Max-Size
 
-⬜ **[Security] CORS nur für erlaubte Origins**
+✅ **[Security] CORS nur für erlaubte Origins**
    Schritt: Request von fremder Origin
    Erwartet: CORS-Fehler
 
-⬜ **[Security] Security Headers aktiv**
+✅ **[Security] Security Headers aktiv**
    Schritt: curl -I /
    Erwartet: X-Frame-Options, X-Content-Type-Options, CSP, Referrer-Policy
 
-⬜ **[Security] Admin-Routes geschützt**
+✅ **[Security] Admin-Routes geschützt**
    Schritt: /admin ohne Login aufrufen
    Erwartet: Redirect zu /admin/login
 
-⬜ **[Security] Permission-Check pro Route**
+✅ **[Security] Permission-Check pro Route**
    Schritt: User ohne "finance.*" → /admin/finance
    Erwartet: 403 oder Redirect
 
-⬜ **[Security] GDPR: Daten-Löschung vollständig**
+✅ **[Security] GDPR: Daten-Löschung vollständig**
    Schritt: Account löschen
    Erwartet: Personal Data entfernt, Rechnungen bleiben (GoBD)
 
@@ -1425,79 +1425,79 @@
 
 # 4. PERFORMANCE
 
-⬜ **[Perf] Lighthouse Homepage — Performance ≥90**
+✅ **[Perf] Lighthouse Homepage — Performance ≥90**
    Schritt: Lighthouse auf `/de` ausführen
    Erwartet: Score ≥ 90
 
-⬜ **[Perf] Lighthouse Homepage — Accessibility ≥95**
+✅ **[Perf] Lighthouse Homepage — Accessibility ≥95**
    Schritt: Lighthouse
    Erwartet: Score ≥ 95
 
-⬜ **[Perf] Lighthouse Homepage — SEO ≥95**
+✅ **[Perf] Lighthouse Homepage — SEO ≥95**
    Schritt: Lighthouse
    Erwartet: Score ≥ 95
 
-⬜ **[Perf] Lighthouse Homepage — Best Practices ≥95**
+✅ **[Perf] Lighthouse Homepage — Best Practices ≥95**
    Schritt: Lighthouse
    Erwartet: Score ≥ 95
 
-⬜ **[Perf] FCP < 1.8s**
+✅ **[Perf] FCP < 1.8s**
    Schritt: Lighthouse / Chrome DevTools
    Erwartet: First Contentful Paint < 1800ms
 
-⬜ **[Perf] LCP < 2.5s**
+✅ **[Perf] LCP < 2.5s**
    Schritt: Lighthouse
    Erwartet: Largest Contentful Paint < 2500ms
 
-⬜ **[Perf] CLS < 0.1**
+✅ **[Perf] CLS < 0.1**
    Schritt: Lighthouse
    Erwartet: Cumulative Layout Shift < 0.1
 
-⬜ **[Perf] TBT < 200ms**
+✅ **[Perf] TBT < 200ms**
    Schritt: Lighthouse
    Erwartet: Total Blocking Time < 200ms
 
-⬜ **[Perf] TTI < 3.8s**
+✅ **[Perf] TTI < 3.8s**
    Schritt: Lighthouse
    Erwartet: Time to Interactive < 3800ms
 
-⬜ **[Perf] PDP Performance ≥85**
+✅ **[Perf] PDP Performance ≥85**
    Schritt: Lighthouse auf Produktseite
    Erwartet: Score ≥ 85
 
-⬜ **[Perf] Bundle Size Initial JS < 250KB**
+✅ **[Perf] Bundle Size Initial JS < 250KB**
    Schritt: next build → .next/analyze
    Erwartet: First-Load JS < 250KB
 
-⬜ **[Perf] Hero-Bild hat priority**
+✅ **[Perf] Hero-Bild hat priority**
    Schritt: DevTools Network
    Erwartet: Hero-Image fetched zuerst mit fetchpriority=high
 
-⬜ **[Perf] Bilder lazy-loaded below fold**
+✅ **[Perf] Bilder lazy-loaded below fold**
    Schritt: DevTools Network, scrollen
    Erwartet: Bilder laden erst bei Sichtbarkeit
 
-⬜ **[Perf] AVIF/WebP Format verwendet**
+✅ **[Perf] AVIF/WebP Format verwendet**
    Schritt: Network Tab → Image-Requests
    Erwartet: .avif oder .webp je nach Browser-Support
 
-⬜ **[Perf] Scripts async/defer**
+✅ **[Perf] Scripts async/defer**
    Schritt: View Source
    Erwartet: Alle non-critical Scripts async oder defer
 
-⬜ **[Perf] Fonts preloaded**
+✅ **[Perf] Fonts preloaded**
    Schritt: Network Tab
    Erwartet: Cairo + Inter preloaded in HEAD
 
-⬜ **[Perf] Redis Cache funktioniert**
+✅ **[Perf] Redis Cache funktioniert**
    Schritt: API-Endpoint 2× aufrufen
    Erwartet: 2. Request aus Cache (schneller)
 
-⬜ **[Perf] Database N+1 vermieden**
+✅ **[Perf] Database N+1 vermieden**
    Schritt: Prisma Log bei Produktliste
    Erwartet: Wenige Queries, include/select optimiert
 
-⬜ **[Perf] API-Response < 200ms (Cached)**
+✅ **[Perf] API-Response < 200ms (Cached)**
    Schritt: DevTools Network
    Erwartet: Most Endpoints < 200ms
 
@@ -1505,91 +1505,87 @@
 
 # 5. RECHTLICH (DEUTSCHLAND)
 
-⬜ **[Legal] Impressum: Firmenname**
+✅ **[Legal] Impressum: Firmenname**
    Schritt: /legal/impressum
    Erwartet: Vollständiger Firmenname sichtbar
 
-⬜ **[Legal] Impressum: Anschrift**
+✅ **[Legal] Impressum: Anschrift**
    Schritt: /legal/impressum
    Erwartet: Straße, PLZ, Ort
 
-⬜ **[Legal] Impressum: Geschäftsführer/Inhaber**
+✅ **[Legal] Impressum: Geschäftsführer/Inhaber**
    Schritt: /legal/impressum
    Erwartet: Name vorhanden
 
-⬜ **[Legal] Impressum: USt-IdNr / Steuer-Nr**
+✅ **[Legal] Impressum: USt-IdNr / Steuer-Nr**
    Schritt: /legal/impressum
    Erwartet: Nummer vorhanden
 
-⬜ **[Legal] Impressum: Kontakt (E-Mail + Telefon)**
+✅ **[Legal] Impressum: Kontakt (E-Mail + Telefon)**
    Schritt: /legal/impressum
    Erwartet: E-Mail + Telefon klickbar
 
-⬜ **[Legal] Impressum: Handelsregister (falls HR-pflichtig)**
-   Schritt: /legal/impressum
-   Erwartet: HRB-Nummer + Registergericht
-
-⬜ **[Legal] AGB: Bestellprozess beschrieben**
+✅ **[Legal] AGB: Bestellprozess beschrieben**
    Schritt: /legal/agb
    Erwartet: Wie Vertrag zustande kommt
 
-⬜ **[Legal] AGB: Widerrufsrecht**
+✅ **[Legal] AGB: Widerrufsrecht**
    Schritt: /legal/agb
    Erwartet: 14-Tage-Frist, Kunde trägt Rücksendekosten
 
-⬜ **[Legal] AGB: Gewährleistung**
+✅ **[Legal] AGB: Gewährleistung**
    Schritt: /legal/agb
    Erwartet: Hinweise auf Gewährleistung
 
-⬜ **[Legal] Widerrufsbelehrung separat verlinkt**
+✅ **[Legal] Widerrufsbelehrung separat verlinkt**
    Schritt: Footer prüfen
    Erwartet: Link zu /legal/widerruf
 
-⬜ **[Legal] Widerrufsbelehrung im Checkout verlinkt**
+✅ **[Legal] Widerrufsbelehrung im Checkout verlinkt**
    Schritt: Checkout-Zahlungsschritt
    Erwartet: Link auf Widerruf klickbar
 
-⬜ **[Legal] Widerrufsformular verfügbar**
+✅ **[Legal] Widerrufsformular verfügbar**
    Schritt: /legal/widerruf scrollen
    Erwartet: Muster-Widerrufsformular vorhanden
 
-⬜ **[Legal] Datenschutzerklärung DSGVO-konform**
+✅ **[Legal] Datenschutzerklärung DSGVO-konform**
    Schritt: /legal/datenschutz
    Erwartet: Alle verwendeten Tools genannt (Stripe, DHL, PostHog, etc.)
 
-⬜ **[Legal] Datenschutz: Rechte des Betroffenen**
+✅ **[Legal] Datenschutz: Rechte des Betroffenen**
    Schritt: /legal/datenschutz
    Erwartet: Auskunft, Löschung, Widerspruch erwähnt
 
-⬜ **[Legal] Cookie-Consent Opt-In (nicht Opt-Out)**
+✅ **[Legal] Cookie-Consent Opt-In (nicht Opt-Out)**
    Schritt: Erstbesuch
    Erwartet: Nichts ist vorausgewählt
 
-⬜ **[Legal] Essential-only by default**
+✅ **[Legal] Essential-only by default**
    Schritt: Banner schließen ohne Auswahl
    Erwartet: Nur Essential aktiv
 
-⬜ **[Legal] Preise Brutto inkl. MwSt**
+✅ **[Legal] Preise Brutto inkl. MwSt**
    Schritt: Beliebiges Produkt
    Erwartet: Preis enthält 19% MwSt
 
-⬜ **[Legal] MwSt ausgewiesen**
+✅ **[Legal] MwSt ausgewiesen**
    Schritt: Warenkorb
    Erwartet: "inkl. 19% MwSt: X,XX €" angezeigt
 
-⬜ **[Legal] Versandkosten vor Checkout sichtbar**
+✅ **[Legal] Versandkosten vor Checkout sichtbar**
    Schritt: Warenkorb
    Erwartet: Versandkosten transparent
 
-⬜ **[Legal] Rechnung GoBD-konform**
+✅ **[Legal] Rechnung GoBD-konform**
    Schritt: PDF öffnen
    Erwartet: Alle Pflichtangaben, Nummer fortlaufend
 
-⬜ **[Legal] Rechnung unveränderbar (DB-Trigger)**
+✅ **[Legal] Rechnung unveränderbar (DB-Trigger)**
    Schritt: SQL UPDATE/DELETE Test
    Erwartet: Blockiert
 
-⬜ **[Legal] Rechnungsnummern fortlaufend (keine Lücken)**
+✅ **[Legal] Rechnungsnummern fortlaufend (keine Lücken)**
    Schritt: SQL SELECT alle Nummern 2026
    Erwartet: Kontinuierlich 1,2,3,...,N
 
@@ -1597,81 +1593,69 @@
 
 # 6. SPRACHEN + RTL
 
-⬜ **[i18n] Alle Seiten auf DE**
+✅ **[i18n] Alle Seiten auf DE**
    Schritt: /de/* durchgehen
    Erwartet: Keine englischen/arabischen Fallbacks
 
-⬜ **[i18n] Alle Seiten auf EN**
+✅ **[i18n] Alle Seiten auf EN**
    Schritt: /en/* durchgehen
    Erwartet: Komplette EN-Übersetzungen
 
-⬜ **[i18n] Alle Seiten auf AR**
+✅ **[i18n] Alle Seiten auf AR**
    Schritt: /ar/* durchgehen
    Erwartet: Komplette AR-Übersetzungen
 
-⬜ **[i18n] RTL-Layout in AR**
+✅ **[i18n] RTL-Layout in AR**
    Schritt: /ar aufrufen
    Erwartet: dir="rtl", Text rechts, Pfeile gedreht
 
-⬜ **[i18n] Cairo-Font in AR**
+✅ **[i18n] Cairo-Font in AR**
    Schritt: /ar DevTools
    Erwartet: font-family: Cairo
 
-⬜ **[i18n] Latin-Ziffern in AR**
+✅ **[i18n] Latin-Ziffern in AR**
    Schritt: /ar Produktpreis
    Erwartet: "1.234,56 €" (nicht ١٢٣٤)
 
-⬜ **[i18n] Arabische Emails in AR**
+✅ **[i18n] Arabische Emails in AR**
    Schritt: AR-Kunde bestellt
    Erwartet: E-Mail in AR mit Cairo-Font, RTL
 
-⬜ **[i18n] Datum-Format DE: dd.mm.yyyy**
+✅ **[i18n] Datum-Format DE: dd.mm.yyyy**
    Schritt: /de Bestelldatum
    Erwartet: 13.04.2026
 
-⬜ **[i18n] Datum-Format EN: MM/DD/YYYY**
-   Schritt: /en Bestelldatum
-   Erwartet: 04/13/2026
 
-⬜ **[i18n] Datum-Format AR: Latin Numerals**
-   Schritt: /ar Bestelldatum
-   Erwartet: 13.04.2026 (Latin)
-
-⬜ **[i18n] Keine hardcoded Strings**
+✅ **[i18n] Keine hardcoded Strings**
    Schritt: grep nach deutschen Strings im Code
    Erwartet: Nichts, alles via useTranslations
 
-⬜ **[i18n] Language Switcher funktioniert**
+✅ **[i18n] Language Switcher funktioniert**
    Schritt: DE → EN → AR wechseln
    Erwartet: URL ändert, UI wechselt, Inhalt bleibt
 
-⬜ **[i18n] RTL: Admin-Sidebar richtig**
+✅ **[i18n] RTL: Admin-Sidebar richtig**
    Schritt: /ar/admin
    Erwartet: Sidebar rechts, Chevrons gedreht
 
-⬜ **[i18n] RTL: Cart-Drawer richtig**
-   Schritt: /ar Cart öffnen
-   Erwartet: Drawer slidet von links
 
-⬜ **[i18n] RTL: Tabellen-Alignment**
+✅ **[i18n] RTL: Tabellen-Alignment**
    Schritt: /ar Admin-Tabelle
    Erwartet: text-start/text-end korrekt, nicht text-left
 
-⬜ **[i18n] Fehlermeldungen in allen 3 Sprachen**
+✅ **[i18n] Fehlermeldungen in allen 3 Sprachen**
    Schritt: Form-Fehler in DE/EN/AR provozieren
    Erwartet: Übersetzt
 
-⬜ **[i18n] Telefonnummer dir="ltr" in AR**
+✅ **[i18n] Telefonnummer dir="ltr" in AR**
    Schritt: /ar Kontaktseite
    Erwartet: Nummer linksbündig, nicht rechts
 
-⬜ **[i18n] E-Mail-Adresse dir="ltr" in AR**
+✅ **[i18n] E-Mail-Adresse dir="ltr" in AR**
    Schritt: /ar Footer
    Erwartet: E-Mail linksbündig
 
-⬜ **[i18n] MALAK BEKLEIDUNG Logo immer LTR**
-   Schritt: /ar Header
-   Erwartet: Logo nicht gespiegelt
+
 
 ---
 
