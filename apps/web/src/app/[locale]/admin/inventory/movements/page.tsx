@@ -717,7 +717,7 @@ export default function MovementsPage() {
               disabled={page === 0}
               className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-colors"
             >
-              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              <ChevronLeft className="h-4 w-4" />
             </button>
             {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
               let p: number
@@ -742,7 +742,7 @@ export default function MovementsPage() {
               disabled={page >= totalPages - 1}
               className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-colors"
             >
-              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>

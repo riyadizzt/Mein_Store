@@ -236,13 +236,13 @@ export default function NotificationsPage() {
           <div className="flex gap-2">
             <button onClick={() => setPage(page - 1)} disabled={page <= 1}
               className="flex items-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">
-              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              <ChevronLeft className="h-4 w-4" />
               {t3(locale, 'Zurück', 'Previous', 'السابق')}
             </button>
             <button onClick={() => setPage(page + 1)} disabled={page >= totalPages}
               className="flex items-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">
               {t3(locale, 'Weiter', 'Next', 'التالي')}
-              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>

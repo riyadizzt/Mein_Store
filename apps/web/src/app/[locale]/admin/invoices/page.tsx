@@ -204,10 +204,10 @@ export default function AdminInvoicesPage() {
           <p className="text-sm text-muted-foreground">{t('page', locale)} {page} {t('of', locale)} {pages}</p>
           <div className="flex gap-1">
             <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))} className="h-8 w-8 p-0">
-              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)} className="h-8 w-8 p-0">
-              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>

@@ -561,10 +561,12 @@ export default function AuditLogPage() {
               onClick={() => setPage(page - 1)}
               className="gap-1.5 px-4"
             >
-              {/* rtl:rotate-180 mirrors the chevron so it points in the
-                  reading-back direction (right) in Arabic, not the source
-                  direction (left) which would look like "next" in RTL. */}
-              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              {/* Pagination convention: left arrow = prev, right = next
+                  in BOTH LTR and RTL. RTL flexbox reverses the visual
+                  order of the two buttons (next ends up on the left side
+                  in Arabic, which IS the "forward" direction in RTL
+                  reading), so we keep the chevrons un-rotated. */}
+              <ChevronLeft className="h-4 w-4" />
               {t('auditLog.prev')}
             </Button>
             <Button
@@ -575,7 +577,7 @@ export default function AuditLogPage() {
               className="gap-1.5 px-4"
             >
               {t('auditLog.next')}
-              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>

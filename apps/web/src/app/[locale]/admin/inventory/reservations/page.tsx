@@ -414,7 +414,7 @@ export default function ReservationsPage() {
               disabled={page === 0}
               className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-muted disabled:opacity-30"
             >
-              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
+              <ChevronLeft className="h-4 w-4" />
             </button>
             <span className="px-3 text-xs font-semibold tabular-nums" dir="ltr">
               {page + 1} / {totalPages}
@@ -424,7 +424,7 @@ export default function ReservationsPage() {
               disabled={page >= totalPages - 1}
               className="h-8 w-8 rounded-lg border flex items-center justify-center hover:bg-muted disabled:opacity-30"
             >
-              <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
