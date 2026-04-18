@@ -22,7 +22,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Layers, AlertTriangle, Loader2 } from 'lucide-react'
+import { Layers, AlertTriangle, Loader2, Lock } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { translateColor } from '@/lib/locale-utils'
@@ -58,9 +58,14 @@ function pickName(w: StockWarning, locale: string): string {
 interface Props {
   orderId: string
   locale: string
+  // Order status to enforce the pre-capture Lifecycle-Guard mirror on the
+  // frontend. Backend is the real authority (throws 409
+  // WarehouseChangeBlockedAfterCapture); this prop is a UX preview that
+  // saves the admin a pointless click and explains why.
+  orderStatus?: string
 }
 
-export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
+export function ConsolidateWarehouseButton({ orderId, locale, orderStatus }: Props) {
   const qc = useQueryClient()
   const [pendingWarehouseId, setPendingWarehouseId] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<StockWarning[]>([])
@@ -140,6 +145,14 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
   // consolidate affordance instead of an invisible control).
   if (!warehouses) return null
 
+  // Post-capture Lifecycle-Guard (mirror of the backend 409). After payment
+  // capture the sale_online movement has already decremented the source
+  // warehouse's quantityOnHand — moving the reservation row now would
+  // create phantom drift. The admin is shown a read-only informational
+  // box explaining why the control is locked.
+  const isPreCapture = orderStatus === 'pending' || orderStatus === 'pending_payment' || orderStatus === undefined
+  const isPostCaptureBlocked = orderStatus !== undefined && !isPreCapture
+
   const handlePick = (warehouseId: string) => {
     setPendingWarehouseId(warehouseId)
     setWarnings([])
@@ -174,10 +187,44 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
         )}
       </p>
 
-      {/* Warehouse pills — always visible, no dropdown. Direct 1-click pick.
-          Replaces the previous dropdown which had stacking/overflow issues
-          in some container contexts. */}
-      {activeWarehouses.length === 0 ? (
+      {/* Post-capture lock notice — replaces the clickable pills when the
+          order has moved past pending/pending_payment. Visually muted so
+          it's clearly distinct from the loading state (which keeps gold
+          colors + spinner) and from end-states (shipped/delivered render
+          similarly from the parent's control-hiding logic). */}
+      {isPostCaptureBlocked ? (
+        <div
+          className="py-3 px-3 bg-muted/40 border border-border rounded-lg"
+          title={t3(
+            locale,
+            'Lager kann nach Zahlungsbestätigung nicht mehr geändert werden. Die Ware wurde bereits aus dem ursprünglichen Lager abgebucht. Für echten Warehouse-Transfer das Inventar-Modul nutzen.',
+            'Warehouse cannot be changed after payment capture. The stock has already been deducted from the original warehouse. Use the Inventory module for a real warehouse transfer.',
+            'لا يمكن تغيير المستودع بعد تأكيد الدفع. تم خصم البضائع بالفعل من المستودع الأصلي. استخدم وحدة المخزون لإجراء نقل حقيقي بين المستودعات.',
+          )}
+        >
+          <div className="flex items-start gap-2">
+            <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t3(
+                  locale,
+                  'Nach Zahlungsbestätigung nicht mehr möglich',
+                  'Not available after payment capture',
+                  'غير متاح بعد تأكيد الدفع',
+                )}
+              </p>
+              <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                {t3(
+                  locale,
+                  'Die Ware wurde bereits aus dem Lager abgebucht.',
+                  'The goods have already been deducted.',
+                  'تم خصم البضائع بالفعل من المستودع.',
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : activeWarehouses.length === 0 ? (
         <div className="py-3 text-xs text-muted-foreground text-center border rounded-lg">
           {t3(
             locale,
@@ -187,6 +234,9 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
           )}
         </div>
       ) : (
+        /* Warehouse pills — always visible, no dropdown. Direct 1-click pick.
+           Replaces the previous dropdown which had stacking/overflow issues
+           in some container contexts. */
         <div className="flex flex-wrap gap-2">
           {activeWarehouses.map((w) => (
             <button

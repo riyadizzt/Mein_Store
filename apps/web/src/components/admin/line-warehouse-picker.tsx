@@ -37,9 +37,13 @@ interface Props {
   currentWarehouse: { id: string; name: string; type: string } | null
   editable: boolean
   locale: string
+  // Order status flows through for the read-only tooltip so the admin
+  // understands WHY the picker is locked after payment capture. Required
+  // to match the backend guard WarehouseChangeBlockedAfterCapture.
+  orderStatus?: string
 }
 
-export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editable, locale }: Props) {
+export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editable, locale, orderStatus }: Props) {
   const qc = useQueryClient()
   const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -96,8 +100,31 @@ export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editabl
   const label = currentWarehouse?.name ?? t3(locale, '—', '—', '—')
 
   if (!editable) {
+    // Distinguish "post-capture lock" from "end-state (shipped/delivered/
+    // cancelled)" so the tooltip tells the admin the specific reason.
+    // Both land on the same read-only badge visually — only the title
+    // differs. Post-capture = confirmed/processing: goods have left the
+    // source warehouse via sale_online, move-reservation would drift.
+    // End-state: the order is terminal, no edits make sense.
+    const isPostCapture = orderStatus === 'confirmed' || orderStatus === 'processing'
+    const tooltip = isPostCapture
+      ? t3(
+          locale,
+          'Lager kann nach Zahlungsbestätigung nicht mehr geändert werden. Ware wurde bereits aus dem Lager abgebucht.',
+          'Warehouse cannot be changed after payment capture. Stock has already been deducted from this warehouse.',
+          'لا يمكن تغيير المستودع بعد تأكيد الدفع. تم خصم البضائع بالفعل من المستودع.',
+        )
+      : t3(
+          locale,
+          'Lager-Zuordnung in diesem Status nicht änderbar.',
+          'Warehouse assignment is not editable in this status.',
+          'لا يمكن تعديل تعيين المستودع في هذه الحالة.',
+        )
     return (
-      <div className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <div
+        className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-help"
+        title={tooltip}
+      >
         <WarehouseIcon className="h-3 w-3" />
         <span>{label}</span>
       </div>

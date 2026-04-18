@@ -37,6 +37,11 @@ const FIELD_LABELS: Record<string, L> = {
   warehouseName: { de: 'Lagername', en: 'Warehouse name', ar: 'اسم المستودع' },
   sku: { de: 'SKU', en: 'SKU', ar: 'رمز المنتج' },
   itemsMoved: { de: 'Verschobene Artikel', en: 'Items moved', ar: 'العناصر المنقولة' },
+  // WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE payload fields.
+  // (method, amount, warehouseId already defined elsewhere — reused here.)
+  targetWarehouseId: { de: 'Ziel-Lager', en: 'Target warehouse', ar: 'المستودع المستهدف' },
+  force: { de: 'Force-Override', en: 'Force override', ar: 'تجاوز إجباري' },
+  orderStatus: { de: 'Bestell-Status', en: 'Order status', ar: 'حالة الطلب' },
   // R12 — pre/post payment cancel differentiation
   refunded: { de: 'Erstattet', en: 'Refunded', ar: 'تم الاسترداد' },
   paymentWas: { de: 'Zahlungsstatus', en: 'Payment was', ar: 'حالة الدفع' },

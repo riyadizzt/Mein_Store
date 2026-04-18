@@ -117,6 +117,10 @@ const ACTION_COLORS: Record<string, string> = {
   ORDER_ITEM_WAREHOUSE_CHANGED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300',
   // R7 — consolidate all lines into one warehouse (stronger signal)
   ORDER_WAREHOUSE_CONSOLIDATED: 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
+  // Blocked attempt to move a reservation after payment capture. Strong red
+  // because it signals a lifecycle-boundary violation attempt — admin tried
+  // to do something that would have caused phantom-reservation drift.
+  WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
   // R12 — differentiate cancel-flows by money impact
   ORDER_CANCELLED_PRE_PAYMENT: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
   ORDER_CANCELLED_POST_PAYMENT: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -251,6 +255,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   ORDER_FULFILLMENT_CHANGED: { de: 'Lager geändert', en: 'Fulfillment changed', ar: 'تغيير المستودع' },
   ORDER_ITEM_WAREHOUSE_CHANGED: { de: 'Artikel-Lager geändert', en: 'Item warehouse changed', ar: 'تغيير مستودع العنصر' },
   ORDER_WAREHOUSE_CONSOLIDATED: { de: 'Lager konsolidiert', en: 'Warehouse consolidated', ar: 'دمج المستودعات' },
+  WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE: { de: 'Lager-Wechsel blockiert (nach Zahlung)', en: 'Warehouse change blocked (post-capture)', ar: 'تم حظر تغيير المستودع (بعد الدفع)' },
   ORDER_CANCELLED_PRE_PAYMENT: { de: 'Storno vor Zahlung', en: 'Cancelled pre-payment', ar: 'إلغاء قبل الدفع' },
   ORDER_CANCELLED_POST_PAYMENT: { de: 'Storno mit Erstattung', en: 'Cancelled post-payment', ar: 'إلغاء مع استرداد' },
   CUSTOMER_BULK_TAGGED: { de: 'Kunden getaggt', en: 'Customers tagged', ar: 'وسم العملاء' },

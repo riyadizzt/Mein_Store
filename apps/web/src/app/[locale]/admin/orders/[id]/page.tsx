@@ -486,16 +486,23 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                               <p className="text-sm text-muted-foreground">{item.quantity} &times; {formatCurrency(Number(item.unitPrice), locale)}</p>
                               <p className="text-sm font-bold mt-0.5">{formatCurrency(Number(item.totalPrice), locale)}</p>
                               {/* R4/R5: per-line warehouse badge + picker. Editable
-                                  only when the order is in a pre-ship status AND
-                                  the backend resolved a warehouse for this line. */}
+                                  ONLY in pre-capture statuses. Post-capture the
+                                  stock has already left the source warehouse via
+                                  sale_online, so moving only the reservation row
+                                  would create phantom drift (the launch-blocker
+                                  bug from ORD-20260418-000001). Backend enforces
+                                  the same rule with a 409
+                                  WarehouseChangeBlockedAfterCapture so this check
+                                  is only a UX preview — the real guard is there. */}
                               {!isCancelledItem && (
                                 <div className="mt-2 flex justify-end">
                                   <LineWarehousePicker
                                     orderId={id}
                                     itemId={item.id}
                                     currentWarehouse={item.fulfillmentWarehouse ?? null}
-                                    editable={!['cancelled', 'refunded', 'shipped', 'delivered'].includes(order.status)}
+                                    editable={['pending', 'pending_payment'].includes(order.status)}
                                     locale={locale}
+                                    orderStatus={order.status}
                                   />
                                 </div>
                               )}
@@ -713,7 +720,7 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                         Complements the per-line picker (above each item) for
                         the common case of packing the whole order from one
                         location. Distinct audit action. */}
-                    <ConsolidateWarehouseButton orderId={id} locale={locale} />
+                    <ConsolidateWarehouseButton orderId={id} locale={locale} orderStatus={order.status} />
                   </>
                 )}
               </div>
