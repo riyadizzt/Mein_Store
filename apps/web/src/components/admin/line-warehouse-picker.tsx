@@ -18,7 +18,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Warehouse as WarehouseIcon, Check, Loader2, X, ChevronDown } from 'lucide-react'
+import { Warehouse as WarehouseIcon, Loader2, ChevronDown } from 'lucide-react'
 import { api } from '@/lib/api'
 
 const t3 = (l: string, d: string, e: string, a: string) => (l === 'ar' ? a : l === 'en' ? e : d)
@@ -41,7 +41,6 @@ interface Props {
 
 export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editable, locale }: Props) {
   const qc = useQueryClient()
-  const [open, setOpen] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const { data: warehouses } = useQuery({
@@ -62,7 +61,6 @@ export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editabl
       return data
     },
     onSuccess: (data) => {
-      setOpen(false)
       qc.invalidateQueries({ queryKey: ['admin-order', orderId] })
       if (data.changed === false) {
         setToast({
@@ -83,7 +81,6 @@ export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editabl
       setTimeout(() => setToast(null), 2500)
     },
     onError: (err: any) => {
-      setOpen(false)
       const raw = err?.response?.data?.message
       let text: string
       if (typeof raw === 'string') text = raw
@@ -109,13 +106,16 @@ export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editabl
 
   const activeWarehouses = (warehouses ?? []).filter((w) => w.isActive !== false)
 
+  // Native <select> — browser-handled, bulletproof across all RTL/overflow/
+  // z-index edge cases. The custom dropdown that was here before had
+  // positioning issues in certain container contexts (dropdown rendering
+  // but items invisible). A native select pops up above the viewport, always
+  // visible, always keyboard-accessible. Tradeoff: slightly less branded look,
+  // but 100% reliable.
   return (
     <div className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        disabled={changeMut.isPending}
-        className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-muted/50 hover:bg-muted border border-transparent hover:border-border transition-colors disabled:opacity-50"
+      <div
+        className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md bg-muted/50 hover:bg-muted border border-transparent hover:border-border transition-colors focus-within:border-[#d4a853] focus-within:ring-1 focus-within:ring-[#d4a853]/30"
         title={t3(locale, 'Lager ändern', 'Change warehouse', 'تغيير المستودع')}
       >
         {changeMut.isPending ? (
@@ -124,63 +124,34 @@ export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editabl
           <WarehouseIcon className="h-3 w-3" />
         )}
         <span className="font-medium">{label}</span>
+        <select
+          value={currentWarehouse?.id ?? ''}
+          onChange={(e) => {
+            const newId = e.target.value
+            if (newId && newId !== currentWarehouse?.id) {
+              changeMut.mutate(newId)
+            }
+          }}
+          disabled={changeMut.isPending || activeWarehouses.length === 0}
+          className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
+          aria-label={t3(locale, 'Lager ändern', 'Change warehouse', 'تغيير المستودع')}
+        >
+          {currentWarehouse && (
+            <option value={currentWarehouse.id} disabled>
+              {currentWarehouse.name}
+            </option>
+          )}
+          {activeWarehouses
+            .filter((w) => w.id !== currentWarehouse?.id)
+            .map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.type === 'STORE' ? '🏪 ' : '📦 '}{w.name}
+                {w.isDefault ? ` (${t3(locale, 'Standard', 'default', 'افتراضي')})` : ''}
+              </option>
+            ))}
+        </select>
         <ChevronDown className="h-3 w-3 opacity-60" />
-      </button>
-
-      {open && (
-        <>
-          {/* backdrop — close on outside click */}
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute z-40 end-0 mt-1 w-56 bg-background border rounded-lg shadow-lg overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                {t3(locale, 'Lager wählen', 'Pick warehouse', 'اختر المستودع')}
-              </span>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-            <div className="max-h-64 overflow-auto">
-              {activeWarehouses.length === 0 ? (
-                <div className="px-3 py-4 text-xs text-muted-foreground text-center">
-                  {t3(
-                    locale,
-                    'Keine aktiven Lager',
-                    'No active warehouses',
-                    'لا توجد مستودعات',
-                  )}
-                </div>
-              ) : activeWarehouses.map((w) => {
-                const isCurrent = w.id === currentWarehouse?.id
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    disabled={isCurrent || changeMut.isPending}
-                    onClick={() => changeMut.mutate(w.id)}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm text-foreground text-start hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-default border-b border-border/50 last:border-b-0 ${isCurrent ? 'bg-muted/30' : ''}`}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-base">{w.type === 'STORE' ? '🏪' : '📦'}</span>
-                      <span className="font-medium">{w.name}</span>
-                      {w.isDefault && (
-                        <span className="text-[10px] text-muted-foreground">
-                          ({t3(locale, 'Standard', 'default', 'افتراضي')})
-                        </span>
-                      )}
-                    </span>
-                    {isCurrent && <Check className="h-3 w-3 text-[#d4a853]" />}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </>
-      )}
+      </div>
 
       {toast && (
         <div

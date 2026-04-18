@@ -22,7 +22,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Layers, AlertTriangle, Loader2, ChevronDown, X } from 'lucide-react'
+import { Layers, AlertTriangle, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { translateColor } from '@/lib/locale-utils'
@@ -62,7 +62,6 @@ interface Props {
 
 export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
   const qc = useQueryClient()
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWarehouseId, setPendingWarehouseId] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<StockWarning[]>([])
   const [warehouseName, setWarehouseName] = useState<string>('')
@@ -93,7 +92,6 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
         return
       }
       qc.invalidateQueries({ queryKey: ['admin-order', orderId] })
-      setPickerOpen(false)
       setPendingWarehouseId(null)
       setWarnings([])
       if (data.changed === false) {
@@ -120,7 +118,6 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
       setTimeout(() => setToast(null), 3000)
     },
     onError: (err: any) => {
-      setPickerOpen(false)
       setPendingWarehouseId(null)
       setWarnings([])
       const raw = err?.response?.data?.message
@@ -146,7 +143,6 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
   const handlePick = (warehouseId: string) => {
     setPendingWarehouseId(warehouseId)
     setWarnings([])
-    setPickerOpen(false)
     consolidateMut.mutate({ warehouseId, force: false })
   }
 
@@ -168,75 +164,49 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
         {t3(locale, 'Konsolidieren', 'Consolidate', 'دمج')}
       </label>
 
-      {/* Picker button */}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setPickerOpen((v) => !v)}
-          disabled={consolidateMut.isPending}
-          className="w-full h-9 px-3 rounded-xl border bg-background text-sm mt-1 flex items-center justify-between gap-2 hover:bg-muted/30 disabled:opacity-50"
-        >
-          <span className="text-muted-foreground text-xs">
-            {t3(
-              locale,
-              'Alle Artikel in ein Lager verschieben...',
-              'Move all items to one warehouse...',
-              'نقل جميع العناصر إلى مستودع واحد...',
-            )}
-          </span>
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </button>
-
-        {pickerOpen && (
-          <>
-            <div className="fixed inset-0 z-30" onClick={() => setPickerOpen(false)} />
-            <div className="absolute z-40 inset-x-0 top-full mt-1 bg-background border rounded-lg shadow-lg overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  {t3(locale, 'Ziel-Lager wählen', 'Pick target', 'اختر المستودع')}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen(false)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-              <div className="max-h-64 overflow-auto">
-                {activeWarehouses.length === 0 ? (
-                  <div className="px-3 py-4 text-xs text-muted-foreground text-center">
-                    {t3(
-                      locale,
-                      'Keine aktiven Lager verfügbar',
-                      'No active warehouses available',
-                      'لا توجد مستودعات نشطة',
-                    )}
-                  </div>
-                ) : (
-                  activeWarehouses.map((w) => (
-                    <button
-                      key={w.id}
-                      type="button"
-                      onClick={() => handlePick(w.id)}
-                      disabled={consolidateMut.isPending}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground text-start hover:bg-muted/50 disabled:opacity-50 border-b border-border/50 last:border-b-0"
-                    >
-                      <span className="text-base">{w.type === 'STORE' ? '🏪' : '📦'}</span>
-                      <span className="font-medium">{w.name}</span>
-                      {w.isDefault && (
-                        <span className="text-[10px] text-muted-foreground ms-auto">
-                          ({t3(locale, 'Standard', 'default', 'افتراضي')})
-                        </span>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
+      {/* Helper text */}
+      <p className="text-[11px] text-muted-foreground mt-1 mb-2">
+        {t3(
+          locale,
+          'Alle Artikel in ein einziges Lager verschieben',
+          'Move all items to one warehouse',
+          'نقل جميع العناصر إلى مستودع واحد',
         )}
-      </div>
+      </p>
+
+      {/* Warehouse pills — always visible, no dropdown. Direct 1-click pick.
+          Replaces the previous dropdown which had stacking/overflow issues
+          in some container contexts. */}
+      {activeWarehouses.length === 0 ? (
+        <div className="py-3 text-xs text-muted-foreground text-center border rounded-lg">
+          {t3(
+            locale,
+            'Keine aktiven Lager verfügbar',
+            'No active warehouses available',
+            'لا توجد مستودعات نشطة',
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {activeWarehouses.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              onClick={() => handlePick(w.id)}
+              disabled={consolidateMut.isPending}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-full border-2 border-border bg-background hover:border-[#d4a853] hover:bg-[#d4a853]/10 text-sm font-medium text-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="text-base">{w.type === 'STORE' ? '🏪' : '📦'}</span>
+              <span>{w.name}</span>
+              {w.isDefault && (
+                <span className="text-[10px] text-muted-foreground">
+                  ({t3(locale, 'Standard', 'default', 'افتراضي')})
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Loading state */}
       {consolidateMut.isPending && (
