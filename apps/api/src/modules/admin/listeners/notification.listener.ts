@@ -422,4 +422,47 @@ export class NotificationListener {
       )
     }
   }
+
+  // ── Credit-note PDF finalization failed after 3 retries ────────
+  //
+  // Fired by PaymentsService.createRefund when the Supabase upload for a
+  // Gutschrift PDF exhausts its retries. The Refund + Invoice-shell are
+  // already persisted atomically — this notification surfaces the
+  // "PDF pending" state so the admin can manually re-trigger PDF
+  // generation (future "regenerate" button) or investigate Storage.
+  @OnEvent('payment.credit_note_pdf_pending')
+  async handleCreditNotePdfPending(event: {
+    invoiceId: string
+    creditNoteNumber: string
+    originalInvoiceNumber: string
+    orderId: string
+    orderNumber: string
+    refundAmount: number
+    error: string
+    correlationId?: string
+  }) {
+    try {
+      await this.notificationService.createForAllAdmins({
+        type: 'credit_note_pdf_pending',
+        title: `Gutschrift-PDF ausstehend: ${event.creditNoteNumber}`,
+        body: `Die Gutschrift ${event.creditNoteNumber} (Refund €${event.refundAmount.toFixed(2)} für Bestellung #${event.orderNumber}) wurde korrekt erstellt, aber das PDF konnte nicht hochgeladen werden. Die Rechnung kann später manuell neu generiert werden.`,
+        entityType: 'invoice',
+        entityId: event.invoiceId,
+        data: {
+          creditNoteNumber: event.creditNoteNumber,
+          originalInvoiceNumber: event.originalInvoiceNumber,
+          orderNumber: event.orderNumber,
+          orderId: event.orderId,
+          refundAmount: event.refundAmount,
+          error: event.error.slice(0, 200),
+          correlationId: event.correlationId,
+        },
+      })
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to create notification for payment.credit_note_pdf_pending: ${error.message}`,
+        error.stack,
+      )
+    }
+  }
 }

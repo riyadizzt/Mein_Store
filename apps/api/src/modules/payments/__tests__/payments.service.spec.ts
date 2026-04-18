@@ -14,6 +14,19 @@ const mockInvoiceService = {
   generateAndStoreInvoice: jest.fn().mockResolvedValue({ invoice: { id: 'inv1' }, pdfBuffer: Buffer.alloc(0) }),
   generateAndStoreCreditNote: jest.fn().mockResolvedValue({ invoice: { id: 'gs1' }, pdfBuffer: Buffer.alloc(0) }),
   getOrGenerateInvoice: jest.fn().mockResolvedValue(Buffer.alloc(0)),
+  // Two-phase credit-note flow introduced with the refund-atomicity fix.
+  // Phase 1: shell creation inside the refund $transaction.
+  createCreditNoteShellInTx: jest.fn().mockResolvedValue({
+    invoiceId: 'shell1',
+    creditNoteNumber: 'GS-2026-00001',
+    originalInvoiceNumber: 'RE-2026-00001',
+    pdfInputOrder: { orderNumber: 'ORD-TEST' },
+    pdfInputReturnItems: [],
+  }),
+  // Phase 2: PDF upload + invoice finalization (post-tx). Default happy path.
+  finalizeCreditNotePdf: jest.fn().mockResolvedValue({ ok: true, pdfBuffer: Buffer.alloc(0) }),
+  // Legacy orchestrator (kept for non-refund call sites).
+  generateCreditNote: jest.fn().mockResolvedValue({ creditNote: { id: 'gs1' }, pdfBuffer: Buffer.alloc(0) }),
 }
 
 // ── Mocks ────────────────────────────────────────────────────
@@ -315,6 +328,155 @@ describe('PaymentsService', () => {
       await expect(
         service.createRefund({ paymentId: 'pay1', amount: 5000 }, 'admin1', 'corr1'),
       ).rejects.toThrow(BadRequestException)
+    })
+  })
+
+  // ── Two-Phase Commit for refund + credit-note atomicity ────────
+  //
+  // The launch-blocker fix: the refund + payment-update + order-update +
+  // credit-note-shell must all commit atomically in one $transaction,
+  // and the Supabase PDF upload happens AFTER the tx commits so a
+  // transient storage hiccup can never leave a refund without a matching
+  // Gutschrift row. Previous behaviour (try/catch on generateCreditNote)
+  // silently swallowed upload errors.
+  describe('createRefund — Two-Phase Commit', () => {
+    beforeEach(() => {
+      // Default happy-path mocks. Per-test overrides below.
+      mockInvoiceService.createCreditNoteShellInTx = jest.fn().mockResolvedValue({
+        invoiceId: 'shell1',
+        creditNoteNumber: 'GS-2026-00042',
+        originalInvoiceNumber: 'RE-2026-00001',
+        pdfInputOrder: { orderNumber: 'ORD-20260326-000001' },
+        pdfInputReturnItems: [],
+      })
+      mockInvoiceService.finalizeCreditNotePdf = jest.fn().mockResolvedValue({
+        ok: true,
+        pdfBuffer: Buffer.alloc(0),
+      })
+    })
+
+    it('Phase 1: Refund + Payment + Order + Credit-Note-Shell commit in ONE $transaction', async () => {
+      mockPrisma.payment.findFirst.mockResolvedValue(
+        makePayment({ amount: 50.00, refunds: [] }),
+      )
+      mockPrisma.refund.create.mockResolvedValue({ id: 'ref1', status: 'PROCESSED' })
+      mockPrisma.payment.update.mockResolvedValue({})
+      mockPrisma.order.update.mockResolvedValue({})
+
+      // $transaction wraps the Phase 1 block. Spy on it.
+      await service.createRefund(
+        { paymentId: 'pay1', amount: 5000 /* full refund of €50 */ },
+        'admin1',
+        'corr1',
+      )
+
+      // $transaction was entered with a function (not an array of ops)
+      expect(mockPrisma.$transaction).toHaveBeenCalled()
+      const txArg = (mockPrisma.$transaction as jest.Mock).mock.calls[0][0]
+      expect(typeof txArg).toBe('function')
+
+      // createCreditNoteShellInTx was called inside the tx
+      expect(mockInvoiceService.createCreditNoteShellInTx).toHaveBeenCalledWith(
+        expect.anything(),  // tx client
+        expect.any(String), // orderId
+        50,                  // refund amount in EUR (5000 cents / 100)
+      )
+    })
+
+    it('Phase 2: PDF finalize is called AFTER the transaction commits', async () => {
+      mockPrisma.payment.findFirst.mockResolvedValue(
+        makePayment({ amount: 50.00, refunds: [] }),
+      )
+      mockPrisma.refund.create.mockResolvedValue({ id: 'ref1', status: 'PROCESSED' })
+      mockPrisma.payment.update.mockResolvedValue({})
+      mockPrisma.order.update.mockResolvedValue({})
+
+      await service.createRefund(
+        { paymentId: 'pay1', amount: 3000 /* partial €30 */ },
+        'admin1',
+        'corr1',
+      )
+
+      // Phase 2 invoked with the shell data from Phase 1
+      expect(mockInvoiceService.finalizeCreditNotePdf).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceId: 'shell1',
+          creditNoteNumber: 'GS-2026-00042',
+          refundAmount: 30,
+        }),
+      )
+    })
+
+    it('Phase 2 failure: emits payment.credit_note_pdf_pending event, refund still succeeds', async () => {
+      mockPrisma.payment.findFirst.mockResolvedValue(
+        makePayment({ amount: 50.00, refunds: [] }),
+      )
+      mockPrisma.refund.create.mockResolvedValue({ id: 'ref1', status: 'PROCESSED' })
+      mockPrisma.payment.update.mockResolvedValue({})
+      mockPrisma.order.update.mockResolvedValue({})
+
+      // Simulate all 3 Supabase retries exhausted
+      mockInvoiceService.finalizeCreditNotePdf = jest.fn().mockResolvedValue({
+        ok: false,
+        error: 'Supabase 503 after 3 retries',
+      })
+
+      // Refund must still resolve successfully — silent-success pattern:
+      // the refund is committed, only the PDF is deferred.
+      const result = await service.createRefund(
+        { paymentId: 'pay1', amount: 5000 },
+        'admin1',
+        'corr1',
+      )
+      expect(result).toBeDefined()
+      expect(result.id).toBe('ref1')
+
+      // Admin-notification event was emitted so the pending-PDF state
+      // is surfaced to the admin UI. The listener (in AdminModule) turns
+      // this into a proper notification row.
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        'payment.credit_note_pdf_pending',
+        expect.objectContaining({
+          invoiceId: 'shell1',
+          creditNoteNumber: 'GS-2026-00042',
+          refundAmount: 50,
+          error: expect.stringContaining('Supabase'),
+        }),
+      )
+    })
+
+    it('Phase 1 rollback: if shell-creation throws, no post-tx work runs', async () => {
+      mockPrisma.payment.findFirst.mockResolvedValue(
+        makePayment({ amount: 50.00, refunds: [] }),
+      )
+      mockPrisma.refund.create.mockResolvedValue({ id: 'ref1', status: 'PROCESSED' })
+      mockPrisma.payment.update.mockResolvedValue({})
+      mockPrisma.order.update.mockResolvedValue({})
+
+      // Simulate the GS-sequence upsert or invoice.create failing inside tx.
+      // Since our mock $transaction just invokes the fn synchronously and
+      // returns its result (no real rollback), the throw from
+      // createCreditNoteShellInTx surfaces as a thrown $transaction.
+      mockInvoiceService.createCreditNoteShellInTx = jest.fn().mockRejectedValue(
+        new Error('DB deadlock on invoice_sequences'),
+      )
+
+      await expect(
+        service.createRefund(
+          { paymentId: 'pay1', amount: 5000 },
+          'admin1',
+          'corr1',
+        ),
+      ).rejects.toThrow('DB deadlock on invoice_sequences')
+
+      // Phase 2 must NOT have been called — the tx rolled back before
+      // we left $transaction().
+      expect(mockInvoiceService.finalizeCreditNotePdf).not.toHaveBeenCalled()
+      // And no pending-pdf notification since Phase 2 never ran.
+      expect(mockEventEmitter.emit).not.toHaveBeenCalledWith(
+        'payment.credit_note_pdf_pending',
+        expect.anything(),
+      )
     })
   })
 

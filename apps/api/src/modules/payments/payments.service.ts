@@ -939,48 +939,107 @@ export class PaymentsService {
       idempotencyKey,
     })
 
-    // Persist refund
-    const refund = await this.prisma.refund.create({
-      data: {
-        paymentId: payment.id,
-        amount: dto.amount / 100, // store as EUR, not cents
-        reason: dto.reason,
-        status: refundResult.status === 'succeeded' ? 'PROCESSED' : refundResult.status === 'failed' ? 'FAILED' : 'PENDING',
-        providerRefundId: refundResult.providerRefundId,
-        idempotencyKey,
-        processedAt: refundResult.status === 'succeeded' ? new Date() : null,
-        createdBy: performedBy,
-      },
-    })
-
-    // Update payment status
+    // ── Phase 1 — atomic DB writes (refund + payment + order + GS-shell) ──
+    //
+    // All four writes plus the GS-number allocation run inside a single
+    // $transaction. If ANY of them throw, the whole set rolls back —
+    // including the InvoiceSequence increment (no gap in GS numbering).
+    //
+    // Previously these were 3 separate awaits with the credit note wrapped
+    // in a silent try/catch. That left a "refund without Gutschrift" ghost
+    // state when the PDF upload failed — the same bug shape as the refund-
+    // math bug fixed earlier in this launch cycle.
     const isFullRefund = totalRefunded * 100 + dto.amount >= maxRefundable
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: isFullRefund ? 'refunded' : 'partially_refunded',
-        refundedAmount: { increment: dto.amount / 100 },
-        refundedAt: new Date(),
-      },
-    })
+    const refundStatus: 'PROCESSED' | 'FAILED' | 'PENDING' =
+      refundResult.status === 'succeeded' ? 'PROCESSED'
+      : refundResult.status === 'failed' ? 'FAILED'
+      : 'PENDING'
 
-    // Update order status if full refund
-    if (isFullRefund) {
-      await this.prisma.order.update({
-        where: { id: payment.orderId },
-        data: { status: 'refunded' },
+    const { refund, creditNoteShell } = await this.prisma.$transaction(async (tx) => {
+      const refundRow = await tx.refund.create({
+        data: {
+          paymentId: payment.id,
+          amount: dto.amount / 100, // store as EUR, not cents
+          reason: dto.reason,
+          status: refundStatus,
+          providerRefundId: refundResult.providerRefundId,
+          idempotencyKey,
+          processedAt: refundResult.status === 'succeeded' ? new Date() : null,
+          createdBy: performedBy,
+        },
       })
-    }
+
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: isFullRefund ? 'refunded' : 'partially_refunded',
+          refundedAmount: { increment: dto.amount / 100 },
+          refundedAt: new Date(),
+        },
+      })
+
+      if (isFullRefund) {
+        await tx.order.update({
+          where: { id: payment.orderId },
+          data: { status: 'refunded' },
+        })
+      }
+
+      // Allocate GS-number + write Invoice-shell atomically with the refund.
+      // Shell has pdfUrl=NULL; Phase 2 below fills it in.
+      const shell = await this.invoiceService.createCreditNoteShellInTx(
+        tx,
+        payment.orderId,
+        dto.amount / 100,
+      )
+
+      return { refund: refundRow, creditNoteShell: shell }
+    })
 
     this.logger.log(
-      `[${correlationId}] Refund: ${refund.id} | payment=${payment.id} | amount=${dto.amount} cents | ${isFullRefund ? 'FULL' : 'PARTIAL'} | by=${performedBy}`,
+      `[${correlationId}] Refund: ${refund.id} | payment=${payment.id} | amount=${dto.amount} cents | ${isFullRefund ? 'FULL' : 'PARTIAL'} | GS=${creditNoteShell.creditNoteNumber} | by=${performedBy}`,
     )
 
-    // Auto-generate credit note (Gutschrift)
-    try {
-      await this.invoiceService.generateCreditNote(payment.orderId, dto.amount / 100)
-    } catch (err) {
-      this.logger.error(`Credit note generation failed for payment ${payment.id}: ${err}`)
+    // ── Phase 2 — PDF build + upload + invoice finalize (out-of-tx) ──
+    //
+    // PDF construction is pure CPU (~50-200ms), Supabase upload is the
+    // only external I/O. Retry-with-backoff handles transient storage
+    // hiccups. On final exhaustion the shell stays with pdfUrl=NULL and
+    // an admin-notification 'credit_note_pdf_pending' fires. The refund
+    // is already committed and returned as success — PDF absence is a
+    // deferrable admin-UI concern, not a money-flow failure.
+    const phase2 = await this.invoiceService.finalizeCreditNotePdf({
+      invoiceId: creditNoteShell.invoiceId,
+      creditNoteNumber: creditNoteShell.creditNoteNumber,
+      originalInvoiceNumber: creditNoteShell.originalInvoiceNumber,
+      order: creditNoteShell.pdfInputOrder,
+      returnItems: creditNoteShell.pdfInputReturnItems,
+      refundAmount: dto.amount / 100,
+    })
+
+    if (!phase2.ok) {
+      this.logger.error(
+        `[${correlationId}] Credit note PDF finalization FAILED for ${creditNoteShell.creditNoteNumber}: ${phase2.error}`,
+      )
+      // Emit an event rather than directly injecting NotificationService —
+      // avoids circular module deps (PaymentsModule → AdminModule, and
+      // AdminModule already imports PaymentsModule for AdminReturnsService).
+      // AdminModule's notification.listener picks this up and creates the
+      // admin-notification so the pending-PDF state is visible + retry-able.
+      try {
+        this.eventEmitter.emit('payment.credit_note_pdf_pending', {
+          invoiceId: creditNoteShell.invoiceId,
+          creditNoteNumber: creditNoteShell.creditNoteNumber,
+          originalInvoiceNumber: creditNoteShell.originalInvoiceNumber,
+          orderId: payment.orderId,
+          orderNumber: payment.order.orderNumber,
+          refundAmount: dto.amount / 100,
+          error: phase2.error.slice(0, 200),
+          correlationId,
+        })
+      } catch (emitErr: any) {
+        this.logger.error(`Event emit for pending PDF failed: ${emitErr?.message}`)
+      }
     }
 
     // Fire-and-forget outbound webhook — payment.refunded.

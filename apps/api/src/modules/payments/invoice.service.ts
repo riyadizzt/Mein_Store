@@ -219,42 +219,111 @@ export class InvoiceService implements OnModuleInit {
     return { buffer, filename: `${invoice.invoiceNumber}.pdf` }
   }
 
-  // ── Generate Credit Note ─────────────────────────────────
+  // ── Credit Note Generation (Two-Phase Commit) ───────────
+  //
+  // Credit note creation is split into two phases to keep the Supabase
+  // storage upload OUT of the finance-critical DB transaction:
+  //
+  //   Phase 1 (atomic, in caller's $transaction):
+  //     createCreditNoteShellInTx() — allocate GS-number, write an
+  //     Invoice row with pdfUrl=NULL as a placeholder. Needs a
+  //     Prisma TransactionClient so it joins the same $transaction as
+  //     the refund/payment/order writes.
+  //
+  //   Phase 2 (after tx commits, out of band):
+  //     finalizeCreditNotePdf() — build PDF in-memory, upload to
+  //     Supabase with 3-retry exponential backoff (200ms/500ms/1500ms),
+  //     UPDATE the Invoice row with pdfUrl + storagePath. The GoBD
+  //     trigger (WHEN OLD.pdf_url IS NOT NULL) allows this one-shot
+  //     upgrade; any subsequent UPDATE is blocked.
+  //
+  // On final upload exhaustion: Invoice row stays with pdfUrl=NULL,
+  // caller is responsible for firing an admin notification. The refund
+  // itself is already committed — this is a data-integrity-preserving
+  // deferred finalization, not a failure.
 
-  async generateCreditNote(orderId: string, refundAmount: number): Promise<{ creditNote: any; pdfBuffer: Buffer }> {
-    const order = await this.fetchOrderForInvoice(orderId)
+  /**
+   * Phase 1 — allocate GS-number + write shell Invoice row.
+   * MUST be called inside a Prisma $transaction so the sequence
+   * allocation rolls back if anything upstream fails.
+   *
+   * Returns the shell invoice id + the pdf-input data needed by Phase 2.
+   */
+  async createCreditNoteShellInTx(
+    tx: any,
+    orderId: string,
+    refundAmount: number,
+  ): Promise<{
+    invoiceId: string
+    creditNoteNumber: string
+    originalInvoiceNumber: string
+    pdfInputOrder: any
+    pdfInputReturnItems: any[]
+  }> {
+    // Read order inside tx so we see the just-updated order.status (if the
+    // caller already did order.update for full-refund).
+    const order = await tx.order.findFirst({
+      where: { id: orderId, deletedAt: null },
+      include: {
+        items: {
+          include: {
+            variant: {
+              select: {
+                color: true, size: true,
+                product: { select: { translations: { select: { language: true, name: true } } } },
+              },
+            },
+          },
+        },
+        payment: { select: { method: true, paidAt: true } },
+        invoices: true,
+        user: { select: { firstName: true, lastName: true, email: true, preferredLang: true } },
+        shippingAddress: true,
+      },
+    })
 
-    // Find original invoice
+    if (!order) {
+      throw new NotFoundException({
+        statusCode: 404, error: 'OrderNotFound',
+        message: { de: 'Bestellung nicht gefunden.', en: 'Order not found.', ar: 'الطلب غير موجود.' },
+      })
+    }
+
     const originalInvoice = order.invoices.find((i: any) => i.type === 'INVOICE')
     const originalInvoiceNumber = originalInvoice?.invoiceNumber ?? 'N/A'
 
-    // Try to find return items for this order (for detailed credit note)
-    const returnReq = await this.prisma.return.findFirst({
+    const returnReq = await tx.return.findFirst({
       where: { orderId },
       orderBy: { createdAt: 'desc' },
       select: { returnItems: true },
     })
     const returnItems = (returnReq?.returnItems as any[]) ?? []
 
-    const creditNoteNumber = await this.generateInvoiceNumber('GS')
+    // Atomic GS-number allocation inside the same transaction. If the tx
+    // rolls back afterwards, the sequence rollbacks too — no gap.
+    const year = new Date().getFullYear().toString()
+    const seqResult = await tx.$queryRaw<Array<{ seq: number }>>`
+      INSERT INTO invoice_sequences (date_key, seq)
+      VALUES (${`GS-${year}`}, 1)
+      ON CONFLICT (date_key) DO UPDATE SET seq = invoice_sequences.seq + 1
+      RETURNING seq
+    `
+    const creditNoteNumber = `GS-${year}-${String(seqResult[0].seq).padStart(5, '0')}`
+
     const netAmount = -(refundAmount / 1.19)
     const taxAmount = -(refundAmount - refundAmount / 1.19)
     const grossAmount = -refundAmount
 
-    // Generate PDF
-    const pdfBuffer = await this.buildCreditNotePdf(order, creditNoteNumber, originalInvoiceNumber, refundAmount, returnItems)
-
-    // Upload
-    const { path, signedUrl } = await this.storage.uploadInvoicePdf(creditNoteNumber, pdfBuffer)
-
-    // DB record
-    const creditNote = await this.prisma.invoice.create({
+    // Placeholder Invoice row. pdfUrl=NULL is the signal the row is not
+    // yet finalized. The GoBD trigger permits the later UPDATE precisely
+    // because of this NULL state.
+    const creditNote = await tx.invoice.create({
       data: {
         orderId,
         invoiceNumber: creditNoteNumber,
         type: 'CREDIT_NOTE',
-        pdfUrl: signedUrl,
-        storagePath: path,
+        pdfUrl: null,
+        storagePath: null,
         originalInvoiceId: originalInvoice?.id ?? null,
         netAmount,
         taxAmount,
@@ -262,8 +331,124 @@ export class InvoiceService implements OnModuleInit {
       },
     })
 
-    this.logger.log(`Credit note ${creditNoteNumber} generated (ref: ${originalInvoiceNumber})`)
-    return { creditNote, pdfBuffer }
+    return {
+      invoiceId: creditNote.id,
+      creditNoteNumber,
+      originalInvoiceNumber,
+      pdfInputOrder: order,
+      pdfInputReturnItems: returnItems,
+    }
+  }
+
+  /**
+   * Phase 2 — build PDF, upload to Supabase with retries, finalize the
+   * Invoice row by setting pdfUrl + storagePath.
+   *
+   * Returns { ok: true, pdfBuffer } on success, or { ok: false } on
+   * final exhaustion (after 3 retries). Never throws — the caller is
+   * responsible for admin-notification on ok=false.
+   */
+  async finalizeCreditNotePdf(params: {
+    invoiceId: string
+    creditNoteNumber: string
+    originalInvoiceNumber: string
+    order: any
+    returnItems: any[]
+    refundAmount: number
+  }): Promise<{ ok: true; pdfBuffer: Buffer } | { ok: false; error: string }> {
+    const { invoiceId, creditNoteNumber, originalInvoiceNumber, order, returnItems, refundAmount } = params
+
+    let pdfBuffer: Buffer
+    try {
+      pdfBuffer = await this.buildCreditNotePdf(order, creditNoteNumber, originalInvoiceNumber, refundAmount, returnItems)
+    } catch (e: any) {
+      this.logger.error(`Credit note PDF build failed for ${creditNoteNumber}: ${e.message}`)
+      return { ok: false, error: `PDF build: ${e.message}` }
+    }
+
+    // Retry upload up to 3 times with exponential backoff (200ms, 500ms, 1500ms).
+    // Supabase hiccups are usually transient — 3 attempts covers the vast
+    // majority without blocking the admin UI too long (worst case ~2.2s).
+    const DELAYS_MS = [200, 500, 1500]
+    let uploadResult: { path: string; signedUrl: string } | null = null
+    let lastError = ''
+    for (let attempt = 0; attempt < DELAYS_MS.length; attempt++) {
+      try {
+        uploadResult = await this.storage.uploadInvoicePdf(creditNoteNumber, pdfBuffer)
+        break
+      } catch (e: any) {
+        lastError = e?.message ?? 'unknown upload error'
+        this.logger.warn(
+          `Credit note upload attempt ${attempt + 1}/${DELAYS_MS.length} failed for ${creditNoteNumber}: ${lastError}`,
+        )
+        if (attempt < DELAYS_MS.length - 1) {
+          await new Promise((r) => setTimeout(r, DELAYS_MS[attempt]))
+        }
+      }
+    }
+
+    if (!uploadResult) {
+      this.logger.error(
+        `Credit note ${creditNoteNumber} upload exhausted all 3 retries — invoice row stays with pdfUrl=NULL`,
+      )
+      return { ok: false, error: `Upload after retries: ${lastError}` }
+    }
+
+    // One-shot UPDATE from pdfUrl=NULL → pdfUrl=signedUrl. GoBD trigger
+    // allows this because OLD.pdf_url IS NULL. Any future UPDATE on
+    // this row is blocked by the trigger.
+    try {
+      await this.prisma.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          pdfUrl: uploadResult.signedUrl,
+          storagePath: uploadResult.path,
+        },
+      })
+    } catch (e: any) {
+      this.logger.error(
+        `Credit note ${creditNoteNumber} invoice.update failed post-upload: ${e.message}`,
+      )
+      return { ok: false, error: `Invoice finalize: ${e.message}` }
+    }
+
+    this.logger.log(`Credit note ${creditNoteNumber} finalized (ref: ${originalInvoiceNumber})`)
+    return { ok: true, pdfBuffer }
+  }
+
+  /**
+   * Legacy-compatible orchestrator. Runs Phase 1 in its OWN transaction
+   * followed by Phase 2. Kept for callers that don't compose with an
+   * outer transaction (e.g. standalone admin "regenerate credit note"
+   * triggers if they exist later).
+   *
+   * DO NOT use from createRefund() — that path composes Phase 1 inside
+   * the larger refund transaction for full atomicity.
+   */
+  async generateCreditNote(orderId: string, refundAmount: number): Promise<{ creditNote: any; pdfBuffer: Buffer }> {
+    const phase1 = await this.prisma.$transaction(async (tx) => {
+      return this.createCreditNoteShellInTx(tx, orderId, refundAmount)
+    })
+
+    const phase2 = await this.finalizeCreditNotePdf({
+      invoiceId: phase1.invoiceId,
+      creditNoteNumber: phase1.creditNoteNumber,
+      originalInvoiceNumber: phase1.originalInvoiceNumber,
+      order: phase1.pdfInputOrder,
+      returnItems: phase1.pdfInputReturnItems,
+      refundAmount,
+    })
+
+    const creditNote = await this.prisma.invoice.findUnique({ where: { id: phase1.invoiceId } })
+
+    if (!phase2.ok) {
+      // In the legacy orchestrator path we return the (possibly pdfUrl=NULL)
+      // row with an empty pdfBuffer. Callers that use this legacy wrapper
+      // are presumed to tolerate pending-PDF state.
+      return { creditNote, pdfBuffer: Buffer.alloc(0) }
+    }
+
+    return { creditNote, pdfBuffer: phase2.pdfBuffer }
   }
 
   // ── Generate Delivery Note (no prices, not stored) ───────
