@@ -1,12 +1,15 @@
-import type { NextConfig } from 'next'
 import createNextIntlPlugin from 'next-intl/plugin'
 import { withSentryConfig } from '@sentry/nextjs'
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
-// Explicit NextConfig type (not JSDoc) so nested unions like images.formats
-// narrow to their proper enum-string types instead of bare string[].
-const nextConfig: NextConfig = {
+// Next.js 14 only supports .js / .mjs / .cjs for the config file — .ts is
+// not supported until Next.js 15. We stay on .mjs and rely on a JSDoc type
+// annotation for editor hints. Since .mjs is excluded from the tsc
+// `include` glob, the strict TypeScript check never runs here — Next.js
+// validates the shape itself at startup.
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   images: {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
