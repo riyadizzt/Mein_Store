@@ -699,23 +699,91 @@ export default function MovementsPage() {
                         className={`flex items-center gap-3 px-4 py-3 transition-all hover:bg-muted/30 ${!isSingle ? 'cursor-pointer' : 'cursor-default'}`}
                         style={{ animation: 'fadeIn 300ms ease-out both' }}
                       >
-                        {/* Product image — with graceful fallback when the URL
-                            is broken (e.g. Supabase bucket file deleted but
-                            image row still in DB). We render the fallback
-                            icon div absolutely-positioned BEHIND the img,
-                            so when <img> errors out we just swap its display
-                            to none and the icon shows through. */}
-                        <div className={`relative h-11 w-11 rounded-xl flex-shrink-0 overflow-hidden ${cfg.bg} ${cfg.text} flex items-center justify-center`}>
-                          <Icon className="h-[18px] w-[18px]" />
-                          {pg.productImage && (
-                            <img
-                              src={pg.productImage}
-                              alt=""
-                              className="absolute inset-0 h-full w-full object-cover"
-                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                            />
-                          )}
-                        </div>
+                        {/* Product image(s) — for multi-product groups (e.g.
+                            a return or order that spans multiple variants
+                            of different products) we stack up to 3 distinct
+                            product photos Slack-avatar-style so the admin
+                            sees at a glance which products the event
+                            involved. For single-product groups the original
+                            44×44 single-photo layout with icon-fallback is
+                            kept (when the Supabase URL is broken, <img>
+                            errors out and the icon behind shows through). */}
+                        {(() => {
+                          const distinctImages = Array.from(
+                            new Set(
+                              pg.items
+                                .map((i: any) => i.productImage as string | null)
+                                .filter((u: string | null): u is string => !!u),
+                            ),
+                          )
+                          const visibleImages = distinctImages.slice(0, 3)
+                          const extraCount = Math.max(0, distinctImages.length - 3)
+
+                          if (visibleImages.length <= 1) {
+                            // Single-product group — same layout as before.
+                            return (
+                              <div className={`relative h-11 w-11 rounded-xl flex-shrink-0 overflow-hidden ${cfg.bg} ${cfg.text} flex items-center justify-center`}>
+                                <Icon className="h-[18px] w-[18px]" />
+                                {visibleImages[0] && (
+                                  <img
+                                    src={visibleImages[0]}
+                                    alt=""
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                                  />
+                                )}
+                              </div>
+                            )
+                          }
+
+                          // Multi-product stack — each avatar 40×40 with a 2px
+                          // ring-background separator, overlapping 14px on the
+                          // inline-start side of the next. marginInlineStart
+                          // is RTL-aware (Arabic layout stacks from the right).
+                          const AV_SIZE = 40
+                          const OVERLAP = 14
+                          const totalW = AV_SIZE + (visibleImages.length + (extraCount > 0 ? 1 : 0) - 1) * (AV_SIZE - OVERLAP)
+                          return (
+                            <div
+                              className="relative flex items-center flex-shrink-0"
+                              style={{ height: AV_SIZE, width: totalW }}
+                            >
+                              {visibleImages.map((img, idx) => (
+                                <div
+                                  key={img}
+                                  className={`rounded-xl overflow-hidden ring-2 ring-background flex-shrink-0 ${cfg.bg} ${cfg.text} flex items-center justify-center`}
+                                  style={{
+                                    height: AV_SIZE,
+                                    width: AV_SIZE,
+                                    marginInlineStart: idx === 0 ? 0 : `-${OVERLAP}px`,
+                                    zIndex: visibleImages.length - idx,
+                                  }}
+                                >
+                                  <Icon className="h-[16px] w-[16px] absolute" />
+                                  <img
+                                    src={img}
+                                    alt=""
+                                    className="relative h-full w-full object-cover"
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                                  />
+                                </div>
+                              ))}
+                              {extraCount > 0 && (
+                                <div
+                                  className="rounded-xl flex items-center justify-center text-[11px] font-bold text-muted-foreground bg-muted ring-2 ring-background"
+                                  style={{
+                                    height: AV_SIZE,
+                                    width: AV_SIZE,
+                                    marginInlineStart: `-${OVERLAP}px`,
+                                    zIndex: 0,
+                                  }}
+                                >
+                                  +{extraCount}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
 
                         {/* Main info */}
                         <div className="flex-1 min-w-0">
