@@ -9,12 +9,26 @@ export class DashboardService {
 
   async getOverview() {
     try {
+    // All day/week/month boundaries are anchored to UTC, matching the
+    // convention used by finance-reports.service.ts. Previously these used
+    // local-server-time constructors (e.g. `new Date(y, m, d)`), which on a
+    // Berlin-local machine produced boundaries 1-2h off from the finance
+    // reports' UTC-aligned buckets — same day's revenue showed different
+    // numbers on the dashboard vs. the reports page. GoBD requires
+    // consistent, reproducible time boundaries across all finance views.
+    // Production hosts run in UTC, so this change is a no-op in prod; it
+    // only shifts dev-machine behaviour into alignment with finance-reports.
     const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const todayStart = new Date(now)
+    todayStart.setUTCHours(0, 0, 0, 0)
+    // ISO 8601 / German convention: week starts Monday. getUTCDay returns
+    // 0=Sunday..6=Saturday; map Sunday→6-days-back-to-Monday, anything else→(n-1).
     const weekStart = new Date(todayStart)
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1) // Monday
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const dow = weekStart.getUTCDay()
+    const daysBackToMonday = dow === 0 ? 6 : dow - 1
+    weekStart.setUTCDate(weekStart.getUTCDate() - daysBackToMonday)
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const lastMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
 
     const [
       todayOrders,
@@ -245,8 +259,11 @@ export class DashboardService {
       dayMap.set(key, { revenue: Number(row.revenue ?? 0), orderCount: Number(row.order_count ?? 0) })
     }
     for (let i = 6; i >= 0; i--) {
+      // setUTCDate to stay on UTC day boundaries (matches the UTC anchor of
+      // todayStart above). setDate would use local-time, risking a 1-day
+      // shift across DST transitions on non-UTC machines.
       const d = new Date(todayStart)
-      d.setDate(d.getDate() - i)
+      d.setUTCDate(d.getUTCDate() - i)
       const key = d.toISOString().slice(0, 10)
       const hit = dayMap.get(key)
       revenueLast7Days.push({
@@ -368,7 +385,9 @@ export class DashboardService {
   }
 
   private async getCancellationRate() {
-    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    // Rolling 30-day window from the current instant. Millisecond
+    // subtraction is timezone-free: no DST ambiguity at month boundaries.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     const [total, cancelled] = await Promise.all([
       this.prisma.order.count({ where: { createdAt: { gte: thirtyDaysAgo }, deletedAt: null } }),
       this.prisma.order.count({ where: { createdAt: { gte: thirtyDaysAgo }, deletedAt: null, status: 'cancelled' } }),
@@ -389,11 +408,15 @@ export class DashboardService {
 
   // ── Search Analytics ──────────────────────────────────
   async getSearchAnalytics() {
+    // Same UTC-anchored boundaries as getOverview above (see the comment
+    // block there for the reasoning — keep finance-dashboard alignment
+    // consistent across every query in this service).
     const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const todayStart = new Date(now)
+    todayStart.setUTCHours(0, 0, 0, 0)
     const weekStart = new Date(todayStart)
-    weekStart.setDate(weekStart.getDate() - 7)
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    weekStart.setUTCDate(weekStart.getUTCDate() - 7)
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
 
     // Total searches
     const [totalToday, totalWeek, totalMonth] = await Promise.all([
