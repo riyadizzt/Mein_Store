@@ -375,6 +375,200 @@ describe('Admin — AdminOrdersService', () => {
       expect(result.itemsMoved).toBe(0)
     })
   })
+
+  // ── Post-capture Lifecycle-Guard (Launch-Blocker fix) ─────────
+  //
+  // Covers the bug found in the 18.04 live test where the consolidate flow
+  // moved a reservation row after sale_online had already decremented the
+  // source warehouse's onHand — producing phantom reservations in the
+  // target warehouse that did not correspond to any real order-in-flight.
+  //
+  // The guard: only pending + pending_payment may run consolidate or
+  // changeItemWarehouse. Every other status → 409
+  // WarehouseChangeBlockedAfterCapture (unified error code across both
+  // methods) + audit entry WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE with
+  // data.method = 'consolidate' | 'change_item'.
+  describe('Post-capture Lifecycle-Guard for warehouse changes', () => {
+    // Reusable minimal order shell — just enough structure for the guard
+    // check to fire. No items, reservations, or inventory mocks needed:
+    // the guard rejects BEFORE reaching any of those code paths.
+    const makeOrderAtStatus = (status: string) => ({
+      id: 'o1',
+      orderNumber: 'ORD-GUARD-TEST',
+      deletedAt: null,
+      status,
+      items: [
+        { id: 'i1', variantId: 'v1', quantity: 1, snapshotName: 'A', snapshotSku: 'SKU-A',
+          variant: { color: 'Rot', size: 'M', sku: 'SKU-A', product: { translations: [] } } },
+      ],
+    })
+
+    // ── consolidateWarehouse (R7) ─────────────────────────────
+
+    it('consolidate: status=confirmed → 409 WarehouseChangeBlockedAfterCapture', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('confirmed'))
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+      let caught: any = null
+      try {
+        await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false)
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).toBeInstanceOf(ConflictException)
+      expect(caught.response?.error).toBe('WarehouseChangeBlockedAfterCapture')
+      // 3-language message enforced
+      expect(caught.response?.message?.de).toContain('Zahlungsbestätigung')
+      expect(caught.response?.message?.en).toContain('payment capture')
+      expect(caught.response?.message?.ar).toContain('تأكيد الدفع')
+      // data carries the allowed-status list for the frontend
+      expect(caught.response?.data?.allowedStatuses).toEqual(['pending', 'pending_payment'])
+    })
+
+    it('consolidate: status=processing → 409', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('processing'))
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+      await expect(
+        ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false),
+      ).rejects.toThrow(ConflictException)
+    })
+
+    it('consolidate: status=shipped → 409 (overlaps legacy test, verifies unified error code)', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('shipped'))
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+      let caught: any = null
+      try {
+        await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false)
+      } catch (e) {
+        caught = e
+      }
+      // Legacy test up above already checks `toThrow(ConflictException)`.
+      // This one doubles down on the ERROR CODE being the new unified one
+      // (not the old OrderNotEditable) — protects against a future refactor
+      // that re-introduces the old BadRequest/OrderNotEditable throw.
+      expect(caught.response?.error).toBe('WarehouseChangeBlockedAfterCapture')
+    })
+
+    it('consolidate: status=cancelled → 409', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('cancelled'))
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+      await expect(
+        ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false),
+      ).rejects.toThrow(ConflictException)
+    })
+
+    it('consolidate: status=pending → guard passes (reaches preflight)', async () => {
+      // Allow-list check: pending must NOT trip the guard. Provide just
+      // enough downstream mocks for the call to resolve cleanly (empty
+      // reservations → changed=false, no-op).
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('pending'))
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-target', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findMany.mockResolvedValue([])
+
+      const result = await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false)
+      expect(result.changed).toBe(false)
+      // No audit of the blocked type (we passed, not blocked)
+      const auditCalls = (mockPrisma.adminAuditLog.create as jest.Mock).mock.calls
+      const blockedEntry = auditCalls.find((c) => c[0]?.data?.action === 'WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE')
+      expect(blockedEntry).toBeUndefined()
+    })
+
+    // ── force=true does NOT bypass (Verfeinerung 2) ──────────
+
+    it('consolidate: status=confirmed + force=true → STILL 409 (force does NOT bypass lifecycle guard)', async () => {
+      // Explicit regression guard: `force` was designed for stock-preflight
+      // override (admin accepts partial availability warnings). Our
+      // post-capture guard is a SEPARATE concern — the goods have already
+      // left the source warehouse. No force flag should ever let a
+      // confirmed/processing/shipped/... order consolidate.
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('confirmed'))
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+      let caught: any = null
+      try {
+        await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', true /* force */)
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).toBeInstanceOf(ConflictException)
+      expect(caught.response?.error).toBe('WarehouseChangeBlockedAfterCapture')
+    })
+
+    // ── changeItemWarehouse (R5) ──────────────────────────────
+
+    it('change_item: status=confirmed → 409 WarehouseChangeBlockedAfterCapture', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('confirmed'))
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+      let caught: any = null
+      try {
+        await ordersService.changeItemWarehouse('o1', 'i1', 'wh-target', 'admin1', '127.0.0.1')
+      } catch (e) {
+        caught = e
+      }
+      expect(caught).toBeInstanceOf(ConflictException)
+      expect(caught.response?.error).toBe('WarehouseChangeBlockedAfterCapture')
+      expect(caught.response?.message?.de).toContain('Zahlungsbestätigung')
+    })
+
+    it('change_item: status=pending → guard passes (reaches WarehouseNotFound path)', async () => {
+      // With no warehouse mock set, the post-guard code path reaches
+      // WarehouseNotFound, proving the guard didn't fire. This is cleaner
+      // than mocking the full reservation + inventory chain just to prove
+      // the guard let us through.
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('pending'))
+      mockPrisma.warehouse.findFirst.mockResolvedValue(null)
+
+      let caught: any = null
+      try {
+        await ordersService.changeItemWarehouse('o1', 'i1', 'wh-target', 'admin1', '127.0.0.1')
+      } catch (e) {
+        caught = e
+      }
+      // Must NOT be the guard's 409 — should be the downstream
+      // WarehouseNotFound (404). That proves the guard passed.
+      expect(caught).not.toBeInstanceOf(ConflictException)
+      expect(caught.response?.error).toBe('WarehouseNotFound')
+    })
+
+    // ── Audit trail: one action name, method-field distinguishes ──
+
+    it('audit: blocked attempt writes WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE with method field', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(makeOrderAtStatus('confirmed'))
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+      // Consolidate attempt — expect method='consolidate'
+      try {
+        await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false)
+      } catch { /* guard fires as expected */ }
+
+      // Change-item attempt — expect method='change_item'
+      try {
+        await ordersService.changeItemWarehouse('o1', 'i1', 'wh-target', 'admin1', '127.0.0.1')
+      } catch { /* guard fires as expected */ }
+
+      const auditCalls = (mockPrisma.adminAuditLog.create as jest.Mock).mock.calls
+      const blockedEntries = auditCalls
+        .map((c: any[]) => c[0]?.data)
+        .filter((d: any) => d?.action === 'WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE')
+
+      expect(blockedEntries).toHaveLength(2)
+
+      const consolidateEntry = blockedEntries.find((e: any) => e.changes?.after?.method === 'consolidate')
+      const changeItemEntry = blockedEntries.find((e: any) => e.changes?.after?.method === 'change_item')
+
+      expect(consolidateEntry).toBeDefined()
+      expect(consolidateEntry.changes.after.orderStatus).toBe('confirmed')
+      expect(consolidateEntry.changes.after.orderNumber).toBe('ORD-GUARD-TEST')
+      // force flag captured for consolidate
+      expect(consolidateEntry.changes.after.force).toBe(false)
+
+      expect(changeItemEntry).toBeDefined()
+      expect(changeItemEntry.changes.after.orderStatus).toBe('confirmed')
+      expect(changeItemEntry.changes.after.itemId).toBe('i1')
+    })
+  })
 })
 
 describe('Admin — AdminUsersService', () => {
