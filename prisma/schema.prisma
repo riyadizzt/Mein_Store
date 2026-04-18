@@ -943,6 +943,11 @@ model Return {
   inspectedBy           String?      @map("inspected_by")
   refundedAt            DateTime?    @map("refunded_at")
   refundAmount          Decimal?     @map("refund_amount") @db.Decimal(10, 2)
+  // Last provider error message when processRefund failed at the Stripe/
+  // PayPal/etc. layer. When set, the return stays at `status=inspected`
+  // so the admin UI can surface a "Retry refund" button with context.
+  // Cleared to null on the next successful refund attempt.
+  refundError           String?      @map("refund_error")
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
