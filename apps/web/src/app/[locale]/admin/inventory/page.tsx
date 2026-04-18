@@ -895,7 +895,7 @@ export default function InventoryPage() {
             </div>
             <div className="flex items-center gap-1">
               <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronLeft className="h-4 w-4 rtl:rotate-180" /></button>
-              <span className="text-xs font-medium px-3">{page + 1} / {totalPages || 1}</span>
+              <span className="text-xs font-medium px-3 tabular-nums" dir="ltr">{page + 1} / {totalPages || 1}</span>
               <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronRight className="h-4 w-4 rtl:rotate-180" /></button>
             </div>
           </div>

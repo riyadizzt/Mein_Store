@@ -416,7 +416,7 @@ export default function ReservationsPage() {
             >
               <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </button>
-            <span className="px-3 text-xs font-semibold tabular-nums">
+            <span className="px-3 text-xs font-semibold tabular-nums" dir="ltr">
               {page + 1} / {totalPages}
             </span>
             <button
