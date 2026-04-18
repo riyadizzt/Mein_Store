@@ -967,13 +967,32 @@ export default function InventoryPage() {
               <button onClick={() => setScannerMode('output')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'output' ? 'bg-red-600 text-white shadow' : 'text-white/50 hover:text-white/80'}`}>{t('inventory.scannerOutput')}</button>
               <button onClick={() => { setScannerMode('csv'); setCsvData([]); setCsvResult(null) }} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${scannerMode === 'csv' ? 'bg-blue-600 text-white shadow' : 'text-white/50 hover:text-white/80'}`}>{t('inventory.intakeCsv')}</button>
             </div>
-            <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl">
-              <span className="text-white/40 text-xs">{locale === 'ar' ? 'الموقع:' : 'Standort:'}</span>
-              <select value={warehouseId || ''} onChange={(e) => setWarehouseId(e.target.value)}
-                className="bg-transparent text-white text-xs font-medium focus:outline-none cursor-pointer">
-                {(warehouses as any[])?.map((w: any) => <option key={w.id} value={w.id} className="text-black">{w.name}</option>)}
+            {/* Warehouse picker — wraps the label in the same button-like
+                container so the entire pill is the clickable hit-area.
+                Previous version had bg-transparent on the <select> itself,
+                which left no visual affordance and the tiny hit-area
+                (text-xs wide) was easy to miss. Now: full-pill clickable,
+                visible ChevronDown indicator, gold hover border. */}
+            <label className="relative flex items-center gap-2 bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl border border-white/10 hover:border-[#d4a853]/40 transition-colors cursor-pointer group">
+              <span className="text-white/50 text-xs">{locale === 'ar' ? 'الموقع:' : 'Standort:'}</span>
+              <span className="text-white text-sm font-medium">
+                {(warehouses as any[])?.find((w: any) => w.id === warehouseId)?.name ?? (locale === 'ar' ? 'اختر...' : 'Wählen...')}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-white/50 group-hover:text-[#d4a853] transition-colors" />
+              <select
+                value={warehouseId || ''}
+                onChange={(e) => setWarehouseId(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                aria-label={locale === 'ar' ? 'اختر الموقع' : 'Standort wählen'}
+              >
+                {!warehouseId && <option value="">{locale === 'ar' ? 'اختر الموقع...' : 'Standort wählen...'}</option>}
+                {(warehouses as any[])?.map((w: any) => (
+                  <option key={w.id} value={w.id} className="text-black bg-white">
+                    {w.name}
+                  </option>
+                ))}
               </select>
-            </div>
+            </label>
             <div className="ltr:ml-auto rtl:mr-auto">
               <button className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white border border-white/20 hover:bg-white/10 active:scale-95 transition-all" onClick={async () => {
                 if (scanLog.length > 0) {
