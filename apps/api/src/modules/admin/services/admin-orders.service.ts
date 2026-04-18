@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common'
+import { Injectable, Logger, NotFoundException, BadRequestException, ConflictException, Optional } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
@@ -436,14 +436,56 @@ export class AdminOrdersService {
       })
     }
 
-    if (['cancelled', 'refunded', 'shipped', 'delivered'].includes(order.status)) {
-      throw new BadRequestException({
-        statusCode: 400,
-        error: 'OrderNotEditable',
+    // Post-capture Lifecycle-Guard (Launch-Blocker fix):
+    //
+    // After payment capture, sale_online movements have already decremented
+    // quantityOnHand at the CURRENT reservation's warehouse. If we now move
+    // only the reservation row to a different warehouse (without also
+    // transferring onHand accounting), the source warehouse keeps a stock-
+    // deficit and the target warehouse retains ghost reserved units that
+    // do not correspond to any real order in flight. The result is silent
+    // drift between reservation.warehouseId and the actual goods flow.
+    //
+    // Narrow the allow-list to pre-capture statuses only. Admins who need
+    // to physically relocate goods after payment must use the Inventory
+    // module's warehouse-transfer flow (which writes both counters).
+    //
+    // Structured 409 with error='WarehouseChangeBlockedAfterCapture' —
+    // same pattern as StockTransferRequired (409, 3-language message,
+    // data.allowedStatuses for the frontend). Audit entry
+    // WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE records the attempt so any
+    // admin who hits this block leaves a trail.
+    if (!['pending', 'pending_payment'].includes(order.status)) {
+      try {
+        await this.audit.log({
+          adminId,
+          action: 'WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE',
+          entityType: 'order',
+          entityId: order.id,
+          changes: {
+            after: {
+              method: 'change_item',
+              orderNumber: order.orderNumber,
+              orderStatus: order.status,
+              itemId,
+              targetWarehouseId: newWarehouseId,
+            },
+          },
+          ipAddress,
+        })
+      } catch (e: any) { this.logger.error(`Audit (warehouse-change-blocked): ${e.message}`) }
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'WarehouseChangeBlockedAfterCapture',
         message: {
-          de: 'Bestellungen in diesem Status können nicht umgebucht werden.',
-          en: 'Orders in this status cannot be re-assigned.',
-          ar: 'لا يمكن إعادة تعيين الطلبات في هذه الحالة.',
+          de: 'Lager kann nach Zahlungsbestätigung nicht mehr geändert werden. Die Ware wurde bereits aus dem ursprünglichen Lager abgebucht. Für einen echten Warehouse-Transfer das Inventar-Modul nutzen.',
+          en: 'Warehouse cannot be changed after payment capture. The stock has already been deducted from the original warehouse. Use the Inventory module for a real warehouse transfer.',
+          ar: 'لا يمكن تغيير المستودع بعد تأكيد الدفع. تم خصم البضائع بالفعل من المستودع الأصلي. استخدم وحدة المخزون لإجراء نقل حقيقي بين المستودعات.',
+        },
+        data: {
+          orderId: order.id,
+          orderStatus: order.status,
+          allowedStatuses: ['pending', 'pending_payment'],
         },
       })
     }
@@ -643,14 +685,44 @@ export class AdminOrdersService {
       },
     })
     if (!order) throw new NotFoundException('Order not found')
-    if (['cancelled', 'refunded', 'shipped', 'delivered'].includes(order.status)) {
-      throw new BadRequestException({
-        statusCode: 400,
-        error: 'OrderNotEditable',
+
+    // Post-capture Lifecycle-Guard — same reasoning as changeItemWarehouse
+    // above. Narrow allow-list to pre-capture statuses. `force=true` does
+    // NOT override this: force was designed to bypass the stock-preflight
+    // warnings (Admin confirms they accept the partial availability), which
+    // is a separate concern from the lifecycle stage of the order.
+    // See changeItemWarehouse for the full rationale.
+    if (!['pending', 'pending_payment'].includes(order.status)) {
+      try {
+        await this.audit.log({
+          adminId,
+          action: 'WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE',
+          entityType: 'order',
+          entityId: order.id,
+          changes: {
+            after: {
+              method: 'consolidate',
+              orderNumber: order.orderNumber,
+              orderStatus: order.status,
+              targetWarehouseId: newWarehouseId,
+              force,
+            },
+          },
+          ipAddress,
+        })
+      } catch (e: any) { this.logger.error(`Audit (warehouse-change-blocked): ${e.message}`) }
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'WarehouseChangeBlockedAfterCapture',
         message: {
-          de: 'Bestellungen in diesem Status können nicht umgebucht werden.',
-          en: 'Orders in this status cannot be re-assigned.',
-          ar: 'لا يمكن إعادة تعيين الطلبات في هذه الحالة.',
+          de: 'Lager kann nach Zahlungsbestätigung nicht mehr geändert werden. Die Ware wurde bereits aus dem ursprünglichen Lager abgebucht. Für einen echten Warehouse-Transfer das Inventar-Modul nutzen.',
+          en: 'Warehouse cannot be changed after payment capture. The stock has already been deducted from the original warehouse. Use the Inventory module for a real warehouse transfer.',
+          ar: 'لا يمكن تغيير المستودع بعد تأكيد الدفع. تم خصم البضائع بالفعل من المستودع الأصلي. استخدم وحدة المخزون لإجراء نقل حقيقي بين المستودعات.',
+        },
+        data: {
+          orderId: order.id,
+          orderStatus: order.status,
+          allowedStatuses: ['pending', 'pending_payment'],
         },
       })
     }

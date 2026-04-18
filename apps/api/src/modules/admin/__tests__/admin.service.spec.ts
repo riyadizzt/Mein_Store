@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing'
-import { BadRequestException } from '@nestjs/common'
+import { BadRequestException, ConflictException } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { AuditService } from '../services/audit.service'
 import { NotificationService } from '../services/notification.service'
@@ -168,11 +168,17 @@ describe('Admin — AdminOrdersService', () => {
 
   // ── R5: Per-Line Warehouse Change ────────────────────────────
   describe('changeItemWarehouse (R5)', () => {
+    // Base status 'pending_payment' — inside the post-capture Lifecycle-Guard
+    // allow-list. Was 'confirmed' before the Launch-Blocker fix, but
+    // 'confirmed' is now blocked with WarehouseChangeBlockedAfterCapture
+    // because sale_online has already decremented the source warehouse's
+    // onHand at that point. The test intent is unchanged — we exercise
+    // the reservation-move mechanics, the status is just a precondition.
     const baseOrder = {
       id: 'o1',
       orderNumber: 'ORD-2026-00001',
       deletedAt: null,
-      status: 'confirmed',
+      status: 'pending_payment',
       items: [
         {
           id: 'item-1',
@@ -227,12 +233,15 @@ describe('Admin — AdminOrdersService', () => {
       expect(mockPrisma.stockReservation.update).not.toHaveBeenCalled()
     })
 
-    it('blockiert für shipped/delivered/cancelled Orders', async () => {
+    it('blockiert für shipped/delivered/cancelled Orders (WarehouseChangeBlockedAfterCapture)', async () => {
+      // Post-capture guard now throws ConflictException with the unified
+      // WarehouseChangeBlockedAfterCapture error code. Was BadRequest
+      // OrderNotEditable before the Launch-Blocker fix.
       mockPrisma.order.findFirst.mockResolvedValue({ ...baseOrder, status: 'shipped' })
 
       await expect(
         ordersService.changeItemWarehouse('o1', 'item-1', 'wh-new', 'admin1', '127.0.0.1'),
-      ).rejects.toThrow(BadRequestException)
+      ).rejects.toThrow(ConflictException)
     })
 
     it('wirft NoActiveReservation wenn keine aktive Reservierung existiert', async () => {
@@ -269,11 +278,14 @@ describe('Admin — AdminOrdersService', () => {
 
   // ── R7: Consolidate Warehouse ────────────────────────────────
   describe('consolidateWarehouse (R7)', () => {
+    // Same base-status rationale as changeItemWarehouse (see comment there).
+    // 'pending_payment' keeps the tests exercising the preflight/move logic
+    // without tripping the post-capture Lifecycle-Guard.
     const baseOrder = {
       id: 'o1',
       orderNumber: 'ORD-2026-00002',
       deletedAt: null,
-      status: 'confirmed',
+      status: 'pending_payment',
       items: [
         { id: 'i1', variantId: 'v1', quantity: 1, snapshotName: 'A', snapshotSku: 'SKU-A',
           variant: { color: 'Rot', size: 'M', sku: 'SKU-A', product: { translations: [] } } },
@@ -342,12 +354,15 @@ describe('Admin — AdminOrdersService', () => {
       expect(result.itemsMoved).toBe(0)
     })
 
-    it('blockiert für shipped-Orders', async () => {
+    it('blockiert für shipped-Orders (WarehouseChangeBlockedAfterCapture)', async () => {
+      // Post-capture guard now throws ConflictException; covers not only
+      // shipped but also confirmed/processing/cancelled/returned/refunded.
+      // force=true does NOT bypass this guard — see separate test later.
       mockPrisma.order.findFirst.mockResolvedValue({ ...baseOrder, status: 'shipped' })
 
       await expect(
         ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', true),
-      ).rejects.toThrow(BadRequestException)
+      ).rejects.toThrow(ConflictException)
     })
 
     it('keine Reservations → changed=false, 0 moved, kein Fehler', async () => {
