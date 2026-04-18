@@ -1,10 +1,12 @@
+import type { NextConfig } from 'next'
 import createNextIntlPlugin from 'next-intl/plugin'
 import { withSentryConfig } from '@sentry/nextjs'
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+// Explicit NextConfig type (not JSDoc) so nested unions like images.formats
+// narrow to their proper enum-string types instead of bare string[].
+const nextConfig: NextConfig = {
   images: {
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
@@ -70,6 +72,10 @@ export default withSentryConfig(withNextIntl(nextConfig), {
   // Opt-in; keep route table minimal.
   tunnelRoute: undefined,
 
-  // Don't expose source-maps publicly.
-  hideSourceMaps: true,
+  // Source-maps stay private via two existing switches:
+  //   - productionBrowserSourceMaps: false (nextConfig, line ~26)
+  //   - sourcemaps.disable when SENTRY_AUTH_TOKEN is absent (above)
+  // The legacy top-level `hideSourceMaps` was removed from @sentry/nextjs
+  // v10+, replaced by the `sourcemaps` block. Leaving it in would have been
+  // silently ignored AND failed the strict TypeScript check.
 })
