@@ -35,6 +35,13 @@ interface ReturnFindAllQuery {
 interface InspectItemInput {
   itemId: string
   condition: 'ok' | 'damaged'
+  // Optional admin-override for the target warehouse. If not set,
+  // restockItem() runs through a fallback chain:
+  //   1. Scanner-movement warehouse (derived from 'Return scan: <RET-NR>' notes)
+  //   2. Last reservation warehouse for (orderId, variantId)
+  //   3. Default warehouse (isDefault=true)
+  // When the admin explicitly picks a warehouse in the inspect UI, that wins.
+  warehouseId?: string
 }
 
 interface ReturnItemJson {
@@ -209,6 +216,20 @@ export class AdminReturnsService {
                 status: true,
                 providerPaymentId: true,
                 amount: true,
+                // Refund rows are needed so the UI can render the
+                // "Banküberweisung ausgeführt" button for Vorkasse refunds
+                // that are still PENDING (the admin-driven manual-transfer
+                // confirmation flow — see markRefundTransferred).
+                refunds: {
+                  select: {
+                    id: true,
+                    status: true,
+                    amount: true,
+                    processedAt: true,
+                    createdAt: true,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                },
               },
             },
           },
@@ -620,6 +641,8 @@ export class AdminReturnsService {
     )
 
     let refundAmount = 0
+    let dedupSkipCount = 0  // R10-B Teil 2: counts how many items had their restock skipped because the scanner already booked them
+    let damagedRemovalCount = 0  // R10-B Teil 3: counts how many damaged items triggered a real onHand decrement
     const inspectionResults: Array<{
       itemId: string
       condition: string
@@ -652,12 +675,47 @@ export class AdminReturnsService {
         refundAmount += itemTotal
 
         if (orderItem.variantId) {
-          await this.restockItem(
-            orderItem.variantId,
-            returnQty,
-            ret.orderId,
-            ret.returnNumber ?? id,
-          )
+          // R10-B Teil 2 — Dedup-Guard against double-restock.
+          //
+          // The state machine requires requested/in_transit → received → inspected,
+          // and the Scanner-Flow (admin-inventory.service.ts:processReturnScan)
+          // ALREADY restocked the item when it flipped the status to 'received'.
+          // Without this guard, a condition='ok' call would create a SECOND
+          // return_received movement — silently doubling onHand.
+          //
+          // Strategy: check if a scanner-movement exists for this (variant,
+          // returnNumber) pair. If yes, the scanner has authoritative
+          // inventory impact — we record the inspection (status transition)
+          // but DO NOT add a second stock increment. Audit log records the
+          // skip so the admin can always reconstruct what happened.
+          //
+          // If no scanner-movement exists (edge case: admin bypassed the
+          // scanner step), restockItem() fires its usual fallback chain.
+          const scannerAlreadyRestocked = await this.prisma.inventoryMovement.findFirst({
+            where: {
+              variantId: orderItem.variantId,
+              type: 'return_received',
+              notes: { startsWith: `Return scan: ${ret.returnNumber ?? id}` },
+            },
+            select: { id: true, warehouseId: true },
+          })
+
+          if (scannerAlreadyRestocked) {
+            // Dedup wins — status transition happens below, no stock write.
+            dedupSkipCount++
+            this.logger.log(
+              `Inspect OK for variant ${orderItem.variantId} on ${ret.returnNumber ?? id}: ` +
+              `scanner already restocked in warehouse ${scannerAlreadyRestocked.warehouseId} — skipping second restock`,
+            )
+          } else {
+            await this.restockItem(
+              orderItem.variantId,
+              returnQty,
+              ret.orderId,
+              ret.returnNumber ?? id,
+              input.warehouseId,
+            )
+          }
         }
 
         inspectionResults.push({
@@ -667,14 +725,29 @@ export class AdminReturnsService {
           amount: itemTotal,
         })
       } else {
-        // Damaged: create InventoryMovement type 'damaged', do NOT restock
+        // R10-B Teil 3 — Damaged-Pfad mit echtem Stock-Impact.
+        //
+        // Wenn der Scanner die Ware bereits eingebucht hat (normal flow),
+        // wird hier aus dem Bestand dekrementiert — das spiegelt die
+        // physische Realität wider: Ware kam an, wurde eingebucht, ist
+        // aber defekt und verlässt den Verkaufsbestand. Kein Refund.
+        //
+        // Ohne Scanner-Vorbuchung bleibt das Verhalten wie vorher
+        // (nur Movement-Dokumentation, kein onHand-Change).
         if (orderItem.variantId) {
-          await this.createDamagedMovement(
+          const result = await this.createDamagedMovement(
             orderItem.variantId,
             returnQty,
             ret.orderId,
             ret.returnNumber ?? id,
           )
+          if (result.decremented) {
+            damagedRemovalCount++
+            this.logger.log(
+              `Damaged removal for variant ${orderItem.variantId} on ${ret.returnNumber ?? id}: ` +
+              `-${returnQty} from warehouse ${result.warehouseId}`,
+            )
+          }
         }
 
         inspectionResults.push({
@@ -710,6 +783,57 @@ export class AdminReturnsService {
     try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'inspected', adminId, refundAmount }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
 
     try { await this.audit.log({ adminId, action: 'RETURN_INSPECTED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'inspected', refundAmount } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
+
+    // R10-B Teil 2: log a dedicated audit entry when the dedup-guard skipped a
+    // second restock. This is a signal (not a failure) — it means the Scanner
+    // and Inspect flows operated in the expected sequence. The entry is ONLY
+    // written when items were actually skipped, so a "normal" inspect without
+    // prior scanner (legacy orders / edge case) leaves no noise in the log.
+    if (dedupSkipCount > 0) {
+      try {
+        await this.audit.log({
+          adminId,
+          action: 'RETURN_INSPECTED_NO_DOUBLE_RESTOCK',
+          entityType: 'return',
+          entityId: id,
+          changes: {
+            after: {
+              itemsSkipped: dedupSkipCount,
+              totalItems: items.length,
+              reason: 'scanner_already_restocked',
+            },
+          },
+          ipAddress: ip,
+        })
+      } catch (e: any) {
+        this.logger.error(`Audit (dedup-skip): ${e.message}`)
+      }
+    }
+
+    // R10-B Teil 3: separate audit trail for damaged-removal (real decrement).
+    // Fires only when at least one damaged item was taken OUT of stock after
+    // a prior scanner-restock — the compliance-relevant event from an
+    // inventory-integrity standpoint.
+    if (damagedRemovalCount > 0) {
+      try {
+        await this.audit.log({
+          adminId,
+          action: 'RETURN_DAMAGED_REMOVED_FROM_STOCK',
+          entityType: 'return',
+          entityId: id,
+          changes: {
+            after: {
+              itemsRemoved: damagedRemovalCount,
+              totalItems: items.length,
+              reason: 'damaged_after_scanner_restock',
+            },
+          },
+          ipAddress: ip,
+        })
+      } catch (e: any) {
+        this.logger.error(`Audit (damaged-removal): ${e.message}`)
+      }
+    }
 
     return updated
   }
@@ -904,6 +1028,111 @@ export class AdminReturnsService {
 
     this.logger.log(
       `Return ${returnNumber} refunded: ${refundAmountEur.toFixed(2)} EUR | order=${ret.order.orderNumber} | by=${adminId}`,
+    )
+
+    return updated
+  }
+
+  // ── 8b. markRefundTransferred (Vorkasse manual bank transfer confirm) ──
+  //
+  // Context: Vorkasse (bank-transfer) refunds cannot be executed via an API —
+  // the admin must manually wire the money from the shop account. Until that
+  // happens, the Refund row sits at status='PENDING' and is INVISIBLE to the
+  // finance reports (which filter on status='PROCESSED' so only actual cash-
+  // out is counted). This endpoint lets the admin flip PENDING → PROCESSED
+  // once the manual transfer is done, which makes the refund show up in the
+  // daily/monthly/VAT reports retroactively (anchored on refund.createdAt
+  // for accounting consistency with the credit-note-issue date).
+  //
+  // Guards: only Vorkasse refunds, only PENDING. Idempotent via the PENDING
+  // guard — a second click on an already-PROCESSED refund gets a 400, never
+  // double-flips. No payment.status touch (already refunded at refund-create
+  // time), no side-effects on the return itself.
+  async markRefundTransferred(refundId: string, adminId: string, ip: string) {
+    const refund = await this.prisma.refund.findUnique({
+      where: { id: refundId },
+      select: {
+        id: true,
+        status: true,
+        amount: true,
+        processedAt: true,
+        payment: {
+          select: {
+            provider: true,
+            orderId: true,
+            order: { select: { orderNumber: true } },
+          },
+        },
+      },
+    })
+
+    if (!refund) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'RefundNotFound',
+        message: {
+          de: 'Erstattung nicht gefunden.',
+          en: 'Refund not found.',
+          ar: 'الاسترداد غير موجود.',
+        },
+      })
+    }
+
+    if (refund.payment?.provider !== 'VORKASSE') {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'OnlyVorkasseSupported',
+        message: {
+          de: 'Nur Vorkasse-Erstattungen können manuell bestätigt werden.',
+          en: 'Only Vorkasse refunds can be manually confirmed.',
+          ar: 'يمكن تأكيد استرداد التحويل المصرفي يدويًا فقط.',
+        },
+      })
+    }
+
+    if (refund.status !== 'PENDING') {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'RefundNotPending',
+        message: {
+          de: `Erstattung ist bereits im Status "${refund.status}".`,
+          en: `Refund is already in status "${refund.status}".`,
+          ar: `الاسترداد بالفعل في حالة "${refund.status}".`,
+        },
+      })
+    }
+
+    const updated = await this.prisma.refund.update({
+      where: { id: refundId },
+      data: {
+        status: 'PROCESSED',
+        processedAt: new Date(),
+      },
+    })
+
+    try {
+      await this.audit.log({
+        adminId,
+        action: 'VORKASSE_REFUND_CONFIRMED',
+        entityType: 'refund',
+        entityId: refundId,
+        changes: {
+          before: { status: 'PENDING', processedAt: null },
+          after: {
+            status: 'PROCESSED',
+            processedAt: updated.processedAt,
+            amount: Number(refund.amount),
+            orderNumber: refund.payment.order?.orderNumber ?? null,
+          },
+        },
+        ipAddress: ip,
+      })
+    } catch (e: any) {
+      this.logger.error(`Audit: ${e.message}`)
+    }
+
+    this.logger.log(
+      `Vorkasse refund ${refundId} marked as transferred: ${Number(refund.amount).toFixed(2)} EUR | order=${refund.payment.order?.orderNumber ?? refund.payment.orderId} | by=${adminId}`,
     )
 
     return updated
@@ -1271,21 +1500,90 @@ export class AdminReturnsService {
     }
   }
 
+  /**
+   * Restock an item from a return with a 4-step warehouse fallback chain.
+   *
+   * Resolution order:
+   *   1. explicit `targetWarehouseId` (admin picked one in the inspect UI)
+   *   2. Scanner-movement warehouse: we look up the most recent
+   *      inventory_movement with notes starting "Return scan: <RET-NR>"
+   *      for this variant. If the Lager-Mitarbeiter already booked the
+   *      return into a specific warehouse during the scan step, that's
+   *      the authoritative location.
+   *   3. Last reservation warehouse for (orderId, variantId) — respects
+   *      admin-overridden fulfilment warehouse
+   *   4. Default warehouse (isDefault=true) — legacy behaviour, stays as
+   *      final fallback so existing call sites never 500 on missing data
+   *
+   * Returns the warehouse the restock happened in, or null if no inventory
+   * row could be located / created (logged as warning).
+   */
   private async restockItem(
     variantId: string,
     quantity: number,
     orderId: string,
     returnNumber: string,
-  ): Promise<void> {
-    // Find inventory for this variant in default warehouse
-    const inv = await this.prisma.inventory.findFirst({
-      where: { variantId },
-      orderBy: { warehouse: { isDefault: 'desc' } },
-    })
+    targetWarehouseId?: string,
+  ): Promise<{ warehouseId: string | null; restocked: boolean }> {
+    // ── Step 1-3: resolve target warehouse via fallback chain ──
+    let resolvedWarehouseId: string | null = targetWarehouseId ?? null
+
+    if (!resolvedWarehouseId) {
+      const scannerMove = await this.prisma.inventoryMovement.findFirst({
+        where: {
+          variantId,
+          notes: { startsWith: `Return scan: ${returnNumber}` },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { warehouseId: true },
+      })
+      if (scannerMove) resolvedWarehouseId = scannerMove.warehouseId
+    }
+
+    if (!resolvedWarehouseId) {
+      const lastReservation = await this.prisma.stockReservation.findFirst({
+        where: {
+          variantId,
+          orderId,
+          status: { in: ['RESERVED', 'CONFIRMED', 'RELEASED'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { warehouseId: true },
+      })
+      if (lastReservation) resolvedWarehouseId = lastReservation.warehouseId
+    }
+
+    // ── Step 4: find or create inventory row at resolved warehouse ──
+    let inv: any = null
+    if (resolvedWarehouseId) {
+      inv = await this.prisma.inventory.findFirst({
+        where: { variantId, warehouseId: resolvedWarehouseId },
+      })
+      if (!inv) {
+        // Resolved warehouse has no inventory row for this variant yet —
+        // create it. This matches the processReturnScan behaviour so
+        // return-restocks never fail silently on "row missing".
+        inv = await this.prisma.inventory.create({
+          data: {
+            variantId,
+            warehouseId: resolvedWarehouseId,
+            quantityOnHand: 0,
+            quantityReserved: 0,
+            reorderPoint: 5,
+          },
+        })
+      }
+    } else {
+      // Nothing resolved → legacy default-warehouse fallback
+      inv = await this.prisma.inventory.findFirst({
+        where: { variantId },
+        orderBy: { warehouse: { isDefault: 'desc' } },
+      })
+    }
 
     if (!inv) {
-      this.logger.warn(`No inventory record found for variant ${variantId} — skipping restock`)
-      return
+      this.logger.warn(`No inventory record available for variant ${variantId} — skipping restock`)
+      return { warehouseId: null, restocked: false }
     }
 
     await this.prisma.$transaction([
@@ -1306,14 +1604,114 @@ export class AdminReturnsService {
         },
       }),
     ])
+
+    return { warehouseId: inv.warehouseId, restocked: true }
   }
 
+  /**
+   * R10-B Teil 3 + R11: damaged-path with real stock impact.
+   *
+   * Naming convention (R11 — intentionally kept, NOT renamed):
+   *   • Customers never see "damaged" as a self-selectable reason — that
+   *     was removed in R10-B Teil 0 because we inspect every item before
+   *     shipping, making customer-reported defects overwhelmingly false.
+   *   • Admins retain the full "damaged" lifecycle for the rare real-defect
+   *     case (transport damage, customer-caused damage). "Damaged" is the
+   *     domain term, matches the Prisma `InventoryMovementType.damaged`
+   *     enum value, and matches the Prisma `ReturnReason.damaged` enum
+   *     (still present for backwards-compat with historical returns).
+   *   • No rename to "defective" or "quality_issue" — `quality_issue` is
+   *     a separate, less severe customer reason and must remain distinct.
+   *
+   * Two scenarios:
+   *
+   *   (a) Scanner already booked the item into a warehouse (normal flow):
+   *       The Scanner-Flow did its job unconditionally — Ware kam an, Ware
+   *       wurde eingebucht. Now the admin inspection determines that this
+   *       specific unit is damaged. We need to take it back out of stock
+   *       so the inventory reflects what's actually sellable.
+   *
+   *       → Decrement quantityOnHand at the Scanner-Warehouse
+   *       → Movement: type='damaged', quantity=-qty, proper Before/After
+   *       → Returns `decremented: true` + warehouseId for audit logging
+   *
+   *   (b) No scanner movement exists (edge / legacy case):
+   *       The stock was never increased for this return — likely the scanner
+   *       step was skipped entirely. We only document the damage for history;
+   *       no inventory change.
+   *
+   *       → Movement: type='damaged', quantity=-qty, Before == After
+   *       → Returns `decremented: false`
+   *
+   * Legacy tests depend on the old "documentation-only" behaviour for damaged
+   * items WITHOUT a scanner movement — that path is preserved exactly.
+   */
   private async createDamagedMovement(
     variantId: string,
     quantity: number,
     orderId: string,
     returnNumber: string,
-  ): Promise<void> {
+  ): Promise<{ decremented: boolean; warehouseId: string | null }> {
+    // Lookup the scanner movement for this specific return to decide whether
+    // to decrement or just document. Uses the same key the Dedup-Guard uses
+    // (notes startsWith `Return scan: <RET-NR>`) so both paths agree on the
+    // authoritative warehouse.
+    const scannerMovement = await this.prisma.inventoryMovement.findFirst({
+      where: {
+        variantId,
+        type: 'return_received',
+        notes: { startsWith: `Return scan: ${returnNumber}` },
+      },
+      select: { warehouseId: true },
+    })
+
+    if (scannerMovement) {
+      // Scenario (a): real decrement at the scanner's warehouse
+      const inv = await this.prisma.inventory.findFirst({
+        where: { variantId, warehouseId: scannerMovement.warehouseId },
+      })
+      if (!inv) {
+        this.logger.warn(
+          `Scanner movement exists for variant ${variantId} in warehouse ${scannerMovement.warehouseId} but inventory row is gone — documenting only`,
+        )
+        await this.prisma.inventoryMovement.create({
+          data: {
+            variantId,
+            warehouseId: scannerMovement.warehouseId,
+            type: 'damaged',
+            quantity: -quantity,
+            quantityBefore: 0,
+            quantityAfter: 0,
+            referenceId: orderId,
+            notes: `Damaged removal (inv row missing): ${returnNumber}`,
+          },
+        })
+        return { decremented: false, warehouseId: scannerMovement.warehouseId }
+      }
+
+      await this.prisma.$transaction([
+        this.prisma.inventory.update({
+          where: { id: inv.id },
+          data: { quantityOnHand: { decrement: quantity } },
+        }),
+        this.prisma.inventoryMovement.create({
+          data: {
+            variantId,
+            warehouseId: inv.warehouseId,
+            type: 'damaged',
+            quantity: -quantity,
+            quantityBefore: inv.quantityOnHand,
+            quantityAfter: inv.quantityOnHand - quantity,
+            referenceId: orderId,
+            notes: `Damaged removal after scan: ${returnNumber}`,
+          },
+        }),
+      ])
+
+      return { decremented: true, warehouseId: inv.warehouseId }
+    }
+
+    // Scenario (b): no scanner → documentation only (legacy behaviour)
     const inv = await this.prisma.inventory.findFirst({
       where: { variantId },
       orderBy: { warehouse: { isDefault: 'desc' } },
@@ -1321,7 +1719,7 @@ export class AdminReturnsService {
 
     if (!inv) {
       this.logger.warn(`No inventory record found for variant ${variantId} — skipping damaged movement`)
-      return
+      return { decremented: false, warehouseId: null }
     }
 
     await this.prisma.inventoryMovement.create({
@@ -1329,13 +1727,15 @@ export class AdminReturnsService {
         variantId,
         warehouseId: inv.warehouseId,
         type: 'damaged',
-        quantity: -quantity, // Documented as loss
+        quantity: -quantity,
         quantityBefore: inv.quantityOnHand,
         quantityAfter: inv.quantityOnHand,
         referenceId: orderId,
-        notes: `Return damaged: ${returnNumber}`,
+        notes: `Return damaged (no scan): ${returnNumber}`,
       },
     })
+
+    return { decremented: false, warehouseId: inv.warehouseId }
   }
 
   private async getReturnAddress(): Promise<string> {

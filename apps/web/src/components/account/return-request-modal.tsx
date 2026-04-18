@@ -8,11 +8,18 @@ import { RotateCcw, Loader2, Clock, AlertTriangle, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 
+// Customer-facing return reasons.
+//
+// "damaged" is intentionally omitted — we inspect every item before shipping,
+// so a customer-reported defect is statistically a mismatched expectation,
+// not a real defect. Letting the customer pick "damaged" would invite a
+// reason the admin is systematically going to override during inspection.
+// The admin retains the "damaged" option during inspection for the rare
+// real-defect case (transport damage, customer-caused damage).
 const REASONS = [
   { value: 'wrong_size', de: 'Passt nicht (Größe)', en: 'Doesn\'t fit (size)', ar: 'لا يناسب (المقاس)' },
   { value: 'changed_mind', de: 'Gefällt nicht', en: 'Changed my mind', ar: 'غيرت رأيي' },
   { value: 'wrong_product', de: 'Falscher Artikel', en: 'Wrong item', ar: 'منتج خاطئ' },
-  { value: 'damaged', de: 'Beschädigt', en: 'Damaged', ar: 'تالف' },
   { value: 'quality_issue', de: 'Qualitätsmangel', en: 'Quality issue', ar: 'مشكلة في الجودة' },
   { value: 'other', de: 'Sonstiges', en: 'Other', ar: 'أخرى' },
 ]
@@ -164,19 +171,45 @@ export function ReturnRequestModal({ open, onClose, orderId, orderNumber, items,
                   </div>
                 )}
 
-                {/* Reason Dropdown (visible when selected) */}
+                {/* Reason Picker — premium chip grid. Replaces the native
+                    <select>, which on mobile could overflow the viewport
+                    and render unpredictably across OS (iOS picker / Android
+                    dropdown / desktop-emulator micro-popup). Chips wrap
+                    cleanly at any width, are all visible without tapping,
+                    and give the selection a calm gold-accent treatment. */}
                 {isSelected && (
-                  <div className="mt-3 ltr:ml-7 rtl:mr-7 space-y-2" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
-                    <select value={reasons[item.id] || 'wrong_size'} onChange={(e) => setReasons((r) => ({ ...r, [item.id]: e.target.value }))}
-                      className="w-full h-9 px-3 rounded-lg border bg-background text-sm">
-                      {REASONS.map((r) => (
-                        <option key={r.value} value={r.value}>{locale === 'ar' ? r.ar : locale === 'en' ? r.en : r.de}</option>
-                      ))}
-                    </select>
+                  <div className="mt-4 ltr:ml-7 rtl:mr-7 space-y-3" style={{ animation: 'fadeSlideUp 200ms ease-out' }}>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {t('Grund', 'Reason', 'السبب')}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {REASONS.map((r) => {
+                        const value = locale === 'ar' ? r.ar : locale === 'en' ? r.en : r.de
+                        const active = (reasons[item.id] || 'wrong_size') === r.value
+                        return (
+                          <button
+                            type="button"
+                            key={r.value}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              setReasons((rr) => ({ ...rr, [item.id]: r.value }))
+                            }}
+                            className={`px-3.5 py-2 rounded-full text-sm font-medium border transition-all duration-200 min-h-[38px] ${
+                              active
+                                ? 'bg-[#d4a853] text-white border-[#d4a853] shadow-sm'
+                                : 'bg-background text-foreground border-border hover:border-[#d4a853]/40 hover:bg-[#d4a853]/5'
+                            }`}
+                          >
+                            {value}
+                          </button>
+                        )
+                      })}
+                    </div>
                     {reasons[item.id] === 'other' && (
                       <textarea value={notes[item.id] || ''} onChange={(e) => setNotes((n) => ({ ...n, [item.id]: e.target.value }))}
                         placeholder={t('Bitte beschreibe das Problem...', 'Please describe the issue...', 'يرجى وصف المشكلة...')}
-                        className="w-full h-16 px-3 py-2 rounded-lg border bg-background text-sm resize-none" />
+                        className="w-full h-20 px-3 py-2 rounded-xl border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#d4a853]/30 focus:border-[#d4a853] transition-colors"
+                        style={{ animation: 'fadeSlideUp 200ms ease-out' }} />
                     )}
                   </div>
                 )}

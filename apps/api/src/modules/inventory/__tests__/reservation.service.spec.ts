@@ -23,10 +23,20 @@ function buildPrisma() {
       updateMany: jest.fn(),
     },
     stockReservation: {
-      findUnique: jest.fn(),
+      // R13 added an out-of-transaction findUnique call after release() to
+      // resolve the variantId for ISR tag invalidation. Default to null so
+      // existing idempotency tests don't need to opt into the mock — the
+      // resulting revalidate call is a no-op in that case.
+      findUnique: jest.fn().mockResolvedValue(null),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+    },
+    productVariant: {
+      // R13 — revalidateProductTags resolves slugs via productVariant.findMany.
+      // Default to an empty list so the helper gracefully no-ops in all
+      // existing tests.
+      findMany: jest.fn().mockResolvedValue([]),
     },
     inventoryMovement: { create: jest.fn() },
   }
@@ -229,6 +239,131 @@ describe('ReservationService', () => {
       })
       const service = await makeService(prisma)
       await expect(service.confirm('res-done', 'order1')).rejects.toThrow(BadRequestException)
+    })
+  })
+
+  describe('restockFromConfirmed — R9: Post-Payment-Cancel Pfad', () => {
+    it('findet keine CONFIRMED Reservierungen → no-op ohne DB-Writes', async () => {
+      prisma.stockReservation.findMany.mockResolvedValue([])
+
+      const service = await makeService(prisma)
+      const result = await service.restockFromConfirmed('orderX', 'test', 'admin1')
+
+      expect(result.restocked).toBe(0)
+      expect(prisma.$transaction).not.toHaveBeenCalled()
+      expect(prisma.inventory.update).not.toHaveBeenCalled()
+    })
+
+    it('flippt CONFIRMED → RELEASED und inkrementiert quantityOnHand am Reservation-Warehouse', async () => {
+      prisma.stockReservation.findMany.mockResolvedValue([
+        { id: 'res1', variantId: 'v1', warehouseId: 'wh-marzahn', quantity: 2, orderId: 'orderX', status: 'CONFIRMED' },
+      ])
+      prisma.stockReservation.updateMany = jest.fn().mockResolvedValue({ count: 1 })
+      prisma.inventory.findUnique.mockResolvedValue({
+        id: 'inv1', variantId: 'v1', warehouseId: 'wh-marzahn', quantityOnHand: 43, quantityReserved: 0,
+      })
+
+      const service = await makeService(prisma)
+      const result = await service.restockFromConfirmed('orderX', 'ORD-XX cancel', 'admin1')
+
+      expect(result.restocked).toBe(1)
+      // Atomic claim: updateMany WHERE status=CONFIRMED
+      expect(prisma.stockReservation.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'res1', status: 'CONFIRMED' }, data: { status: 'RELEASED' } }),
+      )
+      // Increment onHand at the reservation's recorded warehouse
+      expect(prisma.inventory.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { variantId_warehouseId: { variantId: 'v1', warehouseId: 'wh-marzahn' } },
+          data: { quantityOnHand: { increment: 2 } },
+        }),
+      )
+      // NO quantityReserved decrement — confirm() already did that at capture
+      expect(prisma.inventory.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ quantityReserved: expect.anything() }) }),
+      )
+    })
+
+    it('erstellt genau eine InventoryMovement pro restockter Reservierung', async () => {
+      prisma.stockReservation.findMany.mockResolvedValue([
+        { id: 'res1', variantId: 'v1', warehouseId: 'wh1', quantity: 3, orderId: 'orderX', status: 'CONFIRMED' },
+        { id: 'res2', variantId: 'v2', warehouseId: 'wh1', quantity: 1, orderId: 'orderX', status: 'CONFIRMED' },
+      ])
+      prisma.stockReservation.updateMany = jest.fn().mockResolvedValue({ count: 1 })
+      prisma.inventory.findUnique.mockResolvedValue({ quantityOnHand: 10, quantityReserved: 0 })
+
+      const service = await makeService(prisma)
+      const result = await service.restockFromConfirmed('orderX', 'cancel', 'admin1')
+
+      expect(result.restocked).toBe(2)
+      expect(prisma.inventoryMovement.create).toHaveBeenCalledTimes(2)
+      // Movement type must be return_received (matches reconciliation expectations)
+      expect(prisma.inventoryMovement.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ type: 'return_received' }) }),
+      )
+    })
+
+    it('ist idempotent: racing caller hat bereits geflippt → count=0 → skip ohne DB-Write', async () => {
+      prisma.stockReservation.findMany.mockResolvedValue([
+        { id: 'res1', variantId: 'v1', warehouseId: 'wh1', quantity: 2, orderId: 'orderX', status: 'CONFIRMED' },
+      ])
+      // Racer already flipped the row to RELEASED between findMany and our updateMany
+      prisma.stockReservation.updateMany = jest.fn().mockResolvedValue({ count: 0 })
+
+      const service = await makeService(prisma)
+      const result = await service.restockFromConfirmed('orderX', 'cancel', 'admin1')
+
+      expect(result.restocked).toBe(0)
+      // No inventory writes because claim failed
+      expect(prisma.inventory.update).not.toHaveBeenCalled()
+      expect(prisma.inventoryMovement.create).not.toHaveBeenCalled()
+    })
+
+    it('findet NUR CONFIRMED, NICHT RESERVED (sauber getrennte Pfade)', async () => {
+      prisma.stockReservation.findMany.mockResolvedValue([])
+
+      const service = await makeService(prisma)
+      await service.restockFromConfirmed('orderX', 'test', 'admin1')
+
+      // Critical separation from release(): filter MUST be CONFIRMED, never RESERVED
+      expect(prisma.stockReservation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ orderId: 'orderX', status: 'CONFIRMED' }),
+        }),
+      )
+    })
+
+    it('variantIds-Filter begrenzt auf Partial-Cancel-Scope', async () => {
+      prisma.stockReservation.findMany.mockResolvedValue([])
+
+      const service = await makeService(prisma)
+      await service.restockFromConfirmed('orderX', 'partial', 'admin1', ['v1', 'v2'])
+
+      expect(prisma.stockReservation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            orderId: 'orderX',
+            status: 'CONFIRMED',
+            variantId: { in: ['v1', 'v2'] },
+          }),
+        }),
+      )
+    })
+
+    it('bricht sauber ab wenn Inventory-Row fehlt (Status bleibt geflippt, aber kein Increment)', async () => {
+      prisma.stockReservation.findMany.mockResolvedValue([
+        { id: 'res1', variantId: 'v1', warehouseId: 'wh-deleted', quantity: 2, orderId: 'orderX', status: 'CONFIRMED' },
+      ])
+      prisma.stockReservation.updateMany = jest.fn().mockResolvedValue({ count: 1 })
+      prisma.inventory.findUnique.mockResolvedValue(null) // warehouse row gone
+
+      const service = await makeService(prisma)
+      const result = await service.restockFromConfirmed('orderX', 'edge', 'admin1')
+
+      // Count stays 0 because we couldn't increment
+      expect(result.restocked).toBe(0)
+      expect(prisma.inventory.update).not.toHaveBeenCalled()
+      expect(prisma.inventoryMovement.create).not.toHaveBeenCalled()
     })
   })
 

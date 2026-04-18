@@ -72,6 +72,10 @@ export default function AdminReturnsPage() {
   const [reasonFilter, setReasonFilter] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [inspectItems, setInspectItems] = useState<Record<string, 'ok' | 'damaged'>>({})
+  // Optional admin-override for the target warehouse in the inspect flow.
+  // Empty string = "Automatisch" (backend falls back through: Scanner-WH →
+  // last reservation WH → default). A concrete warehouse id overrides.
+  const [inspectWarehouseId, setInspectWarehouseId] = useState<string>('')
   const [rejectReason, setRejectReason] = useState('')
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
 
@@ -101,6 +105,16 @@ export default function AdminReturnsPage() {
     enabled: !!selectedId,
   })
 
+  // Warehouses for the inspect-override picker. Only active ones — the admin
+  // shouldn't be able to book stock into a deactivated location.
+  const { data: warehouses } = useQuery({
+    queryKey: ['admin-warehouses-inspect'],
+    queryFn: async () => {
+      const { data } = await api.get('/admin/warehouses')
+      return (data ?? []).filter((w: any) => w.isActive) as Array<{ id: string; name: string; type: string; isDefault: boolean }>
+    },
+  })
+
   // ── Mutations ──────────────────────────────────────────────
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-returns'] })
@@ -119,9 +133,9 @@ export default function AdminReturnsPage() {
   })
 
   const inspectMut = useMutation({
-    mutationFn: (items: { itemId: string; condition: 'ok' | 'damaged' }[]) =>
+    mutationFn: (items: { itemId: string; condition: 'ok' | 'damaged'; warehouseId?: string }[]) =>
       api.post(`/admin/returns/${selectedId}/inspect`, { items }),
-    onSuccess: () => { invalidate(); setInspectItems({}) },
+    onSuccess: () => { invalidate(); setInspectItems({}); setInspectWarehouseId('') },
   })
 
   const refundMut = useMutation({
@@ -129,10 +143,19 @@ export default function AdminReturnsPage() {
     onSuccess: invalidate,
   })
 
+  // Vorkasse: flip Refund.status PENDING → PROCESSED after the admin has
+  // manually wired the bank transfer. Required so the refund shows up in
+  // finance reports (which only count PROCESSED refunds).
+  const markTransferredMut = useMutation({
+    mutationFn: (refundId: string) => api.post(`/admin/refunds/${refundId}/mark-transferred`),
+    onSuccess: invalidate,
+  })
+
   // ── Handlers ───────────────────────────────────────────────
   const openDetail = (ret: any) => {
     setSelectedId(ret.id)
     setInspectItems({})
+    setInspectWarehouseId('')
     setRejectReason('')
   }
 
@@ -192,8 +215,42 @@ export default function AdminReturnsPage() {
     if (ok) refundMut.mutate()
   }
 
+  // Confirm the manual Vorkasse bank transfer — flips Refund.status to PROCESSED.
+  // Irreversible by design (the money left the shop account, the refund row
+  // is now authoritative for finance reports).
+  const handleConfirmTransfer = async (refundId: string, amount: number) => {
+    const amt = formatCurrency(amount, locale)
+    const ok = await confirmDialog({
+      title: t3(
+        '\u00dcberweisung wirklich ausgef\u00fchrt?',
+        'Transfer actually executed?',
+        '\u0647\u0644 \u062a\u0645 \u0627\u0644\u062a\u062d\u0648\u064a\u0644 \u0641\u0639\u0644\u0627\u064b\u061f',
+      ),
+      description: t3(
+        `Bestätige, dass du den Betrag ${amt} manuell an den Kunden überwiesen hast. Diese Aktion erscheint sofort in den Finanzberichten und kann nicht rückgängig gemacht werden.`,
+        `Confirm that you have manually transferred ${amt} to the customer. This action will immediately appear in finance reports and cannot be undone.`,
+        `أكد أنك قمت بتحويل المبلغ ${amt} يدوياً إلى العميل. سيظهر هذا الإجراء فوراً في التقارير المالية ولا يمكن التراجع عنه.`,
+      ),
+      variant: 'danger',
+      confirmLabel: t3(
+        'Ja, \u00fcberwiesen',
+        'Yes, transferred',
+        '\u0646\u0639\u0645\u060c \u062a\u0645 \u0627\u0644\u062a\u062d\u0648\u064a\u0644',
+      ),
+      cancelLabel: t3('Abbrechen', 'Cancel', '\u0625\u0644\u063a\u0627\u0621'),
+    })
+    if (ok) markTransferredMut.mutate(refundId)
+  }
+
   const handleInspect = () => {
-    const items = Object.entries(inspectItems).map(([itemId, condition]) => ({ itemId, condition }))
+    const whId = inspectWarehouseId.trim() || undefined
+    const items = Object.entries(inspectItems).map(([itemId, condition]) => ({
+      itemId,
+      condition,
+      // Only attach warehouseId if the admin explicitly picked one.
+      // Empty string → backend uses its fallback chain.
+      ...(whId ? { warehouseId: whId } : {}),
+    }))
     if (items.length === 0) return
     inspectMut.mutate(items)
   }
@@ -635,9 +692,43 @@ export default function AdminReturnsPage() {
 
                   {/* received → inspect */}
                   {detail.status === 'received' && (
-                    <Button className="w-full gap-2" onClick={handleInspect} disabled={Object.keys(inspectItems).length === 0 || inspectMut.isPending}>
-                      <Eye className="h-4 w-4" />{t3('Pr\u00fcfung abschlie\u00dfen', 'Complete Inspection', '\u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u0641\u062d\u0635')}
-                    </Button>
+                    <div className="space-y-2">
+                      {/* Optional warehouse override. Empty = backend fallback
+                          (Scanner-WH → last reservation → default). Labelled
+                          so the admin understands why "Automatisch" is the
+                          right default — the Lager-Mitarbeiter already booked
+                          the return into a specific warehouse during scanning. */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-muted-foreground whitespace-nowrap">
+                          {t3('Einbuchen in', 'Restock to', 'إضافة إلى')}:
+                        </label>
+                        <select
+                          value={inspectWarehouseId}
+                          onChange={(e) => setInspectWarehouseId(e.target.value)}
+                          className="flex-1 h-9 rounded-lg border border-border bg-background px-2 text-sm"
+                        >
+                          <option value="">
+                            {t3(
+                              'Automatisch (vom Scanner übernommen)',
+                              'Automatic (from scanner)',
+                              'تلقائي (من الماسح)',
+                            )}
+                          </option>
+                          {(warehouses ?? []).map((w) => (
+                            <option key={w.id} value={w.id}>
+                              {w.name}{w.isDefault ? ` (${t3('Standard', 'default', 'افتراضي')})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        className="w-full gap-2"
+                        onClick={handleInspect}
+                        disabled={Object.keys(inspectItems).length === 0 || inspectMut.isPending}
+                      >
+                        <Eye className="h-4 w-4" />{t3('Pr\u00fcfung abschlie\u00dfen', 'Complete Inspection', '\u0625\u0643\u0645\u0627\u0644 \u0627\u0644\u0641\u062d\u0635')}
+                      </Button>
+                    </div>
                   )}
 
                   {/* inspected → 1-CLICK REFUND (gold, prominent) */}
@@ -658,16 +749,71 @@ export default function AdminReturnsPage() {
                     )
                   })()}
 
-                  {/* refunded → show info */}
-                  {detail.status === 'refunded' && (
-                    <div className="flex items-center gap-3 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-green-800 text-sm">
-                      <Check className="h-5 w-5 flex-shrink-0" />
-                      <div>
-                        <p className="font-medium">{t3('Erstattet am', 'Refunded on', '\u062a\u0645 \u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f \u0641\u064a')} {formatDate(detail.refundedAt, locale)}</p>
-                        <p className="text-green-700 font-bold">{formatCurrency(Number(detail.refundAmount ?? 0), locale)}</p>
+                  {/* refunded → show info. For Vorkasse, the latest refund row
+                      may still be PENDING (manual bank transfer not yet done)
+                      or PROCESSED (transfer confirmed by admin).  Render the
+                      correct branch based on that so finance reports stay
+                      honest. */}
+                  {detail.status === 'refunded' && (() => {
+                    const provider = detail.order?.payment?.provider
+                    // Refunds are loaded ordered by createdAt desc, so [0] is latest.
+                    const latestRefund = detail.order?.payment?.refunds?.[0] as
+                      | { id: string; status: 'PENDING' | 'PROCESSED' | 'FAILED'; amount: string | number; processedAt: string | null; createdAt: string }
+                      | undefined
+                    const isVorkassePending =
+                      provider === 'VORKASSE' &&
+                      latestRefund?.status === 'PENDING'
+
+                    if (isVorkassePending) {
+                      return (
+                        <div className="px-4 py-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-700 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-semibold text-amber-900 text-sm">
+                                {t3(
+                                  'Bank\u00fcberweisung ausstehend',
+                                  'Bank transfer pending',
+                                  '\u0627\u0644\u062a\u062d\u0648\u064a\u0644 \u0627\u0644\u0645\u0635\u0631\u0641\u064a \u0645\u0639\u0644\u0651\u0642',
+                                )}
+                              </p>
+                              <p className="text-sm text-amber-800 mt-1">
+                                {t3(
+                                  `Der Betrag ${formatCurrency(Number(latestRefund?.amount ?? detail.refundAmount ?? 0), locale)} muss noch per Banküberweisung an den Kunden gesendet werden. Solange der Status nicht bestätigt ist, erscheint die Erstattung NICHT in den Finanzberichten.`,
+                                  `The amount ${formatCurrency(Number(latestRefund?.amount ?? detail.refundAmount ?? 0), locale)} still needs to be wired to the customer. Until confirmed, this refund is NOT counted in finance reports.`,
+                                  `يجب تحويل المبلغ ${formatCurrency(Number(latestRefund?.amount ?? detail.refundAmount ?? 0), locale)} إلى العميل عبر التحويل المصرفي. حتى يتم التأكيد، لن يظهر هذا الاسترداد في التقارير المالية.`,
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            className="w-full gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                            onClick={() => handleConfirmTransfer(latestRefund!.id, Number(latestRefund?.amount ?? 0))}
+                            disabled={markTransferredMut.isPending}
+                          >
+                            <Check className="h-4 w-4" />
+                            {t3(
+                              'Bank\u00fcberweisung ausgef\u00fchrt',
+                              'Bank transfer executed',
+                              '\u062a\u0645 \u062a\u0646\u0641\u064a\u0630 \u0627\u0644\u062a\u062d\u0648\u064a\u0644',
+                            )}
+                          </Button>
+                        </div>
+                      )
+                    }
+
+                    // Standard case: refund is PROCESSED (Stripe/PayPal/etc.
+                    // automatic, or Vorkasse after admin confirmed transfer).
+                    return (
+                      <div className="flex items-center gap-3 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-green-800 text-sm">
+                        <Check className="h-5 w-5 flex-shrink-0" />
+                        <div>
+                          <p className="font-medium">{t3('Erstattet am', 'Refunded on', '\u062a\u0645 \u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f \u0641\u064a')} {formatDate(detail.refundedAt, locale)}</p>
+                          <p className="text-green-700 font-bold">{formatCurrency(Number(detail.refundAmount ?? 0), locale)}</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {/* rejected → show reason */}
                   {detail.status === 'rejected' && (

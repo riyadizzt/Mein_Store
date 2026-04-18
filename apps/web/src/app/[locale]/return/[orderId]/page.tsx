@@ -47,9 +47,15 @@ type PrefillData = {
 
 // Keys MUST match prisma ReturnReason enum — checked by class-validator
 // on the backend. Wrong values come back as a 400 listing all allowed enums.
+//
+// "damaged" is intentionally omitted — we inspect every item before shipping,
+// so a customer-reported defect is statistically a mismatched expectation,
+// not a real defect. Letting the customer pick "damaged" would invite a
+// reason the admin is systematically going to override during inspection.
+// The admin retains the "damaged" option during inspection for the rare
+// real-defect case (transport damage, customer-caused damage).
 const REASONS = [
   { key: 'wrong_size', de: 'Falsche Größe', en: 'Wrong size', ar: 'مقاس خاطئ' },
-  { key: 'damaged', de: 'Defekt / Beschädigt', en: 'Defective / damaged', ar: 'معيب / تالف' },
   { key: 'quality_issue', de: 'Qualitätsmangel', en: 'Quality issue', ar: 'مشكلة في الجودة' },
   { key: 'wrong_product', de: 'Falsches Produkt', en: 'Wrong product', ar: 'منتج خاطئ' },
   { key: 'right_of_withdrawal', de: 'Widerruf (14 Tage)', en: 'Right of withdrawal', ar: 'حق الانسحاب' },

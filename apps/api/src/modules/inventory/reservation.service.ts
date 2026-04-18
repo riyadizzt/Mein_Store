@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../../prisma/prisma.service'
 import { ReserveStockDto } from './dto/reserve-stock.dto'
 import { InventoryService } from './inventory.service'
+import { revalidateProductTags } from '../../common/helpers/revalidation'
 
 interface InventoryRow {
   id: string
@@ -126,6 +127,12 @@ export class ReservationService {
       )
 
       return reservation
+    }).then(async (reservation) => {
+      // R13 — tag-based ISR invalidation. Fire-and-forget: a failed
+      // revalidate call never rolls back the reservation. Outside the
+      // $transaction callback so the DB txn commits first.
+      revalidateProductTags(this.prisma, [dto.variantId]).catch(() => {})
+      return reservation
     })
   }
 
@@ -179,6 +186,15 @@ export class ReservationService {
     })
 
     this.logger.log(`Freigegeben: reservationId=${reservationId} | reason=${reason}`)
+    // R13 — refetch variantId out-of-band so we can invalidate its ISR tag.
+    // The transaction above read it already but didn't return it; a second
+    // select is cheap and keeps the happy-path signature untouched.
+    this.prisma.stockReservation
+      .findUnique({ where: { id: reservationId }, select: { variantId: true } })
+      .then((r) => {
+        if (r?.variantId) revalidateProductTags(this.prisma, [r.variantId]).catch(() => {})
+      })
+      .catch(() => {})
     return { success: true, reservationId }
   }
 
@@ -270,7 +286,131 @@ export class ReservationService {
       `Bestätigt: reservationId=${reservationId} | orderId=${orderId} | qty=${reservation.quantity}`,
     )
 
+    // R13 — onHand just changed at capture time; invalidate the product tag.
+    revalidateProductTags(this.prisma, [reservation.variantId]).catch(() => {})
+
     return { success: true, reservationId, orderId }
+  }
+
+  // ── Restock from CONFIRMED: Post-Payment-Cancel Pfad ─────────
+  //
+  // When an order is cancelled AFTER payment capture, its reservations are
+  // already in status CONFIRMED (flipped by confirm() at capture time) AND
+  // the onHand counter was decremented in the same transaction. release()
+  // only finds RESERVED rows → silent no-op → stock vanishes.
+  //
+  // This method is the dedicated post-capture cancel path. It:
+  //   • atomically flips CONFIRMED → RELEASED via updateMany WHERE status
+  //     (race-safe against double-calls / webhook replays)
+  //   • increments quantityOnHand at the reservation's RECORDED warehouse
+  //     (respects any admin-override moves — R4/R5/R7 coming later)
+  //   • logs a `return_received` movement with a clear cancel-restock note
+  //   • leaves quantityReserved UNTOUCHED (already decremented at confirm())
+  //   • is fully idempotent — a second call finds zero CONFIRMED rows
+  //
+  // Optional variantIds filter is for partial cancels: only restock the
+  // variants being cancelled, not the whole order.
+  //
+  // Callers should invoke AFTER refund success is confirmed, otherwise a
+  // failed refund could leave stock back on the shelf while money is still
+  // with the customer.
+
+  async restockFromConfirmed(
+    orderId: string,
+    reason: string,
+    actorId: string = 'system',
+    variantIds?: string[],
+  ): Promise<{ restocked: number }> {
+    const where: any = { orderId, status: 'CONFIRMED' }
+    if (variantIds && variantIds.length > 0) {
+      where.variantId = { in: variantIds }
+    }
+
+    const confirmed = await this.prisma.stockReservation.findMany({ where })
+    if (confirmed.length === 0) {
+      this.logger.log(
+        `restockFromConfirmed: no CONFIRMED reservations for order=${orderId}` +
+          (variantIds ? ` variantIds=${variantIds.join(',')}` : ''),
+      )
+      return { restocked: 0 }
+    }
+
+    let restockedCount = 0
+
+    for (const res of confirmed) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const claimed = await tx.stockReservation.updateMany({
+            where: { id: res.id, status: 'CONFIRMED' },
+            data: { status: 'RELEASED' },
+          })
+          if (claimed.count === 0) {
+            this.logger.warn(
+              `restockFromConfirmed: reservation ${res.id} already flipped by racer — skipping`,
+            )
+            return
+          }
+
+          const invBefore = await tx.inventory.findUnique({
+            where: {
+              variantId_warehouseId: {
+                variantId: res.variantId,
+                warehouseId: res.warehouseId,
+              },
+            },
+          })
+          if (!invBefore) {
+            this.logger.error(
+              `restockFromConfirmed: inventory row missing for variant=${res.variantId} warehouse=${res.warehouseId} — status flipped but cannot restock`,
+            )
+            return
+          }
+
+          await tx.inventory.update({
+            where: {
+              variantId_warehouseId: {
+                variantId: res.variantId,
+                warehouseId: res.warehouseId,
+              },
+            },
+            data: { quantityOnHand: { increment: res.quantity } },
+          })
+
+          await tx.inventoryMovement.create({
+            data: {
+              variantId: res.variantId,
+              warehouseId: res.warehouseId,
+              type: 'return_received',
+              quantity: res.quantity,
+              quantityBefore: invBefore.quantityOnHand,
+              quantityAfter: invBefore.quantityOnHand + res.quantity,
+              referenceId: res.id,
+              notes: `Order cancelled (post-payment restock): ${reason}`,
+              createdBy: actorId,
+            },
+          })
+
+          restockedCount++
+        })
+      } catch (e: any) {
+        this.logger.error(
+          `restockFromConfirmed: transaction failed for reservation=${res.id}: ${e?.message ?? e}`,
+        )
+      }
+    }
+
+    this.logger.log(
+      `restockFromConfirmed: orderId=${orderId} restocked=${restockedCount}/${confirmed.length}`,
+    )
+
+    // R13 — onHand increased for every restocked variant; invalidate all
+    // affected product tags in one batch. Fire-and-forget, never throws.
+    if (restockedCount > 0) {
+      const touchedVariantIds = Array.from(new Set(confirmed.map((r) => r.variantId)))
+      revalidateProductTags(this.prisma, touchedVariantIds).catch(() => {})
+    }
+
+    return { restocked: restockedCount }
   }
 
   // ── Batch Release: Abgelaufene Reservierungen ────────────────
