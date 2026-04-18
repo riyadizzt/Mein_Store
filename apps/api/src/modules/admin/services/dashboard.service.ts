@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../../prisma/prisma.service'
+// Single source of truth for "what counts toward gross revenue" —
+// shared with finance-reports to prevent the two services from drifting
+// apart again (the exact bug shape of Launch-Blocker #3).
+import { COUNTABLE_STATUSES } from './finance-reports.service'
 
 @Injectable()
 export class DashboardService {
@@ -48,35 +52,43 @@ export class DashboardService {
       lowStockCountRows,
       revenueLast7DaysRaw,
     ] = await Promise.all([
-      // Today's revenue
+      // Today's revenue — FINANCIAL KPI. Uses COUNTABLE_STATUSES so it
+      // matches finance-reports.aggregateSalesForDay exactly. Previously
+      // used `notIn ['cancelled']` which silently counted pending /
+      // pending_payment / disputed orders (money not yet received) as
+      // revenue, overstating the number vs. the finance reports.
       this.prisma.order.aggregate({
-        where: { createdAt: { gte: todayStart }, status: { notIn: ['cancelled'] }, deletedAt: null },
+        where: { createdAt: { gte: todayStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
         _sum: { totalAmount: true, subtotal: true },
         _count: true,
       }),
-      // This week
+      // This week — FINANCIAL KPI, see todayOrders comment above.
       this.prisma.order.aggregate({
-        where: { createdAt: { gte: weekStart }, status: { notIn: ['cancelled'] }, deletedAt: null },
+        where: { createdAt: { gte: weekStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
         _sum: { totalAmount: true },
         _count: true,
       }),
-      // This month
+      // This month — FINANCIAL KPI, see todayOrders comment above.
       this.prisma.order.aggregate({
-        where: { createdAt: { gte: monthStart }, status: { notIn: ['cancelled'] }, deletedAt: null },
+        where: { createdAt: { gte: monthStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
         _sum: { totalAmount: true },
         _count: true,
       }),
-      // Last month (for comparison)
+      // Last month — FINANCIAL KPI used for month-over-month comparison.
       this.prisma.order.aggregate({
         where: {
           createdAt: { gte: lastMonthStart, lt: monthStart },
-          status: { notIn: ['cancelled'] },
+          status: { in: COUNTABLE_STATUSES },
           deletedAt: null,
         },
         _sum: { totalAmount: true },
         _count: true,
       }),
-      // Orders by status
+      // Orders by status — OPERATIONAL pipeline view.
+      // Intentionally includes EVERY status (pending, cancelled, disputed,
+      // etc.) because this drives the admin's "where are my orders right
+      // now" pie/bar chart. Narrowing to COUNTABLE_STATUSES would hide
+      // pending orders and break pipeline visibility.
       this.prisma.order.groupBy({
         by: ['status'],
         _count: true,
@@ -123,7 +135,11 @@ export class DashboardService {
         ORDER BY (i.quantity_on_hand - i.quantity_reserved) ASC
         LIMIT 20
       `,
-      // Recent 10 orders
+      // Recent 10 orders — OPERATIONAL activity feed.
+      // Intentionally unfiltered by status so a fresh pending order shows
+      // up immediately (admin wants to see new orders in real time, not
+      // wait ~15 minutes for payment capture). Narrowing to
+      // COUNTABLE_STATUSES would hide pending orders from this list.
       this.prisma.order.findMany({
         where: { deletedAt: null },
         select: {
@@ -144,7 +160,10 @@ export class DashboardService {
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
-      // Open disputes
+      // Open disputes — OPERATIONAL, gezielter Single-Status-Filter.
+      // Lists the orders currently in the 'disputed' state for admin
+      // attention (chargebacks, Stripe disputes, etc.). Status filter
+      // here is INTENTIONAL and has nothing to do with revenue logic.
       this.prisma.order.findMany({
         where: { status: 'disputed', deletedAt: null },
         select: { id: true, orderNumber: true, totalAmount: true, createdAt: true },
@@ -162,7 +181,14 @@ export class DashboardService {
         _count: true,
         where: { status: 'captured' },
       }),
-      // Top 10 products this month (with names in all 3 locales + images)
+      // Top 10 products this month — FINANCIAL KPI.
+      // Status list below MUST stay in sync with COUNTABLE_STATUSES in
+      // finance-reports.service.ts. Hardcoded inline because Prisma's
+      // $queryRaw template tag cannot cleanly interpolate a TS string[]
+      // into SQL `IN (...)` without switching to the more verbose
+      // Prisma.sql helper — keeping this readable trades a tiny sync
+      // obligation for grep-friendly SQL. If COUNTABLE_STATUSES ever
+      // changes, update this list too (Fix 4 regression test catches drift).
       this.prisma.$queryRaw<Array<{
         snapshot_name: string
         product_name_de: string | null
@@ -188,18 +214,20 @@ export class DashboardService {
         LEFT JOIN product_translations pt_ar ON pt_ar.product_id = p.id AND pt_ar.language = 'ar'
         LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
         WHERE o.created_at >= ${monthStart}
-          AND o.status != 'cancelled'
+          AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND o.deleted_at IS NULL
         GROUP BY oi.snapshot_name, pt_de.name, pt_en.name, pt_ar.name, pi.url
         ORDER BY total_revenue DESC
         LIMIT 10
       `,
-      // Today's revenue by channel
+      // Today's revenue by channel — FINANCIAL KPI.
+      // Same COUNTABLE_STATUSES filter as the today/week/month aggregates
+      // so the channel-breakdown sum matches today.revenueGross.
       this.prisma.order.groupBy({
         by: ['channel'],
         _sum: { totalAmount: true },
         _count: true,
-        where: { createdAt: { gte: todayStart }, status: { notIn: ['cancelled'] }, deletedAt: null },
+        where: { createdAt: { gte: todayStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
       }),
       // Unread (first-viewed-by-admin-at IS NULL) orders — ALL statuses.
       // Powers the sidebar badge. Consistent with the red pulsing dot in
@@ -229,12 +257,14 @@ export class DashboardService {
           AND p.is_active = true
           AND pv.is_active = true
       `,
-      // Revenue for the last 7 days (incl. today), grouped per calendar day.
-      // Drives the "Revenue — Last 7 Days" chart on the dashboard. Before
-      // this query, the chart used Math.random() mock data — embarrassingly
-      // visible after the pre-launch reset when every real number was 0.
-      // Excludes cancelled orders and soft-deleted orders, same filter as the
-      // today/week/month aggregates above for consistency.
+      // Revenue for the last 7 days (incl. today), grouped per UTC day —
+      // FINANCIAL KPI, drives the "Revenue — Last 7 Days" chart.
+      // Status list below MUST stay in sync with COUNTABLE_STATUSES in
+      // finance-reports.service.ts. Same hardcoding rationale as the
+      // topProducts query above — Prisma's $queryRaw template tag does not
+      // interpolate string[] cleanly into SQL IN-lists without the more
+      // verbose Prisma.sql helper. If COUNTABLE_STATUSES changes, update
+      // this list too; Fix 4's regression test will catch any drift.
       this.prisma.$queryRaw<Array<{ day: Date; revenue: number; order_count: number }>>`
         SELECT
           DATE_TRUNC('day', created_at)::timestamp AS day,
@@ -242,7 +272,7 @@ export class DashboardService {
           COUNT(*)::int AS order_count
         FROM orders
         WHERE created_at >= ${new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000)}
-          AND status NOT IN ('cancelled')
+          AND status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND deleted_at IS NULL
         GROUP BY DATE_TRUNC('day', created_at)
         ORDER BY day ASC
@@ -385,6 +415,12 @@ export class DashboardService {
   }
 
   private async getCancellationRate() {
+    // OPERATIONAL ratio — cancellation percentage over the last 30 days.
+    // The denominator (`total`) MUST include every order regardless of
+    // status, the numerator only 'cancelled' — that's the math. Swapping
+    // in COUNTABLE_STATUSES here would shrink the denominator and falsely
+    // inflate the ratio. This is intentionally NOT a finance metric.
+    //
     // Rolling 30-day window from the current instant. Millisecond
     // subtraction is timezone-free: no DST ambiguity at month boundaries.
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)

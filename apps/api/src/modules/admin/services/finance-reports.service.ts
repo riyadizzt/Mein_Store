@@ -4,15 +4,21 @@ import { OrderStatus, SalesChannel } from '@prisma/client'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit')
 
-// All customer-facing channels — exclude POS (offline/Shopify)
-const ONLINE_CHANNELS: SalesChannel[] = ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp']
+// All customer-facing channels — exclude POS (offline/Shopify).
+// Exported so other finance-related services (e.g. admin dashboard) can
+// import the same list instead of duplicating it and drifting over time.
+export const ONLINE_CHANNELS: SalesChannel[] = ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp']
 
 // Countable statuses: every order that WAS paid counts as revenue.
 // 'returned' is included because the payment was captured — the refund
 // is subtracted separately via the Refund table. Excluding 'returned'
 // would cause double-subtraction (order drops from gross AND refund
 // subtracts from it again → negative net revenue).
-const COUNTABLE_STATUSES: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded']
+//
+// Exported as the single source of truth for "what counts toward gross
+// revenue" across the API. Admin dashboard imports this too so its KPIs
+// never drift from the finance-reports figures.
+export const COUNTABLE_STATUSES: OrderStatus[] = ['confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded']
 
 /** Shared where-clause for all finance queries */
 const ORDER_FILTER = {
