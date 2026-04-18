@@ -116,9 +116,9 @@ function badgeExplainer(badgeKey: string | undefined, count: number, locale: str
   if (!badgeKey) return ''
   const dict: Record<string, { de: string; en: string; ar: string }> = {
     openOrders: {
-      de: `${count} offene Bestellung${count === 1 ? '' : 'en'} (pending, pending_payment, confirmed, processing)`,
-      en: `${count} open order${count === 1 ? '' : 's'} (pending, pending_payment, confirmed, processing)`,
-      ar: `${count} طلب${count === 1 ? '' : 'ات'} مفتوح (قيد الانتظار، بانتظار الدفع، مؤكد، قيد المعالجة)`,
+      de: `${count} ungelesene Bestellung${count === 1 ? '' : 'en'} (noch nicht vom Admin geöffnet)`,
+      en: `${count} unread order${count === 1 ? '' : 's'} (not yet opened by admin)`,
+      ar: `${count} طلب${count === 1 ? '' : 'ات'} غير مقروء (لم يفتحه المسؤول بعد)`,
     },
     unreadNotifications: {
       de: `${count} ungelesene Benachrichtigung${count === 1 ? '' : 'en'}`,
@@ -204,10 +204,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const contact: any = contactQ.data
 
   const notifications = {
-    openOrders: dash?.ordersByStatus
-      ?.filter((s: any) => ['pending', 'pending_payment', 'confirmed', 'processing'].includes(s.status))
-      .reduce((sum: number, s: any) => sum + s.count, 0) ?? 0,
-    lowStock: dash?.lowStock?.length ?? 0,
+    // Sidebar-badge feed: UNREAD orders (Gmail-inbox semantic). The badge
+    // decrements when an admin opens an order — the backend findOne stamps
+    // firstViewedByAdminAt, and the next dashboard refetch (30s) sees the
+    // lower count. Keeps the badge in sync with what actually needs
+    // attention, not the total lifecycle queue.
+    openOrders: dash?.openOrdersUnread ?? 0,
+    // Truthful unlimited count from the backend. dash.lowStock[] is capped
+    // at 20 for the detail list, so using its .length made the badge
+    // permanently read "20" whenever there were 20+ low-stock rows.
+    lowStock: dash?.lowStockCount ?? dash?.lowStock?.length ?? 0,
     disputes: dash?.disputes?.count ?? 0,
     pendingReturns: dash?.pendingReturns?.count ?? 0,
     unreadNotifications: unread?.count ?? 0,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations, useLocale } from 'next-intl'
 import { Palette, Image as ImageIcon, Type, Check, Loader2, LayoutGrid, ExternalLink } from 'lucide-react'
@@ -21,6 +21,13 @@ export default function AppearancePage() {
   const [saved, setSaved] = useState(false)
   const [activeLang, setActiveLang] = useState<'de' | 'en' | 'ar'>('de')
 
+  // Dirty-tracking: only keys the user actually edited get sent on save.
+  // Without this, a full-form PATCH can overwrite untouched keys with
+  // whatever the form currently holds — including empty strings from a
+  // partial re-populate — silently wiping saved values (incident 17.04.2026,
+  // Social-URL data loss).
+  const dirtyRef = useRef<Set<string>>(new Set())
+
   const { data: settings } = useQuery({
     queryKey: ['admin-settings'],
     queryFn: async () => {
@@ -35,7 +42,7 @@ export default function AppearancePage() {
     if (!settings) return
     const s = settings.admin
     const p = settings.public
-    setForm({
+    const fresh: Record<string, string> = {
       brandName: p?.brandName ?? s?.companyName ?? 'MALAK',
       logoUrl: s?.logoUrl ?? '',
       heroBannerImage: p?.heroBanner?.image ?? '',
@@ -53,12 +60,40 @@ export default function AppearancePage() {
       facebookUrl: p?.social?.facebook ?? '',
       tiktokUrl: p?.social?.tiktok ?? '',
       homepage_design: p?.homepage_design ?? 'A',
+    }
+    // Preserve any in-progress user edits when settings refetches (window
+    // focus, invalidate, etc.) — otherwise a background refresh would reset
+    // the user's typing.
+    setForm((prev) => {
+      if (dirtyRef.current.size === 0) return fresh
+      const merged = { ...fresh }
+      for (const k of dirtyRef.current) {
+        if (k in prev) merged[k] = prev[k]
+      }
+      return merged
     })
   }, [settings])
 
   const saveMutation = useMutation({
-    mutationFn: () => api.patch('/admin/settings', form),
-    onSuccess: () => {
+    // Build a PARTIAL payload from the dirty set. Sending the whole form
+    // would overwrite fields the user didn't touch with whatever value the
+    // form state happens to hold — which can be empty after a background
+    // refetch or stale state. Dirty-tracking is the cheapest, safest guard.
+    mutationFn: async () => {
+      if (dirtyRef.current.size === 0) return { noop: true as const }
+      const payload: Record<string, string> = {}
+      for (const k of dirtyRef.current) payload[k] = form[k] ?? ''
+      await api.patch('/admin/settings', payload)
+      return { noop: false as const }
+    },
+    onSuccess: (result) => {
+      if (result?.noop) {
+        toast.success(t3('Keine Änderungen zu speichern', 'لا توجد تغييرات للحفظ'))
+        return
+      }
+      // Clear dirty set BEFORE invalidate so the refetch doesn't skip
+      // re-populating those keys in the useEffect merge path.
+      dirtyRef.current.clear()
       queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
       queryClient.invalidateQueries({ queryKey: ['shop-settings-public'] })
       setSaved(true)
@@ -66,6 +101,7 @@ export default function AppearancePage() {
       setTimeout(() => setSaved(false), 3000)
     },
     onError: (err: any) => {
+      // On failure, keep the dirty set so a retry still sends the changes.
       const msg =
         err?.response?.data?.message ||
         err?.message ||
@@ -74,7 +110,10 @@ export default function AppearancePage() {
     },
   })
 
-  const u = (key: string, value: string) => setForm((p) => ({ ...p, [key]: value }))
+  const u = (key: string, value: string) => {
+    setForm((p) => ({ ...p, [key]: value }))
+    dirtyRef.current.add(key)
+  }
 
   return (
     <div>

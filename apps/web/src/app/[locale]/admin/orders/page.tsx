@@ -202,10 +202,43 @@ export default function AdminOrdersPage() {
                     </button>
                     {!collapsedDays.has(dateKey) && items.map((order: any) => {
                       const statusColor = STATUS_COLORS[order.status] ?? 'bg-gray-100'
+                      // Unread = never opened in admin detail-view. Red pulsing
+                      // dot + subtle red row tint + bold text so the admin can
+                      // spot new orders at a glance even in a dense list.
+                      const isUnread = order.firstViewedByAdminAt == null
                       return (
-                        <div key={order.id} className="grid grid-cols-7 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center">
+                        <div
+                          key={order.id}
+                          className={`grid grid-cols-7 gap-x-2 border-b hover:bg-muted/30 transition-colors items-center ${
+                            isUnread ? 'bg-red-500/[0.06]' : ''
+                          }`}
+                        >
                           <div className="px-4 py-4">
-                            <Link href={`/${locale}/admin/orders/${order.id}`} className="font-mono text-sm font-medium text-primary hover:underline">
+                            {/* The order number itself is always Latin (ORD-…)
+                                and reads left-to-right — force `dir="ltr"` on
+                                the link so the dot + number alignment is
+                                identical in DE, EN, and AR. Without this, the
+                                RTL flex-direction flipped the dot into the
+                                wrong visual slot and BiDi-sandwiched it right
+                                against the "O" of ORD. */}
+                            <Link
+                              href={`/${locale}/admin/orders/${order.id}`}
+                              dir="ltr"
+                              className={`font-mono text-sm text-primary hover:underline inline-flex items-center ${
+                                isUnread ? 'font-bold' : 'font-medium'
+                              }`}
+                            >
+                              {isUnread && (
+                                <span
+                                  className="relative inline-flex h-2.5 w-2.5 flex-shrink-0 mr-2.5"
+                                  aria-label={locale === 'ar' ? 'غير مقروء' : locale === 'en' ? 'Unread' : 'Ungelesen'}
+                                  title={locale === 'ar' ? 'غير مقروء' : locale === 'en' ? 'Unread' : 'Ungelesen'}
+                                >
+                                  {/* Pulsing halo + solid red core for clear "new" signal */}
+                                  <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75 animate-ping" />
+                                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-background" />
+                                </span>
+                              )}
                               {order.orderNumber}
                             </Link>
                           </div>

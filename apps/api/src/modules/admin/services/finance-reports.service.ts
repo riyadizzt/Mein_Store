@@ -184,10 +184,15 @@ export class FinanceReportsService {
     const end = new Date(day)
     end.setUTCHours(23, 59, 59, 999)
 
+    // Include refunded + partially_refunded payments: the money WAS captured,
+    // so it counts toward the day's payment-method mix. The refund itself is
+    // subtracted separately in aggregateRefunds() — not here. Without this
+    // broader filter, refunded orders silently drop out of the payment mix
+    // and the sum of per-method totals disagrees with the day's order count.
     const rows = await this.prisma.payment.groupBy({
       by: ['method'],
       where: {
-        status: 'captured',
+        status: { in: ['captured', 'partially_refunded', 'refunded'] },
         order: {
           ...ORDER_FILTER,
           createdAt: { gte: start, lte: end },

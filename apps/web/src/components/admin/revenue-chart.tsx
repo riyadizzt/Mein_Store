@@ -3,29 +3,51 @@
 import { useLocale } from 'next-intl'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
-function generateData(locale: string) {
-  const localeStr = locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'de' ? 'de-DE' : 'en-GB'
-  const data = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    data.push({
-      date: d.toLocaleDateString(localeStr, { weekday: 'short', day: 'numeric' }),
-      revenue: Math.round(Math.random() * 2000 + 500),
-    })
-  }
-  // RTL: reverse so newest is on the left (start side)
-  return locale === 'ar' ? data.reverse() : data
+// Real data shape from dashboard.service.ts getOverview():
+// { date: 'YYYY-MM-DD', revenue: number, orderCount: number }
+interface DayPoint {
+  date: string
+  revenue: number
+  orderCount: number
 }
 
-export function RevenueChart() {
+interface Props {
+  data?: DayPoint[]
+}
+
+function formatDate(iso: string, locale: string): string {
+  const d = new Date(iso + 'T12:00:00Z')  // noon-of-day avoids DST shifts
+  const localeStr = locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'de' ? 'de-DE' : 'en-GB'
+  return d.toLocaleDateString(localeStr, { weekday: 'short', day: 'numeric' })
+}
+
+export function RevenueChart({ data }: Props) {
   const locale = useLocale()
-  const data = generateData(locale)
   const isRtl = locale === 'ar'
+
+  // If backend didn't ship data (first load, or the data property is missing),
+  // fall back to 7 empty buckets so the axes still render cleanly.
+  const buckets: DayPoint[] = data && data.length > 0
+    ? data
+    : Array.from({ length: 7 }, (_, i) => {
+        const d = new Date()
+        d.setDate(d.getDate() - (6 - i))
+        return { date: d.toISOString().slice(0, 10), revenue: 0, orderCount: 0 }
+      })
+
+  // Each chart point only needs its display label + revenue number.
+  const chartData = buckets.map((b) => ({
+    date: formatDate(b.date, locale),
+    revenue: b.revenue,
+    orderCount: b.orderCount,
+  }))
+
+  // RTL: newest day is on the visual left (start side).
+  const displayData = isRtl ? [...chartData].reverse() : chartData
 
   return (
     <ResponsiveContainer width="100%" height={240}>
-      <AreaChart data={data}>
+      <AreaChart data={displayData}>
         <defs>
           <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#d4a853" stopOpacity={0.2} />

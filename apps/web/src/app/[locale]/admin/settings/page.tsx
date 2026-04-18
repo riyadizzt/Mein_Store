@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations, useLocale } from 'next-intl'
 import { Settings, CreditCard, Mail, Building2, Check, Loader2, Gift, Bell, Shield, ChevronRight } from 'lucide-react'
@@ -9,6 +9,7 @@ import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { toast } from '@/store/toast-store'
 
 type Tab = 'company' | 'payments' | 'marketing' | 'notifications' | 'email'
 
@@ -19,6 +20,12 @@ export default function AdminSettingsPage() {
   const [form, setForm] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('company')
+
+  // Dirty-tracking: only keys the user actually edited get sent on save.
+  // Without this, a full-form PATCH can overwrite untouched keys with
+  // whatever the form currently holds — including empty strings from a
+  // partial re-populate — silently wiping saved values (incident 17.04.2026).
+  const dirtyRef = useRef<Set<string>>(new Set())
   const t3 = (d: string, e: string, a: string) => locale === 'ar' ? a : locale === 'en' ? e : d
 
   const { data: settings, isLoading } = useQuery({
@@ -28,53 +35,90 @@ export default function AdminSettingsPage() {
 
   // Sync form with loaded settings
   useEffect(() => {
-    if (settings) {
-      setForm({
-        companyName: settings.companyName ?? '',
-        companyAddress: settings.companyAddress ?? '',
-        companyVatId: settings.companyVatId ?? '',
-        companyCeo: settings.companyCeo ?? '',
-        companyPhone: settings.companyPhone ?? '',
-        companyEmail: settings.companyEmail ?? '',
-        logoUrl: settings.logoUrl ?? '',
-        freeShippingThreshold: settings.freeShippingThreshold ?? '100',
-        stripeEnabled: String(settings.stripeEnabled ?? false),
-        klarnaEnabled: String(settings.klarnaEnabled ?? false),
-        paypalEnabled: String(settings.paypalEnabled ?? false),
-        welcomePopupEnabled: String(settings.welcomePopupEnabled ?? 'true'),
-        welcomeDiscountPercent: String(settings.welcomeDiscountPercent ?? '10'),
-        notif_email_new_order: String(settings.notif_email_new_order ?? 'true'),
-        notif_email_low_stock: String(settings.notif_email_low_stock ?? 'true'),
-        notif_sound_enabled: String(settings.notif_sound_enabled ?? 'true'),
-        notif_daily_summary: String(settings.notif_daily_summary ?? 'false'),
-        notif_daily_summary_email: String(settings.notif_daily_summary_email ?? ''),
-        notif_email_auto_cancel: String(settings.notif_email_auto_cancel ?? 'true'),
-        returnsEnabled: String(settings.returnsEnabled ?? 'true'),
-        addressAutocompleteEnabled: String(settings.addressAutocompleteEnabled ?? 'false'),
-        vorkasse_enabled: String(settings.vorkasse_enabled ?? 'false'),
-        vorkasse_account_holder: String(settings.vorkasse_account_holder ?? ''),
-        vorkasse_iban: String(settings.vorkasse_iban ?? ''),
-        vorkasse_bic: String(settings.vorkasse_bic ?? ''),
-        vorkasse_bank_name: String(settings.vorkasse_bank_name ?? ''),
-        vorkasse_deadline_days: String(settings.vorkasse_deadline_days ?? '7'),
-        sumup_enabled: String(settings.sumup_enabled ?? 'false'),
-        sumup_merchant_code: String(settings.sumup_merchant_code ?? ''),
-        whatsapp_ai_enabled: String(settings.whatsapp_ai_enabled ?? 'false'),
-      })
+    if (!settings) return
+    const fresh: Record<string, string> = {
+      companyName: settings.companyName ?? '',
+      companyAddress: settings.companyAddress ?? '',
+      companyVatId: settings.companyVatId ?? '',
+      companyCeo: settings.companyCeo ?? '',
+      companyPhone: settings.companyPhone ?? '',
+      companyEmail: settings.companyEmail ?? '',
+      logoUrl: settings.logoUrl ?? '',
+      freeShippingThreshold: settings.freeShippingThreshold ?? '100',
+      stripeEnabled: String(settings.stripeEnabled ?? false),
+      klarnaEnabled: String(settings.klarnaEnabled ?? false),
+      paypalEnabled: String(settings.paypalEnabled ?? false),
+      welcomePopupEnabled: String(settings.welcomePopupEnabled ?? 'true'),
+      welcomeDiscountPercent: String(settings.welcomeDiscountPercent ?? '10'),
+      notif_email_new_order: String(settings.notif_email_new_order ?? 'true'),
+      notif_email_low_stock: String(settings.notif_email_low_stock ?? 'true'),
+      notif_sound_enabled: String(settings.notif_sound_enabled ?? 'true'),
+      notif_daily_summary: String(settings.notif_daily_summary ?? 'false'),
+      notif_daily_summary_email: String(settings.notif_daily_summary_email ?? ''),
+      notif_email_auto_cancel: String(settings.notif_email_auto_cancel ?? 'true'),
+      returnsEnabled: String(settings.returnsEnabled ?? 'true'),
+      addressAutocompleteEnabled: String(settings.addressAutocompleteEnabled ?? 'false'),
+      vorkasse_enabled: String(settings.vorkasse_enabled ?? 'false'),
+      vorkasse_account_holder: String(settings.vorkasse_account_holder ?? ''),
+      vorkasse_iban: String(settings.vorkasse_iban ?? ''),
+      vorkasse_bic: String(settings.vorkasse_bic ?? ''),
+      vorkasse_bank_name: String(settings.vorkasse_bank_name ?? ''),
+      vorkasse_deadline_days: String(settings.vorkasse_deadline_days ?? '7'),
+      sumup_enabled: String(settings.sumup_enabled ?? 'false'),
+      sumup_merchant_code: String(settings.sumup_merchant_code ?? ''),
+      whatsapp_ai_enabled: String(settings.whatsapp_ai_enabled ?? 'false'),
     }
+    // Preserve in-progress user edits across background refetches.
+    setForm((prev) => {
+      if (dirtyRef.current.size === 0) return fresh
+      const merged = { ...fresh }
+      for (const k of dirtyRef.current) {
+        if (k in prev) merged[k] = prev[k]
+      }
+      return merged
+    })
   }, [settings])
 
   const saveMutation = useMutation({
-    mutationFn: () => api.patch('/admin/settings', form),
-    onSuccess: () => {
+    // Only PATCH fields the user actually edited. Prevents silent
+    // overwrites of untouched keys (see dirtyRef note above).
+    mutationFn: async () => {
+      if (dirtyRef.current.size === 0) return { noop: true as const }
+      const payload: Record<string, string> = {}
+      for (const k of dirtyRef.current) payload[k] = form[k] ?? ''
+      await api.patch('/admin/settings', payload)
+      return { noop: false as const }
+    },
+    onSuccess: (result) => {
+      if (result?.noop) {
+        toast.success(t3('Keine Änderungen zu speichern', 'No changes to save', 'لا توجد تغييرات للحفظ'))
+        return
+      }
+      // Clear dirty BEFORE invalidate so the refetch re-populates cleanly.
+      dirtyRef.current.clear()
       queryClient.invalidateQueries({ queryKey: ['admin-settings'] })
       setSaved(true)
+      toast.success(t3('Einstellungen gespeichert', 'Settings saved', 'تم حفظ الإعدادات'))
       setTimeout(() => setSaved(false), 3000)
+    },
+    onError: (err: any) => {
+      // Keep dirty set so a retry still sends the changes.
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        t3('Speichern fehlgeschlagen', 'Save failed', 'فشل الحفظ')
+      toast.error(typeof msg === 'string' ? msg : t3('Speichern fehlgeschlagen', 'Save failed', 'فشل الحفظ'))
     },
   })
 
-  const updateField = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }))
-  const toggleField = (key: string) => setForm((prev) => ({ ...prev, [key]: prev[key] === 'true' ? 'false' : 'true' }))
+  const updateField = (key: string, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    dirtyRef.current.add(key)
+  }
+  const toggleField = (key: string) => {
+    setForm((prev) => ({ ...prev, [key]: prev[key] === 'true' ? 'false' : 'true' }))
+    dirtyRef.current.add(key)
+  }
 
   if (isLoading) {
     return (

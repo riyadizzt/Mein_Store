@@ -161,7 +161,7 @@ export function DashboardV2() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-sm">{t3('Umsatz — Letzte 7 Tage', 'Revenue — Last 7 Days', 'الإيرادات — آخر 7 أيام')}</h3>
             </div>
-            <RevenueChart />
+            <RevenueChart data={data?.revenueLast7Days ?? []} />
           </div>
           {/* Channel Donut — 30% */}
           <div className="lg:col-span-3 bg-background border rounded-2xl p-5">

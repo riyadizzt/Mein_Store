@@ -258,6 +258,13 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
         </div>
 
         {/* ─── Thumbnails (desktop) ─── */}
+        {/* Background bg-[#f5f5f5] matches the main-image container so
+            thumbnails with transparent PNG product photos render with a
+            consistent neutral backdrop instead of the browser's default
+            checker pattern. Without it, images with mixed backgrounds
+            (transparent vs. white vs. grey) looked visually mismatched
+            — especially noticeable when the product has a mix of
+            packshot and lifestyle photos. */}
         {total > 1 && (
           <div className="hidden lg:flex gap-2.5 overflow-x-auto scrollbar-hide pb-1 mt-3">
             {safeImages.map((im, i) => (
@@ -265,7 +272,7 @@ export function PremiumGallery({ images, productName, isRTL }: PremiumGalleryPro
                 key={i}
                 onClick={() => go(i)}
                 aria-label={`${productName} ${i + 1}`}
-                className={`relative flex-shrink-0 w-20 h-[100px] overflow-hidden transition-all duration-200 ${
+                className={`relative flex-shrink-0 w-20 h-[100px] overflow-hidden bg-[#f5f5f5] transition-all duration-200 ${
                   i === safeActive ? 'opacity-100 ring-2 ring-[#d4a853] ring-offset-1' : 'opacity-40 hover:opacity-70'
                 }`}
               >

@@ -697,6 +697,12 @@ model Order {
   cancelReason           String?      @map("cancel_reason")
   refundStatus           String?      @map("refund_status")    // succeeded | failed | pending | not_needed
   refundError            String?      @map("refund_error")
+  // Admin read-tracking — powers the sidebar "unread orders" badge and the
+  // unread marker on the orders list. Set exactly once on the first admin
+  // detail-view; never cleared after. Independent from order.status so a
+  // shipped order that was never opened by an admin still counts as unread.
+  firstViewedByAdminAt   DateTime?    @map("first_viewed_by_admin_at")
+  firstViewedByAdmin     String?      @map("first_viewed_by_admin")
   deletedAt              DateTime?    @map("deleted_at")
   createdAt              DateTime     @default(now()) @map("created_at")
   updatedAt              DateTime     @updatedAt @map("updated_at")
@@ -714,6 +720,9 @@ model Order {
 
   @@index([userId, status])
   @@index([createdAt, id])
+  // Partial index for the sidebar-badge query — only rows still unread are
+  // indexed, keeping the index tiny regardless of total order volume.
+  @@index([firstViewedByAdminAt], map: "orders_unread_idx")
   @@map("orders")
 }
 

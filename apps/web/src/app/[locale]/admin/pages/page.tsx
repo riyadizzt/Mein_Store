@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslations, useLocale } from 'next-intl'
 import { FileText, Check, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { toast } from '@/store/toast-store'
 
 const PAGES = [
   { key: 'impressum', de: 'Impressum', ar: 'البيانات القانونية' },
@@ -28,6 +29,12 @@ export default function AdminPagesPage() {
   const [content, setContent] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
 
+  // Dirty-tracking: only keys the user actually edited get sent on save.
+  // Legal content is especially dangerous to full-form-PATCH because a
+  // stale or partial response could blank Impressum/AGB/Datenschutz —
+  // legally required content that must never disappear silently.
+  const dirtyRef = useRef<Set<string>>(new Set())
+
   const { data: settings } = useQuery({
     queryKey: ['shop-settings-public'],
     queryFn: async () => { const { data } = await api.get('/settings/public'); return data },
@@ -35,22 +42,52 @@ export default function AdminPagesPage() {
 
   useEffect(() => {
     if (!settings?.legal) return
-    const all: Record<string, string> = {}
+    const fresh: Record<string, string> = {}
     for (const page of PAGES) {
       for (const lang of LANGS) {
         const val = settings.legal[page.key]?.[lang] ?? ''
-        all[`${page.key}_${lang}`] = val
+        fresh[`${page.key}_${lang}`] = val
       }
     }
-    setContent(all)
+    // Preserve in-progress user edits across background refetches.
+    setContent((prev) => {
+      if (dirtyRef.current.size === 0) return fresh
+      const merged = { ...fresh }
+      for (const k of dirtyRef.current) {
+        if (k in prev) merged[k] = prev[k]
+      }
+      return merged
+    })
   }, [settings])
 
   const saveMutation = useMutation({
-    mutationFn: () => api.patch('/admin/settings', content),
-    onSuccess: () => {
+    // Only PATCH fields the user actually edited. Legal content is legally
+    // required to be present — never let a background refetch silently wipe it.
+    mutationFn: async () => {
+      if (dirtyRef.current.size === 0) return { noop: true as const }
+      const payload: Record<string, string> = {}
+      for (const k of dirtyRef.current) payload[k] = content[k] ?? ''
+      await api.patch('/admin/settings', payload)
+      return { noop: false as const }
+    },
+    onSuccess: (result) => {
+      if (result?.noop) {
+        toast.success(t3('Keine Änderungen zu speichern', 'لا توجد تغييرات للحفظ'))
+        return
+      }
+      dirtyRef.current.clear()
       queryClient.invalidateQueries({ queryKey: ['shop-settings-public'] })
       setSaved(true)
+      toast.success(t3('Seiten gespeichert', 'تم حفظ الصفحات'))
       setTimeout(() => setSaved(false), 3000)
+    },
+    onError: (err: any) => {
+      // Keep dirty set so a retry still sends the changes.
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        t3('Speichern fehlgeschlagen', 'فشل الحفظ')
+      toast.error(typeof msg === 'string' ? msg : t3('Speichern fehlgeschlagen', 'فشل الحفظ'))
     },
   })
 
@@ -100,7 +137,10 @@ export default function AdminPagesPage() {
 
           <textarea
             value={content[currentKey] ?? ''}
-            onChange={(e) => setContent((prev) => ({ ...prev, [currentKey]: e.target.value }))}
+            onChange={(e) => {
+              setContent((prev) => ({ ...prev, [currentKey]: e.target.value }))
+              dirtyRef.current.add(currentKey)
+            }}
             className="w-full h-[500px] px-4 py-3 rounded-lg border bg-background text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
             dir={activeLang === 'ar' ? 'rtl' : 'ltr'}
             placeholder={`${(() => { const pg = PAGES.find((p) => p.key === activePage); return pg ? getPageLabel(pg) : '' })()} ${t3('Inhalt', 'المحتوى')} (${activeLang.toUpperCase()})...`}

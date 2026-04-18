@@ -30,6 +30,9 @@ export class DashboardService {
       revenueByPayment,
       topProducts,
       todayByChannel,
+      openOrdersUnread,
+      lowStockCountRows,
+      revenueLast7DaysRaw,
     ] = await Promise.all([
       // Today's revenue
       this.prisma.order.aggregate({
@@ -65,7 +68,20 @@ export class DashboardService {
         _count: true,
         where: { deletedAt: null },
       }),
-      // Low stock (items where on_hand - reserved <= reorder_point)
+      // Low stock — items where on_hand - reserved <= reorder_point.
+      //
+      // Filters to avoid badge noise:
+      //   - p.deleted_at IS NULL: skip soft-deleted products (test data,
+      //     garbage collection candidates — not real low-stock situations)
+      //   - p.is_active AND pv.is_active: skip inactive SKUs (dormant)
+      //   - reorder_point > 0: skip rows where no reorder trigger is set.
+      //     After the pre-launch reset, non-default warehouses are empty
+      //     but also set reorder_point=0 → they don't alert. A warehouse
+      //     that's genuinely stocking this variant will have reorder_point>0.
+      //
+      // LIMIT 20 caps the detail list; a separate UNLIMITED count ships as
+      // lowStockCount so the sidebar badge is honest instead of always
+      // reading "20" when there are 20+ items.
       this.prisma.$queryRaw<Array<{
         sku: string
         product_name: string
@@ -86,6 +102,10 @@ export class DashboardService {
         LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
         JOIN warehouses w ON w.id = i.warehouse_id
         WHERE (i.quantity_on_hand - i.quantity_reserved) <= i.reorder_point
+          AND i.reorder_point > 0
+          AND p.deleted_at IS NULL
+          AND p.is_active = true
+          AND pv.is_active = true
         ORDER BY (i.quantity_on_hand - i.quantity_reserved) ASC
         LIMIT 20
       `,
@@ -167,7 +187,73 @@ export class DashboardService {
         _count: true,
         where: { createdAt: { gte: todayStart }, status: { notIn: ['cancelled'] }, deletedAt: null },
       }),
+      // Unread (first-viewed-by-admin-at IS NULL) orders in actionable status.
+      // Powers the sidebar badge: only count orders still in the open-work
+      // pipeline AND not yet opened by any admin. Excludes cancelled / shipped
+      // / delivered / returned / refunded (those are lifecycle-complete from
+      // a to-do perspective, even if no admin technically clicked them open).
+      this.prisma.order.count({
+        where: {
+          firstViewedByAdminAt: null,
+          status: { in: ['pending', 'pending_payment', 'confirmed', 'processing'] },
+          deletedAt: null,
+        },
+      }),
+      // Unbounded count of the same low-stock set the query above returns
+      // (without the LIMIT 20) — the sidebar badge shows this. Keeps the
+      // badge truthful instead of always clamping at 20 whenever there
+      // are ≥ 20 low-stock rows.
+      this.prisma.$queryRaw<Array<{ n: number }>>`
+        SELECT COUNT(*)::int AS n
+        FROM inventory i
+        JOIN product_variants pv ON pv.id = i.variant_id
+        JOIN products p ON p.id = pv.product_id
+        WHERE (i.quantity_on_hand - i.quantity_reserved) <= i.reorder_point
+          AND i.reorder_point > 0
+          AND p.deleted_at IS NULL
+          AND p.is_active = true
+          AND pv.is_active = true
+      `,
+      // Revenue for the last 7 days (incl. today), grouped per calendar day.
+      // Drives the "Revenue — Last 7 Days" chart on the dashboard. Before
+      // this query, the chart used Math.random() mock data — embarrassingly
+      // visible after the pre-launch reset when every real number was 0.
+      // Excludes cancelled orders and soft-deleted orders, same filter as the
+      // today/week/month aggregates above for consistency.
+      this.prisma.$queryRaw<Array<{ day: Date; revenue: number; order_count: number }>>`
+        SELECT
+          DATE_TRUNC('day', created_at)::timestamp AS day,
+          COALESCE(SUM(CAST(total_amount AS DECIMAL(10,2))), 0)::float AS revenue,
+          COUNT(*)::int AS order_count
+        FROM orders
+        WHERE created_at >= ${new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000)}
+          AND status NOT IN ('cancelled')
+          AND deleted_at IS NULL
+        GROUP BY DATE_TRUNC('day', created_at)
+        ORDER BY day ASC
+      `,
     ])
+
+    // Normalise the 7-day revenue series so the chart always has 7 points,
+    // even on days without orders. Days without orders → revenue=0. Keyed
+    // by YYYY-MM-DD so DST-shifts don't shift the buckets.
+    const revenueLast7Days: Array<{ date: string; revenue: number; orderCount: number }> = []
+    const dayMap = new Map<string, { revenue: number; orderCount: number }>()
+    for (const row of revenueLast7DaysRaw as any[]) {
+      const key = new Date(row.day).toISOString().slice(0, 10)
+      dayMap.set(key, { revenue: Number(row.revenue ?? 0), orderCount: Number(row.order_count ?? 0) })
+    }
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(todayStart)
+      d.setDate(d.getDate() - i)
+      const key = d.toISOString().slice(0, 10)
+      const hit = dayMap.get(key)
+      revenueLast7Days.push({
+        date: key,
+        revenue: hit?.revenue ?? 0,
+        orderCount: hit?.orderCount ?? 0,
+      })
+    }
 
     // Calculate comparison percentages
     const thisMonthRevenue = Number(monthOrders._sum.totalAmount ?? 0)
@@ -199,6 +285,15 @@ export class DashboardService {
         monthOverMonth: monthOverMonth ? `${Number(monthOverMonth) > 0 ? '+' : ''}${monthOverMonth}%` : null,
       },
       ordersByStatus: ordersByStatus.map((s) => ({ status: s.status, count: s._count })),
+      // Sidebar-badge feed: unread orders that still need admin attention.
+      // Decrements the moment an admin opens the order (findOne fires the
+      // updateMany that stamps firstViewedByAdminAt).
+      openOrdersUnread,
+      // Truthful low-stock count (not capped by the list's LIMIT 20).
+      lowStockCount: Number(lowStockCountRows?.[0]?.n ?? 0),
+      // Real revenue for the dashboard chart (7 days incl. today, always
+      // exactly 7 entries — days without orders have revenue=0).
+      revenueLast7Days,
       recentOrders,
       recentAuditActions: recentAudit,
       disputes: {
@@ -254,6 +349,9 @@ export class DashboardService {
         thisWeek: { revenue: '0.00', orderCount: 0 },
         thisMonth: { revenue: '0.00', orderCount: 0, monthOverMonth: null },
         ordersByStatus: [],
+        openOrdersUnread: 0,
+        lowStockCount: 0,
+        revenueLast7Days: [],
         lowStock: [],
         recentOrders: [],
         recentAuditActions: [],

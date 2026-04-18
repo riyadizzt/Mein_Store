@@ -4,6 +4,11 @@ import { PrismaModule } from '../../prisma/prisma.module'
 import { PaymentsModule } from '../payments/payments.module'
 import { EmailModule } from '../email/email.module'
 import { ShipmentsModule } from '../shipments/shipments.module'
+// InventoryModule exports ReservationService. AdminOrdersService injects it
+// to release reservations via the race-safe `reservationService.release()`
+// instead of manually deleting stock_reservations rows + drift-ing the
+// quantityReserved counter (incident 17.04.2026).
+import { InventoryModule } from '../inventory/inventory.module'
 import { AdminController } from './admin.controller'
 import { ShippingZonesController } from './shipping-zones/shipping-zones.controller'
 import { ShippingZonesService } from './shipping-zones/shipping-zones.service'
@@ -29,7 +34,7 @@ import { CampaignService } from './services/campaign.service'
 import { CronCrashAlertService } from './services/cron-crash-alert.service'
 
 @Module({
-  imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule],
+  imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule, InventoryModule],
   controllers: [AdminController, ShippingZonesController, NotificationSseController],
   providers: [
     AuditService,

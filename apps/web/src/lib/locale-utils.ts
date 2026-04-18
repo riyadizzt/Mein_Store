@@ -24,6 +24,19 @@ const COLOR_MAP: Record<string, Record<string, string>> = {
   Khaki:    { de: 'Khaki',    en: 'Khaki',   ar: 'كاكي' },
   Silber:   { de: 'Silber',   en: 'Silver',  ar: 'فضي' },
   Gold:     { de: 'Gold',     en: 'Gold',    ar: 'ذهبي' },
+  // Extended German shade keys
+  Anthrazit:  { de: 'Anthrazit',  en: 'Anthracite', ar: 'فحمي' },
+  Hellblau:   { de: 'Hellblau',   en: 'Light Blue', ar: 'أزرق فاتح' },
+  Dunkelblau: { de: 'Dunkelblau', en: 'Dark Blue',  ar: 'أزرق داكن' },
+  Dunkelgrau: { de: 'Dunkelgrau', en: 'Dark Gray',  ar: 'رمادي داكن' },
+  Hellgrau:   { de: 'Hellgrau',   en: 'Light Gray', ar: 'رمادي فاتح' },
+  Dunkelgrün: { de: 'Dunkelgrün', en: 'Dark Green', ar: 'أخضر داكن' },
+  Hellgrün:   { de: 'Hellgrün',   en: 'Light Green', ar: 'أخضر فاتح' },
+  Creme:      { de: 'Creme',      en: 'Cream',      ar: 'كريمي' },
+  Mint:       { de: 'Mint',       en: 'Mint',       ar: 'نعناعي' },
+  Olive:      { de: 'Olive',      en: 'Olive',      ar: 'زيتوني' },
+  Senf:       { de: 'Senf',       en: 'Mustard',    ar: 'خردلي' },
+  Koralle:    { de: 'Koralle',    en: 'Coral',      ar: 'مرجاني' },
   // English keys (for data stored in English)
   Black:    { de: 'Schwarz',  en: 'Black',   ar: 'أسود' },
   White:    { de: 'Weiß',     en: 'White',   ar: 'أبيض' },
@@ -35,6 +48,18 @@ const COLOR_MAP: Record<string, Record<string, string>> = {
   Pink:     { de: 'Rosa',     en: 'Pink',    ar: 'وردي' },
   Yellow:   { de: 'Gelb',     en: 'Yellow',  ar: 'أصفر' },
   Purple:   { de: 'Lila',     en: 'Purple',  ar: 'بنفسجي' },
+  // Arabic keys (for data that was stored in Arabic — rare, legacy)
+  أسود:     { de: 'Schwarz',  en: 'Black',   ar: 'أسود' },
+  اسود:     { de: 'Schwarz',  en: 'Black',   ar: 'أسود' },  // without hamza (legacy)
+  أبيض:     { de: 'Weiß',     en: 'White',   ar: 'أبيض' },
+  ابيض:     { de: 'Weiß',     en: 'White',   ar: 'أبيض' },
+  أحمر:     { de: 'Rot',      en: 'Red',     ar: 'أحمر' },
+  احمر:     { de: 'Rot',      en: 'Red',     ar: 'أحمر' },
+  أخضر:     { de: 'Grün',     en: 'Green',   ar: 'أخضر' },
+  أزرق:     { de: 'Blau',     en: 'Blue',    ar: 'أزرق' },
+  بنفسجي:   { de: 'Lila',     en: 'Purple',  ar: 'بنفسجي' },
+  // Typos / variant spellings — map to canonical
+  BLUn:     { de: 'Blau',     en: 'Blue',    ar: 'أزرق' },
 }
 
 export function translateColor(color: string | null | undefined, locale: string): string {

@@ -132,7 +132,53 @@ export default function InventoryPage() {
 
   const quickAdjustMut = useMutation({
     mutationFn: async ({ id, delta }: { id: string; delta: number }) => { await api.patch(`/admin/inventory/${id}/quick`, { delta }) },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-inventory'] }); qc.invalidateQueries({ queryKey: ['inventory-stats'] }) },
+    // Optimistic update: update the cache IMMEDIATELY so the number jumps
+    // the moment the admin clicks +/-, instead of waiting for the HTTP
+    // round-trip + full list refetch (which felt laggy on rapid clicks —
+    // the UI showed stale values for hundreds of ms while multiple
+    // in-flight requests piled up). Rollback on error; revalidate on
+    // settle to re-sync with whatever the backend actually stored.
+    onMutate: async ({ id, delta }) => {
+      await qc.cancelQueries({ queryKey: ['admin-inventory'] })
+      const snapshots = qc.getQueriesData({ queryKey: ['admin-inventory'] })
+      for (const [key, data] of snapshots) {
+        if (!data) continue
+        const clone = JSON.parse(JSON.stringify(data)) as any
+        // Grouped-view shape: { data: [{ variants: [{ inventory: [{ id, quantityOnHand, ... }] }] }] }
+        // Flat-view shape: { data: [{ id, quantityOnHand, ... }] }
+        if (Array.isArray(clone?.data)) {
+          for (const item of clone.data) {
+            // Flat: item IS inventory row
+            if (item?.id === id && typeof item?.quantityOnHand === 'number') {
+              item.quantityOnHand = Math.max(0, item.quantityOnHand + delta)
+            }
+            // Grouped: walk variants[].inventory[]
+            if (Array.isArray(item?.variants)) {
+              for (const v of item.variants) {
+                if (!Array.isArray(v?.inventory)) continue
+                for (const inv of v.inventory) {
+                  if (inv?.id === id && typeof inv?.quantityOnHand === 'number') {
+                    inv.quantityOnHand = Math.max(0, inv.quantityOnHand + delta)
+                  }
+                }
+              }
+            }
+          }
+        }
+        qc.setQueryData(key, clone)
+      }
+      return { snapshots }
+    },
+    onError: (_err, _vars, ctx) => {
+      // Rollback every cached view to its pre-click state.
+      if (ctx?.snapshots) {
+        for (const [key, data] of ctx.snapshots) qc.setQueryData(key, data)
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['admin-inventory'] })
+      qc.invalidateQueries({ queryKey: ['inventory-stats'] })
+    },
   })
 
   const adjustMut = useMutation({

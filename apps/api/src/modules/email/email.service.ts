@@ -275,6 +275,16 @@ export class EmailService {
       companyPhone: db.companyPhone || this.config.get('COMPANY_PHONE', ''),
       companyEmail: db.companyEmail || this.config.get('COMPANY_CONTACT_EMAIL', 'info@malak-bekleidung.com'),
       logoUrl: db.logoUrl || this.config.get('COMPANY_LOGO_URL', 'https://placehold.co/200x60/1a1a2e/ffffff?text=Malak'),
+      // Social URLs from admin settings. Empty string when not configured —
+      // the email layout renders each icon only when its URL is non-empty
+      // (and hides the whole row if all three are empty — `hasSocial` below).
+      instagramUrl: db.instagramUrl || '',
+      facebookUrl: db.facebookUrl || '',
+      tiktokUrl: db.tiktokUrl || '',
+      // Precomputed flag so the template can hide the entire social row with
+      // a single `{{#if hasSocial}}` instead of a 3-way nested check.
+      // Handlebars treats empty string as falsy, any non-empty string as truthy.
+      hasSocial: (db.instagramUrl || db.facebookUrl || db.tiktokUrl) ? '1' : '',
       currentYear: new Date().getFullYear().toString(),
       shopUrl: this.config.get('APP_URL', 'https://malak-bekleidung.com'),
     }

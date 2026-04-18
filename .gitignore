@@ -66,3 +66,6 @@ apps/api/storage/labels/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Separate standalone shop repo — not part of omnichannel-store
+Mein_Store/
