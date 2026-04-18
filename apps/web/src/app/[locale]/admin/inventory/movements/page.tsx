@@ -3,12 +3,14 @@
 import { useState, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, ArrowRightLeft, PackagePlus, RotateCcw,
   ShoppingBag, ChevronLeft, ChevronRight, Search, Calendar,
   Package, AlertTriangle, Filter, X, User, ChevronDown,
   TrendingUp, TrendingDown, Lock, Unlock, CalendarRange,
+  ExternalLink,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { translateColor, translateMovement, getProductName } from '@/lib/locale-utils'
@@ -48,6 +50,102 @@ function getDateLabel(dateKey: string, locale: string): string {
 
   const fmt = locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'de' ? 'de-DE' : 'en-GB'
   return new Intl.DateTimeFormat(fmt, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(dateKey + 'T12:00:00'))
+}
+
+// ── Source-Event Parser (Bug #3 fix) ──────────────────────────
+//
+// Groups movements by the SOURCE EVENT that produced them instead of by
+// productName + type. Before this parser, two separate returns on the
+// same day were visually merged into one "+13 2 variants" row because
+// they shared productName + type="return_received" (see 18.04 incident).
+//
+// The notes field that the backend writes per movement follows stable
+// prefix-based patterns per event type. We regex-match to extract a
+// stable identifier (RET-number, ORD-number, reservation-UUID) and use
+// it as part of the group key. Unknown formats fall back to the
+// movement's own id — those movements end up as single-row groups,
+// which is safe: never wrongly merged, just not optimally grouped.
+interface SourceEvent {
+  kind: 'return' | 'order' | 'reservation' | 'cleanup'
+  id: string
+  // Admin-navigable href. Null for internal identifiers (reservation UUIDs
+  // don't have an admin-detail page). Return-scans and damaged-return rows
+  // all land on /admin/returns; orders use a search-prefill URL.
+  href: string | null
+}
+
+function parseSourceEvent(notes: string | null | undefined): SourceEvent | null {
+  if (!notes) return null
+
+  // Return scan — the most common multi-warehouse event.
+  // Matches both the scanner movement and the R10-B dedup/damaged movements.
+  const returnScan = notes.match(/Return scan:\s*(RET-\d{4}-\d+)/i)
+  if (returnScan) {
+    return { kind: 'return', id: returnScan[1], href: '/admin/returns' }
+  }
+  const damagedScan = notes.match(/Damaged removal after scan:\s*(RET-\d{4}-\d+)/i)
+  if (damagedScan) {
+    return { kind: 'return', id: damagedScan[1], href: '/admin/returns' }
+  }
+
+  // Consolidate (R7) — release + reserve pair share the same ORD-number
+  // and end up in ONE group, which is semantically correct (one admin action).
+  const consolidate = notes.match(/Consolidate\s+[→←][^:]*:\s*(ORD-\d{8}-\d+)/i)
+  if (consolidate) {
+    return {
+      kind: 'order',
+      id: consolidate[1],
+      href: `/admin/orders?q=${encodeURIComponent(consolidate[1])}`,
+    }
+  }
+
+  // Phantom-cleanup row (from commit b58827e)
+  const cleanup = notes.match(/Cleanup Phantom[^(]*from\s+(ORD-\d{8}-\d+)/i)
+  if (cleanup) {
+    return {
+      kind: 'cleanup',
+      id: cleanup[1],
+      href: `/admin/orders?q=${encodeURIComponent(cleanup[1])}`,
+    }
+  }
+
+  // New-order reservation (written at create-time). Uses the Order's UUID;
+  // we can't search on UUID in the admin-orders page, so no link — but the
+  // id still serves as a unique group key so two separate orders don't merge.
+  const reservation = notes.match(/Reservierung für Session=\S+\s+Order=([a-f0-9-]+)/i)
+  if (reservation) {
+    return { kind: 'order', id: reservation[1], href: null }
+  }
+
+  // Sale-confirmed — identified by the reservation UUID that got captured.
+  const saleRes = notes.match(/Verkauf bestätigt[^—]*—\s*Reservierung\s+([a-f0-9-]+)/i)
+  if (saleRes) {
+    return { kind: 'reservation', id: saleRes[1], href: null }
+  }
+
+  // Unknown pattern → return null so the caller uses the movement's own
+  // id as the group key (single-row group). Never wrongly merged.
+  return null
+}
+
+// Short display for an event ID. UUIDs (from reservation patterns) get
+// truncated to the first 8 chars — enough to be distinct in the UI without
+// being a full hash dump. RET-/ORD- numbers render as-is.
+function formatSourceId(source: SourceEvent): string {
+  if (source.id.startsWith('RET-') || source.id.startsWith('ORD-')) return source.id
+  return source.id.slice(0, 8)
+}
+
+// Localized kind label for the group header.
+function sourceKindLabel(kind: SourceEvent['kind'], locale: string): string {
+  const map: Record<SourceEvent['kind'], [string, string, string]> = {
+    return:      ['Retoure',      'Return',      'إرجاع'],
+    order:       ['Bestellung',   'Order',       'طلب'],
+    reservation: ['Reservierung', 'Reservation', 'حجز'],
+    cleanup:     ['Cleanup',      'Cleanup',     'تنظيف'],
+  }
+  const [de, en, ar] = map[kind]
+  return locale === 'ar' ? ar : locale === 'en' ? en : de
 }
 
 function getTimeOnly(dateStr: string, locale: string): string {
@@ -200,9 +298,34 @@ export default function MovementsPage() {
     return acc
   }, [movements])
 
-  // Group movements by date, then by product+type within each date
+  // Group movements by date, then by SOURCE EVENT (Bug #3 fix) within each
+  // date. Previous logic grouped by productName + type, which conflated
+  // two independent events on the same product (e.g. RET-2026-00001 at
+  // 05:14 and RET-2026-00002 at 16:00 showed as one "+13 2 variants" row).
+  //
+  // New key:   type + source-event-id (parsed from notes)
+  // Fallback:  type + movement.id (single-row group, never wrongly merged)
+  //
+  // This means a return that touches multiple warehouses OR multiple
+  // variants stays as ONE group (same source event), but two separate
+  // returns on the same variant stay SEPARATE — which is the semantic
+  // correction the admin actually expected.
   const grouped = useMemo(() => {
-    const dateGroups: { dateKey: string; label: string; productGroups: { key: string; productName: string; productImage: string | null; type: string; totalQty: number; items: any[] }[] }[] = []
+    const dateGroups: {
+      dateKey: string
+      label: string
+      productGroups: {
+        key: string
+        productName: string
+        productImage: string | null
+        type: string
+        totalQty: number
+        items: any[]
+        source: SourceEvent | null
+        involvedVariants: number
+        involvedWarehouses: number
+      }[]
+    }[] = []
     const dateMap = new Map<string, any[]>()
 
     for (const m of movements) {
@@ -212,11 +335,12 @@ export default function MovementsPage() {
     }
 
     for (const [dateKey, items] of dateMap) {
-      // Sub-group by productName + type
       const pgMap = new Map<string, any[]>()
       for (const item of items) {
-        const pName = item.productName ? getProductName(item.productName, locale) : item.sku || 'Unknown'
-        const pgKey = `${pName}__${item.type}`
+        const src = parseSourceEvent(item.notes)
+        const pgKey = src
+          ? `${item.type}__${src.kind}:${src.id}`
+          : `${item.type}__fallback:${item.id}`
         if (!pgMap.has(pgKey)) pgMap.set(pgKey, [])
         pgMap.get(pgKey)!.push(item)
       }
@@ -224,6 +348,12 @@ export default function MovementsPage() {
       const productGroups = [...pgMap.entries()].map(([pgKey, pgItems]) => {
         const first = pgItems[0]
         const pName = first.productName ? getProductName(first.productName, locale) : first.sku || ''
+        const source = parseSourceEvent(first.notes)
+        // Story-context metadata: distinct variants/warehouses in this event.
+        const variants = new Set(pgItems.map((i: any) => i.sku).filter(Boolean))
+        const warehouses = new Set(
+          pgItems.map((i: any) => i.warehouseName).filter(Boolean),
+        )
         return {
           key: `${dateKey}__${pgKey}`,
           productName: pName,
@@ -231,6 +361,9 @@ export default function MovementsPage() {
           type: first.type,
           totalQty: pgItems.reduce((s: number, i: any) => s + i.quantity, 0),
           items: pgItems,
+          source,
+          involvedVariants: variants.size,
+          involvedWarehouses: warehouses.size,
         }
       })
 
@@ -586,6 +719,45 @@ export default function MovementsPage() {
 
                         {/* Main info */}
                         <div className="flex-1 min-w-0">
+                          {/* Story-timeline source chip — renders a clickable
+                              reference to the event that produced these
+                              movements (RET- / ORD- / reservation-UUID).
+                              Only shown when the parser resolved a known
+                              source pattern; unknown-format movements skip
+                              this line and render the plain product-name
+                              header as before (no visual regression). */}
+                          {pg.source && (() => {
+                            const label = sourceKindLabel(pg.source.kind, locale)
+                            const idLabel = formatSourceId(pg.source)
+                            const content = (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#d4a853]">
+                                <span>{label}</span>
+                                <span className="font-mono tabular-nums" dir="ltr">{idLabel}</span>
+                                {pg.source.href && <ExternalLink className="h-2.5 w-2.5" />}
+                              </span>
+                            )
+                            return (
+                              <div
+                                className="mb-0.5"
+                                onClick={(e) => {
+                                  // Prevent the outer collapse-toggle from firing
+                                  // when the admin clicks the link itself.
+                                  if (pg.source?.href) e.stopPropagation()
+                                }}
+                              >
+                                {pg.source.href ? (
+                                  <Link
+                                    href={pg.source.href}
+                                    className="hover:underline"
+                                  >
+                                    {content}
+                                  </Link>
+                                ) : (
+                                  content
+                                )}
+                              </div>
+                            )
+                          })()}
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[13px] font-bold truncate max-w-[220px]">{pg.productName || firstItem.sku}</span>
                             <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
@@ -616,9 +788,40 @@ export default function MovementsPage() {
                           ) : (
                             <>
                               <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-muted-foreground">
-                                <span>{pg.items.length} {locale === 'ar' ? 'متغير' : locale === 'en' ? 'variants' : 'Varianten'}</span>
-                                <span className="text-muted-foreground/30">·</span>
-                                <span className="truncate max-w-[250px]">{variantPreview}{moreCount > 0 ? ` +${moreCount}` : ''}</span>
+                                {/* When we have a known source event, describe the
+                                    grouped movements in story terms ("3 Produkte · 2 Lager").
+                                    Otherwise fall back to the legacy variant-count label. */}
+                                {pg.source ? (
+                                  <>
+                                    <span>
+                                      {pg.involvedVariants} {locale === 'ar'
+                                        ? (pg.involvedVariants === 1 ? 'منتج' : 'منتجات')
+                                        : locale === 'en'
+                                        ? (pg.involvedVariants === 1 ? 'product' : 'products')
+                                        : (pg.involvedVariants === 1 ? 'Produkt' : 'Produkte')}
+                                    </span>
+                                    {pg.involvedWarehouses > 1 && (
+                                      <>
+                                        <span className="text-muted-foreground/30">·</span>
+                                        <span>
+                                          {pg.involvedWarehouses} {locale === 'ar'
+                                            ? 'مستودعات'
+                                            : locale === 'en'
+                                            ? (pg.involvedWarehouses === 1 ? 'warehouse' : 'warehouses')
+                                            : 'Lager'}
+                                        </span>
+                                      </>
+                                    )}
+                                    <span className="text-muted-foreground/30">·</span>
+                                    <span className="truncate max-w-[220px]">{variantPreview}{moreCount > 0 ? ` +${moreCount}` : ''}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>{pg.items.length} {locale === 'ar' ? 'متغير' : locale === 'en' ? 'variants' : 'Varianten'}</span>
+                                    <span className="text-muted-foreground/30">·</span>
+                                    <span className="truncate max-w-[250px]">{variantPreview}{moreCount > 0 ? ` +${moreCount}` : ''}</span>
+                                  </>
+                                )}
                               </div>
                               <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground/50">
                                 {warehouses.length > 0 && <span>{warehouses.join(', ')}</span>}
