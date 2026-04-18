@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useLocale } from 'next-intl'
-import { Ticket, X, Check, Loader2 } from 'lucide-react'
+import { Ticket, X, Check, Loader2, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useCheckoutStore } from '@/store/checkout-store'
 
@@ -109,9 +109,21 @@ export function CouponInput({ subtotal }: { subtotal: number }) {
       </div>
 
       {error && (
-        <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
-          <X className="h-3 w-3" />{error}
-        </p>
+        // Banner style (amber + AlertTriangle) — same visual language as
+        // the refundError banner on the return-detail page. Previously this
+        // was a tiny text-xs red paragraph that customers routinely missed,
+        // which combined with the silent-drop backend bug produced the
+        // ORD-20260418-000001 incident where the customer thought 50MALAK
+        // had been applied but the order landed with discount=0.
+        <div className="mt-2 px-3 py-2.5 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-700 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-900">
+              {t('Gutschein nicht angewendet', 'Coupon not applied', 'لم يتم تطبيق القسيمة')}
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">{error}</p>
+          </div>
+        </div>
       )}
 
       <p className="text-[10px] text-muted-foreground/60 mt-1">

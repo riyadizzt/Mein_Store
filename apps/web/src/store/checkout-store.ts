@@ -97,27 +97,33 @@ const initialState = {
 //  - cart stays in localStorage (cart-store) so items survive across visits,
 //    but the in-progress checkout itself is session-local
 //
-// partialize() whitelist is intentionally minimal: ONLY address-form fields
-// that don't depend on the current cart contents. Anything derived from the
-// cart (shippingOption, couponCode/appliedCoupon/discountAmount, paymentMethod)
-// would go stale the moment the customer edits their cart mid-checkout —
-// that's exactly how the 14.04.2026 "€140.89 vs €135.90" regression happened.
-// The user came back to a cached shippingOption.price=4.99 after the subtotal
-// crossed the free-shipping threshold and saw two conflicting numbers.
+// partialize() whitelist is intentionally minimal.
 //
 // Excluded on purpose:
 //   - step                → user should re-enter the flow from guest-or-login
 //   - shippingOption      → recomputed by step-shipping from the live cart
+//                           (14.04 regression: stale shipping price survived
+//                           subtotal changes across the free-ship threshold)
 //   - paymentMethod       → re-selected each session
-//   - couponCode,
-//     appliedCoupon,
-//     discountAmount      → re-validated each session (min-order-amount rules)
+//   - appliedCoupon,
+//     discountAmount      → RE-COMPUTED from a fresh validateCoupon() on
+//                           rehydrate (see onRehydrateStorage below). Stale
+//                           appliedCoupon/discountAmount would cause the
+//                           shown "summary discount" to diverge from what
+//                           the order-create applies.
 //   - termsAccepted       → legal hygiene: AGB must be accepted per session
 //   - orderId, orderNumber, idempotencyKey, isProcessing, error → ephemera
 //
-// Included (safe, form-only):
+// Included (safe, form-only + the coupon code string only):
 //   - guestEmail, shippingAddress, billingAddress,
 //     billingSameAsShipping, savedAddressId
+//   - couponCode → the string the user typed. NOT the derived appliedCoupon
+//                  object, NOT the discountAmount. The onRehydrateStorage
+//                  hook fires a fresh /coupons/validate with the current
+//                  cart subtotal; if the call succeeds, setCoupon() restores
+//                  the full triple. If it fails we keep couponCode in-store
+//                  (optimistic) — the backend order-create is the final
+//                  authority and rejects bad codes with 400 CouponRejected.
 export const useCheckoutStore = create<CheckoutState>()(
   persist(
     (set) => ({
@@ -155,7 +161,31 @@ export const useCheckoutStore = create<CheckoutState>()(
         billingAddress: state.billingAddress,
         billingSameAsShipping: state.billingSameAsShipping,
         savedAddressId: state.savedAddressId,
+        // ONLY the code string — not the derived appliedCoupon/discount.
+        // onRehydrateStorage below re-computes those from a fresh validate.
+        couponCode: state.couponCode,
       }),
+      // After sessionStorage rehydrate: if a couponCode is present, fire a
+      // lightweight revalidate with the current cart subtotal. This fixes
+      // the silent-drop path where the user applied a coupon, the state
+      // rehydrated (e.g. Stripe-widget mount/unmount remount), and the
+      // derived appliedCoupon/discountAmount were lost. Without re-validate
+      // the UI shows "coupon applied" but the summary shows 0 discount.
+      //
+      // Policy (answered B3 in the plan): OPTIMISTIC on failure. If the
+      // network call itself fails (offline, 500), we keep the couponCode
+      // in state and rely on the backend order-create's 400 CouponRejected
+      // as the final safety net. Offline users should not be punished.
+      onRehydrateStorage: () => (state) => {
+        if (!state || !state.couponCode) return
+        // Deferred import — couponRevalidator lives in a sibling module
+        // that imports api.ts, which in turn touches this store during
+        // its auth-state reads. Using a dynamic import breaks the
+        // potential evaluation cycle.
+        void import('@/lib/coupon-revalidator').then((m) => {
+          m.revalidateCouponOnRehydrate(state.couponCode!)
+        }).catch(() => { /* swallow — optimistic */ })
+      },
     },
   ),
 )

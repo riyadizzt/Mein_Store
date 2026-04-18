@@ -12,7 +12,7 @@ import {
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js'
-import { ArrowLeft, Loader2, CreditCard, Lock, Shield, Building2, ChevronDown, MapPin } from 'lucide-react'
+import { ArrowLeft, Loader2, CreditCard, Lock, Shield, Building2, ChevronDown, MapPin, AlertTriangle } from 'lucide-react'
 import { useCheckoutStore } from '@/store/checkout-store'
 import { useCartStore } from '@/store/cart-store'
 import { useAuthStore } from '@/store/auth-store'
@@ -67,6 +67,7 @@ function StepPaymentInner() {
     isProcessing, error,
     setTermsAccepted, setStep, setProcessing, setError,
     setOrder, generateIdempotencyKey, setPaymentMethod,
+    removeCoupon,
   } = useCheckoutStore()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const { items, subtotal } = useCartStore()
@@ -204,8 +205,46 @@ function StepPaymentInner() {
       const method = activeTab === 'vorkasse' ? 'vorkasse' : activeTab === 'sumup' ? 'sumup' : activeTab === 'paypal' ? 'paypal' : activeTab === 'klarna' ? 'klarna_pay_now' : 'stripe_card'
       setPaymentMethod(method as any)
 
+      // Pre-submit coupon re-validate — defense-in-depth for the edge cases
+      // where the coupon was valid at apply-time but became invalid between
+      // then and submit (admin deactivated the coupon, expiry passed, user
+      // swapped carts under the free-ship threshold for a min-order coupon).
+      //
+      // Backend order-create also validates (see orders.service.create); this
+      // is purely a UX-nicety — failing here keeps the user on this step
+      // instead of creating an order they then have to cancel.
+      //
+      // Optimistic on network failure: if the call itself throws (offline,
+      // 500), we proceed with the submit. Backend is the final authority.
+      let couponCode = useCheckoutStore.getState().couponCode
+      if (couponCode) {
+        try {
+          const { data: cv } = await api.post('/coupons/validate', {
+            code: couponCode,
+            subtotal: cartSubtotal,
+          })
+          if (cv?.valid === false) {
+            const reason = cv?.reason
+            const localized =
+              typeof reason === 'object' && reason
+                ? (reason[locale as 'de' | 'en' | 'ar'] ?? reason.de ?? reason.en ?? '')
+                : typeof reason === 'string' ? reason : ''
+            const prefix =
+              locale === 'ar' ? 'الكوبون غير صالح'
+              : locale === 'en' ? 'Coupon invalid'
+              : 'Gutschein ungültig'
+            removeCoupon()
+            couponCode = null  // don't send it to order-create
+            setError(localized ? `${prefix}: ${localized}` : prefix)
+            setProcessing(false)
+            return  // abort submit; user sees error + can remove/retry
+          }
+        } catch {
+          // Optimistic: network error → let the backend decide.
+        }
+      }
+
       // 1. Create order — mit vollständiger Adresse
-      const couponCode = useCheckoutStore.getState().couponCode
       const orderPayload: Record<string, any> = {
         items: items.map((item) => ({ variantId: item.variantId, quantity: item.quantity })),
         countryCode: shippingAddress?.country ?? 'DE',
@@ -533,6 +572,34 @@ function StepPaymentInner() {
         ))}
       </div>
       <div className="border-t pt-3 space-y-1.5 text-sm">
+        {/* Mismatch warning — couponCode is stored but no discount is being
+            applied. Possible reasons: rehydrate re-validate is still in
+            flight, or the code became invalid (expired/one_per_customer)
+            since apply. Either way the user must see that the green
+            "coupon applied" state they saw earlier is no longer accurate
+            for this order. Without this banner, the 18.04 silent-drop bug
+            could reappear even with the backend fix in place. */}
+        {useCheckoutStore.getState().couponCode &&
+         !(useCheckoutStore.getState().discountAmount > 0) &&
+         !useCheckoutStore.getState().appliedCoupon?.freeShipping && (
+          <div className="mt-1 mb-2 px-3 py-2.5 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-700 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-900">
+                {locale === 'ar' ? 'القسيمة غير نشطة'
+                  : locale === 'en' ? 'Coupon inactive'
+                  : 'Gutschein nicht aktiv'}
+              </p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                {locale === 'ar'
+                  ? 'لن يتم تطبيق الرمز الذي أدخلته على هذا الطلب. يُرجى إعادة الإدخال أو الإزالة.'
+                  : locale === 'en'
+                  ? "The code you entered won't be applied to this order. Please re-enter or remove."
+                  : 'Ihr eingegebener Code wird auf dieser Bestellung nicht angewendet. Bitte neu einlösen oder entfernen.'}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{cartSubtotal.toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>{shippingCost === 0 ? t('shippingStep.free') : `€${shippingCost.toFixed(2)}`}</span></div>
         {useCheckoutStore.getState().discountAmount > 0 && (
