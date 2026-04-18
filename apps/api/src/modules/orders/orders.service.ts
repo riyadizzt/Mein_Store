@@ -23,6 +23,7 @@ import {
 import { OrderNotFoundException } from './exceptions/order-not-found.exception'
 import { InvalidOrderStateException } from './exceptions/invalid-order-state.exception'
 import { DuplicateOrderException } from './exceptions/duplicate-order.exception'
+import { AdminMarketingService } from '../admin/services/admin-marketing.service'
 
 // ── Zustandsmaschine ──────────────────────────────────────────
 
@@ -61,6 +62,12 @@ export class OrdersService {
     private readonly idempotencyService: IdempotencyService,
     @Inject(SHIPPING_CALCULATOR)
     private readonly shippingCalculator: ShippingCalculator,
+    // Single source of truth for coupon validation. OrdersModule → AdminModule
+    // is already a one-way import (AdminModule does NOT import OrdersModule),
+    // so no forwardRef needed. Re-using the shared validateCoupon prevents
+    // the divergence that caused the 18.04 incident (silent drop because the
+    // order-create's own weak validation missed onePerCustomer + startAt).
+    private readonly marketingService: AdminMarketingService,
   ) {}
 
   // ── REUSE: find an existing pending order for the same cart ──
@@ -468,41 +475,51 @@ export class OrdersService {
       })
 
       // 6. Coupon validieren + Rabatt berechnen
+      //
+      // Delegates to the shared AdminMarketingService.validateCoupon() so this
+      // code path enforces the exact same rules as the public /coupons/validate
+      // endpoint: onePerCustomer, startAt, expiresAt, maxUsage, email-abuse,
+      // minOrder. The previous in-line check missed onePerCustomer + startAt
+      // entirely and fell through silently on any rejection — letting a user
+      // submit an invalid-coupon order with discountAmount=0 and no error
+      // feedback. That was the 18.04 ORD-20260418-000001 bug.
+      //
+      // Now: any rejection throws a structured 400 CouponRejected with the
+      // reasonCode + 3-lang message. Frontend can branch on the code.
       let discountAmount = 0
       let validatedCouponCode: string | undefined
 
       if (dto.couponCode) {
-        const coupon = await this.prisma.coupon.findFirst({
-          where: {
-            code: dto.couponCode,
-            isActive: true,
-            AND: [
-              { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-              { OR: [{ maxUsageCount: null }, { usedCount: { lt: 1000000 } }] },
-            ],
-          },
+        const result = await this.marketingService.validateCoupon(dto.couponCode, {
+          userId: userId ?? undefined,
+          email: userId ? undefined : dto.guestEmail ?? undefined,
+          subtotal,
         })
 
-        if (coupon) {
-          if (coupon.minOrderAmount && subtotal < Number(coupon.minOrderAmount)) {
-            throw new BadRequestException(
-              `Mindestbestellwert für Coupon: €${Number(coupon.minOrderAmount).toFixed(2)}`,
-            )
-          }
-
-          if (coupon.discountPercent) {
-            discountAmount = subtotal * (Number(coupon.discountPercent) / 100)
-          } else if (coupon.discountAmount) {
-            discountAmount = Math.min(Number(coupon.discountAmount), subtotal)
-          }
-
-          // Free shipping coupon: set shipping to 0
-          if (coupon.freeShipping) {
-            shipping.cost = 0
-          }
-
-          validatedCouponCode = coupon.code
+        if (!result.valid) {
+          throw new BadRequestException({
+            statusCode: 400,
+            error: 'CouponRejected',
+            reasonCode: result.reasonCode,
+            message: result.reason,
+            data: {
+              couponCode: dto.couponCode,
+              reasonCode: result.reasonCode,
+            },
+          })
         }
+
+        // Apply discount from the validated coupon.
+        const c = result.coupon
+        if (c.type === 'percentage' && c.discountPercent != null) {
+          discountAmount = subtotal * (c.discountPercent / 100)
+        } else if (c.type === 'fixed_amount' && c.discountAmount != null) {
+          discountAmount = Math.min(c.discountAmount, subtotal)
+        }
+        if (c.freeShipping) {
+          shipping.cost = 0
+        }
+        validatedCouponCode = c.code
       }
 
       // Versandkosten-MwSt ebenfalls rausrechnen (Versand ist auch brutto in DE)
@@ -706,11 +723,26 @@ export class OrdersService {
           }
         }
 
-        // Coupon-Verwendung erfassen
+        // Coupon-Verwendung erfassen.
+        //
+        // Populate BOTH userId and email (when available) so the abuse-guards
+        // in validateCoupon() can actually match on future redemption
+        // attempts. Previously only couponId + orderId were passed, leaving
+        // userId=NULL and email=NULL — which meant the onePerCustomer
+        // findFirst(WHERE couponId AND (userId=X OR email=X)) could never
+        // return a row → onePerCustomer was effectively disabled for every
+        // coupon. That was the ORD-20260418-000001 incident's root cause.
         if (validatedCouponCode) {
           const coupon = await tx.coupon.findFirst({ where: { code: validatedCouponCode } })
           if (coupon) {
-            await tx.couponUsage.create({ data: { couponId: coupon.id, orderId: created.id } })
+            await tx.couponUsage.create({
+              data: {
+                couponId: coupon.id,
+                orderId: created.id,
+                userId: userId ?? null,
+                email: userId ? null : (dto.guestEmail?.toLowerCase().trim() ?? null),
+              },
+            })
             await tx.coupon.update({ where: { id: coupon.id }, data: { usedCount: { increment: 1 } } })
           }
         }

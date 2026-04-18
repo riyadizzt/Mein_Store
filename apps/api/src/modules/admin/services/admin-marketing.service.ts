@@ -267,8 +267,36 @@ export class AdminMarketingService {
       hasPromotion?: boolean
     },
   ): Promise<
-    | { valid: true; coupon: { code: string; type: string; discountPercent: number | null; discountAmount: number | null; freeShipping: boolean; description: string | null } }
-    | { valid: false; reason: { de: string; en: string; ar: string } }
+    | {
+        valid: true
+        coupon: {
+          code: string
+          type: string
+          discountPercent: number | null
+          discountAmount: number | null
+          freeShipping: boolean
+          description: string | null
+        }
+      }
+    | {
+        valid: false
+        // Machine-readable classification of the rejection. Lets downstream
+        // callers (order-create, checkout UI) branch on semantic meaning
+        // without pattern-matching the human-readable message.
+        //
+        // Backwards-compatibility: the existing `reason: { de, en, ar }` field
+        // stays untouched — this is an ADDITION, not a replacement.
+        reasonCode:
+          | 'invalid'           // code does not exist
+          | 'not_active'        // isActive=false
+          | 'expired'           // past expiresAt
+          | 'not_yet_started'   // before startAt
+          | 'max_usage'         // global usage limit reached
+          | 'one_per_customer'  // onePerCustomer guard hit
+          | 'email_abuse'       // non-onePerCustomer email-rate-limit hit
+          | 'min_order'         // subtotal below minOrderAmount
+        reason: { de: string; en: string; ar: string }
+      }
   > {
     const coupon = await this.prisma.coupon.findUnique({
       where: { code: code.toUpperCase().trim() },
@@ -278,6 +306,7 @@ export class AdminMarketingService {
     if (!coupon) {
       return {
         valid: false,
+        reasonCode: 'invalid',
         reason: {
           de: 'Dieser Gutscheincode ist ungültig.',
           en: 'This coupon code is invalid.',
@@ -290,6 +319,7 @@ export class AdminMarketingService {
     if (!coupon.isActive) {
       return {
         valid: false,
+        reasonCode: 'not_active',
         reason: {
           de: 'Dieser Gutschein ist derzeit nicht aktiv.',
           en: 'This coupon is currently not active.',
@@ -304,6 +334,7 @@ export class AdminMarketingService {
     if (coupon.expiresAt && coupon.expiresAt < now) {
       return {
         valid: false,
+        reasonCode: 'expired',
         reason: {
           de: 'Dieser Gutschein ist abgelaufen.',
           en: 'This coupon has expired.',
@@ -316,6 +347,7 @@ export class AdminMarketingService {
     if (coupon.startAt && coupon.startAt > now) {
       return {
         valid: false,
+        reasonCode: 'not_yet_started',
         reason: {
           de: 'Dieser Gutschein ist noch nicht gültig.',
           en: 'This coupon is not yet valid.',
@@ -328,6 +360,7 @@ export class AdminMarketingService {
     if (coupon.maxUsageCount != null && coupon.usedCount >= coupon.maxUsageCount) {
       return {
         valid: false,
+        reasonCode: 'max_usage',
         reason: {
           de: 'Dieser Gutschein wurde bereits zu oft eingelöst.',
           en: 'This coupon has reached its maximum usage limit.',
@@ -354,6 +387,7 @@ export class AdminMarketingService {
         if (existingUsage) {
           return {
             valid: false,
+            reasonCode: 'one_per_customer',
             reason: {
               de: 'Sie haben diesen Gutschein bereits verwendet.',
               en: 'You have already used this coupon.',
@@ -377,6 +411,7 @@ export class AdminMarketingService {
       if (emailUsageCount >= 3) {
         return {
           valid: false,
+          reasonCode: 'email_abuse',
           reason: {
             de: 'Sie haben diesen Gutschein bereits zu oft verwendet.',
             en: 'You have used this coupon too many times.',
@@ -395,6 +430,7 @@ export class AdminMarketingService {
       const minAmount = Number(coupon.minOrderAmount).toFixed(2)
       return {
         valid: false,
+        reasonCode: 'min_order',
         reason: {
           de: `Der Mindestbestellwert von ${minAmount} EUR wurde nicht erreicht.`,
           en: `The minimum order amount of ${minAmount} EUR has not been reached.`,

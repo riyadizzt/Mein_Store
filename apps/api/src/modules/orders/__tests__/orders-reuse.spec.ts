@@ -11,6 +11,7 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { OrdersService } from '../orders.service'
+import { AdminMarketingService } from '../../admin/services/admin-marketing.service'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { IdempotencyService } from '../idempotency.service'
 import { SHIPPING_CALCULATOR } from '../shipping/shipping-calculator.interface'
@@ -42,6 +43,12 @@ async function makeService() {
       { provide: IdempotencyService, useValue: mockIdempotency },
       { provide: EventEmitter2, useValue: mockEvents },
       { provide: SHIPPING_CALCULATOR, useValue: mockShipping },
+      // These reuse-focused tests don't exercise the coupon path at all —
+      // validateCoupon is mocked to a trivially-valid default so DI resolves.
+      {
+        provide: AdminMarketingService,
+        useValue: { validateCoupon: jest.fn().mockResolvedValue({ valid: true, coupon: {} }) },
+      },
     ],
   }).compile()
   return module.get<OrdersService>(OrdersService)

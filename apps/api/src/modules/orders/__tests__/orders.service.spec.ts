@@ -5,6 +5,7 @@ import { OrdersService } from '../orders.service'
 import { IdempotencyService } from '../idempotency.service'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { SHIPPING_CALCULATOR } from '../shipping/shipping-calculator.interface'
+import { AdminMarketingService } from '../../admin/services/admin-marketing.service'
 import { OrderNotFoundException } from '../exceptions/order-not-found.exception'
 import { InvalidOrderStateException } from '../exceptions/invalid-order-state.exception'
 
@@ -133,6 +134,26 @@ describe('OrdersService', () => {
         { provide: EventEmitter2, useValue: mockEventEmitter },
         { provide: IdempotencyService, useValue: mockIdempotency },
         { provide: SHIPPING_CALCULATOR, useValue: mockShipping },
+        // Shared coupon validator. Default mock returns valid=true so
+        // existing non-coupon test paths are unaffected. Per-test overrides
+        // provide {valid:false, reasonCode, reason} when asserting the
+        // rejection flow.
+        {
+          provide: AdminMarketingService,
+          useValue: {
+            validateCoupon: jest.fn().mockResolvedValue({
+              valid: true,
+              coupon: {
+                code: 'MOCK',
+                type: 'percentage',
+                discountPercent: 10,
+                discountAmount: null,
+                freeShipping: false,
+                description: null,
+              },
+            }),
+          },
+        },
       ],
     }).compile()
 
