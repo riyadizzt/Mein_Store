@@ -13,10 +13,11 @@ import { Input } from '@/components/ui/input'
 import {
   RotateCcw, Search, Package, X, Check, Truck,
   Download, Eye, TrendingDown, BarChart3, Euro, AlertTriangle,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, RefreshCw, XCircle,
 } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, formatTime, formatCurrency } from '@/lib/locale-utils'
 import { PayPalLogo, KlarnaLogo, SumUpLogo, StripeLogo } from '@/components/ui/payment-logos'
+import { toast } from '@/store/toast-store'
 
 // ── Status & Reason maps ────────────────────────────────────
 const STATUS_KEYS = ['requested', 'label_sent', 'in_transit', 'received', 'inspected', 'refunded', 'rejected'] as const
@@ -140,7 +141,30 @@ export default function AdminReturnsPage() {
 
   const refundMut = useMutation({
     mutationFn: () => api.post(`/admin/returns/${selectedId}/refund`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      toast.success(
+        locale === 'ar' ? 'تم الاسترداد بنجاح'
+        : locale === 'en' ? 'Refund processed successfully'
+        : 'Erstattung erfolgreich durchgeführt',
+      )
+    },
+    // The backend now throws a structured BadRequest when the provider
+    // refund fails (stripe/paypal/klarna/sumup). Payload shape:
+    //   { error: 'RefundFailed', message: {de,en,ar}, data: {refundError} }
+    // We show the localized message via toast and rely on invalidate() +
+    // the refundError banner (below) to render the retry affordance.
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message
+      const localized = typeof msg === 'object' ? (msg[locale] ?? msg.de ?? msg.en) : msg
+      const fallback =
+        locale === 'ar' ? 'فشل الاسترداد — يرجى المحاولة مرة أخرى'
+        : locale === 'en' ? 'Refund failed — please retry'
+        : 'Erstattung fehlgeschlagen — bitte erneut versuchen'
+      toast.error(localized ?? fallback)
+      // Refresh detail so refundError banner shows up with the persisted error.
+      invalidate()
+    },
   })
 
   // Vorkasse: flip Refund.status PENDING → PROCESSED after the admin has
@@ -736,16 +760,56 @@ export default function AdminReturnsPage() {
                     const amt = Number(detail.refundAmount ?? 0) > 0
                       ? Number(detail.refundAmount)
                       : (detail.returnItems ?? []).reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
+                    const refundError: string | null = detail.refundError ?? null
+                    const hasError = !!refundError
                     return (
-                    <Button
-                      className="w-full gap-2 text-lg py-6 font-bold bg-[#d4a853] hover:bg-[#c49943] text-white shadow-lg"
-                      onClick={handleRefund}
-                      disabled={refundMut.isPending}
-                    >
-                      <Euro className="h-5 w-5" />
-                      {t3('Erstattung ausl\u00f6sen', 'Issue Refund', '\u0625\u0635\u062f\u0627\u0631 \u0627\u0633\u062a\u0631\u062f\u0627\u062f')}
-                      {amt > 0 && <span className="text-sm font-normal opacity-80">({formatCurrency(amt, locale)})</span>}
-                    </Button>
+                    <div className="space-y-3">
+                      {/* Refund-failed banner — shown when a prior attempt threw
+                          a provider error. The admin can read the error and
+                          hit Retry. refundError is cleared on the next
+                          successful refund (or on a fresh inspect()). */}
+                      {hasError && (
+                        <div className="px-4 py-4 bg-red-50 border border-red-300 rounded-xl space-y-3">
+                          <div className="flex items-start gap-3">
+                            <XCircle className="h-5 w-5 flex-shrink-0 text-red-700 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-red-900 text-sm">
+                                {t3(
+                                  'Letzte Erstattung fehlgeschlagen',
+                                  'Last refund attempt failed',
+                                  '\u0641\u0634\u0644\u062a \u0645\u062d\u0627\u0648\u0644\u0629 \u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f \u0627\u0644\u0623\u062e\u064a\u0631\u0629',
+                                )}
+                              </p>
+                              <p className="text-sm text-red-800 mt-1">
+                                {t3(
+                                  'Die Zahlung wurde NICHT zurückerstattet. Der Status bleibt auf "Geprüft". Bitte Fehler prüfen und erneut versuchen.',
+                                  'No money was refunded. The return stays at "Inspected". Review the error and retry.',
+                                  '\u0644\u0645 \u064a\u062a\u0645 \u0627\u0633\u062a\u0631\u062f\u0627\u062f \u0627\u0644\u062f\u0641\u0639. \u064a\u0628\u0642\u0649 \u0627\u0644\u0645\u0631\u062a\u062c\u0639 \u0639\u0644\u0649 \u062d\u0627\u0644\u0629 "\u062a\u0645 \u0627\u0644\u0641\u062d\u0635". \u064a\u0631\u062c\u0649 \u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u062e\u0637\u0623 \u0648\u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.',
+                                )}
+                              </p>
+                              <div className="mt-2 px-3 py-2 bg-white border border-red-200 rounded-lg text-xs text-red-900 font-mono break-words" dir="ltr">
+                                {refundError}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <Button
+                        className={`w-full gap-2 text-lg py-6 font-bold shadow-lg ${
+                          hasError
+                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                            : 'bg-[#d4a853] hover:bg-[#c49943] text-white'
+                        }`}
+                        onClick={handleRefund}
+                        disabled={refundMut.isPending}
+                      >
+                        {hasError ? <RefreshCw className="h-5 w-5" /> : <Euro className="h-5 w-5" />}
+                        {hasError
+                          ? t3('Erstattung erneut versuchen', 'Retry Refund', '\u0625\u0639\u0627\u062f\u0629 \u0645\u062d\u0627\u0648\u0644\u0629 \u0627\u0644\u0627\u0633\u062a\u0631\u062f\u0627\u062f')
+                          : t3('Erstattung ausl\u00f6sen', 'Issue Refund', '\u0625\u0635\u062f\u0627\u0631 \u0627\u0633\u062a\u0631\u062f\u0627\u062f')}
+                        {amt > 0 && <span className="text-sm font-normal opacity-80">({formatCurrency(amt, locale)})</span>}
+                      </Button>
+                    </div>
                     )
                   })()}
 

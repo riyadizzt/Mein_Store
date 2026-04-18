@@ -152,6 +152,10 @@ const ACTION_COLORS: Record<string, string> = {
   RETURN_DAMAGED_REMOVED_FROM_STOCK: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300',
   RETURN_REJECTED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   RETURN_REFUNDED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  // Finance-critical: refund API call failed (Stripe/PayPal/Klarna/SumUp).
+  // Return stays at 'inspected' awaiting admin retry — the persisted
+  // refundError column drives the red banner in the return detail.
+  RETURN_REFUND_FAILED: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
   VORKASSE_REFUND_CONFIRMED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
   RETURN_LABEL_UPDATED: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300',
   RETURN_STATUS_APPROVED: 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300',
@@ -241,6 +245,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   },
   RETURN_REJECTED: { de: 'Retoure abgelehnt', en: 'Return rejected', ar: 'رفض المرتجع' },
   RETURN_REFUNDED: { de: 'Erstattung verarbeitet', en: 'Refund processed', ar: 'معالجة الاسترداد' },
+  RETURN_REFUND_FAILED: { de: 'Erstattung fehlgeschlagen', en: 'Refund failed', ar: 'فشل الاسترداد' },
   VORKASSE_REFUND_CONFIRMED: { de: 'Vorkasse-Überweisung bestätigt', en: 'Vorkasse transfer confirmed', ar: 'تأكيد التحويل المصرفي' },
   ORDER_PARTIAL_CANCEL: { de: 'Teilstornierung', en: 'Partial cancel', ar: 'إلغاء جزئي' },
   ORDER_FULFILLMENT_CHANGED: { de: 'Lager geändert', en: 'Fulfillment changed', ar: 'تغيير المستودع' },

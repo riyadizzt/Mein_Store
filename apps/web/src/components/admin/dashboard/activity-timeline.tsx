@@ -45,6 +45,7 @@ import {
   Flame,
   BadgeEuro,
   PackageX,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface ActionConfig {
@@ -98,6 +99,7 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   RETURN_INSPECTED_NO_DOUBLE_RESTOCK: { de: 'Doppelbuchung verhindert',  en: 'Double-restock prevented', ar: 'منع الازدواج',     Icon: ShieldCheck,    color: 'bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300' },
   RETURN_DAMAGED_REMOVED_FROM_STOCK: { de: 'Beschädigt aus Bestand',    en: 'Damaged removed',          ar: 'إزالة التالف',       Icon: PackageX,       color: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300' },
   RETURN_REFUNDED:           { de: 'Erstattung verarbeitet',         en: 'Refund processed',       ar: 'تم الاسترداد',              Icon: Undo2,          color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  RETURN_REFUND_FAILED:      { de: 'Erstattung fehlgeschlagen',      en: 'Refund failed',          ar: 'فشل الاسترداد',            Icon: AlertTriangle,  color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
   VORKASSE_REFUND_CONFIRMED: { de: 'Vorkasse-Überweisung bestätigt', en: 'Vorkasse transfer confirmed', ar: 'تأكيد التحويل المصرفي', Icon: BadgeEuro,      color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
   STAFF_INVITED:             { de: 'Mitarbeiter eingeladen',         en: 'Staff invited',          ar: 'تمت دعوة موظف',              Icon: UserPlus,       color: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300' },
   STAFF_CREATED:             { de: 'Mitarbeiter erstellt',           en: 'Staff created',          ar: 'تم إنشاء موظف',              Icon: UserPlus,       color: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300' },

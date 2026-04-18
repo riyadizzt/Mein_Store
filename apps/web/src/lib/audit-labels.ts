@@ -42,6 +42,11 @@ const FIELD_LABELS: Record<string, L> = {
   paymentWas: { de: 'Zahlungsstatus', en: 'Payment was', ar: 'حالة الدفع' },
   refundAmount: { de: 'Erstattungsbetrag', en: 'Refund amount', ar: 'مبلغ الاسترداد' },
   manualRefund: { de: 'Manuelle Erstattung', en: 'Manual refund', ar: 'استرداد يدوي' },
+  // RETURN_REFUND_FAILED + related return audit fields
+  returnNumber: { de: 'Retourennummer', en: 'Return No.', ar: 'رقم المرتجع' },
+  isFullReturn: { de: 'Vollretoure', en: 'Full return', ar: 'إرجاع كامل' },
+  provider: { de: 'Anbieter', en: 'Provider', ar: 'مزوّد الدفع' },
+  error: { de: 'Fehler', en: 'Error', ar: 'خطأ' },
   amount: { de: 'Betrag', en: 'Amount', ar: 'المبلغ' },
   method: { de: 'Methode', en: 'Method', ar: 'الطريقة' },
   // warehouseId already defined above (R5/R7 block) — removed duplicate
