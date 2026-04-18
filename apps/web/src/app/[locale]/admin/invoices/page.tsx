@@ -202,7 +202,7 @@ export default function AdminInvoicesPage() {
       {total > LIMIT && (
         <div className="flex items-center justify-between mt-4">
           <p className="text-sm text-muted-foreground">{t('page', locale)} {page} {t('of', locale)} {pages}</p>
-          <div className="flex gap-1">
+          <div className="flex gap-1" dir="ltr">
             <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))} className="h-8 w-8 p-0">
               <ChevronLeft className="h-4 w-4" />
             </Button>

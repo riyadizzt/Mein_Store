@@ -711,7 +711,7 @@ export default function MovementsPage() {
           <span className="text-xs text-muted-foreground">
             {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} {locale === 'ar' ? 'من' : locale === 'en' ? 'of' : 'von'} {total}
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" dir="ltr">
             <button
               onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0}

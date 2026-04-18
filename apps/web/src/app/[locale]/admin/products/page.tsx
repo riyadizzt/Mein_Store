@@ -534,9 +534,9 @@ export default function AdminProductsPage() {
                   {[25, 50, 100].map((n) => <option key={n} value={n}>{n} {t('products.perPage')}</option>)}
                 </select>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1" dir="ltr">
                 <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
-                <span className="text-xs font-medium px-3 tabular-nums" dir="ltr">{page + 1} / {totalPages || 1}</span>
+                <span className="text-xs font-medium px-3 tabular-nums">{page + 1} / {totalPages || 1}</span>
                 <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
               </div>
             </div>
@@ -548,9 +548,9 @@ export default function AdminProductsPage() {
       {view === 'grid' && totalCount > 0 && (
         <div className="flex items-center justify-between mt-4">
           <div className="text-xs text-muted-foreground">{totalCount} {t('products.product')}</div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" dir="ltr">
             <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
-            <span className="text-xs font-medium px-3 tabular-nums" dir="ltr">{page + 1} / {totalPages || 1}</span>
+            <span className="text-xs font-medium px-3 tabular-nums">{page + 1} / {totalPages || 1}</span>
             <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div>

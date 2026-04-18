@@ -553,7 +553,12 @@ export default function AuditLogPage() {
           <p className="text-sm text-muted-foreground">
             {t('auditLog.page', { page: meta.page, total: meta.totalPages })}
           </p>
-          <div className="flex gap-2">
+          {/* dir="ltr" on the pagination container forces left-to-right
+              button order (prev, next) even when the surrounding page is
+              Arabic/RTL. This matches the Amazon/Zalando/Shopify Arabic
+              convention: arrow direction and position agree (← on left,
+              → on right, both pointing outward from the counter). */}
+          <div className="flex gap-2" dir="ltr">
             <Button
               variant="outline"
               size="sm"
@@ -561,11 +566,6 @@ export default function AuditLogPage() {
               onClick={() => setPage(page - 1)}
               className="gap-1.5 px-4"
             >
-              {/* Pagination convention: left arrow = prev, right = next
-                  in BOTH LTR and RTL. RTL flexbox reverses the visual
-                  order of the two buttons (next ends up on the left side
-                  in Arabic, which IS the "forward" direction in RTL
-                  reading), so we keep the chevrons un-rotated. */}
               <ChevronLeft className="h-4 w-4" />
               {t('auditLog.prev')}
             </Button>

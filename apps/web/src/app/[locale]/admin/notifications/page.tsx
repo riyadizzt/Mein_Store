@@ -233,7 +233,7 @@ export default function NotificationsPage() {
               `صفحة ${page} من ${totalPages} (${total} إجمالي)`
             )}
           </p>
-          <div className="flex gap-2">
+          <div className="flex gap-2" dir="ltr">
             <button onClick={() => setPage(page - 1)} disabled={page <= 1}
               className="flex items-center gap-1 px-3 py-1.5 text-sm border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">
               <ChevronLeft className="h-4 w-4" />

@@ -408,7 +408,7 @@ export default function ReservationsPage() {
           <span className="text-xs text-muted-foreground tabular-nums">
             {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} {t3('von', 'of', 'من')} {total}
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" dir="ltr">
             <button
               onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0}
@@ -416,7 +416,7 @@ export default function ReservationsPage() {
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="px-3 text-xs font-semibold tabular-nums" dir="ltr">
+            <span className="px-3 text-xs font-semibold tabular-nums">
               {page + 1} / {totalPages}
             </span>
             <button
