@@ -515,6 +515,18 @@ export default function InventoryPage() {
   }
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
 
+  // Warehouse-scope label for the KPI cards.
+  //   - scope === 'global'    → grey "Alle Lager"
+  //   - scope === 'warehouse' → gold "{Marzahn} nur" (active filter signal)
+  // Arabic interpolates a Latin warehouse name, so wrap the name in dir=ltr
+  // at render time to avoid BiDi reordering the parentheses/punctuation.
+  const scope: 'global' | 'warehouse' = stats?.scope ?? 'global'
+  const scopeName: string = stats?.warehouseName ?? ''
+  const scopeLabel = scope === 'warehouse'
+    ? t('inventory.scopeOnly', { name: scopeName })
+    : t('inventory.scopeAll')
+  const scopeClass = scope === 'warehouse' ? 'text-[#d4a853] font-medium' : 'text-muted-foreground'
+
   const statCards = [
     { key: 'total', label: t('inventory.totalStock'), value: `${stats?.totalUnits ?? 0}`, sub: `${stats?.totalItems ?? 0} ${t('inventory.variant')}`, icon: Package, color: 'bg-blue-50 text-blue-600' },
     { key: 'low', label: t('inventory.lowStock'), value: String(stats?.lowStock ?? 0), icon: AlertTriangle, color: 'bg-orange-50 text-orange-600', click: () => { setStatus('low'); setPage(0) }, alert: (stats?.lowStock ?? 0) > 0 },
@@ -533,7 +545,25 @@ export default function InventoryPage() {
             style={{ animationDelay: `${i * 60}ms`, animation: 'fadeSlideUp 400ms ease-out both' }}>
             <div className="flex items-center gap-3">
               <div className={`h-11 w-11 rounded-xl ${c.color} flex items-center justify-center transition-transform group-hover:scale-110`}><c.icon className="h-5 w-5" /></div>
-              <div><div className="text-xl font-bold">{c.value}</div><div className="text-[11px] text-muted-foreground">{c.label}</div>{c.sub && <div className="text-[10px] text-muted-foreground">{c.sub}</div>}</div>
+              <div>
+                <div className="text-xl font-bold">{c.value}</div>
+                <div className="text-[11px] text-muted-foreground">{c.label}</div>
+                {c.sub && <div className="text-[10px] text-muted-foreground">{c.sub}</div>}
+                {/* Scope label — signals whether the number is global or
+                    filtered to one warehouse. Gold = active filter.
+                    Latin warehouse name in AR wrapped in dir=ltr so the
+                    BiDi renderer doesn't reorder the parentheses around it. */}
+                <div className={`text-[10px] mt-0.5 ${scopeClass}`}>
+                  {scope === 'warehouse' && locale === 'ar' ? (
+                    <>
+                      <span dir="ltr" className="inline-block">{scopeName}</span>
+                      <span className="ms-1">فقط</span>
+                    </>
+                  ) : (
+                    scopeLabel
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         ))}

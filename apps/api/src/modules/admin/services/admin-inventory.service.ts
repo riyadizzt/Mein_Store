@@ -39,12 +39,20 @@ export class AdminInventoryService {
   }
 
   // ── STATS ──────────────────────────────────────────────────
+  //
+  // Scope contract:
+  //   - no warehouseId  → GLOBAL across all warehouses (sum of all stock)
+  //   - with warehouseId → scoped to that single warehouse
+  //
+  // Previously fell back to the default warehouse when no ID was passed —
+  // that silently hid stock in non-default warehouses (reported as "4950
+  // total" while 163 units sat in Pannierstr Shop, confusing the admin).
+  // The UI now shows a "scope" label next to each KPI so the admin can
+  // always tell whether a number is warehouse-scoped or global.
 
   async getStats(warehouseId?: string) {
-    const whId = warehouseId || (await this.prisma.warehouse.findFirst({ where: { isDefault: true } }))?.id
-
     const allInv = await this.prisma.inventory.findMany({
-      where: whId ? { warehouseId: whId } : {},
+      where: warehouseId ? { warehouseId } : {},
       include: { variant: { select: { product: { select: { deletedAt: true } } } } },
     })
 
@@ -62,7 +70,23 @@ export class AdminInventoryService {
       else if (avail <= inv.reorderPoint) lowStock++
     }
 
-    return { totalItems, totalUnits, lowStock, outOfStock }
+    // Resolve warehouse name for display context — only fire this query
+    // when actually filtering (the global case doesn't need it).
+    const warehouseName = warehouseId
+      ? (await this.prisma.warehouse.findUnique({
+          where: { id: warehouseId },
+          select: { name: true },
+        }))?.name ?? null
+      : null
+
+    return {
+      totalItems,
+      totalUnits,
+      lowStock,
+      outOfStock,
+      scope: warehouseId ? ('warehouse' as const) : ('global' as const),
+      warehouseName,
+    }
   }
 
   // ── RESERVATIONS (read-only view) ─────────────────────────

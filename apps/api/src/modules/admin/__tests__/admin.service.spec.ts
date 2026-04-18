@@ -730,6 +730,73 @@ describe('Admin — AdminInventoryService', () => {
     inventoryService = module.get(AdminInventoryService)
   })
 
+  // ── R-scope: getStats with warehouse-scope contract ────────────
+  describe('getStats — warehouse-scope (Option B)', () => {
+    const mkInv = (onHand: number, reserved: number, reorderPoint = 0, deleted = false) => ({
+      quantityOnHand: onHand,
+      quantityReserved: reserved,
+      reorderPoint,
+      variant: { product: { deletedAt: deleted ? new Date() : null } },
+    })
+
+    it('global scope (no warehouseId) — does NOT fall back to default warehouse anymore', async () => {
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        mkInv(100, 10), // available=90, onHand=100
+        mkInv(50, 50),  // available=0 → outOfStock
+        mkInv(5, 0, 10), // available=5 ≤ reorderPoint=10 → lowStock
+      ])
+      // No warehouse.findFirst stub needed — the legacy fallback is gone
+      // by design. The test verifies that behaviour.
+      mockPrisma.warehouse.findFirst.mockResolvedValue(null)
+
+      const result = await inventoryService.getStats()
+
+      expect(result.scope).toBe('global')
+      expect(result.warehouseName).toBeNull()
+      expect(result.totalItems).toBe(3)
+      expect(result.totalUnits).toBe(155) // sum of onHand
+      expect(result.outOfStock).toBe(1)
+      expect(result.lowStock).toBe(1)
+      // Critical: findMany was called WITHOUT a warehouseId filter
+      expect(mockPrisma.inventory.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      )
+    })
+
+    it('warehouse scope (warehouseId given) — filters + returns warehouse name', async () => {
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        mkInv(20, 0),
+        mkInv(30, 0),
+      ])
+      mockPrisma.warehouse.findUnique.mockResolvedValue({ name: 'Marzahn' })
+
+      const result = await inventoryService.getStats('wh-marzahn')
+
+      expect(result.scope).toBe('warehouse')
+      expect(result.warehouseName).toBe('Marzahn')
+      expect(result.totalItems).toBe(2)
+      expect(result.totalUnits).toBe(50)
+      expect(mockPrisma.inventory.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { warehouseId: 'wh-marzahn' } }),
+      )
+      expect(mockPrisma.warehouse.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'wh-marzahn' } }),
+      )
+    })
+
+    it('filters out soft-deleted product variants in both scopes', async () => {
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        mkInv(10, 0),         // active
+        mkInv(99, 0, 0, true), // DELETED — must not count
+      ])
+      mockPrisma.warehouse.findFirst.mockResolvedValue(null)
+
+      const result = await inventoryService.getStats()
+      expect(result.totalItems).toBe(1)
+      expect(result.totalUnits).toBe(10) // not 10+99
+    })
+  })
+
   it('manuelle Bestandskorrektur mit Audit Trail', async () => {
     mockPrisma.inventory.findUnique.mockResolvedValue({
       id: 'inv1', variantId: 'v1', warehouseId: 'wh1', quantityOnHand: 10,

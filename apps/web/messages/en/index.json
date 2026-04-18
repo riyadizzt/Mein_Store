@@ -640,6 +640,8 @@
       "inStock": "In Stock",
       "lowStock": "Low Stock",
       "outOfStock": "Out of Stock",
+      "scopeAll": "All warehouses",
+      "scopeOnly": "{name} only",
       "missingTranslation": "missing",
       "allCategories": "All Categories",
       "allStatus": "All Status",

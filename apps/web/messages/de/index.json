@@ -640,6 +640,8 @@
       "inStock": "Auf Lager",
       "lowStock": "Niedrig",
       "outOfStock": "Ausverkauft",
+      "scopeAll": "Alle Lager",
+      "scopeOnly": "{name} nur",
       "missingTranslation": "fehlt",
       "allCategories": "Alle Kategorien",
       "allStatus": "Alle Status",

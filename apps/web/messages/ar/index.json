@@ -640,6 +640,8 @@
       "inStock": "متوفر",
       "lowStock": "منخفض",
       "outOfStock": "نفد",
+      "scopeAll": "جميع المستودعات",
+      "scopeOnly": "{name} فقط",
       "missingTranslation": "مفقود",
       "allCategories": "جميع الأقسام",
       "allStatus": "جميع الحالات",
