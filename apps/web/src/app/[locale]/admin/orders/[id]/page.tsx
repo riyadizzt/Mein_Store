@@ -21,6 +21,8 @@ import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { ChannelBadge } from '@/components/admin/channel-icon'
 import { FulfillmentWarehouseSelect } from '@/components/admin/fulfillment-warehouse-select'
+import { LineWarehousePicker } from '@/components/admin/line-warehouse-picker'
+import { ConsolidateWarehouseButton } from '@/components/admin/consolidate-warehouse-button'
 import { RefundStatusBanner } from '@/components/admin/refund-status-banner'
 
 // ── Status Helpers ───────────────────────────────────────────
@@ -483,6 +485,20 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                             <>
                               <p className="text-sm text-muted-foreground">{item.quantity} &times; {formatCurrency(Number(item.unitPrice), locale)}</p>
                               <p className="text-sm font-bold mt-0.5">{formatCurrency(Number(item.totalPrice), locale)}</p>
+                              {/* R4/R5: per-line warehouse badge + picker. Editable
+                                  only when the order is in a pre-ship status AND
+                                  the backend resolved a warehouse for this line. */}
+                              {!isCancelledItem && (
+                                <div className="mt-2 flex justify-end">
+                                  <LineWarehousePicker
+                                    orderId={id}
+                                    itemId={item.id}
+                                    currentWarehouse={item.fulfillmentWarehouse ?? null}
+                                    editable={!['cancelled', 'refunded', 'shipped', 'delivered'].includes(order.status)}
+                                    locale={locale}
+                                  />
+                                </div>
+                              )}
                             </>
                           )}
                         </div>
@@ -686,12 +702,19 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                 <p className="text-sm text-muted-foreground">{t3('Noch kein Versand', 'No shipment yet', 'لم يتم الشحن بعد')}</p>
                 {/* Fulfillment Warehouse — only for non-cancelled/refunded orders */}
                 {!['cancelled', 'refunded', 'delivered', 'shipped'].includes(order.status) && (
-                  <FulfillmentWarehouseSelect
-                    orderId={id}
-                    currentWarehouseId={order.fulfillmentWarehouseId ?? order.fulfillmentWarehouse?.id ?? null}
-                    currentWarehouseName={order.fulfillmentWarehouse?.name ?? null}
-                    locale={locale}
-                  />
+                  <>
+                    <FulfillmentWarehouseSelect
+                      orderId={id}
+                      currentWarehouseId={order.fulfillmentWarehouseId ?? order.fulfillmentWarehouse?.id ?? null}
+                      currentWarehouseName={order.fulfillmentWarehouse?.name ?? null}
+                      locale={locale}
+                    />
+                    {/* R7 — consolidate all lines into a single warehouse.
+                        Complements the per-line picker (above each item) for
+                        the common case of packing the whole order from one
+                        location. Distinct audit action. */}
+                    <ConsolidateWarehouseButton orderId={id} locale={locale} />
+                  </>
                 )}
               </div>
             )}

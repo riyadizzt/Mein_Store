@@ -11,6 +11,7 @@ import { PrismaService } from '../../../prisma/prisma.service'
 import { PaymentsService } from '../../payments/payments.service'
 import { ShipmentsService } from '../../shipments/shipments.service'
 import { EmailService } from '../../email/email.service'
+import { ReservationService } from '../../inventory/reservation.service'
 
 const mockNotificationService = {
   create: jest.fn().mockResolvedValue(undefined),
@@ -32,9 +33,10 @@ const mockPrisma = {
   productReview: { count: jest.fn() },
   coupon: { count: jest.fn() },
   promotion: { count: jest.fn() },
-  inventory: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn(), upsert: jest.fn() },
+  inventory: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn(), upsert: jest.fn(), create: jest.fn() },
   inventoryMovement: { create: jest.fn(), createMany: jest.fn(), findMany: jest.fn() },
-  warehouse: { findUnique: jest.fn(), findMany: jest.fn() },
+  warehouse: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn() },
+  stockReservation: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   stocktake: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), delete: jest.fn(), update: jest.fn() },
   stocktakeItem: { findUnique: jest.fn(), update: jest.fn() },
   category: { findMany: jest.fn() },
@@ -109,6 +111,10 @@ describe('Admin — AdminOrdersService', () => {
         { provide: NotificationService, useValue: mockNotificationService },
         { provide: EmailService, useValue: mockEmailService },
         { provide: EventEmitter2, useValue: mockEventEmitter },
+        // Mock ReservationService — AdminOrdersService now injects it to
+        // release reservations via the race-safe service method instead of
+        // manually deleting DB rows and inflating quantityOnHand.
+        { provide: ReservationService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile()
     ordersService = module.get(AdminOrdersService)
@@ -158,6 +164,201 @@ describe('Admin — AdminOrdersService', () => {
     mockPrisma.adminNote.create.mockResolvedValue({ id: 'note1', content: 'Test' })
     const note = await ordersService.addNote('o1', 'Kundenrückfrage', 'admin1')
     expect(note.content).toBe('Test')
+  })
+
+  // ── R5: Per-Line Warehouse Change ────────────────────────────
+  describe('changeItemWarehouse (R5)', () => {
+    const baseOrder = {
+      id: 'o1',
+      orderNumber: 'ORD-2026-00001',
+      deletedAt: null,
+      status: 'confirmed',
+      items: [
+        {
+          id: 'item-1',
+          variantId: 'v1',
+          quantity: 2,
+          snapshotName: 'Test Shirt',
+          snapshotSku: 'MAL-T-001',
+          variant: {
+            color: 'Rot', size: 'M', sku: 'MAL-T-001',
+            product: { translations: [{ language: 'de', name: 'Test-Hemd' }] },
+          },
+        },
+      ],
+    }
+
+    it('verschiebt eine einzelne Line atomic ins neue Lager', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-new', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findFirst.mockResolvedValue({
+        id: 'res-1', warehouseId: 'wh-old', quantity: 2, status: 'RESERVED',
+      })
+      // During the tx: existingInv present, sourceInv reserves, etc.
+      mockPrisma.inventory.findFirst
+        .mockResolvedValueOnce({ id: 'inv-new', quantityOnHand: 10, quantityReserved: 0 }) // existingInv check
+        .mockResolvedValueOnce({ id: 'inv-old', quantityOnHand: 10, quantityReserved: 2 }) // sourceInv check
+      mockPrisma.stockReservation.update.mockResolvedValue({})
+      mockPrisma.inventory.updateMany.mockResolvedValue({ count: 1 })
+      mockPrisma.inventoryMovement.createMany.mockResolvedValue({ count: 2 })
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+      const result = await ordersService.changeItemWarehouse('o1', 'item-1', 'wh-new', 'admin1', '127.0.0.1')
+      expect(result.changed).toBe(true)
+      expect(result.warehouseName).toBe('Hamburg')
+
+      // Reservation was updated to new warehouse
+      expect(mockPrisma.stockReservation.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'res-1' }, data: { warehouseId: 'wh-new' } }),
+      )
+      // Both movements created
+      expect(mockPrisma.inventoryMovement.createMany).toHaveBeenCalled()
+    })
+
+    it('no-op wenn Ziel-Lager = aktuelles Lager', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-same', name: 'Marzahn', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findFirst.mockResolvedValue({
+        id: 'res-1', warehouseId: 'wh-same', quantity: 2, status: 'RESERVED',
+      })
+
+      const result = await ordersService.changeItemWarehouse('o1', 'item-1', 'wh-same', 'admin1', '127.0.0.1')
+      expect(result.changed).toBe(false)
+      expect(mockPrisma.stockReservation.update).not.toHaveBeenCalled()
+    })
+
+    it('blockiert für shipped/delivered/cancelled Orders', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue({ ...baseOrder, status: 'shipped' })
+
+      await expect(
+        ordersService.changeItemWarehouse('o1', 'item-1', 'wh-new', 'admin1', '127.0.0.1'),
+      ).rejects.toThrow(BadRequestException)
+    })
+
+    it('wirft NoActiveReservation wenn keine aktive Reservierung existiert', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-new', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findFirst.mockResolvedValue(null)
+
+      await expect(
+        ordersService.changeItemWarehouse('o1', 'item-1', 'wh-new', 'admin1', '127.0.0.1'),
+      ).rejects.toThrow(BadRequestException)
+    })
+
+    it('mappt Postgres CHECK-constraint auf 409 StockTransferRequired', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-new', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findFirst.mockResolvedValue({
+        id: 'res-1', warehouseId: 'wh-old', quantity: 5, status: 'RESERVED',
+      })
+      // Simulate the CHECK-constraint firing during transaction
+      mockPrisma.$transaction.mockImplementationOnce(async () => {
+        throw new Error('new row for relation "inventory" violates check constraint "inventory_reserved_lte_on_hand"')
+      })
+
+      try {
+        await ordersService.changeItemWarehouse('o1', 'item-1', 'wh-new', 'admin1', '127.0.0.1')
+        throw new Error('should have thrown')
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(BadRequestException)
+        expect(e.response?.error).toBe('StockTransferRequired')
+        expect(e.response?.message?.de).toContain('Kein Bestand')
+      }
+    })
+  })
+
+  // ── R7: Consolidate Warehouse ────────────────────────────────
+  describe('consolidateWarehouse (R7)', () => {
+    const baseOrder = {
+      id: 'o1',
+      orderNumber: 'ORD-2026-00002',
+      deletedAt: null,
+      status: 'confirmed',
+      items: [
+        { id: 'i1', variantId: 'v1', quantity: 1, snapshotName: 'A', snapshotSku: 'SKU-A',
+          variant: { color: 'Rot', size: 'M', sku: 'SKU-A', product: { translations: [] } } },
+        { id: 'i2', variantId: 'v2', quantity: 2, snapshotName: 'B', snapshotSku: 'SKU-B',
+          variant: { color: 'Blau', size: 'L', sku: 'SKU-B', product: { translations: [] } } },
+      ],
+    }
+
+    it('preflight: all items available → consolidate möglich', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-target', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findMany.mockResolvedValue([
+        { id: 'r1', variantId: 'v1', warehouseId: 'wh-source', quantity: 1 },
+        { id: 'r2', variantId: 'v2', warehouseId: 'wh-source', quantity: 2 },
+      ])
+      // Preflight: target has enough for each variant
+      mockPrisma.inventory.findFirst
+        .mockResolvedValueOnce({ quantityOnHand: 5, quantityReserved: 0 }) // v1 preflight
+        .mockResolvedValueOnce({ quantityOnHand: 5, quantityReserved: 0 }) // v2 preflight
+        // During tx: existingInv + sourceInv calls per item
+        .mockResolvedValue({ id: 'inv', quantityOnHand: 5, quantityReserved: 1 })
+      mockPrisma.stockReservation.update.mockResolvedValue({})
+      mockPrisma.inventory.updateMany.mockResolvedValue({ count: 1 })
+      mockPrisma.inventoryMovement.createMany.mockResolvedValue({ count: 2 })
+      mockPrisma.order.update.mockResolvedValue({})
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+
+      const result = await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', true)
+      expect(result.changed).toBe(true)
+      expect(result.itemsMoved).toBe(2)
+    })
+
+    it('preflight: ein Item nicht verfügbar → warnings-response ohne DB-write', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-target', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findMany.mockResolvedValue([
+        { id: 'r1', variantId: 'v1', warehouseId: 'wh-source', quantity: 1 },
+        { id: 'r2', variantId: 'v2', warehouseId: 'wh-source', quantity: 5 },
+      ])
+      // v1 OK, v2 NOT enough in target
+      mockPrisma.inventory.findFirst
+        .mockResolvedValueOnce({ quantityOnHand: 5, quantityReserved: 0 }) // v1 has 5 free
+        .mockResolvedValueOnce({ quantityOnHand: 2, quantityReserved: 0 }) // v2 has only 2 free, needs 5
+
+      const result = await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false)
+      expect(result.changed).toBe(false)
+      expect(result.needsConfirmation).toBe(true)
+      expect(result.warnings).toHaveLength(1)
+      expect(result.warnings?.[0].needed).toBe(5)
+      expect(result.warnings?.[0].available).toBe(2)
+      // Nothing was written
+      expect(mockPrisma.stockReservation.update).not.toHaveBeenCalled()
+      expect(mockPrisma.order.update).not.toHaveBeenCalled()
+    })
+
+    it('no-op wenn alle Items bereits im Ziel-Lager', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-target', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findMany.mockResolvedValue([
+        { id: 'r1', variantId: 'v1', warehouseId: 'wh-target', quantity: 1 },
+        { id: 'r2', variantId: 'v2', warehouseId: 'wh-target', quantity: 2 },
+      ])
+
+      const result = await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', false)
+      expect(result.changed).toBe(false)
+      expect(result.itemsMoved).toBe(0)
+    })
+
+    it('blockiert für shipped-Orders', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue({ ...baseOrder, status: 'shipped' })
+
+      await expect(
+        ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', true),
+      ).rejects.toThrow(BadRequestException)
+    })
+
+    it('keine Reservations → changed=false, 0 moved, kein Fehler', async () => {
+      mockPrisma.order.findFirst.mockResolvedValue(baseOrder)
+      mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 'wh-target', name: 'Hamburg', type: 'WAREHOUSE' })
+      mockPrisma.stockReservation.findMany.mockResolvedValue([])
+
+      const result = await ordersService.consolidateWarehouse('o1', 'wh-target', 'admin1', '127.0.0.1', true)
+      expect(result.changed).toBe(false)
+      expect(result.itemsMoved).toBe(0)
+    })
   })
 })
 

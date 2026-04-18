@@ -296,8 +296,10 @@ export class AdminController {
 
   @Get('orders/:id')
   @RequirePermission(PERMISSIONS.ORDERS_VIEW)
-  getOrder(@Param('id', ParseUUIDPipe) id: string) {
-    return this.orders.findOne(id)
+  getOrder(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
+    // Pass adminId so findOne can auto-mark the order as viewed on first
+    // open. Read-tracking powers the sidebar "unread" badge + list marker.
+    return this.orders.findOne(id, req.user?.id)
   }
 
   @Patch('orders/:id/status')
@@ -441,6 +443,37 @@ export class AdminController {
     @Ip() ip: string,
   ) {
     return this.orders.changeFulfillmentWarehouse(id, warehouseId, req.user.id, ip, !!force)
+  }
+
+  // R5 — Move ONE order-item's reservation to a new warehouse.
+  // Paired with findOne's items[].fulfillmentWarehouse field (R4) which
+  // drives the per-line picker UI. Returns a structured 409
+  // StockTransferRequired error when target stock is insufficient.
+  @Patch('orders/:id/items/:itemId/warehouse')
+  @RequirePermission(PERMISSIONS.ORDERS_EDIT)
+  changeItemWarehouse(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body('warehouseId') warehouseId: string,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    return this.orders.changeItemWarehouse(id, itemId, warehouseId, req.user.id, ip)
+  }
+
+  // R7 — Consolidate ALL items into a single warehouse in one transaction.
+  // Two-phase: without force, returns warnings if any item can't be moved.
+  // With force=true, performs the atomic move. Distinct audit action.
+  @Post('orders/:id/consolidate-warehouse')
+  @RequirePermission(PERMISSIONS.ORDERS_EDIT)
+  consolidateWarehouse(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('warehouseId') warehouseId: string,
+    @Body('force') force: boolean,
+    @Req() req: any,
+    @Ip() ip: string,
+  ) {
+    return this.orders.consolidateWarehouse(id, warehouseId, req.user.id, ip, !!force)
   }
 
   // ── Customers / Users ──────────────────────────────────────
@@ -1093,17 +1126,57 @@ export class AdminController {
   @RequirePermission(PERMISSIONS.INVENTORY_INTAKE)
   @HttpCode(HttpStatus.OK)
   async deleteWarehouse(@Param('id', ParseUUIDPipe) id: string) {
-    // Check if warehouse has inventory
-    const count = await this.prisma.inventory.count({ where: { warehouseId: id, quantityOnHand: { gt: 0 } } })
-    if (count > 0) {
-      return { deleted: false, error: 'warehouse_has_stock', message: { de: `Dieses Lager hat noch ${count} Artikel mit Bestand. Bitte zuerst den Bestand transferieren.`, en: `This warehouse has ${count} items with stock. Please transfer stock first.`, ar: `هذا الموقع يحتوي على ${count} منتج في المخزون. يرجى نقل المخزون أولاً.` } }
-    }
-    // Don't delete default warehouse
+    // ── Guards ─────────────────────────────────────────────────
+    // 1. Default warehouse is sacred — it's the fallback the order flow
+    //    relies on when no explicit warehouse is picked. Never delete.
     const wh = await this.prisma.warehouse.findUnique({ where: { id } })
-    if (wh?.isDefault) {
+    if (!wh) return { deleted: false, error: 'not_found' }
+    if (wh.isDefault) {
       return { deleted: false, error: 'is_default', message: { de: 'Standard-Lager kann nicht gelöscht werden.', en: 'Default warehouse cannot be deleted.', ar: 'لا يمكن حذف الموقع الافتراضي.' } }
     }
-    await this.prisma.warehouse.delete({ where: { id } })
+
+    // 2. Has real stock (on-hand OR reserved) — block until admin transfers.
+    //    quantityReserved matters because a reservation represents a customer
+    //    order in flight; we don't want to silently free those up.
+    const withStock = await this.prisma.inventory.count({
+      where: {
+        warehouseId: id,
+        OR: [{ quantityOnHand: { gt: 0 } }, { quantityReserved: { gt: 0 } }],
+      },
+    })
+    if (withStock > 0) {
+      return { deleted: false, error: 'warehouse_has_stock', message: { de: `Dieses Lager hat noch ${withStock} Artikel mit Bestand. Bitte zuerst den Bestand transferieren.`, en: `This warehouse has ${withStock} items with stock. Please transfer stock first.`, ar: `هذا الموقع يحتوي على ${withStock} منتج في المخزون. يرجى نقل المخزون أولاً.` } }
+    }
+
+    // 3. Active orders OR reservations pointing here — block.
+    const activeOrders = await this.prisma.order.count({
+      where: { fulfillmentWarehouseId: id, deletedAt: null, status: { notIn: ['cancelled', 'refunded', 'delivered'] as any } },
+    })
+    const activeRes = await this.prisma.stockReservation.count({ where: { warehouseId: id, status: 'RESERVED' } })
+    if (activeOrders > 0 || activeRes > 0) {
+      return { deleted: false, error: 'warehouse_has_active_orders', message: { de: `Dieses Lager ist Ziel für ${activeOrders} offene Bestellungen und ${activeRes} Reservierungen. Bitte zuerst erledigen oder stornieren.`, en: `This warehouse is the fulfillment target for ${activeOrders} open orders and ${activeRes} reservations. Finish or cancel them first.`, ar: `هذا الموقع مرتبط بـ ${activeOrders} طلبات مفتوحة و ${activeRes} حجوزات. يرجى إنهاؤها أو إلغاؤها أولاً.` } }
+    }
+
+    // 4. Locations inside this warehouse — block if any exist (admin should
+    //    clean them up explicitly). Rare — most test shops don't use locations.
+    const locations = await this.prisma.inventoryLocation.count({ where: { warehouseId: id } })
+    if (locations > 0) {
+      return { deleted: false, error: 'warehouse_has_locations', message: { de: `Dieses Lager hat ${locations} Regale/Standorte. Bitte zuerst entfernen.`, en: `This warehouse has ${locations} locations/shelves. Please remove them first.`, ar: `هذا الموقع يحتوي على ${locations} رفوف. يرجى إزالتها أولاً.` } }
+    }
+
+    // ── Cascade delete ────────────────────────────────────────
+    // At this point the warehouse is empty of live data. Residual historical
+    // rows (empty inventory rows, old inventory_movements) exist purely as
+    // audit trail — they block the DELETE via FK but removing them is safe
+    // when the warehouse itself is going away. Nullable / no-FK refs in
+    // LowStockAlert / Stocktake / BoxManifest don't enforce anything, they
+    // stay as orphaned string data (harmless; the warehouse they point to
+    // no longer exists but the rows are historical records only).
+    await this.prisma.$transaction([
+      this.prisma.inventoryMovement.deleteMany({ where: { warehouseId: id } }),
+      this.prisma.inventory.deleteMany({ where: { warehouseId: id } }),
+      this.prisma.warehouse.delete({ where: { id } }),
+    ])
     return { deleted: true }
   }
 
@@ -1394,6 +1467,17 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   processReturnRefund(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
     return this.returns.processRefund(id, req.user.id, ip)
+  }
+
+  // Vorkasse-refund manual bank-transfer confirmation.
+  // Used by admin after wiring the money to flip Refund.status PENDING→PROCESSED
+  // so the refund becomes visible in finance reports. See admin-returns.service.ts
+  // (markRefundTransferred) for the business rationale.
+  @Post('refunds/:id/mark-transferred')
+  @RequirePermission(PERMISSIONS.RETURNS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  markRefundTransferred(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.returns.markRefundTransferred(id, req.user.id, ip)
   }
 
   @Post('returns/:id/send-label')
