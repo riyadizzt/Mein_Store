@@ -121,6 +121,10 @@ const ACTION_COLORS: Record<string, string> = {
   // because it signals a lifecycle-boundary violation attempt — admin tried
   // to do something that would have caused phantom-reservation drift.
   WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
+  // Remedial cleanup of a pre-existing phantom reservation (e.g. the one
+  // from ORD-20260418-000001 produced before the guard was in place).
+  // Slate because it's an operational remediation, not an incident.
+  PHANTOM_RESERVATION_CLEANED: 'bg-slate-100 text-slate-800 dark:bg-slate-500/20 dark:text-slate-300',
   // R12 — differentiate cancel-flows by money impact
   ORDER_CANCELLED_PRE_PAYMENT: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
   ORDER_CANCELLED_POST_PAYMENT: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -256,6 +260,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   ORDER_ITEM_WAREHOUSE_CHANGED: { de: 'Artikel-Lager geändert', en: 'Item warehouse changed', ar: 'تغيير مستودع العنصر' },
   ORDER_WAREHOUSE_CONSOLIDATED: { de: 'Lager konsolidiert', en: 'Warehouse consolidated', ar: 'دمج المستودعات' },
   WAREHOUSE_CHANGE_BLOCKED_AFTER_CAPTURE: { de: 'Lager-Wechsel blockiert (nach Zahlung)', en: 'Warehouse change blocked (post-capture)', ar: 'تم حظر تغيير المستودع (بعد الدفع)' },
+  PHANTOM_RESERVATION_CLEANED: { de: 'Phantom-Reservierung bereinigt', en: 'Phantom reservation cleaned', ar: 'تم تنظيف حجز وهمي' },
   ORDER_CANCELLED_PRE_PAYMENT: { de: 'Storno vor Zahlung', en: 'Cancelled pre-payment', ar: 'إلغاء قبل الدفع' },
   ORDER_CANCELLED_POST_PAYMENT: { de: 'Storno mit Erstattung', en: 'Cancelled post-payment', ar: 'إلغاء مع استرداد' },
   CUSTOMER_BULK_TAGGED: { de: 'Kunden getaggt', en: 'Customers tagged', ar: 'وسم العملاء' },

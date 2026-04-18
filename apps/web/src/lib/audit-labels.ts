@@ -42,6 +42,11 @@ const FIELD_LABELS: Record<string, L> = {
   targetWarehouseId: { de: 'Ziel-Lager', en: 'Target warehouse', ar: 'المستودع المستهدف' },
   force: { de: 'Force-Override', en: 'Force override', ar: 'تجاوز إجباري' },
   orderStatus: { de: 'Bestell-Status', en: 'Order status', ar: 'حالة الطلب' },
+  // PHANTOM_RESERVATION_CLEANED payload fields
+  reservationId: { de: 'Reservierungs-ID', en: 'Reservation ID', ar: 'معرف الحجز' },
+  originalWarehouseId: { de: 'Ursprünglich. Lager', en: 'Original warehouse', ar: 'المستودع الأصلي' },
+  qty: { de: 'Menge', en: 'Quantity', ar: 'الكمية' },
+  cleanupReason: { de: 'Bereinigungs-Grund', en: 'Cleanup reason', ar: 'سبب التنظيف' },
   // R12 — pre/post payment cancel differentiation
   refunded: { de: 'Erstattet', en: 'Refunded', ar: 'تم الاسترداد' },
   paymentWas: { de: 'Zahlungsstatus', en: 'Payment was', ar: 'حالة الدفع' },
