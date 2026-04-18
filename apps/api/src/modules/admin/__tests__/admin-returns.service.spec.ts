@@ -40,6 +40,9 @@ function buildPrisma() {
     stockReservation: {
       findFirst: jest.fn(),
     },
+    refund: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     order: { update: jest.fn() },
     adminAuditLog: { create: jest.fn() },
   }
@@ -760,6 +763,293 @@ describe('AdminReturnsService', () => {
       // KEIN Dekrement-Audit-Log
       const actions = prisma.adminAuditLog.create.mock.calls.map((c: any[]) => c[0]?.data?.action)
       expect(actions).not.toContain('RETURN_DAMAGED_REMOVED_FROM_STOCK')
+    })
+  })
+
+  // ── Proportional Refund Calculation (finance-critical fix) ──────
+  //
+  // These tests pin down the fix for the ghost-refund bug where the old
+  // items-sum calculation produced an amount larger than what was actually
+  // captured, Stripe rejected the refund, and the code silently flipped
+  // the return to 'refunded' anyway. The helper landed in a prior commit;
+  // these tests cover its integration into inspect() and processRefund().
+  describe('Proportional Refund Calculation (REGEL 1 vs REGEL 2)', () => {
+    function makeInspectReturn(opts: {
+      orderItems: Array<{ id: string; variantId: string; quantity: number; unitPrice: number }>
+      returnItems: Array<{ itemId: string; variantId: string; quantity: number; unitPrice: number }>
+      subtotal: number
+      totalAmount: number
+      shippingCost: number
+    }) {
+      return {
+        ...baseReturn,
+        id: 'ret1',
+        status: 'received',
+        returnNumber: 'RET-2026-00099',
+        returnItems: opts.returnItems,
+        order: {
+          ...baseReturn.order,
+          id: 'order1',
+          subtotal: opts.subtotal,
+          totalAmount: opts.totalAmount,
+          shippingCost: opts.shippingCost,
+          items: opts.orderItems.map((oi) => ({
+            id: oi.id,
+            variantId: oi.variantId,
+            snapshotName: 'Test',
+            snapshotSku: `MAL-${oi.id}`,
+            quantity: oi.quantity,
+            unitPrice: oi.unitPrice,
+            totalPrice: oi.unitPrice * oi.quantity,
+          })),
+        },
+      }
+    }
+
+    it('inspect: partial return with coupon → refund = ratio × (total − shipping), NOT items-sum', async () => {
+      // User's exact bug case:
+      //   subtotal=50, totalAmount=29.99, shipping=4.99 (coupon=25)
+      //   return 3 of 5 items at €10 each
+      //   expected: 0.6 × 25 = 15.00  (not 30.00!)
+      prisma.return.findUnique.mockResolvedValue(
+        makeInspectReturn({
+          orderItems: [{ id: 'oi1', variantId: 'v1', quantity: 5, unitPrice: 10 }],
+          returnItems: [{ itemId: 'oi1', variantId: 'v1', quantity: 3, unitPrice: 10 }],
+          subtotal: 50,
+          totalAmount: 29.99,
+          shippingCost: 4.99,
+        }),
+      )
+      prisma.return.update.mockResolvedValue({})
+      prisma.inventory.findFirst.mockResolvedValue({
+        id: 'inv1', variantId: 'v1', warehouseId: 'wh1',
+        quantityOnHand: 10, quantityReserved: 0,
+      })
+
+      const service = await makeService(prisma)
+      await service.inspect('ret1', [{ itemId: 'oi1', condition: 'ok' }], 'admin1', '127.0.0.1')
+
+      expect(prisma.return.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'inspected',
+            refundAmount: 15.0,
+          }),
+        }),
+      )
+    })
+
+    it('inspect: full return with no prior refund → REGEL 1 (refund = totalAmount)', async () => {
+      // All items returned, no prior refund → customer paid X, gets X back.
+      // subtotal=50, coupon=25, shipping=4.99 → totalAmount=29.99
+      // Full refund = 29.99 (shipping included)
+      prisma.return.findUnique.mockResolvedValue(
+        makeInspectReturn({
+          orderItems: [{ id: 'oi1', variantId: 'v1', quantity: 5, unitPrice: 10 }],
+          returnItems: [{ itemId: 'oi1', variantId: 'v1', quantity: 5, unitPrice: 10 }],
+          subtotal: 50,
+          totalAmount: 29.99,
+          shippingCost: 4.99,
+        }),
+      )
+      prisma.return.update.mockResolvedValue({})
+      prisma.inventory.findFirst.mockResolvedValue({
+        id: 'inv1', variantId: 'v1', warehouseId: 'wh1',
+        quantityOnHand: 10, quantityReserved: 0,
+      })
+
+      const service = await makeService(prisma)
+      await service.inspect('ret1', [{ itemId: 'oi1', condition: 'ok' }], 'admin1', '127.0.0.1')
+
+      expect(prisma.return.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ refundAmount: 29.99 }),
+        }),
+      )
+      // Audit entry should expose isFullReturn=true for auditability
+      const auditAfter = prisma.adminAuditLog.create.mock.calls
+        .map((c: any[]) => c[0]?.data)
+        .find((d: any) => d?.action === 'RETURN_INSPECTED')?.changes?.after
+      expect(auditAfter?.isFullReturn).toBe(true)
+    })
+
+    it('inspect: full items covered but prior refund exists → falls back to partial (REGEL 2)', async () => {
+      // Single-refund-per-order assumption: if any PROCESSED refund already
+      // moved money for this order, a second refund treats this as partial.
+      prisma.refund.findFirst.mockResolvedValue({ id: 'prior-refund' })
+      prisma.return.findUnique.mockResolvedValue(
+        makeInspectReturn({
+          orderItems: [{ id: 'oi1', variantId: 'v1', quantity: 5, unitPrice: 10 }],
+          returnItems: [{ itemId: 'oi1', variantId: 'v1', quantity: 5, unitPrice: 10 }],
+          subtotal: 50,
+          totalAmount: 29.99,
+          shippingCost: 4.99,
+        }),
+      )
+      prisma.return.update.mockResolvedValue({})
+      prisma.inventory.findFirst.mockResolvedValue({
+        id: 'inv1', variantId: 'v1', warehouseId: 'wh1',
+        quantityOnHand: 10, quantityReserved: 0,
+      })
+
+      const service = await makeService(prisma)
+      await service.inspect('ret1', [{ itemId: 'oi1', condition: 'ok' }], 'admin1', '127.0.0.1')
+
+      // Partial math: ratio=1.0, paidForGoods=25, refund=25.00 (no shipping)
+      expect(prisma.return.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ refundAmount: 25.0 }),
+        }),
+      )
+      const auditAfter = prisma.adminAuditLog.create.mock.calls
+        .map((c: any[]) => c[0]?.data)
+        .find((d: any) => d?.action === 'RETURN_INSPECTED')?.changes?.after
+      expect(auditAfter?.isFullReturn).toBe(false)
+    })
+
+    it('inspect: damaged items do NOT contribute to refundAmount', async () => {
+      // 2× €10 returned, 1 ok + 1 damaged → refund from 1 ok item only
+      prisma.return.findUnique.mockResolvedValue(
+        makeInspectReturn({
+          orderItems: [
+            { id: 'oi1', variantId: 'v1', quantity: 1, unitPrice: 10 },
+            { id: 'oi2', variantId: 'v2', quantity: 1, unitPrice: 10 },
+          ],
+          returnItems: [
+            { itemId: 'oi1', variantId: 'v1', quantity: 1, unitPrice: 10 },
+            { itemId: 'oi2', variantId: 'v2', quantity: 1, unitPrice: 10 },
+          ],
+          subtotal: 20,
+          totalAmount: 20,
+          shippingCost: 0,
+        }),
+      )
+      prisma.return.update.mockResolvedValue({})
+      prisma.inventory.findFirst.mockResolvedValue({
+        id: 'inv1', variantId: 'v1', warehouseId: 'wh1',
+        quantityOnHand: 5, quantityReserved: 0,
+      })
+
+      const service = await makeService(prisma)
+      await service.inspect(
+        'ret1',
+        [
+          { itemId: 'oi1', condition: 'ok' },
+          { itemId: 'oi2', condition: 'damaged' },
+        ],
+        'admin1',
+        '127.0.0.1',
+      )
+
+      // Only oi1 (€10) flows back. Free shipping so paidForGoods=20.
+      // ratio = 10/20 = 0.5 (only ok-items count in numerator).
+      // refund = 0.5 × 20 = 10.00
+      expect(prisma.return.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ refundAmount: 10.0 }),
+        }),
+      )
+    })
+  })
+
+  // ── processRefund: failure handling (status stays 'inspected') ──
+  //
+  // The "refunded-but-not-refunded" ghost-state was caused by catch blocks
+  // that logged and continued. Now a provider failure persists refundError,
+  // fires a RETURN_REFUND_FAILED audit, and throws 400 — status stays
+  // 'inspected' so the admin UI can retry.
+  describe('processRefund — error handling', () => {
+    function makeInspectedReturn(refundAmount = 15.0) {
+      return {
+        id: 'ret1',
+        orderId: 'order1',
+        status: 'inspected',
+        returnNumber: 'RET-2026-00001',
+        refundAmount,
+        returnItems: [{ itemId: 'oi1', variantId: 'v1', quantity: 3, unitPrice: 10 }],
+        order: {
+          id: 'order1',
+          orderNumber: 'ORD-2026-00001',
+          subtotal: 50,
+          totalAmount: 29.99,
+          shippingCost: 4.99,
+          items: [{ variantId: 'v1', quantity: 5 }],
+          user: { id: 'u1', email: 'k@example.com', firstName: 'Anna', preferredLang: 'de' },
+          payment: {
+            id: 'pay1',
+            orderId: 'order1',
+            status: 'captured',
+            amount: 2999,
+            provider: 'STRIPE',
+          },
+        },
+      }
+    }
+
+    it('on success: transitions to refunded and clears refundError', async () => {
+      prisma.return.findUnique.mockResolvedValue(makeInspectedReturn())
+      prisma.refund.findFirst.mockResolvedValue(null)
+      prisma.return.update.mockResolvedValue({ id: 'ret1', status: 'refunded' })
+      mockPayments.createRefund.mockResolvedValueOnce({ id: 'stripe-ref-1' })
+
+      const service = await makeService(prisma)
+      await service.processRefund('ret1', 'admin1', '127.0.0.1')
+
+      // The final update writes status=refunded AND refundError=null
+      const finalUpdate = prisma.return.update.mock.calls.find(
+        (c: any[]) => c[0]?.data?.status === 'refunded',
+      )
+      expect(finalUpdate).toBeDefined()
+      expect(finalUpdate![0].data.refundError).toBeNull()
+    })
+
+    it('on Stripe failure: persists refundError, status stays inspected, throws 400', async () => {
+      prisma.return.findUnique.mockResolvedValue(makeInspectedReturn())
+      prisma.refund.findFirst.mockResolvedValue(null)
+      prisma.return.update.mockResolvedValue({ id: 'ret1' })
+      mockPayments.createRefund.mockRejectedValueOnce(
+        new Error('The refund amount (3000) is greater than the amount captured (2999)'),
+      )
+
+      const service = await makeService(prisma)
+      await expect(service.processRefund('ret1', 'admin1', '127.0.0.1')).rejects.toThrow(
+        BadRequestException,
+      )
+
+      // refundError was persisted on the return
+      const errorUpdate = prisma.return.update.mock.calls.find(
+        (c: any[]) => typeof c[0]?.data?.refundError === 'string',
+      )
+      expect(errorUpdate).toBeDefined()
+      expect(errorUpdate![0].data.refundError).toContain('refund amount')
+
+      // Status was NEVER flipped to 'refunded'
+      const refundedUpdate = prisma.return.update.mock.calls.find(
+        (c: any[]) => c[0]?.data?.status === 'refunded',
+      )
+      expect(refundedUpdate).toBeUndefined()
+
+      // order.status was NEVER flipped to 'returned'
+      expect(prisma.order.update).not.toHaveBeenCalled()
+    })
+
+    it('on failure: writes RETURN_REFUND_FAILED audit entry with provider error', async () => {
+      prisma.return.findUnique.mockResolvedValue(makeInspectedReturn())
+      prisma.refund.findFirst.mockResolvedValue(null)
+      prisma.return.update.mockResolvedValue({ id: 'ret1' })
+      mockPayments.createRefund.mockRejectedValueOnce(
+        new Error('charge already refunded'),
+      )
+
+      const service = await makeService(prisma)
+      await expect(service.processRefund('ret1', 'admin1', '127.0.0.1')).rejects.toThrow()
+
+      const failedAudit = prisma.adminAuditLog.create.mock.calls
+        .map((c: any[]) => c[0]?.data)
+        .find((d: any) => d?.action === 'RETURN_REFUND_FAILED')
+      expect(failedAudit).toBeDefined()
+      expect(failedAudit.changes.after.error).toContain('already refunded')
+      expect(failedAudit.changes.after.provider).toBe('STRIPE')
     })
   })
 })

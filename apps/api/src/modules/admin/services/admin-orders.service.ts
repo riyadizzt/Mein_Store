@@ -7,6 +7,7 @@ import { PaymentsService } from '../../payments/payments.service'
 import { ShipmentsService } from '../../shipments/shipments.service'
 import { EmailService } from '../../email/email.service'
 import { ReservationService } from '../../inventory/reservation.service'
+import { calculateProportionalRefund } from '../../../common/helpers/refund-calc'
 
 @Injectable()
 export class AdminOrdersService {
@@ -1178,8 +1179,26 @@ export class AdminOrdersService {
       return this.cancelWithRefund(orderId, reason, adminId, ipAddress)
     }
 
-    // Calculate refund amount (only cancelled items)
-    const refundAmount = itemsToCancel.reduce((sum: number, item: any) => sum + Number(item.totalPrice), 0)
+    // Calculate refund amount via the proportional helper.
+    //
+    // cancelItems is partial by definition — the full-items case is caught
+    // by the earlier redirect to cancelWithRefund(). So isFullReturn=false.
+    // The helper scales the item totals against order.subtotal and applies
+    // them to (totalAmount − shippingCost), correctly handling coupons
+    // that the old `sum(totalPrice)` code silently ignored. That bug was
+    // what caused the Stripe "amount exceeds captured" rejection.
+    const refundAmount = calculateProportionalRefund({
+      returnedItems: itemsToCancel.map((item: any) => ({
+        unitPrice: Number(item.unitPrice),
+        quantity: item.quantity,
+      })),
+      order: {
+        subtotal: Number(order.subtotal),
+        totalAmount: Number(order.totalAmount),
+        shippingCost: Number(order.shippingCost),
+      },
+      isFullReturn: false,
+    })
     const refundAmountCents = Math.round(refundAmount * 100)
 
     // 1. Mark items as cancelled (set quantity to 0 and store original)

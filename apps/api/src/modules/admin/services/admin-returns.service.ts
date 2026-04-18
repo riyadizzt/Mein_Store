@@ -18,6 +18,7 @@ import { DHLProvider } from '../../shipments/providers/dhl.provider'
 import { WebhookDispatcherService } from '../../webhooks/webhook-dispatcher.service'
 import { buildReturnPayloadBase } from '../../webhooks/payload-builders/return'
 import type { WebhookEventType } from '../../webhooks/events'
+import { calculateProportionalRefund } from '../../../common/helpers/refund-calc'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit')
@@ -585,6 +586,13 @@ export class AdminReturnsService {
           select: {
             id: true,
             orderNumber: true,
+            // Financials needed for the proportional refund calculation.
+            // The post-coupon, post-discount figures live here; items carry
+            // pre-discount unitPrice × quantity snapshots that cannot be
+            // blindly summed for a refund amount.
+            subtotal: true,
+            totalAmount: true,
+            shippingCost: true,
             items: {
               select: {
                 id: true,
@@ -640,7 +648,6 @@ export class AdminReturnsService {
       returnItems.map((ri: any) => [ri.variantId, ri.quantity ?? 1]),
     )
 
-    let refundAmount = 0
     let dedupSkipCount = 0  // R10-B Teil 2: counts how many items had their restock skipped because the scanner already booked them
     let damagedRemovalCount = 0  // R10-B Teil 3: counts how many damaged items triggered a real onHand decrement
     const inspectionResults: Array<{
@@ -649,6 +656,9 @@ export class AdminReturnsService {
       restocked: boolean
       amount: number
     }> = []
+    // Items eligible for refund (condition='ok'). Damaged items don't flow
+    // money back — the customer keeps the damaged goods' value at zero.
+    const refundableItems: Array<{ unitPrice: number; quantity: number }> = []
 
     // Process each item
     for (const input of items) {
@@ -671,8 +681,14 @@ export class AdminReturnsService {
       const itemTotal = Number(orderItem.unitPrice) * returnQty
 
       if (input.condition === 'ok') {
-        // Restock: increment quantityOnHand + create InventoryMovement
-        refundAmount += itemTotal
+        // Track this line for proportional refund calculation post-loop.
+        // The old code summed itemTotal directly — that ignored the coupon
+        // and crashed the provider refund when the sum exceeded the
+        // captured amount. calculateProportionalRefund() scales by ratio.
+        refundableItems.push({
+          unitPrice: Number(orderItem.unitPrice),
+          quantity: returnQty,
+        })
 
         if (orderItem.variantId) {
           // R10-B Teil 2 — Dedup-Guard against double-restock.
@@ -759,6 +775,48 @@ export class AdminReturnsService {
       }
     }
 
+    // ── Full-Return detection ────────────────────────────────────
+    //
+    // REGEL 1 applies (refund = totalAmount, shipping included) only when:
+    //   (a) every order item is returned in full quantity (variantId match,
+    //       returnQty >= orderQty), AND
+    //   (b) every inspected item has condition='ok' — a damaged item means
+    //       the customer keeps zero value for that line, so the refund is
+    //       no longer "everything the customer paid", which is the whole
+    //       point of REGEL 1, AND
+    //   (c) no prior PROCESSED refund exists for this order (cancelItems,
+    //       cancelWithRefund, or an earlier return would all bump us into
+    //       partial mode — single-refund-per-order business assumption).
+    //
+    // Legacy orders without variantIds on all items fall back to partial
+    // for safety — we can't prove full coverage without the variant link.
+    const priorRefund = await this.prisma.refund.findFirst({
+      where: { payment: { orderId: ret.orderId }, status: 'PROCESSED' },
+      select: { id: true },
+    })
+
+    const allItemsCovered =
+      ret.order.items.length > 0 &&
+      ret.order.items.every((oi) => {
+        if (!oi.variantId) return false
+        const returnedQty = returnQtyMap.get(oi.variantId) ?? 0
+        return returnedQty >= oi.quantity
+      })
+
+    const allInspectedOk = items.every((i) => i.condition === 'ok')
+
+    const isFullReturn = !priorRefund && allItemsCovered && allInspectedOk
+
+    const refundAmount = calculateProportionalRefund({
+      returnedItems: refundableItems,
+      order: {
+        subtotal: Number(ret.order.subtotal),
+        totalAmount: Number(ret.order.totalAmount),
+        shippingCost: Number(ret.order.shippingCost),
+      },
+      isFullReturn,
+    })
+
     // Update return with inspection data and calculated refund amount
     const existingReturnItems = (ret.returnItems as ReturnItemJson[] | null) ?? []
     const updatedReturnItems = existingReturnItems.map((ri) => {
@@ -776,13 +834,16 @@ export class AdminReturnsService {
         inspectedAt: new Date(),
         inspectedBy: adminId,
         refundAmount,
+        // Clear any stale provider-error from a prior failed refund attempt.
+        // A fresh inspection supersedes the old computation.
+        refundError: null,
         returnItems: updatedReturnItems as unknown as undefined,
       },
     })
 
     try { this.eventEmitter.emit('return.status_changed', { returnId: id, orderId: ret.orderId, orderNumber: ret.order.orderNumber, status: 'inspected', adminId, refundAmount }) } catch (e: any) { this.logger.error(`Event: ${e.message}`) }
 
-    try { await this.audit.log({ adminId, action: 'RETURN_INSPECTED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'inspected', refundAmount } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
+    try { await this.audit.log({ adminId, action: 'RETURN_INSPECTED', entityType: 'return', entityId: id, changes: { before: { status: ret.status }, after: { status: 'inspected', refundAmount, isFullReturn } }, ipAddress: ip }) } catch (e: any) { this.logger.error(`Audit: ${e.message}`) }
 
     // R10-B Teil 2: log a dedicated audit entry when the dedup-guard skipped a
     // second restock. This is a signal (not a failure) — it means the Scanner
@@ -848,6 +909,14 @@ export class AdminReturnsService {
           select: {
             id: true,
             orderNumber: true,
+            // Financials for the legacy-fallback refund recalculation
+            // (see below). Inspect() already sets refundAmount correctly
+            // for fresh returns; these fields are only touched when the
+            // persisted amount is missing/zero.
+            subtotal: true,
+            totalAmount: true,
+            shippingCost: true,
+            items: { select: { variantId: true, quantity: true } },
             user: { select: { id: true, email: true, firstName: true, preferredLang: true } },
             payment: {
               select: {
@@ -911,12 +980,38 @@ export class AdminReturnsService {
       })
     }
 
-    // Calculate amount — recalculate from returnItems if refundAmount is 0
+    // Calculate amount — recalculate from returnItems if refundAmount is 0.
+    //
+    // This fallback path is for legacy rows inspected before the proportional
+    // refund helper landed (old rows may have refundAmount=null or 0). For
+    // fresh returns, inspect() stores the correctly-scaled amount and this
+    // branch is a no-op.
+    //
+    // Conservative: isFullReturn=false here. We cannot safely re-detect
+    // full-return coverage at refund-time because a prior cancellation may
+    // have removed items from order.items — triggering a false-positive
+    // "covers all" when the origin of the discrepancy is pre-refund cancel,
+    // not an actual full return. The partial formula is money-safe in both
+    // cases (it scales proportionally).
     let refundAmountEur = Number(ret.refundAmount ?? 0)
     if (refundAmountEur <= 0) {
       const returnItems = (ret.returnItems as any[] | null) ?? []
-      refundAmountEur = returnItems.reduce((sum: number, ri: any) => sum + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0)
-      // Persist the recalculated amount
+      const legacyRefundables = returnItems
+        .filter((ri: any) => (ri?.condition ?? 'ok') === 'ok')
+        .map((ri: any) => ({
+          unitPrice: Number(ri.unitPrice) || 0,
+          quantity: ri.quantity || 1,
+        }))
+      refundAmountEur = calculateProportionalRefund({
+        returnedItems: legacyRefundables,
+        order: {
+          subtotal: Number(ret.order.subtotal),
+          totalAmount: Number(ret.order.totalAmount),
+          shippingCost: Number(ret.order.shippingCost),
+        },
+        isFullReturn: false,
+      })
+      // Persist the recalculated amount so the UI and audit align
       if (refundAmountEur > 0) {
         await this.prisma.return.update({ where: { id }, data: { refundAmount: refundAmountEur } })
       }
@@ -941,6 +1036,14 @@ export class AdminReturnsService {
     // - Stripe/Klarna/PayPal refund
     // - Gutschrift (GS-XXXX credit note) via InvoiceService
     // - Updates payment status (refunded / partially_refunded)
+    //
+    // CRITICAL: if this throws, the return MUST stay at status='inspected'.
+    // The old code swallowed the error and still flipped the return to
+    // 'refunded' + the order to 'returned' — leaving the system in a state
+    // where the admin UI showed "refunded" but no money had moved. The
+    // caller receives a 400 with the provider error so the admin UI can
+    // surface a retry button. The persisted `refundError` column feeds
+    // that UI and is cleared on the next successful attempt.
     try {
       await this.paymentsService.createRefund(
         {
@@ -953,12 +1056,26 @@ export class AdminReturnsService {
         `return-refund-${ret.id}`,
       )
     } catch (e: any) {
-      this.logger.error(`Return refund failed for ${returnNumber}: ${e.message}`)
+      const errMsg = String(e?.message ?? 'Unknown provider error').slice(0, 500)
+      this.logger.error(`Return refund failed for ${returnNumber}: ${errMsg}`)
+
+      // Persist the error on the return. Status stays 'inspected' — the
+      // retry flow reruns this same method and will clear the error on
+      // success or overwrite it on another failure.
+      try {
+        await this.prisma.return.update({
+          where: { id },
+          data: { refundError: errMsg },
+        })
+      } catch (persistErr: any) {
+        this.logger.error(`Failed to persist refundError for ${returnNumber}: ${persistErr.message}`)
+      }
+
       try {
         await this.notificationService.create({
           type: 'refund_failed',
           title: `⚠ Retoure-Erstattung fehlgeschlagen: ${returnNumber}`,
-          body: `Retoure genehmigt, aber Erstattung von €${(amountCents / 100).toFixed(2)} konnte nicht durchgeführt werden. Bitte manuell erstatten. Fehler: ${e.message?.slice(0, 100)}`,
+          body: `Retoure genehmigt, aber Erstattung von €${(amountCents / 100).toFixed(2)} konnte nicht durchgeführt werden. Bitte manuell erstatten. Fehler: ${errMsg.slice(0, 100)}`,
           entityType: 'return', entityId: id, channel: 'admin',
           data: {
             kind: 'return',
@@ -967,19 +1084,53 @@ export class AdminReturnsService {
             orderNumber: ret.order.orderNumber,
             orderId: ret.orderId,
             amount: amountCents / 100,
-            error: (e.message ?? '').slice(0, 100),
+            error: errMsg.slice(0, 100),
           },
         })
-      } catch {}
-      // Don't block the return status update — the return is approved, refund can be retried manually
+      } catch (notifErr: any) {
+        this.logger.error(`Notification failed for ${returnNumber}: ${notifErr.message}`)
+      }
+
+      try {
+        await this.audit.log({
+          adminId,
+          action: 'RETURN_REFUND_FAILED',
+          entityType: 'return',
+          entityId: id,
+          changes: {
+            after: {
+              returnNumber,
+              orderNumber: ret.order.orderNumber,
+              amount: amountCents / 100,
+              provider: payment.provider ?? 'unknown',
+              error: errMsg.slice(0, 200),
+            },
+          },
+          ipAddress: ip,
+        })
+      } catch (auditErr: any) {
+        this.logger.error(`Audit (refund-failed) for ${returnNumber}: ${auditErr.message}`)
+      }
+
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'RefundFailed',
+        message: {
+          de: `Erstattung fehlgeschlagen: ${errMsg.slice(0, 150)}`,
+          en: `Refund failed: ${errMsg.slice(0, 150)}`,
+          ar: `فشل الاسترداد: ${errMsg.slice(0, 150)}`,
+        },
+        data: { refundError: errMsg },
+      })
     }
 
-    // Update return status
+    // Update return status — refund succeeded, clear any stale error.
     const updated = await this.prisma.return.update({
       where: { id },
       data: {
         status: 'refunded',
         refundedAt: new Date(),
+        refundError: null,
       },
     })
 
