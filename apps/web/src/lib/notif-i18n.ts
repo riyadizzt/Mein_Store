@@ -183,6 +183,27 @@ export function translateNotification(
         body: t(bodyDe, bodyEn, bodyAr),
       }
     }
+    case 'credit_note_pdf_pending': {
+      // Fires when the Supabase upload for a Gutschrift-PDF exhausts
+      // its retries after a successful refund. The refund itself is
+      // committed; only the PDF finalization is deferred. Admin can
+      // re-trigger PDF generation manually from the invoices page.
+      const gsNum = d.creditNoteNumber ?? ''
+      const orderNum = d.orderNumber ?? on ?? ''
+      const amt = d.refundAmount != null ? `€${Number(d.refundAmount).toFixed(2)}` : ''
+      return {
+        title: t(
+          `Gutschrift-PDF ausstehend${gsNum ? ': ' + gsNum : ''}`,
+          `Credit note PDF pending${gsNum ? ': ' + gsNum : ''}`,
+          `فاتورة دائنة PDF معلّقة${gsNum ? ': ' + gsNum : ''}`,
+        ),
+        body: t(
+          `${amt} Erstattung für ${orderNum} abgeschlossen, PDF muss manuell neu generiert werden.`,
+          `${amt} refund for ${orderNum} completed, PDF needs manual regeneration.`,
+          `تم إكمال استرداد ${amt} للطلب ${orderNum}، يتعيّن إعادة توليد ملف PDF يدوياً.`,
+        ),
+      }
+    }
     case 'coupon_expiring':
       return {
         title: t('Gutschein läuft ab', 'Coupon expiring', 'قسيمة على وشك الانتهاء'),

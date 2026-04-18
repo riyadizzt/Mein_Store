@@ -12,7 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone, Layers,
-  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert, Lock, Webhook,
+  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert, Lock, Webhook, FileWarning,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -539,6 +539,8 @@ function NotificationBell({ locale }: { count: number; locale: string }) {
     payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
     payment_disputed: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-600' },
     refund_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
+    // Amber (not red): refund succeeded, only the PDF upload is deferred.
+    credit_note_pdf_pending: { Icon: FileWarning, bg: 'bg-amber-100', fg: 'text-amber-700', dot: 'bg-amber-500' },
     customer_registered: { Icon: Users, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
     coupon_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },
     promotion_expiring: { Icon: Bell, bg: 'bg-amber-100', fg: 'text-amber-600', dot: 'bg-amber-500' },

@@ -8,7 +8,7 @@ import { translateNotification } from '@/lib/notif-i18n'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import {
   Bell, ShoppingBag, RotateCcw, Users, X, Trash2, ShieldAlert, MessageSquare,
-  Check, ChevronLeft, ChevronRight, Filter,
+  Check, ChevronLeft, ChevronRight, Filter, FileWarning,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -31,6 +31,9 @@ const TYPE_CONFIG: Record<string, { Icon: typeof Bell; bg: string; fg: string; d
   payment_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
   payment_disputed: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-600' },
   refund_failed: { Icon: X, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
+  // Amber (not red): the refund already succeeded, only the PDF is
+  // deferred. This is an attention-worthy state, not a failure.
+  credit_note_pdf_pending: { Icon: FileWarning, bg: 'bg-amber-100', fg: 'text-amber-700', dot: 'bg-amber-500' },
   customer_registered: { Icon: Users, bg: 'bg-green-100', fg: 'text-green-600', dot: 'bg-green-500' },
   contact_message: { Icon: MessageSquare, bg: 'bg-indigo-100', fg: 'text-indigo-600', dot: 'bg-indigo-500' },
   account_deletion_requested: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-600', dot: 'bg-red-500' },
@@ -54,6 +57,7 @@ const TYPE_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   payment_failed: { de: 'Zahlung fehlgeschlagen', en: 'Payment Failed', ar: 'فشل الدفع' },
   payment_disputed: { de: 'Zahlung bestritten', en: 'Payment Disputed', ar: 'نزاع على الدفع' },
   refund_failed: { de: 'Erstattung fehlgeschlagen', en: 'Refund Failed', ar: 'فشل الاسترداد' },
+  credit_note_pdf_pending: { de: 'Gutschrift-PDF ausstehend', en: 'Credit Note PDF Pending', ar: 'فاتورة دائنة PDF معلّقة' },
   customer_registered: { de: 'Neuer Kunde', en: 'New Customer', ar: 'عميل جديد' },
   contact_message: { de: 'Kontaktanfrage', en: 'Contact Request', ar: 'رسالة تواصل' },
   admin_password_reset: { de: 'Passwort zurückgesetzt', en: 'Password Reset', ar: 'إعادة تعيين كلمة المرور' },
