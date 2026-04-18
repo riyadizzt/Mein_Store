@@ -187,15 +187,16 @@ export class DashboardService {
         _count: true,
         where: { createdAt: { gte: todayStart }, status: { notIn: ['cancelled'] }, deletedAt: null },
       }),
-      // Unread (first-viewed-by-admin-at IS NULL) orders in actionable status.
-      // Powers the sidebar badge: only count orders still in the open-work
-      // pipeline AND not yet opened by any admin. Excludes cancelled / shipped
-      // / delivered / returned / refunded (those are lifecycle-complete from
-      // a to-do perspective, even if no admin technically clicked them open).
+      // Unread (first-viewed-by-admin-at IS NULL) orders — ALL statuses.
+      // Powers the sidebar badge. Consistent with the red pulsing dot in
+      // the orders list which appears on every unread row regardless of
+      // status. Previously filtered to open-pipeline statuses only, which
+      // caused the mismatch: a refunded unread order showed the dot but
+      // wasn't counted in the badge — user ended up with red dots they
+      // couldn't "clear" by looking at the sidebar. Now badge = dot count.
       this.prisma.order.count({
         where: {
           firstViewedByAdminAt: null,
-          status: { in: ['pending', 'pending_payment', 'confirmed', 'processing'] },
           deletedAt: null,
         },
       }),
