@@ -134,8 +134,14 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
     },
   })
 
+  // Active-filter: the backend sends isActive as a real boolean, but guard
+  // against missing/truthy variants so a legacy warehouse with isActive===true
+  // never gets filtered out. Only `isActive === false` excludes.
   const activeWarehouses = (warehouses ?? []).filter((w) => w.isActive !== false)
-  if (activeWarehouses.length <= 1) return null
+  // Hide completely only when the query hasn't loaded AT ALL — otherwise
+  // render (even for a single-warehouse shop so the admin still sees the
+  // consolidate affordance instead of an invisible control).
+  if (!warehouses) return null
 
   const handlePick = (warehouseId: string) => {
     setPendingWarehouseId(warehouseId)
@@ -198,23 +204,34 @@ export function ConsolidateWarehouseButton({ orderId, locale }: Props) {
                 </button>
               </div>
               <div className="max-h-64 overflow-auto">
-                {activeWarehouses.map((w) => (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => handlePick(w.id)}
-                    disabled={consolidateMut.isPending}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-start hover:bg-muted/50 disabled:opacity-50"
-                  >
-                    <span className="text-sm">{w.type === 'STORE' ? '🏪' : '📦'}</span>
-                    <span>{w.name}</span>
-                    {w.isDefault && (
-                      <span className="text-[10px] text-muted-foreground">
-                        ({t3(locale, 'Standard', 'default', 'افتراضي')})
-                      </span>
+                {activeWarehouses.length === 0 ? (
+                  <div className="px-3 py-4 text-xs text-muted-foreground text-center">
+                    {t3(
+                      locale,
+                      'Keine aktiven Lager verfügbar',
+                      'No active warehouses available',
+                      'لا توجد مستودعات نشطة',
                     )}
-                  </button>
-                ))}
+                  </div>
+                ) : (
+                  activeWarehouses.map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => handlePick(w.id)}
+                      disabled={consolidateMut.isPending}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground text-start hover:bg-muted/50 disabled:opacity-50 border-b border-border/50 last:border-b-0"
+                    >
+                      <span className="text-base">{w.type === 'STORE' ? '🏪' : '📦'}</span>
+                      <span className="font-medium">{w.name}</span>
+                      {w.isDefault && (
+                        <span className="text-[10px] text-muted-foreground ms-auto">
+                          ({t3(locale, 'Standard', 'default', 'افتراضي')})
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </>

@@ -145,7 +145,16 @@ export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editabl
               </button>
             </div>
             <div className="max-h-64 overflow-auto">
-              {activeWarehouses.map((w) => {
+              {activeWarehouses.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-muted-foreground text-center">
+                  {t3(
+                    locale,
+                    'Keine aktiven Lager',
+                    'No active warehouses',
+                    'لا توجد مستودعات',
+                  )}
+                </div>
+              ) : activeWarehouses.map((w) => {
                 const isCurrent = w.id === currentWarehouse?.id
                 return (
                   <button
@@ -153,11 +162,11 @@ export function LineWarehousePicker({ orderId, itemId, currentWarehouse, editabl
                     type="button"
                     disabled={isCurrent || changeMut.isPending}
                     onClick={() => changeMut.mutate(w.id)}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-start hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-default ${isCurrent ? 'bg-muted/30' : ''}`}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm text-foreground text-start hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-default border-b border-border/50 last:border-b-0 ${isCurrent ? 'bg-muted/30' : ''}`}
                   >
                     <span className="flex items-center gap-1.5">
-                      <span className="text-sm">{w.type === 'STORE' ? '🏪' : '📦'}</span>
-                      <span>{w.name}</span>
+                      <span className="text-base">{w.type === 'STORE' ? '🏪' : '📦'}</span>
+                      <span className="font-medium">{w.name}</span>
                       {w.isDefault && (
                         <span className="text-[10px] text-muted-foreground">
                           ({t3(locale, 'Standard', 'default', 'افتراضي')})
