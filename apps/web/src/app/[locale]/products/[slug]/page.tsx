@@ -8,8 +8,17 @@ import { generateProductOGTags } from '@/components/product-og-tags'
 const API_URL = API_BASE_URL
 
 async function getProduct(slug: string, lang: string) {
+  // R13 — tag-based ISR invalidation. The API backend calls /api/revalidate
+  // with { tags: [`product:${slug}`] } on every reservation lifecycle event
+  // (reserve / confirm / release / restockFromConfirmed), which marks this
+  // fetch cache entry stale so the next request re-fetches fresh stock.
+  //
+  // A 60s safety fallback keeps catalog-browser hits cheap if the backend
+  // revalidate call ever fails (network hiccup, misconfigured secret) —
+  // the page just shows slightly stale data until the next hit after 60s,
+  // never forever.
   const res = await fetch(`${API_URL}/api/v1/products/${slug}?lang=${lang}`, {
-    next: { revalidate: 10 },
+    next: { tags: [`product:${slug}`], revalidate: 60 },
   })
   if (!res.ok) return null
   return res.json()

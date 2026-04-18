@@ -330,33 +330,81 @@ export class OrdersService {
         }
       }
 
-      // 3. STOCK CHECK — Block overselling BEFORE creating order
+      // 3. STOCK CHECK — Block overselling BEFORE creating order.
+      //
+      // R3 Gap 1: MAX-per-warehouse semantics, NOT SUM-over-all.
+      //
+      // The stock-check must agree with the Auto-Resolve logic above: reserve()
+      // runs against ONE warehouse, so a split stock of 5+5 cannot fulfill a
+      // single line of qty=6 — the Auto-Resolve would find no warehouse and
+      // leave item.warehouseId pointing at the default with insufficient stock,
+      // causing a cryptic downstream 409 inside the reserve() transaction.
+      //
+      // Summing quantityOnHand across warehouses (the old behaviour) passed the
+      // check (sum=10>=6) and let the order proceed — only to explode later.
+      // Switching to max-per-warehouse agrees with what reserve() can actually
+      // do and surfaces the error right here with a clean structured message.
+      //
+      // R3 Gap 2: structured 3-language error with machine-readable payload.
+      //   error   : 'InsufficientStockInAnyWarehouse'
+      //   message : { de, en, ar }   — frontend picks admin/customer locale
+      //   data    : { variantId, sku, requested, maxAvailable }
+      //
+      // We deliberately do NOT leak per-warehouse availability to the client —
+      // that would invite brute-force availability scanning across locations.
+      // Only the single largest available figure is returned, which matches
+      // "how many could a customer still buy without changing the cart".
       const locale = dto.locale ?? 'de'
       for (const item of dto.items) {
-        const totalAvailable = await this.prisma.inventory.aggregate({
+        const inventories = await this.prisma.inventory.findMany({
           where: { variantId: item.variantId, warehouse: { isActive: true } },
-          _sum: { quantityOnHand: true, quantityReserved: true },
+          select: { quantityOnHand: true, quantityReserved: true },
         })
-        const available = (totalAvailable._sum.quantityOnHand ?? 0) - (totalAvailable._sum.quantityReserved ?? 0)
-        if (available < item.quantity) {
+        let maxAvailable = 0
+        for (const inv of inventories) {
+          const avail = inv.quantityOnHand - inv.quantityReserved
+          if (avail > maxAvailable) maxAvailable = avail
+        }
+
+        if (maxAvailable < item.quantity) {
           const variant = await this.prisma.productVariant.findUnique({
             where: { id: item.variantId },
-            select: { color: true, size: true, product: { select: { translations: { where: { language: (locale ?? 'de') as any }, take: 1 } } } },
+            select: {
+              sku: true,
+              color: true,
+              size: true,
+              product: { select: { translations: { select: { language: true, name: true } } } },
+            },
           })
-          const productName = variant?.product?.translations?.[0]?.name ?? ''
+          const translations = variant?.product?.translations ?? []
+          const nameDe = translations.find((t: any) => t.language === 'de')?.name ?? variant?.sku ?? ''
+          const nameEn = translations.find((t: any) => t.language === 'en')?.name ?? nameDe
+          const nameAr = translations.find((t: any) => t.language === 'ar')?.name ?? nameDe
           const detail = [variant?.color, variant?.size].filter(Boolean).join(' / ')
-          const msg = available <= 0
-            ? locale === 'ar'
-              ? `عذراً، "${productName}" (${detail}) غير متوفر حالياً`
-              : locale === 'en'
-                ? `Sorry, "${productName}" (${detail}) is currently out of stock`
-                : `"${productName}" (${detail}) ist leider nicht mehr verfügbar`
-            : locale === 'ar'
-              ? `عذراً، يتوفر فقط ${available} قطعة من "${productName}" (${detail})`
-              : locale === 'en'
-                ? `Sorry, only ${available} piece(s) of "${productName}" (${detail}) available`
-                : `Nur noch ${available} Stück von "${productName}" (${detail}) verfügbar`
-          throw new ConflictException(msg)
+
+          const outOfStock = maxAvailable <= 0
+          throw new ConflictException({
+            statusCode: 409,
+            error: 'InsufficientStockInAnyWarehouse',
+            message: {
+              de: outOfStock
+                ? `"${nameDe}" (${detail}) ist leider nicht mehr verfügbar.`
+                : `Nur noch ${maxAvailable} Stück von "${nameDe}" (${detail}) aus einem Lager verfügbar — bitte Menge reduzieren.`,
+              en: outOfStock
+                ? `Sorry, "${nameEn}" (${detail}) is currently out of stock.`
+                : `Only ${maxAvailable} piece(s) of "${nameEn}" (${detail}) available from a single warehouse — please reduce quantity.`,
+              ar: outOfStock
+                ? `عذراً، "${nameAr}" (${detail}) غير متوفر حالياً.`
+                : `يتوفر فقط ${maxAvailable} قطعة من "${nameAr}" (${detail}) من مستودع واحد — يرجى تقليل الكمية.`,
+            },
+            data: {
+              variantId: item.variantId,
+              sku: variant?.sku ?? null,
+              requested: item.quantity,
+              maxAvailable,
+              locale,
+            },
+          })
         }
       }
 

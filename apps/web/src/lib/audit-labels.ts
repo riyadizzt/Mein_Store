@@ -27,11 +27,24 @@ const FIELD_LABELS: Record<string, L> = {
   reason: { de: 'Grund', en: 'Reason', ar: 'السبب' },
   itemCount: { de: 'Anzahl Artikel', en: 'Item count', ar: 'عدد الأصناف' },
   cancelledItems: { de: 'Stornierte Artikel', en: 'Cancelled items', ar: 'الأصناف الملغاة' },
+  // R10-B Teil 2/3: new audit-change keys from the inspect flow
+  itemsSkipped: { de: 'Übersprungene Artikel', en: 'Items skipped', ar: 'الأصناف المتجاوزة' },
+  itemsRemoved: { de: 'Aus Bestand entfernt', en: 'Removed from stock', ar: 'مزال من المخزون' },
+  totalItems: { de: 'Gesamt', en: 'Total items', ar: 'إجمالي الأصناف' },
+  // R5/R7 per-line + consolidate warehouse changes
+  itemId: { de: 'Artikel-ID', en: 'Item ID', ar: 'معرف العنصر' },
+  warehouseId: { de: 'Lager-ID', en: 'Warehouse ID', ar: 'معرف المستودع' },
+  warehouseName: { de: 'Lagername', en: 'Warehouse name', ar: 'اسم المستودع' },
+  sku: { de: 'SKU', en: 'SKU', ar: 'رمز المنتج' },
+  itemsMoved: { de: 'Verschobene Artikel', en: 'Items moved', ar: 'العناصر المنقولة' },
+  // R12 — pre/post payment cancel differentiation
+  refunded: { de: 'Erstattet', en: 'Refunded', ar: 'تم الاسترداد' },
+  paymentWas: { de: 'Zahlungsstatus', en: 'Payment was', ar: 'حالة الدفع' },
   refundAmount: { de: 'Erstattungsbetrag', en: 'Refund amount', ar: 'مبلغ الاسترداد' },
   manualRefund: { de: 'Manuelle Erstattung', en: 'Manual refund', ar: 'استرداد يدوي' },
   amount: { de: 'Betrag', en: 'Amount', ar: 'المبلغ' },
   method: { de: 'Methode', en: 'Method', ar: 'الطريقة' },
-  warehouseId: { de: 'Lager-ID', en: 'Warehouse ID', ar: 'معرف المستودع' },
+  // warehouseId already defined above (R5/R7 block) — removed duplicate
   name: { de: 'Name', en: 'Name', ar: 'الاسم' },
   total: { de: 'Gesamt', en: 'Total', ar: 'المجموع' },
   shipped: { de: 'Versendet', en: 'Shipped', ar: 'تم الشحن' },
@@ -124,6 +137,17 @@ const VALUE_LABELS: Record<string, Record<string, L>> = {
     right_of_withdrawal: { de: 'Widerruf', en: 'Right of withdrawal', ar: 'حق الانسحاب' },
     changed_mind: { de: 'Meinung geändert', en: 'Changed mind', ar: 'تغيير الرأي' },
     other: { de: 'Sonstiges', en: 'Other', ar: 'أخرى' },
+    // R10-B Teil 2/3: reason values that show up in the new audit actions
+    scanner_already_restocked: {
+      de: 'Scanner hatte bereits eingebucht',
+      en: 'Scanner already restocked',
+      ar: 'الماسح قام بالإدخال مسبقاً',
+    },
+    damaged_after_scanner_restock: {
+      de: 'Beschädigung nach Scanner-Eingang',
+      en: 'Damaged after scanner intake',
+      ar: 'تضرر بعد إدخال الماسح',
+    },
   },
   status: {
     pending: { de: 'Ausstehend', en: 'Pending', ar: 'معلق' },

@@ -13,6 +13,20 @@ import { InvalidOrderStateException } from '../exceptions/invalid-order-state.ex
 const mockPrisma = {
   productVariant: {
     findMany: jest.fn(),
+    // R3 Gap 2 — stock-insufficiency error builder calls findUnique to hydrate
+    // the 3-language product name for the customer-facing error payload.
+    findUnique: jest.fn().mockResolvedValue({
+      sku: 'SKU-001',
+      color: 'Schwarz',
+      size: 'M',
+      product: {
+        translations: [
+          { language: 'de', name: 'Test-Produkt' },
+          { language: 'en', name: 'Test product' },
+          { language: 'ar', name: 'منتج تجريبي' },
+        ],
+      },
+    }),
   },
   order: {
     create: jest.fn(),
@@ -29,6 +43,10 @@ const mockPrisma = {
   warehouse: { findFirst: jest.fn().mockResolvedValue({ id: 'wh1' }) },
   inventory: {
     findFirst: jest.fn().mockResolvedValue({ id: 'inv1', quantityOnHand: 100, quantityReserved: 0 }),
+    // R3 Gap 1 — stock check is now MAX-per-warehouse via findMany, not SUM
+    // via aggregate. Default to a single warehouse row with plenty of stock
+    // so the happy-path tests keep passing.
+    findMany: jest.fn().mockResolvedValue([{ quantityOnHand: 100, quantityReserved: 0 }]),
     updateMany: jest.fn(),
     aggregate: jest.fn().mockResolvedValue({ _sum: { quantityOnHand: 100, quantityReserved: 0 } }),
   },
@@ -386,6 +404,127 @@ describe('OrdersService', () => {
       expect(mockPrisma.order.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ deletedAt: expect.any(Date) }) }),
       )
+    })
+  })
+
+  // ── R3 Gap 1 + Gap 2: Stock-Check MAX-per-Warehouse + structured error ──
+  //
+  // Covers the regression where a cart line of qty=6 would pass a SUM-over-
+  // warehouses check (5+5=10>=6) but then explode inside reserve() because
+  // no single warehouse had 6 units available. The new check uses MAX, which
+  // agrees with what reserve() can actually do.
+  describe('Stock-Check (R3 Gap 1 + Gap 2)', () => {
+    function seedBaseCreate() {
+      mockPrisma.$queryRaw.mockResolvedValue([{ seq: 1 }])
+      mockPrisma.productVariant.findMany.mockResolvedValue([makeVariant('v1', 'SKU-001')])
+      mockPrisma.order.create.mockResolvedValue(makeOrder('o1'))
+      mockPrisma.order.update.mockResolvedValue({})
+      mockEventEmitter.emitAsync.mockResolvedValue([['res1']])
+    }
+
+    const basePayload = {
+      items: [{ variantId: 'v1', warehouseId: 'wh1', quantity: 6 }],
+      countryCode: 'DE',
+      shippingAddress: {
+        firstName: 'Test', lastName: 'User', street: 'Teststr', houseNumber: '1',
+        postalCode: '10117', city: 'Berlin', country: 'DE',
+      },
+      paymentMethod: 'stripe_card',
+      guestEmail: 'test@example.com',
+    }
+
+    it('R3 Gap 1: rejects when split stock 5+5 cannot cover qty=6 from any single warehouse', async () => {
+      seedBaseCreate()
+      // Split stock: 5 in A + 5 in B → MAX=5, cart wants 6 → must reject
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        { quantityOnHand: 5, quantityReserved: 0 },
+        { quantityOnHand: 5, quantityReserved: 0 },
+      ])
+
+      let caught: any = null
+      try {
+        await service.create(basePayload as any, 'user1', 'corr')
+      } catch (e: any) {
+        caught = e
+      }
+      expect(caught).not.toBeNull()
+      // Even though SUM=10, error must fire because MAX=5 < 6
+      expect(caught?.response?.error).toBe('InsufficientStockInAnyWarehouse')
+      expect(caught?.response?.data?.maxAvailable).toBe(5)
+      expect(caught?.response?.data?.requested).toBe(6)
+    })
+
+    it('R3 Gap 1: accepts when ONE warehouse has enough (6 alone, even split rest)', async () => {
+      seedBaseCreate()
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        { quantityOnHand: 6, quantityReserved: 0 }, // This one can cover it
+        { quantityOnHand: 2, quantityReserved: 0 },
+      ])
+
+      // Should not throw the stock-error; other failures (coupon etc) are fine
+      await service.create(basePayload as any, 'user1', 'corr')
+      expect(mockPrisma.order.create).toHaveBeenCalled()
+    })
+
+    it('R3 Gap 2: error shape includes 3-language message + data payload', async () => {
+      seedBaseCreate()
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        { quantityOnHand: 2, quantityReserved: 0 },
+      ])
+
+      try {
+        await service.create(basePayload as any, 'user1', 'corr')
+        throw new Error('expected throw')
+      } catch (e: any) {
+        expect(e.response?.statusCode).toBe(409)
+        expect(e.response?.error).toBe('InsufficientStockInAnyWarehouse')
+        expect(typeof e.response?.message).toBe('object')
+        expect(typeof e.response?.message?.de).toBe('string')
+        expect(typeof e.response?.message?.en).toBe('string')
+        expect(typeof e.response?.message?.ar).toBe('string')
+        expect(e.response?.data?.variantId).toBe('v1')
+        expect(e.response?.data?.requested).toBe(6)
+        expect(e.response?.data?.maxAvailable).toBe(2)
+        // Message wording for the 3 locales differs when out-of-stock vs reduce-qty
+        expect(e.response?.message?.de).toContain('Nur noch 2')
+        expect(e.response?.message?.en).toContain('Only 2')
+      }
+    })
+
+    it('R3 Gap 2: out-of-stock wording when maxAvailable=0', async () => {
+      seedBaseCreate()
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        { quantityOnHand: 3, quantityReserved: 3 }, // all reserved
+      ])
+
+      try {
+        await service.create(basePayload as any, 'user1', 'corr')
+        throw new Error('expected throw')
+      } catch (e: any) {
+        expect(e.response?.data?.maxAvailable).toBe(0)
+        expect(e.response?.message?.de).toContain('nicht mehr verfügbar')
+        expect(e.response?.message?.en).toContain('out of stock')
+        expect(e.response?.message?.ar).toContain('غير متوفر')
+      }
+    })
+
+    it('R3 Gap 2: does NOT leak per-warehouse availability (only maxAvailable)', async () => {
+      seedBaseCreate()
+      mockPrisma.inventory.findMany.mockResolvedValue([
+        { quantityOnHand: 5, quantityReserved: 0 },
+        { quantityOnHand: 2, quantityReserved: 0 },
+        { quantityOnHand: 1, quantityReserved: 0 },
+      ])
+
+      try {
+        await service.create(basePayload as any, 'user1', 'corr')
+        throw new Error('expected throw')
+      } catch (e: any) {
+        // Only a single number, not an array of warehouses
+        expect(e.response?.data?.maxAvailable).toBe(5)
+        expect(e.response?.data?.warehouses).toBeUndefined()
+        expect(e.response?.data?.perWarehouse).toBeUndefined()
+      }
     })
   })
 })

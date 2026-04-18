@@ -43,6 +43,8 @@ import {
   Scissors,
   Activity,
   Flame,
+  BadgeEuro,
+  PackageX,
 } from 'lucide-react'
 
 interface ActionConfig {
@@ -64,6 +66,10 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   ORDER_REFUNDED:            { de: 'Erstattung durchgeführt',        en: 'Refund processed',        ar: 'تم الاسترداد',              Icon: Undo2,          color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
   ORDER_PARTIAL_CANCEL:      { de: 'Teilstornierung',                en: 'Partial cancel',          ar: 'إلغاء جزئي',                 Icon: Scissors,       color: 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300' },
   ORDER_FULFILLMENT_CHANGED: { de: 'Lager geändert',                 en: 'Warehouse changed',       ar: 'تم تغيير المستودع',         Icon: Warehouse,      color: 'bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-300' },
+  ORDER_ITEM_WAREHOUSE_CHANGED: { de: 'Artikel-Lager geändert',      en: 'Item warehouse moved',    ar: 'تغيير مستودع العنصر',        Icon: ArrowRightLeft, color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' },
+  ORDER_WAREHOUSE_CONSOLIDATED: { de: 'Lager konsolidiert',         en: 'Warehouse consolidated',  ar: 'دمج المستودعات',            Icon: Warehouse,      color: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' },
+  ORDER_CANCELLED_PRE_PAYMENT: { de: 'Storno vor Zahlung',          en: 'Cancelled pre-payment',   ar: 'إلغاء قبل الدفع',           Icon: XCircle,        color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  ORDER_CANCELLED_POST_PAYMENT: { de: 'Storno mit Erstattung',      en: 'Cancelled post-payment',  ar: 'إلغاء مع استرداد',          Icon: Undo2,          color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
   PRODUCT_CREATED:           { de: 'Neues Produkt erstellt',         en: 'New product created',    ar: 'تم إنشاء منتج جديد',        Icon: Sparkles,       color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
   PRODUCT_PRICE_CHANGED:     { de: 'Preis geändert',                 en: 'Price changed',           ar: 'تم تغيير السعر',            Icon: Tag,            color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
   PRODUCT_DELETED:           { de: 'Produkt gelöscht',               en: 'Product deleted',         ar: 'تم حذف المنتج',             Icon: Trash2,         color: 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300' },
@@ -89,7 +95,10 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   RETURN_SCANNED:            { de: 'Retoure gescannt',               en: 'Return scanned',         ar: 'مسح المرتجع',                Icon: ScanLine,       color: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-300' },
   RETURN_RECEIVED:           { de: 'Retoure eingetroffen',           en: 'Return received',        ar: 'استلام المرتجع',             Icon: Inbox,          color: 'bg-teal-100 text-teal-600 dark:bg-teal-500/20 dark:text-teal-300' },
   RETURN_INSPECTED:          { de: 'Retoure geprüft',                en: 'Return inspected',       ar: 'فحص المرتجع',                Icon: Search,         color: 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300' },
+  RETURN_INSPECTED_NO_DOUBLE_RESTOCK: { de: 'Doppelbuchung verhindert',  en: 'Double-restock prevented', ar: 'منع الازدواج',     Icon: ShieldCheck,    color: 'bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300' },
+  RETURN_DAMAGED_REMOVED_FROM_STOCK: { de: 'Beschädigt aus Bestand',    en: 'Damaged removed',          ar: 'إزالة التالف',       Icon: PackageX,       color: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300' },
   RETURN_REFUNDED:           { de: 'Erstattung verarbeitet',         en: 'Refund processed',       ar: 'تم الاسترداد',              Icon: Undo2,          color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  VORKASSE_REFUND_CONFIRMED: { de: 'Vorkasse-Überweisung bestätigt', en: 'Vorkasse transfer confirmed', ar: 'تأكيد التحويل المصرفي', Icon: BadgeEuro,      color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
   STAFF_INVITED:             { de: 'Mitarbeiter eingeladen',         en: 'Staff invited',          ar: 'تمت دعوة موظف',              Icon: UserPlus,       color: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300' },
   STAFF_CREATED:             { de: 'Mitarbeiter erstellt',           en: 'Staff created',          ar: 'تم إنشاء موظف',              Icon: UserPlus,       color: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300' },
   STAFF_ROLE_CHANGED:        { de: 'Rolle geändert',                 en: 'Role changed',           ar: 'تم تغيير الدور',             Icon: UserCog,        color: 'bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-300' },

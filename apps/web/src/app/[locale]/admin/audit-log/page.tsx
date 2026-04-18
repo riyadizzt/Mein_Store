@@ -113,6 +113,13 @@ const ACTION_COLORS: Record<string, string> = {
   ORDER_CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   ORDER_PARTIAL_CANCEL: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
   ORDER_FULFILLMENT_CHANGED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300',
+  // R5 — per-line warehouse move (subset of fulfillment change)
+  ORDER_ITEM_WAREHOUSE_CHANGED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300',
+  // R7 — consolidate all lines into one warehouse (stronger signal)
+  ORDER_WAREHOUSE_CONSOLIDATED: 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
+  // R12 — differentiate cancel-flows by money impact
+  ORDER_CANCELLED_PRE_PAYMENT: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  ORDER_CANCELLED_POST_PAYMENT: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   PRODUCT_CREATED: 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300',
   PRODUCT_UPDATED: 'bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300',
   PRODUCT_DELETED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -136,8 +143,16 @@ const ACTION_COLORS: Record<string, string> = {
   RETURN_SCANNED: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-300',
   RETURN_RECEIVED: 'bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300',
   RETURN_INSPECTED: 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300',
+  // R10-B Teil 2: signals that the Dedup-Guard prevented a second restock
+  // because the Scanner-Flow already booked the item into inventory. Slate
+  // (neutral) because it's an informational event, not a success or alert.
+  RETURN_INSPECTED_NO_DOUBLE_RESTOCK: 'bg-slate-100 text-slate-800 dark:bg-slate-500/20 dark:text-slate-300',
+  // R10-B Teil 3: a damaged item was removed from sellable stock after the
+  // scanner had already booked it. Rose because it's a stock-leaving event.
+  RETURN_DAMAGED_REMOVED_FROM_STOCK: 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300',
   RETURN_REJECTED: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
   RETURN_REFUNDED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  VORKASSE_REFUND_CONFIRMED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
   RETURN_LABEL_UPDATED: 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300',
   RETURN_STATUS_APPROVED: 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300',
   RETURN_STATUS_INSPECTED: 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300',
@@ -214,10 +229,25 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   RETURN_SCANNED: { de: 'Retoure gescannt', en: 'Return scanned', ar: 'مسح المرتجع' },
   RETURN_RECEIVED: { de: 'Retoure eingetroffen', en: 'Return received', ar: 'استلام المرتجع' },
   RETURN_INSPECTED: { de: 'Retoure geprüft', en: 'Return inspected', ar: 'فحص المرتجع' },
+  RETURN_INSPECTED_NO_DOUBLE_RESTOCK: {
+    de: 'Retoure geprüft — Doppelbuchung verhindert',
+    en: 'Return inspected — double-restock prevented',
+    ar: 'فحص المرتجع — تم منع الازدواج',
+  },
+  RETURN_DAMAGED_REMOVED_FROM_STOCK: {
+    de: 'Beschädigte Ware aus Bestand entfernt',
+    en: 'Damaged item removed from stock',
+    ar: 'إزالة البضائع التالفة من المخزون',
+  },
   RETURN_REJECTED: { de: 'Retoure abgelehnt', en: 'Return rejected', ar: 'رفض المرتجع' },
   RETURN_REFUNDED: { de: 'Erstattung verarbeitet', en: 'Refund processed', ar: 'معالجة الاسترداد' },
+  VORKASSE_REFUND_CONFIRMED: { de: 'Vorkasse-Überweisung bestätigt', en: 'Vorkasse transfer confirmed', ar: 'تأكيد التحويل المصرفي' },
   ORDER_PARTIAL_CANCEL: { de: 'Teilstornierung', en: 'Partial cancel', ar: 'إلغاء جزئي' },
   ORDER_FULFILLMENT_CHANGED: { de: 'Lager geändert', en: 'Fulfillment changed', ar: 'تغيير المستودع' },
+  ORDER_ITEM_WAREHOUSE_CHANGED: { de: 'Artikel-Lager geändert', en: 'Item warehouse changed', ar: 'تغيير مستودع العنصر' },
+  ORDER_WAREHOUSE_CONSOLIDATED: { de: 'Lager konsolidiert', en: 'Warehouse consolidated', ar: 'دمج المستودعات' },
+  ORDER_CANCELLED_PRE_PAYMENT: { de: 'Storno vor Zahlung', en: 'Cancelled pre-payment', ar: 'إلغاء قبل الدفع' },
+  ORDER_CANCELLED_POST_PAYMENT: { de: 'Storno mit Erstattung', en: 'Cancelled post-payment', ar: 'إلغاء مع استرداد' },
   CUSTOMER_BULK_TAGGED: { de: 'Kunden getaggt', en: 'Customers tagged', ar: 'وسم العملاء' },
   CUSTOMER_EMAIL_SENT: { de: 'E-Mail gesendet', en: 'Email sent', ar: 'إرسال بريد' },
   CUSTOMER_TAGS_CHANGED: { de: 'Kunden-Tags geändert', en: 'Tags changed', ar: 'تغيير الوسوم' },
