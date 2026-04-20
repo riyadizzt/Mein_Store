@@ -737,7 +737,14 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${PROVIDER_COLORS[order.payment.provider?.toLowerCase()] ?? 'bg-gray-100 text-gray-800'}`}>{order.payment.provider}</span>
                 </div>
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Methode', 'Method', 'الطريقة')}</span><span className="font-medium">{({stripe_card: t3('Kreditkarte', 'Credit Card', 'بطاقة ائتمان'), apple_pay: 'Apple Pay', google_pay: 'Google Pay', klarna_pay_now: 'Klarna Sofort', klarna_pay_later: t3('Klarna Rechnung', 'Klarna Invoice', 'كلارنا فاتورة'), paypal: 'PayPal', sepa_direct_debit: 'SEPA'} as Record<string, string>)[order.payment.method] ?? order.payment.method}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Status', 'Status', 'الحالة')}</span><span className="font-medium">{({captured: t3('Bezahlt', 'Paid', 'مدفوع'), refunded: t3('Erstattet', 'Refunded', 'مسترد'), pending: t3('Ausstehend', 'Pending', 'معلق'), failed: t3('Fehlgeschlagen', 'Failed', 'فشل')} as Record<string, string>)[order.payment.status] ?? order.payment.status}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Status', 'Status', 'الحالة')}</span><span className="font-medium">{({
+                  pending: t3('Ausstehend', 'Pending', 'معلق'),
+                  authorized: t3('Autorisiert', 'Authorized', 'مصرّح'),
+                  captured: t3('Bezahlt', 'Paid', 'مدفوع'),
+                  failed: t3('Fehlgeschlagen', 'Failed', 'فشل'),
+                  refunded: t3('Erstattet', 'Refunded', 'مسترد'),
+                  partially_refunded: t3('Teilweise erstattet', 'Partially refunded', 'مسترد جزئياً'),
+                } as Record<string, string>)[order.payment.status] ?? order.payment.status}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Betrag', 'Amount', 'المبلغ')}</span><span className="font-bold">{formatCurrency(Number(order.payment.amount), locale)}</span></div>
                 {order.payment.paidAt && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t3('Bezahlt am', 'Paid at', 'تاريخ الدفع')}</span><span>{formatDateTime(order.payment.paidAt, locale)}</span></div>}
                 {order.payment.providerPaymentId && (
