@@ -130,7 +130,13 @@ export class UserOrdersService {
           },
         },
         shippingAddress: true,
-        payment: true,
+        // Include payment.refunds so the customer order-detail can show a
+        // green "Refund" line for admin-initiated partial cancels. Returns
+        // have their own refundAmount via the returns[] array; admin
+        // cancelItems creates a Refund row but no Return row, so without
+        // this the customer saw their ORD-20260420-000001 as "total €305"
+        // with no indication that €9480 had been refunded.
+        payment: { include: { refunds: true } },
         shipment: true,
         statusHistory: { orderBy: { createdAt: 'asc' } },
         returns: {

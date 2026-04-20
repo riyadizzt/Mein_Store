@@ -491,14 +491,18 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
           const returnedQty = isFullReturn ? item.quantity : (returnedVariantMap.get(item.variantId) ?? 0)
           const isReturned = hasReturn && (isFullReturn || returnedQty > 0)
           const isPartial = isReturned && !isFullReturn && returnedQty < item.quantity
-          // Locale-aware product name + color. snapshotName is the frozen
-          // order-time German string; translations array is always current
-          // from the DB. Fall back through getProductName's chain
-          // (current-locale → de → en), then finally snapshotName.
+          // Admin-initiated partial cancel zeros qty and totalPrice on the
+          // item row without creating a Return record. Detect that shape
+          // so the line is visually flagged instead of showing as an
+          // ambiguous "× 0 — €0.00" ghost row. isCancelled takes priority
+          // over isReturned for styling so the red "Storniert" badge
+          // wins over the orange "Retourniert" one.
+          const isCancelled = Number(item.quantity) === 0 && !isReturned
+          const isMuted = isCancelled || (isReturned && !isPartial)
           const displayName = getProductName(item.variant?.product?.translations, locale) || item.snapshotName
           const displayColor = translateColor(item.variant?.color, locale)
           return (
-          <div key={item.id} className={`flex gap-4 p-4 ${isReturned ? 'bg-muted/30' : ''}`}>
+          <div key={item.id} className={`flex gap-4 p-4 ${isCancelled ? 'bg-red-50/50' : isReturned ? 'bg-muted/30' : ''}`}>
             {(() => {
               const images = item.variant?.product?.images ?? []
               const color = item.variant?.color
@@ -506,7 +510,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
               const primaryImg = images.find((img: any) => img.isPrimary)
               const imgUrl = colorImg?.url ?? primaryImg?.url ?? images[0]?.url
               return (
-            <div className={`w-16 h-16 bg-muted rounded overflow-hidden flex-shrink-0 ${isReturned && !isPartial ? 'opacity-50' : ''}`}>
+            <div className={`w-16 h-16 bg-muted rounded overflow-hidden flex-shrink-0 ${isMuted ? 'opacity-50' : ''}`}>
               {imgUrl && (
                 <Image src={imgUrl} alt={displayName} width={64} height={64} className="w-full h-full object-cover" />
               )}
@@ -514,8 +518,14 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
               )
             })()}
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${isReturned && !isPartial ? 'line-through opacity-60' : ''}`}>{displayName}</p>
-              <p className="text-sm text-muted-foreground">{displayColor}{item.variant?.size ? ` / ${item.variant.size}` : ''} × {item.quantity}</p>
+              <p className={`text-sm font-medium ${isMuted ? 'line-through opacity-60' : ''}`}>{displayName}</p>
+              <p className={`text-sm text-muted-foreground ${isCancelled ? 'line-through opacity-60' : ''}`}>{displayColor}{item.variant?.size ? ` / ${item.variant.size}` : ''}{!isCancelled && ` × ${item.quantity}`}</p>
+              {isCancelled && (
+                <span className="inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
+                  <RotateCcw className="h-3 w-3" />
+                  {locale === 'ar' ? 'تم الإلغاء' : locale === 'en' ? 'Cancelled' : 'Storniert'}
+                </span>
+              )}
               {isReturned && (
                 <span className={`inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 rounded-full ${isFullReturn ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
                   <RotateCcw className="h-3 w-3" />
@@ -527,7 +537,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
                 </span>
               )}
             </div>
-            <p className={`text-sm font-semibold ${isReturned && !isPartial ? 'line-through opacity-60' : ''}`}>&euro;{Number(item.totalPrice).toFixed(2)}</p>
+            <p className={`text-sm font-semibold ${isMuted ? 'line-through opacity-60' : ''}`}>&euro;{Number(item.totalPrice).toFixed(2)}</p>
           </div>
           )
         })}
@@ -537,14 +547,25 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
 
       {/* Totals */}
       {(() => {
+        // Refund detection covers BOTH sources:
+        //   1. Return-flow refunds → returns[].refundAmount (customer-initiated)
+        //   2. Admin-cancel refunds → payment.refunds[].amount where
+        //      status='PROCESSED' (no Return row exists for these)
+        // Use the MAX of the two so we don't double-count when a Return
+        // refund also appears in payment.refunds (both link to the same
+        // paymentId and carry the same amount).
+        const paymentRefundSum = (order.payment?.refunds ?? [])
+          .filter((r: any) => r.status === 'PROCESSED')
+          .reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0)
         const ret = order.returns?.[0]
         const returnItems = (ret?.returnItems ?? []) as any[]
-        const refundAmt = ret
+        const returnRefundAmt = ret
           ? (Number(ret.refundAmount ?? 0) > 0
             ? Number(ret.refundAmount)
             : returnItems.reduce((s: number, ri: any) => s + (Number(ri.unitPrice) || 0) * (ri.quantity || 1), 0))
           : 0
-        const isRefunded = ret?.status === 'refunded' && refundAmt > 0
+        const refundAmt = Math.max(paymentRefundSum, returnRefundAmt)
+        const hasRefund = refundAmt > 0.01
         return (
       <div className="border rounded-lg p-5 mb-6 space-y-2 text-base">
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('subtotal')}</span><span>&euro;{Number(order.subtotal).toFixed(2)}</span></div>
@@ -560,7 +581,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('shipping')}</span><span>&euro;{Number(order.shippingCost).toFixed(2)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">{tCart('tax')}</span><span>&euro;{Number(order.taxAmount).toFixed(2)}</span></div>
         <div className="flex justify-between font-bold text-base pt-2 border-t"><span>{tCart('total')}</span><span>&euro;{Number(order.totalAmount).toFixed(2)}</span></div>
-        {isRefunded && (
+        {hasRefund && (
           <div className="flex justify-between text-green-600 font-semibold pt-2 border-t border-green-200">
             <span>{locale === 'ar' ? 'الاسترداد' : locale === 'en' ? 'Refund' : 'Erstattung'}</span>
             <span>- &euro;{refundAmt.toFixed(2)}</span>
