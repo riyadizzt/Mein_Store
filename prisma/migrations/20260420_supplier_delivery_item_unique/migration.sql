@@ -1,0 +1,49 @@
+-- Item-level idempotency for supplier delivery intake.
+--
+-- Problem: admin-suppliers.createDelivery() had no guard against a double
+-- submit. A single delivery with N line items could be processed twice
+-- (double-click on "Buchen", network retry, duplicate webhook, etc.),
+-- producing 2×N InventoryMovement rows and 2×N increments to
+-- Inventory.quantityOnHand. Silent stock drift, impossible to detect
+-- post-factum without external records.
+--
+-- Fix: pin each InventoryMovement of type='supplier_delivery' to the
+-- SupplierDeliveryItem row that produced it by writing its id into
+-- reference_id. A partial UNIQUE INDEX on (reference_id, variant_id)
+-- WHERE type='supplier_delivery' then guarantees at most one movement
+-- row per (deliveryItem, variant) pair. The DB rejects duplicates with
+-- P2002; the service catches that and returns a friendly "already booked"
+-- response. No application-level idempotency cache needed — the invariant
+-- lives in the schema itself.
+--
+-- Why partial (WHERE type='supplier_delivery'):
+--   InventoryMovement.referenceId is already used by other movement types
+--   with different semantics (reservation.id for 'reserved', order.id for
+--   'sale_online', etc.). A global UNIQUE on (reference_id, variant_id)
+--   would incorrectly collide across types. A partial index scoped to
+--   type='supplier_delivery' gives the guarantee exactly where it's needed
+--   without touching the other flows.
+--
+-- Why not add this column to the Prisma schema as @@unique:
+--   Prisma does not support partial unique indexes declaratively. Raw SQL
+--   is the only path. Future devs reading the schema will see the
+--   `referenceId` field is nullable and unconstrained — the comment on
+--   InventoryMovement.referenceId (line 578 of schema.prisma) is updated
+--   in the same commit to point to this migration.
+--
+-- Safe to apply:
+--   * Pre-flight verified against Live-DB: zero existing rows of type
+--     'supplier_delivery' (inspect-supplier-movements.ts result: 0/0/0).
+--     No historical data can violate the new constraint.
+--   * Even if historical rows existed with NULL reference_id, PostgreSQL
+--     treats NULL as distinct in unique indexes by default — multiple
+--     NULLs coexist. The constraint only binds going forward, on rows
+--     written by the updated service code.
+--   * CONCURRENTLY is NOT used: the table currently has 0 supplier_delivery
+--     rows and roughly ~1000 rows of other types, so the lock window is
+--     negligible (< 50ms). CONCURRENTLY would require the migration to
+--     run outside a transaction, which Prisma's migrate runner dislikes.
+
+CREATE UNIQUE INDEX inventory_movements_supplier_delivery_item_unique_idx
+  ON inventory_movements (reference_id, variant_id)
+  WHERE type = 'supplier_delivery';

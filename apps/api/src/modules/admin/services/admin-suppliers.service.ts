@@ -2,10 +2,17 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
 import { ensureVariantBarcode } from '../../../common/helpers/variant-barcode'
+
+// Per-line quantity cap. Tippfehler like 100.000 get rejected early,
+// not silently accepted. Aligned with admin-inventory.service.intake()
+// which already uses the same ceiling for manual stock corrections.
+const MAX_QTY_PER_DELIVERY_LINE = 10000
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -220,8 +227,11 @@ export class AdminSuppliersService {
 
   // ── SKU Generator ────────────────────────────────────────────
 
-  private async generateSku(color: string, size: string): Promise<string> {
-    const seq = await this.prisma.skuSequence.upsert({
+  // Accept either the outer PrismaService or an interactive TransactionClient
+  // so generators called from inside $transaction participate in its rollback.
+  // If the outer tx aborts, the sequence upsert rolls back too — no gap.
+  private async generateSku(client: PrismaService | Prisma.TransactionClient, color: string, size: string): Promise<string> {
+    const seq = await client.skuSequence.upsert({
       where: { id: 'singleton' },
       create: { id: 'singleton', lastNum: 1 },
       update: { lastNum: { increment: 1 } },
@@ -234,10 +244,10 @@ export class AdminSuppliersService {
 
   // ── Delivery Number ──────────────────────────────────────────
 
-  private async generateDeliveryNumber(): Promise<string> {
+  private async generateDeliveryNumber(client: PrismaService | Prisma.TransactionClient): Promise<string> {
     const year = new Date().getFullYear()
 
-    const seq = await this.prisma.supplierDeliverySequence.upsert({
+    const seq = await client.supplierDeliverySequence.upsert({
       where: { id: 'singleton' },
       create: { id: 'singleton', year, lastNum: 1 },
       update: {
@@ -248,7 +258,7 @@ export class AdminSuppliersService {
 
     // Reset if new year
     if (seq.year !== year) {
-      const reset = await this.prisma.supplierDeliverySequence.update({
+      const reset = await client.supplierDeliverySequence.update({
         where: { id: 'singleton' },
         data: { year, lastNum: 1 },
       })
@@ -259,228 +269,457 @@ export class AdminSuppliersService {
   }
 
   // ── Wareneingang (Receiving) ─────────────────────────────────
+  //
+  // Architecture notes (Gruppe-1 hardening, 2026-04-20):
+  //
+  //  1. ATOMIC — the whole flow runs inside a single $transaction.
+  //     Product creation, variant creation, SupplierDelivery insert,
+  //     inventory updates and InventoryMovement writes either ALL
+  //     commit together or ALL roll back. No partial state possible
+  //     when anything throws mid-way.
+  //
+  //  2. VALIDATED FIRST — every incoming line is checked (supplier
+  //     exists, warehouse exists + active, variants exist + active,
+  //     quantity in (0, MAX_QTY_PER_DELIVERY_LINE]) BEFORE any write.
+  //     A single bad line aborts the whole delivery with a structured
+  //     400 error listing every invalid row — admin fixes the file
+  //     and resubmits, no ghost half-bookings.
+  //
+  //  3. IDEMPOTENT (item-level) — each InventoryMovement stores
+  //     referenceId = SupplierDeliveryItem.id. A partial unique index
+  //     on (reference_id, variant_id) WHERE type='supplier_delivery'
+  //     guarantees at most one movement row per deliveryItem. Any
+  //     code-level accidental double-write trips P2002 and rolls back.
+  //     See migration 20260420_supplier_delivery_item_unique.
+  //
+  //  4. RACE-SAFE — inventory updates use `{ increment }` (atomic on
+  //     the DB level) and read the post-update `quantityOnHand` back
+  //     from Prisma's return value for the InventoryMovement record,
+  //     not a locally-computed "before + delta" that could drift under
+  //     concurrent writes.
 
   async createDelivery(dto: CreateDeliveryDto, adminId: string, ip: string) {
+    // ── 1. Supplier + warehouse (outside tx — pure reads) ────
     const supplier = await this.prisma.supplier.findUnique({ where: { id: dto.supplierId } })
-    if (!supplier) throw new NotFoundException('Lieferant nicht gefunden')
+    if (!supplier) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'SupplierNotFound',
+        message: { de: 'Lieferant nicht gefunden.', en: 'Supplier not found.', ar: 'المورد غير موجود.' },
+      })
+    }
 
-    const deliveryNumber = await this.generateDeliveryNumber()
-    const deliveryItems: any[] = []
-    const createdProducts: any[] = []
-    const restockedItems: any[] = []
-    let totalAmount = 0
-    let totalItemCount = 0
-
-    // Find target warehouse: user-selected or default
     const warehouse = dto.warehouseId
       ? await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } })
       : await this.prisma.warehouse.findFirst({ where: { isActive: true }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] })
-    if (!warehouse) throw new BadRequestException('Kein aktives Lager gefunden')
+    if (!warehouse) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'WarehouseNotFound',
+        message: { de: 'Kein aktives Lager gefunden.', en: 'No active warehouse found.', ar: 'لم يتم العثور على مستودع نشط.' },
+      })
+    }
+    if (!warehouse.isActive) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'WarehouseInactive',
+        message: { de: 'Das ausgewählte Lager ist deaktiviert.', en: 'The selected warehouse is inactive.', ar: 'المستودع المحدد غير مفعّل.' },
+      })
+    }
 
-    // ── Process NEW products ──────────────────────────────────
-    if (dto.newProducts?.length) {
-      for (const np of dto.newProducts) {
-        // Create product as INACTIVE
-        const slug = np.productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '') + '-' + Date.now().toString(36)
+    // ── 2. Pre-validate ALL lines (no writes; all-or-nothing) ────
+    const newProductRows = dto.newProducts ?? []
+    const existingItems = dto.existingItems ?? []
+    if (newProductRows.length === 0 && existingItems.length === 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'DeliveryEmpty',
+        message: { de: 'Lieferschein enthält keine Zeilen.', en: 'Delivery has no line items.', ar: 'إذن التسليم لا يحتوي على أي عناصر.' },
+      })
+    }
 
-        // Get default category if none provided
-        let categoryId = np.categoryId
-        if (!categoryId) {
-          const defaultCat = await this.prisma.category.findFirst({ orderBy: { createdAt: 'asc' } })
-          if (!defaultCat) throw new BadRequestException('Keine Kategorie vorhanden. Bitte zuerst eine Kategorie anlegen.')
-          categoryId = defaultCat.id
+    type LineError = { line: number; sku?: string; field: string; reason: string }
+    const errors: LineError[] = []
+
+    // 2a. New products: validate qty cap and at-least-one-positive
+    for (const [pIdx, np] of newProductRows.entries()) {
+      if (!np.productName?.trim()) {
+        errors.push({ line: pIdx, field: 'productName', reason: 'missing' })
+      }
+      const colors = np.colors.length ? np.colors : ['']
+      const sizes = np.sizes.length ? np.sizes : ['']
+      let hasPositive = false
+      for (const color of colors) {
+        for (const size of sizes) {
+          const variantKey = [color, size].filter(Boolean).join('/') || '(default)'
+          const qty = np.quantities[[color, size].filter(Boolean).join('/')] ?? 0
+          if (qty > 0) hasPositive = true
+          if (qty < 0) errors.push({ line: pIdx, sku: variantKey, field: 'quantity', reason: 'negative' })
+          if (qty > MAX_QTY_PER_DELIVERY_LINE) {
+            errors.push({ line: pIdx, sku: variantKey, field: 'quantity', reason: `exceeds_cap_${MAX_QTY_PER_DELIVERY_LINE}` })
+          }
         }
+      }
+      if (!hasPositive) {
+        errors.push({ line: pIdx, field: 'quantities', reason: 'all_zero' })
+      }
+    }
 
-        const product = await this.prisma.product.create({
-          data: {
-            slug,
-            categoryId,
-            basePrice: np.salePrice,
-            isActive: false,
-            translations: {
-              create: [
-                { language: 'de', name: np.productNameDe || np.productName },
-                { language: 'en', name: np.productNameDe || np.productName },
-                { language: 'ar', name: np.productName },
-              ],
-            },
-          },
+    // 2b. Existing items: batch-fetch variants so we can surface ALL
+    //     invalid IDs at once, not one per retry.
+    const variantIds = existingItems.map((i) => i.variantId).filter(Boolean)
+    const foundVariants = variantIds.length > 0
+      ? await this.prisma.productVariant.findMany({
+          where: { id: { in: variantIds } },
+          select: { id: true, sku: true, isActive: true },
         })
+      : []
+    const variantMap = new Map(foundVariants.map((v) => [v.id, v]))
 
-        // Create variants for each color/size combo
-        for (const color of np.colors.length ? np.colors : ['']) {
-          for (const size of np.sizes.length ? np.sizes : ['']) {
-            const variantKey = [color, size].filter(Boolean).join('/')
-            const qty = np.quantities[variantKey] ?? np.quantities[`${color}/${size}`] ?? 0
-            if (qty <= 0) continue
+    for (const [iIdx, item] of existingItems.entries()) {
+      const idx = newProductRows.length + iIdx  // line index across the whole delivery
+      if (!item.variantId) {
+        errors.push({ line: idx, field: 'variantId', reason: 'missing' })
+        continue
+      }
+      const v = variantMap.get(item.variantId)
+      if (!v) {
+        errors.push({ line: idx, sku: item.variantId, field: 'variantId', reason: 'not_found' })
+        continue
+      }
+      if (!v.isActive) {
+        errors.push({ line: idx, sku: v.sku, field: 'variant', reason: 'inactive' })
+      }
+      if (item.quantity === undefined || item.quantity === null) {
+        errors.push({ line: idx, sku: v.sku, field: 'quantity', reason: 'missing' })
+      } else if (item.quantity <= 0) {
+        errors.push({ line: idx, sku: v.sku, field: 'quantity', reason: 'non_positive' })
+      } else if (item.quantity > MAX_QTY_PER_DELIVERY_LINE) {
+        errors.push({ line: idx, sku: v.sku, field: 'quantity', reason: `exceeds_cap_${MAX_QTY_PER_DELIVERY_LINE}` })
+      }
+    }
 
-            const sku = await this.generateSku(color, size)
+    if (errors.length > 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'DeliveryValidationFailed',
+        message: {
+          de: `Lieferschein abgelehnt: ${errors.length} ungültige Zeile(n). Bitte alle Fehler korrigieren und erneut senden.`,
+          en: `Delivery rejected: ${errors.length} invalid line(s). Please correct all errors and resubmit.`,
+          ar: `تم رفض إذن التسليم: ${errors.length} صف(وف) غير صالح. يرجى تصحيح جميع الأخطاء وإعادة الإرسال.`,
+        },
+        data: { errors, maxQuantityPerLine: MAX_QTY_PER_DELIVERY_LINE },
+      })
+    }
 
-            const variant = await this.prisma.productVariant.create({
-              data: {
+    // ── 3. Atomic write transaction ──────────────────────────
+    // Timeout bumped to 30s to accommodate 50+ line deliveries. Default
+    // 5s is too tight once newProducts come into play (each is a
+    // product + translations + variants + inventory rows).
+    let result: {
+      delivery: any
+      createdProducts: Array<{ id: string; name: string }>
+      restockedItems: Array<{ sku: string | null; name: string; qty: number }>
+      deliveryNumber: string
+      totalAmount: number
+      totalItemCount: number
+    }
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
+        const deliveryNumber = await this.generateDeliveryNumber(tx)
+
+        const createdProducts: Array<{ id: string; name: string }> = []
+        type PendingDeliveryItem = {
+          variantId: string
+          productId: string
+          isNewProduct: boolean
+          productName: string
+          sku: string | null
+          color: string | null
+          size: string | null
+          quantity: number
+          unitCost: number
+          totalCost: number
+          __warehouseForInventory: string
+          __isNewVariantToday: boolean
+        }
+        const pendingItems: PendingDeliveryItem[] = []
+        let totalAmount = 0
+        let totalItemCount = 0
+
+        // 3a. Create NEW products + variants inside tx (rollback on failure)
+        for (const np of newProductRows) {
+          const slug = np.productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '')
+            + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6)
+
+          let categoryId = np.categoryId
+          if (!categoryId) {
+            const defaultCat = await tx.category.findFirst({ orderBy: { createdAt: 'asc' } })
+            if (!defaultCat) {
+              throw new BadRequestException({
+                statusCode: 400,
+                error: 'NoCategoryAvailable',
+                message: {
+                  de: 'Keine Kategorie vorhanden. Bitte zuerst eine Kategorie anlegen.',
+                  en: 'No category available. Please create a category first.',
+                  ar: 'لا توجد فئة. يرجى إنشاء فئة أولاً.',
+                },
+              })
+            }
+            categoryId = defaultCat.id
+          }
+
+          const product = await tx.product.create({
+            data: {
+              slug,
+              categoryId,
+              basePrice: np.salePrice,
+              isActive: false,
+              translations: {
+                create: [
+                  { language: 'de', name: np.productNameDe || np.productName },
+                  { language: 'en', name: np.productNameDe || np.productName },
+                  { language: 'ar', name: np.productName },
+                ],
+              },
+            },
+          })
+          createdProducts.push({ id: product.id, name: np.productName })
+
+          const colors = np.colors.length ? np.colors : ['']
+          const sizes = np.sizes.length ? np.sizes : ['']
+          for (const color of colors) {
+            for (const size of sizes) {
+              const variantKey = [color, size].filter(Boolean).join('/')
+              const qty = np.quantities[variantKey] ?? np.quantities[`${color}/${size}`] ?? 0
+              if (qty <= 0) continue  // zero-qty combos in the matrix are legitimately skipped
+
+              const sku = await this.generateSku(tx, color, size)
+              const variant = await tx.productVariant.create({
+                data: {
+                  productId: product.id,
+                  sku,
+                  barcode: ensureVariantBarcode({ sku }),
+                  color: color || null,
+                  colorHex: color ? (np.colorHexes?.[color] ?? null) : null,
+                  size: size || null,
+                  purchasePrice: np.purchasePrice,
+                },
+              })
+
+              const lineCost = np.purchasePrice * qty
+              totalAmount += lineCost
+              totalItemCount += qty
+
+              pendingItems.push({
+                variantId: variant.id,
                 productId: product.id,
+                isNewProduct: true,
+                productName: np.productName,
                 sku,
-                // Guard: mandatory barcode via shared helper. Same
-                // rule as every other variant-create path — the
-                // Wareneingangs-flow was already doing this
-                // correctly (barcode=sku), but we route through the
-                // helper for a single source of truth.
-                barcode: ensureVariantBarcode({ sku }),
                 color: color || null,
-                // Look up the hex for this colour name from the payload.
-                // Falls back to null when the client didn't send a
-                // colorHexes map (backwards compat).
-                colorHex: color ? (np.colorHexes?.[color] ?? null) : null,
                 size: size || null,
-                purchasePrice: np.purchasePrice,
-              },
-            })
-
-            // Create inventory
-            await this.prisma.inventory.create({
-              data: {
-                variantId: variant.id,
-                warehouseId: warehouse.id,
-                quantityOnHand: qty,
-              },
-            })
-
-            // Create inventory movement
-            await this.prisma.inventoryMovement.create({
-              data: {
-                variantId: variant.id,
-                warehouseId: warehouse.id,
-                type: 'supplier_delivery',
                 quantity: qty,
-                quantityBefore: 0,
-                quantityAfter: qty,
-                notes: `Wareneingang ${deliveryNumber} von ${supplier.name}`,
-                createdBy: adminId,
-              },
-            })
-
-            const lineCost = np.purchasePrice * qty
-            totalAmount += lineCost
-            totalItemCount += qty
-
-            deliveryItems.push({
-              variantId: variant.id,
-              productId: product.id,
-              isNewProduct: true,
-              productName: np.productName,
-              sku,
-              color: color || null,
-              size: size || null,
-              quantity: qty,
-              unitCost: np.purchasePrice,
-              totalCost: lineCost,
-            })
+                unitCost: np.purchasePrice,
+                totalCost: lineCost,
+                __warehouseForInventory: warehouse.id,
+                __isNewVariantToday: true,
+              })
+            }
           }
         }
 
-        createdProducts.push({ id: product.id, name: np.productName })
-      }
-    }
+        // 3b. Existing items: purchase-price refresh, name lookup,
+        //     build pending list (no inventory writes yet — we need
+        //     the SupplierDeliveryItem ids first for referenceId).
+        const existingVariantsDetail = existingItems.length > 0
+          ? await tx.productVariant.findMany({
+              where: { id: { in: existingItems.map((i) => i.variantId) } },
+              include: {
+                product: { select: { id: true, translations: { where: { language: 'de' }, select: { name: true } } } },
+              },
+            })
+          : []
+        const vDetailMap = new Map(existingVariantsDetail.map((v) => [v.id, v]))
 
-    // ── Process EXISTING products ─────────────────────────────
-    if (dto.existingItems?.length) {
-      for (const item of dto.existingItems) {
-        const variant = await this.prisma.productVariant.findUnique({
-          where: { id: item.variantId },
-          include: {
-            product: { select: { id: true, translations: { where: { language: 'de' }, select: { name: true } } } },
-          },
-        })
-        if (!variant) continue
+        for (const item of existingItems) {
+          const variant = vDetailMap.get(item.variantId)
+          if (!variant) continue  // pre-validation guarantees this can't happen
+          const unitCost = item.purchasePrice ?? Number(variant.purchasePrice ?? 0)
 
-        // Update purchasePrice if provided
-        if (item.purchasePrice !== undefined) {
-          await this.prisma.productVariant.update({
-            where: { id: item.variantId },
-            data: { purchasePrice: item.purchasePrice },
-          })
-        }
+          if (item.purchasePrice !== undefined) {
+            await tx.productVariant.update({
+              where: { id: item.variantId },
+              data: { purchasePrice: item.purchasePrice },
+            })
+          }
 
-        const unitCost = item.purchasePrice ?? Number(variant.purchasePrice ?? 0)
+          const lineCost = unitCost * item.quantity
+          totalAmount += lineCost
+          totalItemCount += item.quantity
 
-        // Find inventory: in target warehouse if specified, else any with highest stock
-        let inv = dto.warehouseId
-          ? await this.prisma.inventory.findFirst({ where: { variantId: item.variantId, warehouseId: warehouse.id } })
-          : await this.prisma.inventory.findFirst({ where: { variantId: item.variantId }, orderBy: [{ quantityOnHand: 'desc' }] })
-
-        if (!inv) {
-          inv = await this.prisma.inventory.create({
-            data: { variantId: item.variantId, warehouseId: warehouse.id, quantityOnHand: 0 },
-          })
-        }
-
-        const before = inv.quantityOnHand
-        await this.prisma.inventory.update({
-          where: { id: inv.id },
-          data: { quantityOnHand: { increment: item.quantity } },
-        })
-
-        await this.prisma.inventoryMovement.create({
-          data: {
+          const productName = variant.product.translations[0]?.name ?? 'Unbekannt'
+          pendingItems.push({
             variantId: item.variantId,
-            warehouseId: inv.warehouseId,
-            type: 'supplier_delivery',
+            productId: variant.product.id,
+            isNewProduct: false,
+            productName,
+            sku: variant.sku,
+            color: variant.color,
+            size: variant.size,
             quantity: item.quantity,
-            quantityBefore: before,
-            quantityAfter: before + item.quantity,
-            notes: `Wareneingang ${deliveryNumber} von ${supplier.name}`,
-            createdBy: adminId,
-          },
-        })
+            unitCost,
+            totalCost: lineCost,
+            __warehouseForInventory: warehouse.id,
+            __isNewVariantToday: false,
+          })
+        }
 
-        const lineCost = unitCost * item.quantity
-        totalAmount += lineCost
-        totalItemCount += item.quantity
+        // 3c. Create SupplierDelivery + nested items. DB generates UUIDs
+        //     for each SupplierDeliveryItem which we then thread back into
+        //     the InventoryMovement writes as referenceId.
+        const deliveryPayloadItems = pendingItems.map((p) => ({
+          variantId: p.variantId,
+          productId: p.productId,
+          isNewProduct: p.isNewProduct,
+          productName: p.productName,
+          sku: p.sku,
+          color: p.color,
+          size: p.size,
+          quantity: p.quantity,
+          unitCost: p.unitCost,
+          totalCost: p.totalCost,
+        }))
 
-        const productName = variant.product.translations[0]?.name ?? 'Unbekannt'
-        deliveryItems.push({
-          variantId: item.variantId,
-          productId: variant.product.id,
-          isNewProduct: false,
-          productName,
-          sku: variant.sku,
-          color: variant.color,
-          size: variant.size,
-          quantity: item.quantity,
-          unitCost,
-          totalCost: lineCost,
-        })
-
-        restockedItems.push({ sku: variant.sku, name: productName, qty: item.quantity })
-      }
-    }
-
-    // Create delivery record
-    const delivery = await this.prisma.supplierDelivery.create({
-      data: {
-        supplierId: dto.supplierId,
-        deliveryNumber,
-        totalAmount,
-        itemCount: totalItemCount,
-        status: 'received',
-        notes: dto.notes,
-        receivedBy: adminId,
-        items: { create: deliveryItems },
-      },
-      include: { items: true },
-    })
-
-    try {
-      await this.audit.log({
-        adminId, action: 'SUPPLIER_DELIVERY_RECEIVED', entityType: 'supplier_delivery', entityId: delivery.id,
-        changes: {
-          after: {
+        const delivery = await tx.supplierDelivery.create({
+          data: {
+            supplierId: dto.supplierId,
             deliveryNumber,
-            supplier: supplier.name,
             totalAmount,
             itemCount: totalItemCount,
-            newProducts: createdProducts.length,
-            restockedItems: restockedItems.length,
+            status: 'received',
+            notes: dto.notes,
+            receivedBy: adminId,
+            items: { create: deliveryPayloadItems },
+          },
+          include: { items: true },
+        })
+
+        // 3d. Pair each DB-assigned SupplierDeliveryItem.id with its
+        //     original sidecar fields. Prisma preserves insertion order
+        //     for nested creates, so index-based pairing is safe here.
+        if (delivery.items.length !== pendingItems.length) {
+          // Defensive: should never happen. If it does, throw hard so the
+          // whole tx rolls back rather than writing movements against
+          // mismatched items.
+          throw new Error(
+            `SupplierDelivery items length mismatch (expected ${pendingItems.length}, got ${delivery.items.length})`,
+          )
+        }
+
+        const restockedItems: Array<{ sku: string | null; name: string; qty: number }> = []
+
+        // 3e. Inventory updates + InventoryMovement writes per item.
+        //     Each movement gets referenceId = SupplierDeliveryItem.id,
+        //     protected by the partial unique index from migration
+        //     20260420_supplier_delivery_item_unique. Atomic increment on
+        //     inventory.update returns the post-write onHand so movements
+        //     always carry the true quantityAfter.
+        for (let i = 0; i < delivery.items.length; i++) {
+          const deliveryItem = delivery.items[i]
+          const ctx = pendingItems[i]
+          const variantId = deliveryItem.variantId!
+          const warehouseId = ctx.__warehouseForInventory
+          const qty = deliveryItem.quantity
+
+          let beforeQty: number
+          let afterQty: number
+
+          if (ctx.__isNewVariantToday) {
+            await tx.inventory.create({
+              data: { variantId, warehouseId, quantityOnHand: qty },
+            })
+            beforeQty = 0
+            afterQty = qty
+          } else {
+            let inv = await tx.inventory.findFirst({ where: { variantId, warehouseId } })
+            if (!inv) {
+              inv = await tx.inventory.create({
+                data: { variantId, warehouseId, quantityOnHand: 0 },
+              })
+            }
+            beforeQty = inv.quantityOnHand
+            const updated = await tx.inventory.update({
+              where: { id: inv.id },
+              data: { quantityOnHand: { increment: qty } },
+            })
+            afterQty = updated.quantityOnHand
+            restockedItems.push({ sku: ctx.sku, name: ctx.productName, qty })
+          }
+
+          await tx.inventoryMovement.create({
+            data: {
+              variantId,
+              warehouseId,
+              type: 'supplier_delivery',
+              quantity: qty,
+              quantityBefore: beforeQty,
+              quantityAfter: afterQty,
+              referenceId: deliveryItem.id,
+              notes: `Wareneingang ${deliveryNumber} von ${supplier.name}`,
+              createdBy: adminId,
+            },
+          })
+        }
+
+        return {
+          delivery,
+          createdProducts,
+          restockedItems,
+          deliveryNumber,
+          totalAmount,
+          totalItemCount,
+        }
+      }, { timeout: 30000, maxWait: 10000 })
+    } catch (e: unknown) {
+      // Partial unique-index violation on (reference_id, variant_id)
+      // WHERE type='supplier_delivery' — translates to "this item has
+      // already been booked via this delivery line". With the current
+      // write path this can only surface if an upstream retry or an
+      // internal bug attempts to re-process the same SupplierDeliveryItem
+      // within a single service call. Never raised for legitimate separate
+      // deliveries (each generates fresh item UUIDs). Translate to a 409
+      // so the admin sees a clear explanation and the transaction's
+      // rollback is already guaranteed by Prisma.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'SupplierDeliveryItemAlreadyBooked',
+          message: {
+            de: 'Diese Lieferschein-Zeile wurde bereits gebucht. Bitte die Übersicht neu laden und den Bestand prüfen.',
+            en: 'This delivery line has already been booked. Please reload the overview and verify stock.',
+            ar: 'تم حجز هذه السطر بالفعل. يرجى إعادة تحميل النظرة العامة والتحقق من المخزون.',
+          },
+        })
+      }
+      throw e
+    }
+
+    // ── 4. Audit log (outside tx — best-effort, must not roll back) ──
+    try {
+      await this.audit.log({
+        adminId,
+        action: 'SUPPLIER_DELIVERY_RECEIVED',
+        entityType: 'supplier_delivery',
+        entityId: result.delivery.id,
+        changes: {
+          after: {
+            deliveryNumber: result.deliveryNumber,
+            supplier: supplier.name,
+            totalAmount: result.totalAmount,
+            itemCount: result.totalItemCount,
+            newProducts: result.createdProducts.length,
+            restockedItems: result.restockedItems.length,
           },
         },
         ipAddress: ip,
@@ -488,15 +727,15 @@ export class AdminSuppliersService {
     } catch {}
 
     return {
-      delivery,
-      createdProducts,
-      restockedItems,
+      delivery: result.delivery,
+      createdProducts: result.createdProducts,
+      restockedItems: result.restockedItems,
       summary: {
-        deliveryNumber,
-        totalAmount,
-        totalItemCount,
-        newProductsCreated: createdProducts.length,
-        existingProductsRestocked: restockedItems.length,
+        deliveryNumber: result.deliveryNumber,
+        totalAmount: result.totalAmount,
+        totalItemCount: result.totalItemCount,
+        newProductsCreated: result.createdProducts.length,
+        existingProductsRestocked: result.restockedItems.length,
       },
     }
   }

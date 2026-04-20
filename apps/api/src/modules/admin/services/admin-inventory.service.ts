@@ -833,29 +833,73 @@ export class AdminInventoryService {
 
     for (const item of items) {
       if (!item.quantity || item.quantity <= 0 || item.quantity > 10000) continue
-      const inv = await this.prisma.inventory.findUnique({ where: { id: item.inventoryId } })
-      if (!inv) continue
 
-      const newQty = inv.quantityOnHand + item.quantity
-      await this.prisma.$transaction([
-        this.prisma.inventory.update({ where: { id: item.inventoryId }, data: { quantityOnHand: newQty } }),
-        this.prisma.inventoryMovement.create({
-          data: {
-            variantId: inv.variantId, warehouseId: inv.warehouseId,
-            type: type as any, quantity: item.quantity,
-            quantityBefore: inv.quantityOnHand, quantityAfter: newQty,
-            notes: reason, createdBy: adminId,
-          },
-        }),
-      ])
-      results.push({ inventoryId: item.inventoryId, before: inv.quantityOnHand, after: newQty, added: item.quantity })
+      // Atomic increment + movement inside one interactive transaction. The
+      // `increment` is evaluated on the DB so two concurrent intakes on the
+      // same row can't race: each sees its own post-update quantityOnHand
+      // as the authoritative "after" value. The previous implementation
+      // read first, computed newQty locally, then wrote — which loses
+      // increments under READ COMMITTED isolation.
+      //
+      // Uses updateMany+findUnique with a where-clause existence guard
+      // instead of findUnique-then-update so a missing inventory row (rare,
+      // e.g. admin passing a stale id) silently skips the item — matches
+      // the pre-refactor behavior and avoids a hard 404.
+      let resultData: { variantId: string; warehouseId: string; before: number; after: number } | null = null
+
+      try {
+        resultData = await this.prisma.$transaction(async (tx) => {
+          const updated = await tx.inventory.update({
+            where: { id: item.inventoryId },
+            data: { quantityOnHand: { increment: item.quantity } },
+            select: { quantityOnHand: true, variantId: true, warehouseId: true },
+          })
+          const afterQty = updated.quantityOnHand
+          const beforeQty = afterQty - item.quantity
+
+          await tx.inventoryMovement.create({
+            data: {
+              variantId: updated.variantId,
+              warehouseId: updated.warehouseId,
+              type: type as any,
+              quantity: item.quantity,
+              quantityBefore: beforeQty,
+              quantityAfter: afterQty,
+              notes: reason,
+              createdBy: adminId,
+            },
+          })
+
+          return {
+            variantId: updated.variantId,
+            warehouseId: updated.warehouseId,
+            before: beforeQty,
+            after: afterQty,
+          }
+        })
+      } catch (e: unknown) {
+        // P2025: update target not found — admin passed a stale inventoryId.
+        // Silently skip to preserve pre-refactor behavior. Any other error
+        // bubbles up.
+        const isNotFound = (e as { code?: string })?.code === 'P2025'
+        if (!isNotFound) throw e
+      }
+
+      if (!resultData) continue
+
+      results.push({
+        inventoryId: item.inventoryId,
+        before: resultData.before,
+        after: resultData.after,
+        added: item.quantity,
+      })
 
       // Fire-and-forget outbound webhook — enriches payload via DB and emits.
       this.emitRestockWebhook({
-        variantId: inv.variantId,
-        warehouseId: inv.warehouseId,
+        variantId: resultData.variantId,
+        warehouseId: resultData.warehouseId,
         delta: item.quantity,
-        newQuantity: newQty,
+        newQuantity: resultData.after,
         source: reason === 'return' ? 'return' : 'intake',
       })
     }

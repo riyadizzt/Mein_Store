@@ -575,7 +575,12 @@ model InventoryMovement {
   quantity       Int                   // positiv = eingang, negativ = ausgang
   quantityBefore Int?                  @map("quantity_before")
   quantityAfter  Int?                  @map("quantity_after")
-  referenceId    String?               @map("reference_id") // orderId, reservationId, transferId etc.
+  referenceId    String?               @map("reference_id") // orderId, reservationId, supplierDeliveryItemId, transferId etc.
+  // Partial unique index for supplier_delivery idempotency is defined in
+  // prisma/migrations/20260420_supplier_delivery_item_unique/migration.sql
+  // (Prisma does not support partial unique indexes declaratively).
+  // DO NOT add @@unique([referenceId, variantId]) here — it would incorrectly
+  // apply to every movement type. See that migration file for full rationale.
   notes          String?
   createdBy      String?               @map("created_by")
   createdAt      DateTime              @default(now()) @map("created_at")

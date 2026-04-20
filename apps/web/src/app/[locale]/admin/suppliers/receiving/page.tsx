@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { PackageOpen, Search, Plus, Trash2, Check, Printer, Package, Camera, ImagePlus } from 'lucide-react'
+import { PackageOpen, Search, Plus, Trash2, Check, Printer, Package, Camera, ImagePlus, Loader2, AlertTriangle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { API_BASE_URL } from '@/lib/env'
 import { Button } from '@/components/ui/button'
@@ -1085,6 +1085,51 @@ export default function ReceivingPage() {
             <input value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-10 px-3 rounded-lg border bg-background text-sm mt-1" placeholder={t3(locale, 'z.B. Lieferung März 2026', 'e.g. March 2026 delivery', 'مثال: توريد مارس 2026')} />
           </div>
 
+          {/* Error banner — surfaces DeliveryValidationFailed (400 with
+               per-line errors), SupplierDeliveryItemAlreadyBooked (409,
+               item-level idempotency), and generic failures. Stays visible
+               until the admin fixes the input and re-submits — not toast-
+               dismissible so the list of bad rows can be read in peace.
+               Pattern matches the amber-box style used by the coupon-input
+               and refund banners elsewhere in the shop. */}
+          {submitMut.isError && (() => {
+            const err: any = submitMut.error
+            const resp = err?.response?.data ?? err?.data ?? {}
+            const code = resp?.error
+            const localized = typeof resp?.message === 'object' ? (resp.message[locale] ?? resp.message.de ?? resp.message.en) : resp?.message
+            const lineErrors: Array<{ line: number; sku?: string; field: string; reason: string }> = resp?.data?.errors ?? []
+            return (
+              <div className="mt-4 px-4 py-3 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-700 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-900">
+                    {code === 'DeliveryValidationFailed'
+                      ? t3(locale, 'Lieferschein nicht gebucht', 'Delivery not booked', 'لم يتم حجز إذن التسليم')
+                      : code === 'SupplierDeliveryItemAlreadyBooked'
+                      ? t3(locale, 'Bereits gebucht', 'Already booked', 'تم الحجز مسبقاً')
+                      : t3(locale, 'Fehler beim Buchen', 'Booking failed', 'فشل الحجز')}
+                  </p>
+                  <p className="text-xs text-amber-800 mt-0.5">{localized || err?.message}</p>
+                  {lineErrors.length > 0 && (
+                    <ul className="mt-2 text-xs text-amber-900 space-y-0.5 font-mono">
+                      {lineErrors.slice(0, 20).map((le, idx) => (
+                        <li key={idx}>
+                          · {t3(locale, 'Zeile', 'Line', 'سطر')} {le.line + 1}
+                          {le.sku ? ` · ${le.sku}` : ''} · {le.field}: {le.reason}
+                        </li>
+                      ))}
+                      {lineErrors.length > 20 && (
+                        <li className="italic">
+                          ... {lineErrors.length - 20} {t3(locale, 'weitere', 'more', 'المزيد')}
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Footer / Submit */}
           {(existingItems.length > 0 || newProducts.length > 0) && (
             <div className="sticky bottom-0 mt-6 bg-background/95 backdrop-blur border-t -mx-4 px-4 py-4 md:-mx-6 md:px-6 flex items-center justify-between">
@@ -1097,8 +1142,17 @@ export default function ReceivingPage() {
                 disabled={submitMut.isPending || (existingItems.length === 0 && newProducts.length === 0)}
                 className="bg-[#d4a853] hover:bg-[#c49b4a] text-black gap-2 h-11 px-6"
               >
-                <Check className="h-4 w-4" />
-                {submitMut.isPending ? '...' : t3(locale, 'Wareneingang abschließen', 'Complete Receiving', 'إتمام الاستلام')}
+                {submitMut.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t3(locale, 'Wird gebucht...', 'Booking...', 'جاري الحجز...')}
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    {t3(locale, 'Wareneingang abschließen', 'Complete Receiving', 'إتمام الاستلام')}
+                  </>
+                )}
               </Button>
             </div>
           )}
