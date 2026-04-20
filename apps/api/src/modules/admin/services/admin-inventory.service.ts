@@ -683,14 +683,121 @@ export class AdminInventoryService {
     // Get items to restock (from returnItems JSON or order items)
     const returnItems = ret.returnItems as any[] | null
     const orderItemMap = new Map(ret.order.items.map((i: any) => [i.id, i]))
-    const items = returnItems?.length ? returnItems : ret.order.items
-    const restocked: any[] = []
+    const rawItems = returnItems?.length ? returnItems : ret.order.items
 
-    for (const item of items) {
-      // returnItems JSON may not have variantId — look it up from order items
+    // ── Gruppe 3 B8: Data-integrity gate ────────────────────────
+    // Every variantId queued for restock must belong to the parent
+    // order. Catches DB manipulation, manual edits on return.returnItems,
+    // or future bugs in the return-acceptance flow that might slip a
+    // foreign variantId into the payload. Defense-in-depth — the scanner
+    // UI already filters client-side, but the backend must not trust
+    // that gate alone.
+    //
+    // On mismatch: all-or-nothing rejection (consistent with Wareneingang
+    // Gruppe 1). No partial restock, structured 400 with the rogue
+    // variantIds, audit-log entry for forensics.
+    const allowedVariantIds = new Set(
+      ret.order.items.map((i: any) => i.variantId).filter(Boolean) as string[],
+    )
+
+    type ResolvedItem = { variantId: string; quantity: number; original: any }
+    const resolvedItems: ResolvedItem[] = []
+    const foreignItems: Array<{ variantId: string; source: string }> = []
+
+    for (const item of rawItems) {
       const variantId = item.variantId || orderItemMap.get(item.itemId)?.variantId
       const qty = item.quantity ?? 1
       if (!variantId || qty <= 0) continue
+
+      if (!allowedVariantIds.has(variantId)) {
+        foreignItems.push({
+          variantId,
+          source: item.sku ?? item.snapshotSku ?? '(unknown)',
+        })
+        continue
+      }
+
+      resolvedItems.push({ variantId, quantity: qty, original: item })
+    }
+
+    if (foreignItems.length > 0) {
+      try {
+        await this.prisma.adminAuditLog.create({
+          data: {
+            adminId,
+            action: 'RETURN_SCAN_REJECTED_FOREIGN_VARIANT',
+            entityType: 'return',
+            entityId: ret.id,
+            changes: {
+              returnNumber,
+              foreignItems,
+              allowedVariantCount: allowedVariantIds.size,
+            },
+            ipAddress: '::1',
+          },
+        })
+      } catch { /* silent: audit is best-effort */ }
+
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'ReturnScanForeignVariant',
+        message: {
+          de: `Retoure abgelehnt: ${foreignItems.length} Variante(n) gehören nicht zu dieser Bestellung.`,
+          en: `Return rejected: ${foreignItems.length} variant(s) do not belong to this order.`,
+          ar: `تم رفض المرتجع: ${foreignItems.length} متغير(ات) لا تنتمي إلى هذا الطلب.`,
+        },
+        data: {
+          returnNumber,
+          foreignItems,
+          allowedVariantCount: allowedVariantIds.size,
+        },
+      })
+    }
+
+    // ── Gruppe 3 B9: deduplicate by variantId ──────────────────
+    // If returnItems JSON has two entries for the same variant (UI bug,
+    // manual edit, or repeated scanner read), sum their quantities into
+    // one logical work-item instead of processing each as a separate
+    // restock event. Pre-Gruppe-3 the loop would increment onHand twice.
+    const byVariant = new Map<string, ResolvedItem>()
+    let dedupCollapses = 0
+    for (const r of resolvedItems) {
+      const existing = byVariant.get(r.variantId)
+      if (existing) {
+        existing.quantity += r.quantity
+        dedupCollapses++
+      } else {
+        byVariant.set(r.variantId, { variantId: r.variantId, quantity: r.quantity, original: r.original })
+      }
+    }
+    const workItems = Array.from(byVariant.values())
+
+    if (dedupCollapses > 0) {
+      try {
+        await this.prisma.adminAuditLog.create({
+          data: {
+            adminId,
+            action: 'RETURN_SCAN_INPUT_DEDUPLICATED',
+            entityType: 'return',
+            entityId: ret.id,
+            changes: {
+              returnNumber,
+              inputRowCount: resolvedItems.length,
+              uniqueVariants: workItems.length,
+              collapsedRows: dedupCollapses,
+            },
+            ipAddress: '::1',
+          },
+        })
+      } catch { /* silent: audit is best-effort */ }
+    }
+
+    const restocked: any[] = []
+
+    for (const w of workItems) {
+      const variantId = w.variantId
+      const qty = w.quantity
+      const item = w.original
 
       // Use the admin's selected warehouse if provided, otherwise fall back
       // to the inventory row with the highest stock (old behavior).
