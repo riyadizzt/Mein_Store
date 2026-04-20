@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/auth-store'
 import { toast } from '@/store/toast-store'
 import { Button } from '@/components/ui/button'
 import { ReturnRequestModal } from '@/components/account/return-request-modal'
+import { getProductName, translateColor } from '@/lib/locale-utils'
 
 const TIMELINE_STEPS = ['pending', 'confirmed', 'processing', 'shipped', 'delivered']
 
@@ -131,7 +132,10 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
         // back to a static <p> tag and the customer cannot click through
         // to the PDP (previous "unklickbar" bug after wieder-bestellen).
         slug: item.variant?.product?.slug,
-        name: item.snapshotName,
+        // Locale-aware name: use current-locale translation if available,
+        // fall back to the historical snapshot so old orders that lost
+        // their product translations still render something readable.
+        name: getProductName(item.variant?.product?.translations, locale) || item.snapshotName,
         sku: item.snapshotSku ?? item.variant?.sku ?? '',
         color: item.variant?.color,
         size: item.variant?.size,
@@ -487,6 +491,12 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
           const returnedQty = isFullReturn ? item.quantity : (returnedVariantMap.get(item.variantId) ?? 0)
           const isReturned = hasReturn && (isFullReturn || returnedQty > 0)
           const isPartial = isReturned && !isFullReturn && returnedQty < item.quantity
+          // Locale-aware product name + color. snapshotName is the frozen
+          // order-time German string; translations array is always current
+          // from the DB. Fall back through getProductName's chain
+          // (current-locale → de → en), then finally snapshotName.
+          const displayName = getProductName(item.variant?.product?.translations, locale) || item.snapshotName
+          const displayColor = translateColor(item.variant?.color, locale)
           return (
           <div key={item.id} className={`flex gap-4 p-4 ${isReturned ? 'bg-muted/30' : ''}`}>
             {(() => {
@@ -498,14 +508,14 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
               return (
             <div className={`w-16 h-16 bg-muted rounded overflow-hidden flex-shrink-0 ${isReturned && !isPartial ? 'opacity-50' : ''}`}>
               {imgUrl && (
-                <Image src={imgUrl} alt={item.snapshotName} width={64} height={64} className="w-full h-full object-cover" />
+                <Image src={imgUrl} alt={displayName} width={64} height={64} className="w-full h-full object-cover" />
               )}
             </div>
               )
             })()}
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium ${isReturned && !isPartial ? 'line-through opacity-60' : ''}`}>{item.snapshotName}</p>
-              <p className="text-sm text-muted-foreground">{item.variant?.color}{item.variant?.size ? ` / ${item.variant.size}` : ''} × {item.quantity}</p>
+              <p className={`text-sm font-medium ${isReturned && !isPartial ? 'line-through opacity-60' : ''}`}>{displayName}</p>
+              <p className="text-sm text-muted-foreground">{displayColor}{item.variant?.size ? ` / ${item.variant.size}` : ''} × {item.quantity}</p>
               {isReturned && (
                 <span className={`inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 rounded-full ${isFullReturn ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
                   <RotateCcw className="h-3 w-3" />
@@ -619,7 +629,9 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
         items={(order.items ?? []).map((item: any) => ({
           id: item.id,
           variantId: item.variantId,
-          name: item.snapshotName,
+          // Locale-aware for the return-request modal too — same fallback
+          // chain as the main item list above.
+          name: getProductName(item.variant?.product?.translations, locale) || item.snapshotName,
           color: item.variant?.color,
           size: item.variant?.size,
           quantity: item.quantity,
