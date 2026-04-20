@@ -669,20 +669,28 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
         orderNumber={orderNumber}
         daysLeft={daysLeft}
         deliveryDeadline={deliveredAt ? new Date(deliveredAt.getTime() + 14 * 86400000).toLocaleDateString(locale === 'ar' ? 'ar-EG-u-nu-latn' : locale === 'en' ? 'en-GB' : 'de-DE') : '—'}
-        items={(order.items ?? []).map((item: any) => ({
-          id: item.id,
-          variantId: item.variantId,
-          // Locale-aware for the return-request modal too — same fallback
-          // chain as the main item list above.
-          name: getProductName(item.variant?.product?.translations, locale) || item.snapshotName,
-          color: item.variant?.color,
-          size: item.variant?.size,
-          quantity: item.quantity,
-          imageUrl: item.variant?.product?.images?.[0]?.url,
-          unitPrice: Number(item.unitPrice),
-          excludeFromReturns: item.variant?.product?.excludeFromReturns ?? false,
-          returnExclusionReason: item.variant?.product?.returnExclusionReason,
-        }))}
+        items={(order.items ?? [])
+          // Skip cancelled items (admin-cancel zeros qty and totalPrice
+          // without removing the row). Letting them through would show
+          // €0.00 ghost lines in the return-request modal with no way
+          // to interact — customer sees "Grau S × 0" and "Grau M × 0"
+          // etc. and wonders whether they can return something that was
+          // never physically received (ORD-20260420-000001 regression).
+          .filter((item: any) => Number(item.quantity) > 0)
+          .map((item: any) => ({
+            id: item.id,
+            variantId: item.variantId,
+            // Locale-aware for the return-request modal too — same fallback
+            // chain as the main item list above.
+            name: getProductName(item.variant?.product?.translations, locale) || item.snapshotName,
+            color: item.variant?.color,
+            size: item.variant?.size,
+            quantity: item.quantity,
+            imageUrl: item.variant?.product?.images?.[0]?.url,
+            unitPrice: Number(item.unitPrice),
+            excludeFromReturns: item.variant?.product?.excludeFromReturns ?? false,
+            returnExclusionReason: item.variant?.product?.returnExclusionReason,
+          }))}
       />
     </div>
   )

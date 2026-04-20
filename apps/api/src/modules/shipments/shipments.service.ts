@@ -406,16 +406,23 @@ export class ShipmentsService {
       daysLeft,
       canReturn: order.status === 'delivered' && !hasActiveReturn && daysLeft > 0,
       hasActiveReturn,
-      items: order.items.map((it: any) => ({
-        variantId: it.variantId,
-        name: it.snapshotName,
-        sku: it.snapshotSku,
-        color: it.variant?.color,
-        size: it.variant?.size,
-        quantity: it.quantity,
-        unitPrice: Number(it.unitPrice),
-        imageUrl: it.variant?.product?.images?.[0]?.url ?? null,
-      })),
+      // Filter out admin-cancelled items (quantity=0 without row deletion).
+      // Returning them would show €0 ghost lines in the public return modal
+      // for items the customer never physically received. Same filter as
+      // the logged-in account/orders modal — backend-side so any future
+      // UI (mobile app, etc.) inherits it without having to remember.
+      items: order.items
+        .filter((it: any) => Number(it.quantity) > 0)
+        .map((it: any) => ({
+          variantId: it.variantId,
+          name: it.snapshotName,
+          sku: it.snapshotSku,
+          color: it.variant?.color,
+          size: it.variant?.size,
+          quantity: it.quantity,
+          unitPrice: Number(it.unitPrice),
+          imageUrl: it.variant?.product?.images?.[0]?.url ?? null,
+        })),
     }
   }
 
