@@ -89,8 +89,22 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
     // One summary toast at the end rolls up all three buckets so the
     // customer sees "3 added · 1 adjusted · 1 out of stock" in plain
     // language instead of a silent partial failure.
-    const items = order.items ?? []
-    if (items.length === 0) return
+    // Skip cancelled items — admin cancelItems sets quantity=0 without
+    // deleting the row, so the full order.items list still carries
+    // them. Reordering them would drop €158 ghost lines into the cart
+    // with qty=0 (ORD-20260420-000001 regression: 12 ghost items
+    // visible in the cart drawer).
+    const items = (order.items ?? []).filter((i: any) => Number(i.quantity) > 0)
+    if (items.length === 0) {
+      toast.error(
+        locale === 'ar'
+          ? 'لا توجد منتجات نشطة في هذا الطلب لإعادة طلبها'
+          : locale === 'en'
+            ? 'No active items in this order to reorder'
+            : 'Keine aktiven Artikel in dieser Bestellung zum Wiederbestellen',
+      )
+      return
+    }
 
     const variantIds = items.map((i: any) => i.variantId).filter(Boolean)
 
