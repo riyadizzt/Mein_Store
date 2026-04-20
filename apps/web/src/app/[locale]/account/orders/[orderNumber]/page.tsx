@@ -79,6 +79,12 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
       addCartItem({
         variantId: item.variantId,
         productId: item.variant?.product?.id ?? '',
+        // Slug MUST come along so the cart-drawer can render the product
+        // name + image as a navigable link. Without it the drawer falls
+        // back to a static <p> tag and the customer cannot click through
+        // to the PDP — which is exactly the "unklickbar" bug the user
+        // hit after wieder-bestellen on a past order.
+        slug: item.variant?.product?.slug,
         name: item.snapshotName,
         sku: item.snapshotSku ?? item.variant?.sku ?? '',
         color: item.variant?.color,

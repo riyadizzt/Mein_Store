@@ -369,9 +369,21 @@ export class ProductsService {
     return result
   }
 
-  async findOne(slug: string, lang: Language = 'de') {
+  async findOne(slugOrId: string, lang: Language = 'de') {
+    // Accept either a slug (the canonical lookup) OR a UUID. The UUID path
+    // covers the cart-drawer's slug-backfill effect — when an old cart item
+    // persists in localStorage without a slug (e.g. from a wieder-bestellen
+    // action before the handleReorder fix), the drawer issues a
+    // GET /products/<uuid> lookup to heal the missing slug. Without this
+    // OR-fallback the lookup was silently 404'ing and the cart item stayed
+    // non-clickable forever. Slug remains the documented public form; UUID
+    // is a best-effort heal path for legacy items.
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const isUuid = uuidRegex.test(slugOrId)
     const product = await this.prisma.product.findFirst({
-      where: { slug, isActive: true, deletedAt: null },
+      where: isUuid
+        ? { OR: [{ slug: slugOrId }, { id: slugOrId }], isActive: true, deletedAt: null }
+        : { slug: slugOrId, isActive: true, deletedAt: null },
       include: {
         // Load ALL three translations, not just the requested locale.
         // formatProductDetail() walks a fallback chain
@@ -400,7 +412,7 @@ export class ProductsService {
       },
     })
 
-    if (!product) throw new NotFoundException(`Produkt "${slug}" nicht gefunden`)
+    if (!product) throw new NotFoundException(`Produkt "${slugOrId}" nicht gefunden`)
 
     return this.formatProductDetail(product, lang)
   }
