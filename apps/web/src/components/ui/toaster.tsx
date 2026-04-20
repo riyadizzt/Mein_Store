@@ -23,7 +23,7 @@ export function Toaster() {
     <div
       aria-live="polite"
       aria-atomic="true"
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col-reverse items-center gap-2 pointer-events-none lg:bottom-8"
+      className="fixed bottom-6 inset-x-4 sm:left-1/2 sm:inset-x-auto sm:-translate-x-1/2 z-[200] flex flex-col-reverse items-stretch sm:items-center gap-2 pointer-events-none lg:bottom-8"
     >
       <AnimatePresence mode="popLayout">
         {toasts.map((t) => {
@@ -38,10 +38,10 @@ export function Toaster() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className={`pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl text-white text-sm font-medium shadow-elevated max-w-sm ${bg}`}
+              className={`pointer-events-auto flex items-start gap-2.5 px-4 py-3 rounded-xl text-white text-sm font-medium shadow-elevated w-full sm:max-w-md ${bg}`}
             >
-              <Icon className="h-4 w-4 flex-shrink-0" />
-              <span className="flex-1 min-w-0">{t.message}</span>
+              <Icon className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span className="flex-1 min-w-0 leading-relaxed break-words">{t.message}</span>
 
               {t.undo && (
                 <button
@@ -58,10 +58,10 @@ export function Toaster() {
 
               <button
                 onClick={() => remove(t.id)}
-                className="p-0.5 rounded hover:bg-white/20 transition-colors flex-shrink-0"
+                className="p-1 rounded hover:bg-white/20 transition-colors flex-shrink-0 mt-[-2px]"
                 aria-label="Dismiss"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             </motion.div>
           )

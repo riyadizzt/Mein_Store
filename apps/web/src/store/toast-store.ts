@@ -35,6 +35,9 @@ export const toast = {
     useToastStore.getState().add({ message, type: 'success', ...opts }),
   info: (message: string) =>
     useToastStore.getState().add({ message, type: 'info' }),
-  error: (message: string) =>
-    useToastStore.getState().add({ message, type: 'error', duration: 5000 }),
+  // Error toasts stay ~8s — long enough to read a two-sentence message
+  // in any language (Arabic tends to have longer line-wraps, so the
+  // 5000 default was too tight for real error copy).
+  error: (message: string, opts?: { duration?: number }) =>
+    useToastStore.getState().add({ message, type: 'error', duration: opts?.duration ?? 8000 }),
 }
