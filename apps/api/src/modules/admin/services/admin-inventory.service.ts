@@ -434,26 +434,48 @@ export class AdminInventoryService {
 
     let result = products.map((p) => {
       let totalStock = 0, totalReserved = 0, lowCount = 0, outCount = 0
+      // variantsOutInAnyWh counts variants that have at least ONE warehouse
+      // row with stock=0, regardless of the variant's cross-warehouse sum.
+      // Used by the "out_of_stock" filter so selecting "all warehouses" +
+      // "out of stock" matches the stats-KPI semantic ("X rows at zero")
+      // instead of the stricter "aggregate = 0 everywhere" rule (which
+      // hid every split-stock case like MAL-HERREN-GEL-M where Pannierstr
+      // is empty but Marzahn still has some).
+      let variantsOutInAnyWh = 0
       const variants = p.variants.map((v) => {
-        let vStock = 0, vReserved = 0, vReorder = 5
+        let vStock = 0, vReserved = 0
+        // Per-warehouse low/out evaluation — a variant is "low" if ANY of
+        // its warehouse rows is low, not if the sum across all warehouses
+        // is low. Old bug: summing 5+5 = 10 vs reorderPoint 5 → passed check
+        // even though BOTH warehouses individually were at their reorder
+        // threshold. Matches getStats() semantics (which counts per row).
+        let vIsLow = false
+        let vIsOut = false
         const invs = v.inventory.map((inv) => {
           vStock += inv.quantityOnHand
           vReserved += inv.quantityReserved
-          vReorder = inv.reorderPoint
           totalStock += inv.quantityOnHand
           totalReserved += inv.quantityReserved
+          const whAvail = inv.quantityOnHand - inv.quantityReserved
+          if (whAvail <= 0) vIsOut = true
+          else if (inv.reorderPoint > 0 && whAvail <= inv.reorderPoint) vIsLow = true
           return inv
         })
         const avail = vStock - vReserved
         // Only count variants that actually have inventory records
         if (v.inventory.length > 0) {
-          if (avail <= 0) outCount++
-          else if (avail <= vReorder) lowCount++
+          if (vIsOut) variantsOutInAnyWh++
+          if (vIsOut && avail <= 0) outCount++
+          else if (vIsLow) lowCount++
         }
         return { id: v.id, sku: v.sku, barcode: v.barcode, color: v.color, colorHex: v.colorHex, size: v.size, stock: avail, price: Number(p.salePrice ?? p.basePrice ?? 0), inventory: invs }
       })
 
       const avail = totalStock - totalReserved
+      // Product-level status: "out_of_stock" only when the aggregate is zero
+      // (no warehouse has anything). "low" fires as soon as ANY variant is
+      // low in ANY warehouse — so the orange badge surfaces reorder needs
+      // even when another warehouse masks them in the sum.
       const status = avail <= 0 ? 'out_of_stock' : (lowCount > 0 || outCount > 0) ? 'low' : 'in_stock'
 
       return {
@@ -464,6 +486,7 @@ export class AdminInventoryService {
         totalStock: avail,
         totalStockRaw: totalStock,
         lowCount, outCount,
+        outInAnyWarehouse: variantsOutInAnyWh > 0,
         status,
         variantsCount: p.variants.length,
         variants,
@@ -517,10 +540,32 @@ export class AdminInventoryService {
         .filter((p) => p.variants.length > 0)
     }
 
-    // Post-filter by stock status
-    if (query.status === 'out_of_stock') result = result.filter((p) => p.status === 'out_of_stock')
-    else if (query.status === 'low') result = result.filter((p) => p.status === 'low' || p.status === 'out_of_stock')
-    else if (query.status === 'in_stock') result = result.filter((p) => p.status === 'in_stock')
+    // Post-filter by stock status.
+    //
+    // out_of_stock semantic:
+    //  - With warehouseId set: "status === 'out_of_stock'" — the aggregate
+    //    within the selected warehouse is 0 (straight interpretation).
+    //  - Without warehouseId (all warehouses): match products that have at
+    //    least one variant-warehouse row at 0 (outInAnyWarehouse). Aligns
+    //    with the stats-KPI ("13 نفذ") which counts rows, not products.
+    //    Admin clicking the filter after seeing "13 out of stock" in the
+    //    KPI now lands on the products causing those 13 zero rows.
+    //
+    // low filter: keep the existing semantic (includes out_of_stock) and
+    // layer the new "out in any warehouse" signal on top so split-stock
+    // cases where one warehouse is empty but another has stock also
+    // surface here when no warehouse is selected.
+    if (query.status === 'out_of_stock') {
+      result = query.warehouseId
+        ? result.filter((p) => p.status === 'out_of_stock')
+        : result.filter((p) => p.status === 'out_of_stock' || p.outInAnyWarehouse)
+    } else if (query.status === 'low') {
+      result = query.warehouseId
+        ? result.filter((p) => p.status === 'low' || p.status === 'out_of_stock')
+        : result.filter((p) => p.status === 'low' || p.status === 'out_of_stock' || p.outInAnyWarehouse)
+    } else if (query.status === 'in_stock') {
+      result = result.filter((p) => p.status === 'in_stock')
+    }
 
     const filteredTotal = (query.warehouseId || query.locationId || query.status) ? result.length : total
     return { data: result, meta: { total: filteredTotal, limit, offset } }
