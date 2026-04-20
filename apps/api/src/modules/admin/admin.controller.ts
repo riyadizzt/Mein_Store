@@ -2180,9 +2180,14 @@ export class AdminController {
 
     if (type) where.type = type
     if (from || to) {
+      // Accept both 'YYYY-MM-DD' and 'YYYY-MM-DDTHH:mm' (the DateTimePicker
+      // component outputs the ISO slice 0-16 even with showTime={false}).
+      // Slicing to the date portion before appending the day-boundary
+      // suffix avoids the 'YYYY-MM-DDTHH:mmT00:00:00.000Z' invalid-date
+      // trap that silently returned 0 rows.
       where.createdAt = {}
-      if (from) where.createdAt.gte = new Date(`${from}T00:00:00.000Z`)
-      if (to) where.createdAt.lte = new Date(`${to}T23:59:59.999Z`)
+      if (from) where.createdAt.gte = new Date(`${from.slice(0, 10)}T00:00:00.000Z`)
+      if (to) where.createdAt.lte = new Date(`${to.slice(0, 10)}T23:59:59.999Z`)
     }
     if (search) {
       const s = search.trim()
@@ -2268,9 +2273,11 @@ export class AdminController {
   async exportInvoicesCsv(@Query('from') from?: string, @Query('to') to?: string, @Res() res?: Response) {
     const where: any = {}
     if (from || to) {
+      // Same date-slice guard as listInvoices — accept both date and
+      // date-time ISO formats from the frontend DateTimePicker.
       where.createdAt = {}
-      if (from) where.createdAt.gte = new Date(`${from}T00:00:00.000Z`)
-      if (to) where.createdAt.lte = new Date(`${to}T23:59:59.999Z`)
+      if (from) where.createdAt.gte = new Date(`${from.slice(0, 10)}T00:00:00.000Z`)
+      if (to) where.createdAt.lte = new Date(`${to.slice(0, 10)}T23:59:59.999Z`)
     }
 
     const invoices = await this.prisma.invoice.findMany({
