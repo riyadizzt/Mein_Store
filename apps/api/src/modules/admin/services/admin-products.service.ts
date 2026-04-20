@@ -144,7 +144,11 @@ export class AdminProductsService {
               inventory: { select: { quantityOnHand: true, quantityReserved: true, reorderPoint: true } },
             },
           },
-          images: { select: { url: true, isPrimary: true }, orderBy: { sortOrder: 'asc' }, take: 3 },
+          // colorName is needed by the label-print page (/admin/etiketten)
+          // so per-color photos render correctly instead of falling to a
+          // coloured placeholder. `take` bumped so products with many color
+          // variants don't get their images clipped.
+          images: { select: { url: true, isPrimary: true, colorName: true }, orderBy: { sortOrder: 'asc' }, take: 20 },
           category: {
             select: {
               id: true, parentId: true,
@@ -219,6 +223,9 @@ export class AdminProductsService {
         missingLangs: [!hasDE && 'de', !hasEN && 'en', !hasAR && 'ar'].filter(Boolean),
         image: p.images.find((i) => i.isPrimary)?.url ?? p.images[0]?.url ?? null,
         imageCount: p.images.length,
+        // Full images array so downstream callers (label-print station)
+        // can do per-color matching via colorName.
+        images: p.images.map((i) => ({ url: i.url, isPrimary: i.isPrimary, colorName: i.colorName })),
         category: p.category,
         variantsCount: p.variants.length,
         colors: [...uniqueColors],
