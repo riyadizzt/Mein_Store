@@ -10,6 +10,7 @@ import { Truck, Check, Download, RotateCcw, ShoppingBag, ExternalLink, CreditCar
 import { api } from '@/lib/api'
 import { useCartStore } from '@/store/cart-store'
 import { useAuthStore } from '@/store/auth-store'
+import { toast } from '@/store/toast-store'
 import { Button } from '@/components/ui/button'
 import { ReturnRequestModal } from '@/components/account/return-request-modal'
 
@@ -74,16 +75,61 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
   const hasAnyReturn = (order.returns ?? []).length > 0
   const canReturn = returnsEnabled && order.status === 'delivered' && deliveredAt && daysLeft > 0 && !hasAnyReturn
 
-  const handleReorder = () => {
-    for (const item of order.items ?? []) {
+  const handleReorder = async () => {
+    // Pre-filter against current stock BEFORE dropping items in the cart.
+    // Without this the customer would land on checkout only to discover a
+    // backend 409 InsufficientStockInAnyWarehouse — with no hint in the
+    // cart about WHICH item caused it. Now we classify each line:
+    //
+    //   stock >= quantity      → added as-is (happy path)
+    //   0 < stock < quantity   → added with quantity capped to stock
+    //   stock === 0            → NOT added, customer notified
+    //
+    // One summary toast at the end rolls up all three buckets so the
+    // customer sees "3 added · 1 adjusted · 1 out of stock" in plain
+    // language instead of a silent partial failure.
+    const items = order.items ?? []
+    if (items.length === 0) return
+
+    const variantIds = items.map((i: any) => i.variantId).filter(Boolean)
+
+    // Stock-check — same endpoint the cart-drawer uses. Best-effort: if
+    // the call fails (offline, 500) we fall back to the old behaviour
+    // and let the backend's order-create guard reject at submit-time.
+    let stockMap: Record<string, number> = {}
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/products/stock-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variantIds }),
+      })
+      if (res.ok) stockMap = await res.json()
+    } catch { /* offline or network hiccup — optimistic fallback */ }
+
+    let added = 0
+    let adjusted = 0
+    let outOfStock = 0
+
+    for (const item of items) {
+      const available = stockMap[item.variantId] ?? Infinity  // unknown → trust happy path
+      const wanted = item.quantity as number
+
+      if (available === 0) {
+        outOfStock++
+        continue
+      }
+
+      const finalQty = Math.min(wanted, available)
+      if (finalQty < wanted) adjusted++
+      else added++
+
       addCartItem({
         variantId: item.variantId,
         productId: item.variant?.product?.id ?? '',
         // Slug MUST come along so the cart-drawer can render the product
         // name + image as a navigable link. Without it the drawer falls
         // back to a static <p> tag and the customer cannot click through
-        // to the PDP — which is exactly the "unklickbar" bug the user
-        // hit after wieder-bestellen on a past order.
+        // to the PDP (previous "unklickbar" bug after wieder-bestellen).
         slug: item.variant?.product?.slug,
         name: item.snapshotName,
         sku: item.snapshotSku ?? item.variant?.sku ?? '',
@@ -91,9 +137,63 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
         size: item.variant?.size,
         imageUrl: item.variant?.product?.images?.[0]?.url,
         unitPrice: Number(item.unitPrice),
-        quantity: item.quantity,
+        quantity: finalQty,
       })
     }
+
+    // Summary toast — 3-language, explicit about what happened. We
+    // consolidate into one toast so the customer isn't flooded with three
+    // separate notifications when all three buckets are non-empty.
+    const successful = added + adjusted
+    if (successful === 0) {
+      // Nothing could be added — don't navigate, leave the customer on
+      // the order page with a clear error so they can pick a different
+      // order or browse the catalog.
+      toast.error(
+        locale === 'ar'
+          ? 'جميع المنتجات في هذا الطلب غير متوفرة حالياً'
+          : locale === 'en'
+          ? 'All items in this order are currently out of stock'
+          : 'Alle Artikel in dieser Bestellung sind derzeit ausverkauft',
+      )
+      return
+    }
+
+    if (outOfStock > 0 || adjusted > 0) {
+      const parts: string[] = []
+      if (adjusted > 0) {
+        parts.push(
+          locale === 'ar'
+            ? `${adjusted} تم تعديل الكمية`
+            : locale === 'en'
+            ? `${adjusted} adjusted to available stock`
+            : `${adjusted} Menge angepasst`,
+        )
+      }
+      if (outOfStock > 0) {
+        parts.push(
+          locale === 'ar'
+            ? `${outOfStock} غير متوفر`
+            : locale === 'en'
+            ? `${outOfStock} out of stock`
+            : `${outOfStock} ausverkauft`,
+        )
+      }
+      const prefix =
+        locale === 'ar' ? `تمت إضافة ${added + adjusted} من ${items.length}:`
+        : locale === 'en' ? `Added ${added + adjusted} of ${items.length}:`
+        : `${added + adjusted} von ${items.length} hinzugefügt:`
+      toast.info(`${prefix} ${parts.join(' · ')}`)
+    } else {
+      toast.success(
+        locale === 'ar'
+          ? `تمت إضافة ${added} منتجات إلى السلة`
+          : locale === 'en'
+          ? `${added} items added to cart`
+          : `${added} Artikel zum Warenkorb hinzugefügt`,
+      )
+    }
+
     router.push(`/${locale}/checkout`)
   }
 
