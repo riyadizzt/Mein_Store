@@ -504,6 +504,26 @@ export class FinanceReportsService {
     const start = new Date(`${dateFrom}T00:00:00.000Z`)
     const end = new Date(`${dateTo}T23:59:59.999Z`)
 
+    // Trust the DB's order-level totals (order.total_amount is the actual
+    // gross paid after coupon/discount; order.tax_amount is the MwSt
+    // rausgerechnet from that gross). Summing order_items.total_price
+    // ignores order.discountAmount — which for a 50%-off coupon on a
+    // €19570 cart inflated the reported VAT to €3124.62 instead of the
+    // correct €1562.31. Same root cause as the Invoice.netAmount bug
+    // (ORD-20260420-000001 incident, fix 8bd0eb0).
+    //
+    // For multi-rate orders (future — Malak is 19% only today), pro-rate
+    // the order-level total/tax by each rate's share of the pre-discount
+    // items_sum. Single-rate orders collapse the ratio to 1.0 and we
+    // get order.total_amount / order.tax_amount directly. Orders with
+    // subtotal=0 are skipped (can't divide).
+    // Pro-rating strategy: denominator is the PER-ORDER sum of items
+    // (computed in the first CTE), NOT orders.subtotal. Using items-sum
+    // guarantees the per-rate contributions sum to order.total_amount
+    // exactly, even when orders.subtotal is out of sync with the items
+    // (legacy orders, edge-cases, dropped items). The ratio is always
+    // rate_items_sum / all_items_sum ∈ [0, 1] within the same order.
+    // For single-rate orders (Malak today) this collapses to 1.0.
     const rows = await this.prisma.$queryRaw<
       Array<{
         tax_rate: number
@@ -512,27 +532,44 @@ export class FinanceReportsService {
         gross_amount: number
       }>
     >`
+      WITH order_items_totals AS (
+        SELECT oi.order_id, SUM(CAST(oi.total_price AS DECIMAL(10,2))) AS all_items_sum
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE o.created_at >= ${start}
+          AND o.created_at <= ${end}
+          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+          AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
+          AND o.deleted_at IS NULL
+        GROUP BY oi.order_id
+        HAVING SUM(CAST(oi.total_price AS DECIMAL(10,2))) > 0
+      ),
+      order_rate_shares AS (
+        SELECT
+          oi.tax_rate,
+          o.id AS order_id,
+          o.total_amount,
+          o.tax_amount,
+          oit.all_items_sum,
+          SUM(CAST(oi.total_price AS DECIMAL(10,2))) AS rate_items_sum
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        JOIN order_items_totals oit ON oit.order_id = o.id
+        WHERE o.created_at >= ${start}
+          AND o.created_at <= ${end}
+          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+          AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
+          AND o.deleted_at IS NULL
+        GROUP BY oi.tax_rate, o.id, o.total_amount, o.tax_amount, oit.all_items_sum
+      )
       SELECT
-        oi.tax_rate,
-        COALESCE(SUM(
-          CAST(oi.total_price AS DECIMAL(10,2)) /
-          (1 + CAST(oi.tax_rate AS DECIMAL(5,2)) / 100)
-        ), 0) AS taxable_amount,
-        COALESCE(SUM(
-          CAST(oi.total_price AS DECIMAL(10,2)) -
-          CAST(oi.total_price AS DECIMAL(10,2)) /
-          (1 + CAST(oi.tax_rate AS DECIMAL(5,2)) / 100)
-        ), 0) AS tax_amount,
-        COALESCE(SUM(CAST(oi.total_price AS DECIMAL(10,2))), 0) AS gross_amount
-      FROM order_items oi
-      JOIN orders o ON o.id = oi.order_id
-      WHERE o.created_at >= ${start}
-        AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
-        AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
-        AND o.deleted_at IS NULL
-      GROUP BY oi.tax_rate
-      ORDER BY oi.tax_rate DESC
+        tax_rate,
+        COALESCE(SUM(total_amount * (rate_items_sum / all_items_sum)), 0) AS gross_amount,
+        COALESCE(SUM(tax_amount * (rate_items_sum / all_items_sum)), 0) AS tax_amount,
+        COALESCE(SUM((total_amount - tax_amount) * (rate_items_sum / all_items_sum)), 0) AS taxable_amount
+      FROM order_rate_shares
+      GROUP BY tax_rate
+      ORDER BY tax_rate DESC
     `
 
     const vatLines: VatLine[] = rows.map((r) => ({

@@ -726,7 +726,14 @@ function VatTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
   setFrom: (v: string) => void; setTo: (v: string) => void; t3: T3
 }) {
   if (isLoading) return <Skeleton rows={3} />
-  const rates = data?.rates ?? []
+  // Backend returns vatLines (one row per tax rate), totalTax (net of
+  // refunds), and refunds.grossAmount. Previously the frontend read
+  // data?.rates / data?.grossRevenue / data?.totalGross — all of which
+  // don't exist in the response — so the table synthesized a fake row
+  // with gross=0 and net=0 while the tax card pulled the real totalTax.
+  // Result: visually impossible "€3060 VAT on €0 gross" that the admin
+  // spotted in ORD-20260420-000001.
+  const vatLines = Array.isArray(data?.vatLines) ? data.vatLines : []
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -735,11 +742,17 @@ function VatTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
       </div>
       {(() => {
         const totalTax = Number(data?.totalTax ?? 0)
-        const gross = Number(data?.grossRevenue ?? data?.totalGross ?? 0)
-        const net = gross > 0 ? gross - totalTax : 0
-        const hasRates = rates.length > 0
-        // If no rates from API, show calculated 19% row
-        const displayRates = hasRates ? rates : (totalTax > 0 ? [{ rate: 19, taxableAmount: net, taxAmount: totalTax, grossAmount: gross }] : [])
+        // Gross + net derived from the per-rate lines the backend sends.
+        // Refunds are already subtracted from totalTax by the backend
+        // but NOT from per-line grossAmount (those are sales-side only),
+        // so we subtract refund gross here for a consistent trio.
+        const grossSales = vatLines.reduce((s: number, l: any) => s + Number(l.grossAmount ?? 0), 0)
+        const refundGross = Number(data?.refunds?.grossAmount ?? 0)
+        const gross = Math.max(0, grossSales - refundGross)
+        const net = Math.max(0, gross - totalTax)
+        const displayRates = vatLines.length > 0
+          ? vatLines
+          : (totalTax > 0 ? [{ rate: 19, taxableAmount: net, taxAmount: totalTax, grossAmount: gross }] : [])
 
         return (
           <>
@@ -747,11 +760,11 @@ function VatTab({ data, isLoading, from, to, setFrom, setTo, t3 }: {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden">
               <div className="bg-[#1a1a2e] p-5 text-white">
                 <p className="text-xs text-white/50 mb-1">{t3('Bruttoerlöse', 'Gross Revenue', 'إجمالي الإيرادات')}</p>
-                <p className="text-xl font-bold tabular-nums">{fmt(gross || data?.totalGross)}</p>
+                <p className="text-xl font-bold tabular-nums">{fmt(gross)}</p>
               </div>
               <div className="bg-[#1a1a2e] p-5 text-white">
                 <p className="text-xs text-white/50 mb-1">{t3('Nettoerlöse', 'Net Revenue', 'صافي الإيرادات')}</p>
-                <p className="text-xl font-bold tabular-nums">{fmt(net || data?.totalNet)}</p>
+                <p className="text-xl font-bold tabular-nums">{fmt(net)}</p>
               </div>
               <div className="bg-[#1a1a2e] p-5 text-white">
                 <p className="text-xs text-white/50 mb-1">{t3('MwSt gesamt', 'Total VAT', 'إجمالي الضريبة')}</p>
