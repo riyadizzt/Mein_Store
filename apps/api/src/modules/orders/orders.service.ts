@@ -740,7 +740,13 @@ export class OrdersService {
                 couponId: coupon.id,
                 orderId: created.id,
                 userId: userId ?? null,
-                email: userId ? null : (dto.guestEmail?.toLowerCase().trim() ?? null),
+                // Populate email whenever guestEmail is present (even when a
+                // stub-user was created upstream and userId is therefore set).
+                // validateCoupon's OR-lookup on (userId, email) needs BOTH
+                // keys written so onePerCustomer + email-abuse guards match
+                // future redemptions regardless of which stub-user id the
+                // system resolves for the same guest email.
+                email: dto.guestEmail?.toLowerCase().trim() ?? null,
               },
             })
             await tx.coupon.update({ where: { id: coupon.id }, data: { usedCount: { increment: 1 } } })

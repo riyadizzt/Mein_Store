@@ -311,7 +311,7 @@ describe('OrdersService.create — Coupon enforcement (Commit A.2 Backend Securi
     expect(prisma.couponUsage.create).toHaveBeenCalled()
   })
 
-  it('#8 valid coupon + userId set → CouponUsage.create writes userId, email=null', async () => {
+  it('#8 valid coupon + userId set → CouponUsage.create writes userId + email (defense-in-depth)', async () => {
     const marketing = {
       validateCoupon: jest.fn().mockResolvedValue({
         valid: true,
@@ -327,12 +327,40 @@ describe('OrdersService.create — Coupon enforcement (Commit A.2 Backend Securi
     }
     const { service, prisma } = await makeService(marketing)
     await service.create(baseDto({ couponCode: 'LOGGEDIN' }), 'user-abc', 'test-corr-id')
-    // Find the actual call to couponUsage.create
     const usageCalls = prisma.couponUsage.create.mock.calls
     expect(usageCalls.length).toBeGreaterThan(0)
     const payload = usageCalls[0][0].data
     expect(payload.userId).toBe('user-abc')
-    // Registered user → email intentionally null (we identify by userId only)
+    // Since 20.04: email is ALWAYS persisted when dto.guestEmail is present
+    // (stub-guest fix). For logged-in users the frontend normally omits
+    // guestEmail, but if it does arrive, we still persist it so
+    // validateCoupon's OR-lookup on (userId, email) has both match-keys.
+    // Benign for identity because userId remains the primary identifier.
+    expect(payload.email).toBe('buyer@test.invalid')
+  })
+
+  it('#8b valid coupon + userId set + no guestEmail → email stays null', async () => {
+    // Real-world logged-in flow: frontend omits guestEmail entirely.
+    // This test pins down that we don't fabricate an email from thin air.
+    const marketing = {
+      validateCoupon: jest.fn().mockResolvedValue({
+        valid: true,
+        coupon: {
+          code: 'LOGGEDIN',
+          type: 'percentage',
+          discountPercent: 5,
+          discountAmount: null,
+          freeShipping: false,
+          description: null,
+        },
+      }),
+    }
+    const { service, prisma } = await makeService(marketing)
+    const dto = baseDto({ couponCode: 'LOGGEDIN' })
+    delete (dto as any).guestEmail
+    await service.create(dto, 'user-abc', 'test-corr-id')
+    const payload = prisma.couponUsage.create.mock.calls[0][0].data
+    expect(payload.userId).toBe('user-abc')
     expect(payload.email).toBeNull()
   })
 

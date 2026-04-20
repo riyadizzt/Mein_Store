@@ -151,9 +151,15 @@ export class InvoiceService implements OnModuleInit {
     }
 
     const invoiceNumber = await this.generateInvoiceNumber('RE')
-    const netAmount = Number(order.subtotal)
-    const taxAmount = Number(order.taxAmount)
+    // netAmount = gross − tax (NOT order.subtotal, which is pre-discount).
+    // order.totalAmount and order.taxAmount are server-calculated in
+    // orders.service with MwSt rausgerechnet (Brutto-convention). The
+    // netAmount must therefore be derived from those two — using
+    // order.subtotal here produced an inflated net equal to the
+    // pre-coupon item total (ORD-20260420-000001 incident).
     const grossAmount = Number(order.totalAmount)
+    const taxAmount = Number(order.taxAmount)
+    const netAmount = Number((grossAmount - taxAmount).toFixed(2))
 
     // Generate PDF
     const pdfBuffer = await this.buildInvoicePdf(order, invoiceNumber)
@@ -671,14 +677,31 @@ export class InvoiceService implements OnModuleInit {
       doc.text(`${total.toFixed(2)} €`, totValX, y, { width: valW, align: 'right' })
       y += 20
 
-      // MwSt-Ausweis (CALCULATION UNCHANGED)
+      // MwSt-Ausweis — trust order.taxAmount (DB, post-discount-correct).
+      //
+      // The taxTotals loop was aggregating item.totalPrice without
+      // accounting for order-level discounts, so a 50%-off coupon order
+      // rendered ~2× the real MwSt. The DB's order.taxAmount is the
+      // single source of truth (orders.service computes it from the
+      // final gross, MwSt rausgerechnet). For the standard single-rate
+      // case we print that value directly. For the rare multi-rate edge
+      // case we pro-rate by each rate's pre-discount tax share so the
+      // sum of printed lines still equals the DB's taxAmount.
       doc.font('Helvetica').fontSize(7.5).fillColor(MUTED)
-      for (const [rate, amounts] of Object.entries(taxTotals)) {
-        const shippingNet = shipping / (1 + Number(rate) / 100)
-        const shippingVat = shipping - shippingNet
-        const totalTax = amounts.tax + (Object.keys(taxTotals).length === 1 ? shippingVat : 0)
-        doc.text(`Darin enthaltene MwSt. ${rate}%: ${totalTax.toFixed(2)} €`, totX, y, { width: totW + valW + 5, align: 'right' })
+      const dbTax = Number(order.taxAmount)
+      const rateKeys = Object.keys(taxTotals)
+      if (rateKeys.length === 1) {
+        const rate = rateKeys[0]
+        doc.text(`Darin enthaltene MwSt. ${rate}%: ${dbTax.toFixed(2)} €`, totX, y, { width: totW + valW + 5, align: 'right' })
         y += 11
+      } else if (rateKeys.length > 1) {
+        const totalPreTax = rateKeys.reduce((s, k) => s + taxTotals[k].tax, 0)
+        for (const rate of rateKeys) {
+          const share = totalPreTax > 0 ? taxTotals[rate].tax / totalPreTax : 0
+          const distributedTax = dbTax * share
+          doc.text(`Darin enthaltene MwSt. ${rate}%: ${distributedTax.toFixed(2)} €`, totX, y, { width: totW + valW + 5, align: 'right' })
+          y += 11
+        }
       }
 
       // ── PAYMENT NOTE ───────────────────────────────

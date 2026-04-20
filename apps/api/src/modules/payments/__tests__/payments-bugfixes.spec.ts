@@ -27,7 +27,9 @@ const mockInvoiceService = {
 
 function buildPrisma() {
   const mock: any = {
-    payment: { findFirst: jest.fn(), update: jest.fn() },
+    // findUnique is used by markAsCaptured's read-then-update for paidAt
+    // (so the webhook's authoritative timestamp is never overwritten).
+    payment: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     order: { update: jest.fn(), findUnique: jest.fn() },
     orderStatusHistory: { create: jest.fn() },
   }
@@ -516,6 +518,69 @@ describe('PaymentsService — bug-fix regression', () => {
         (call: any) => call[0] === 'order.confirmed',
       )
       expect(confirmedCalls.length).toBe(0)
+    })
+  })
+
+  // Regression for 20.04.2026 ORD-20260420-000001 diagnosis: the order
+  // ended up with payment.status='captured' but payment.paidAt=NULL,
+  // because markAsCaptured (called by Stripe-frontend-confirm / SumUp-
+  // verify / PayPal-capture paths) only set status and forgot paidAt.
+  // Only the webhook path (handlePaymentSuccess) had paidAt. The fix
+  // is read-then-update: set paidAt only when still NULL so the
+  // webhook's authoritative timestamp is preserved on double-confirm.
+  describe('Bug: markAsCaptured must set paidAt when NULL (preserve webhook timestamp)', () => {
+    it('setzt paidAt=now() wenn bisher NULL', async () => {
+      prisma.payment.findUnique.mockResolvedValue({ paidAt: null })
+      prisma.payment.update.mockResolvedValue({})
+      prisma.order.findUnique.mockResolvedValue({
+        status: 'pending_payment',
+        orderNumber: 'ORD-PAID-NULL-001',
+        notes: JSON.stringify({ reservationIds: ['r1'] }),
+      })
+      prisma.order.update.mockResolvedValue({})
+
+      const before = Date.now()
+      const service = await makeService(prisma, eventEmitter)
+      await service.markAsCaptured('order-paid-null-1')
+      const after = Date.now()
+
+      expect(prisma.payment.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { orderId: 'order-paid-null-1' },
+          data: expect.objectContaining({
+            status: 'captured',
+            paidAt: expect.any(Date),
+          }),
+        }),
+      )
+      const updateCall = prisma.payment.update.mock.calls[0][0]
+      const writtenPaidAt: Date = updateCall.data.paidAt
+      expect(writtenPaidAt.getTime()).toBeGreaterThanOrEqual(before)
+      expect(writtenPaidAt.getTime()).toBeLessThanOrEqual(after)
+    })
+
+    it('überschreibt paidAt NICHT wenn Webhook ihn bereits gesetzt hat', async () => {
+      // Webhook-set paidAt is legally authoritative (§ 14 UStG). A
+      // follow-up frontend-confirm or SumUp-verify must NOT reset it
+      // to its own "now" because that would misrepresent the capture time.
+      const webhookTimestamp = new Date('2026-04-20T12:00:00.000Z')
+      prisma.payment.findUnique.mockResolvedValue({ paidAt: webhookTimestamp })
+      prisma.payment.update.mockResolvedValue({})
+      prisma.order.findUnique.mockResolvedValue({
+        status: 'pending_payment',
+        orderNumber: 'ORD-PAID-SET-001',
+        notes: JSON.stringify({ reservationIds: ['r1'] }),
+      })
+      prisma.order.update.mockResolvedValue({})
+
+      const service = await makeService(prisma, eventEmitter)
+      await service.markAsCaptured('order-paid-set-1')
+
+      const updateCall = prisma.payment.update.mock.calls[0][0]
+      // paidAt key must NOT be in the data payload when existing was set.
+      expect('paidAt' in updateCall.data).toBe(false)
+      // status must still be captured (idempotent)
+      expect(updateCall.data.status).toBe('captured')
     })
   })
 })

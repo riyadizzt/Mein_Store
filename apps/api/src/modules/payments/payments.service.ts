@@ -67,11 +67,24 @@ export class PaymentsService {
   }
 
   async markAsCaptured(orderId: string) {
-    // Update payment status if still pending
+    // Update payment status if still pending. paidAt is legally the
+    // payment-capture timestamp (§ 14 UStG Rechnungsdatum context). The
+    // webhook path (handlePaymentSuccess) sets it authoritatively; the
+    // frontend-confirm paths (Stripe confirm, SumUp verify, PayPal
+    // capture) used to skip it, which is why ORD-20260420-000001 ended
+    // up with status=captured + paidAt=NULL. Read-then-update preserves
+    // any existing authoritative value and only fills the NULL gap.
     try {
+      const existing = await this.prisma.payment.findUnique({
+        where: { orderId },
+        select: { paidAt: true },
+      })
       await this.prisma.payment.update({
         where: { orderId },
-        data: { status: 'captured' },
+        data: {
+          status: 'captured',
+          ...(existing?.paidAt ? {} : { paidAt: new Date() }),
+        },
       })
     } catch {
       // Payment might not exist for this order or already captured — continue
