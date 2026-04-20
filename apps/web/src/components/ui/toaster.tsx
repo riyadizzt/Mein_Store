@@ -1,6 +1,7 @@
 'use client'
 
 import { useToastStore } from '@/store/toast-store'
+import { useLocale } from 'next-intl'
 import { AnimatePresence, motion } from 'motion/react'
 import { Check, X, Info, AlertCircle, Undo2 } from 'lucide-react'
 
@@ -18,6 +19,9 @@ const COLORS = {
 
 export function Toaster() {
   const { toasts, remove } = useToastStore()
+  const locale = useLocale()
+  const undoLabel = locale === 'ar' ? 'تراجع' : locale === 'en' ? 'Undo' : 'Rückgängig'
+  const dismissLabel = locale === 'ar' ? 'إغلاق' : locale === 'en' ? 'Dismiss' : 'Schließen'
 
   return (
     <div
@@ -49,17 +53,17 @@ export function Toaster() {
                     t.undo?.()
                     remove(t.id)
                   }}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/20 hover:bg-white/30 transition-colors text-xs font-semibold flex-shrink-0"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/20 hover:bg-white/30 transition-colors text-xs font-semibold flex-shrink-0"
                 >
                   <Undo2 className="h-3 w-3" />
-                  Undo
+                  {undoLabel}
                 </button>
               )}
 
               <button
                 onClick={() => remove(t.id)}
                 className="p-1 rounded hover:bg-white/20 transition-colors flex-shrink-0 mt-[-2px]"
-                aria-label="Dismiss"
+                aria-label={dismissLabel}
               >
                 <X className="h-4 w-4" />
               </button>

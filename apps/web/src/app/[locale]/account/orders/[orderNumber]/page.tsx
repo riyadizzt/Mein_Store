@@ -178,13 +178,25 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
     }
 
     if (outOfStock > 0 || adjusted > 0) {
+      // Build the summary as independent, grammatically-complete
+      // fragments joined by " · " — the old "Added 5 of 5: 1 quantity
+      // adjusted" mashed a fragment onto a partial clause which read
+      // as broken grammar in Arabic and clumsy in German too.
+      const totalAdded = added + adjusted
       const parts: string[] = []
+      parts.push(
+        locale === 'ar'
+          ? `تمت إضافة ${totalAdded} منتجات`
+          : locale === 'en'
+          ? `${totalAdded} items added`
+          : `${totalAdded} Artikel hinzugefügt`,
+      )
       if (adjusted > 0) {
         parts.push(
           locale === 'ar'
-            ? `${adjusted} تم تعديل الكمية`
+            ? `تم تعديل الكمية في ${adjusted}`
             : locale === 'en'
-            ? `${adjusted} adjusted to available stock`
+            ? `${adjusted} quantity adjusted`
             : `${adjusted} Menge angepasst`,
         )
       }
@@ -197,11 +209,7 @@ export default function OrderDetailPage({ params: { orderNumber } }: { params: {
             : `${outOfStock} ausverkauft`,
         )
       }
-      const prefix =
-        locale === 'ar' ? `تمت إضافة ${added + adjusted} من ${items.length}:`
-        : locale === 'en' ? `Added ${added + adjusted} of ${items.length}:`
-        : `${added + adjusted} von ${items.length} hinzugefügt:`
-      toast.info(`${prefix} ${parts.join(' · ')}`)
+      toast.info(parts.join(' · '))
     } else {
       toast.success(
         locale === 'ar'
