@@ -1210,6 +1210,12 @@ export class AdminInventoryService {
           quantityBefore: m.quantityBefore,
           quantityAfter: m.quantityAfter,
           notes: m.notes,
+          // referenceId carries the domain-level id of the source event
+          // (for sale_online it's the Order UUID, for reserve it's the
+          // reservation UUID, etc.). The frontend uses it to group
+          // multi-item sales under their shared order instead of
+          // rendering one row per item. See movements/page.tsx parseSourceEvent.
+          referenceId: m.referenceId,
           createdBy: m.createdBy,
           createdByName: m.createdBy ? (() => { const u = userMap.get(m.createdBy); return u ? `${u.firstName} ${u.lastName}`.trim() : null })() : null,
           createdAt: m.createdAt,

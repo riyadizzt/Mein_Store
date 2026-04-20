@@ -74,7 +74,25 @@ interface SourceEvent {
   href: string | null
 }
 
-function parseSourceEvent(notes: string | null | undefined): SourceEvent | null {
+// UUID v4 shape (36 chars, 5 groups, lowercased hex + dashes). Used as a
+// safety-guard before trusting a raw referenceId string as an order id.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function parseSourceEvent(
+  notes: string | null | undefined,
+  referenceId?: string | null,
+  type?: string | null,
+): SourceEvent | null {
+  // sale_online short-circuit: the backend already stores the Order UUID
+  // in InventoryMovement.referenceId. The notes field only carries the
+  // reservation UUID, which is DIFFERENT per item in a multi-variant
+  // order — grouping by notes would render every item of the same order
+  // as a separate row (ORD-20260420-000001 showed 15+ rows). Using the
+  // referenceId collapses them into one group labelled by Order UUID.
+  if (type === 'sale_online' && referenceId && UUID_RE.test(referenceId)) {
+    return { kind: 'order', id: referenceId, href: null }
+  }
+
   if (!notes) return null
 
   // Return scan — the most common multi-warehouse event.
@@ -117,7 +135,11 @@ function parseSourceEvent(notes: string | null | undefined): SourceEvent | null 
     return { kind: 'order', id: reservation[1], href: null }
   }
 
-  // Sale-confirmed — identified by the reservation UUID that got captured.
+  // Sale-confirmed legacy fallback — only reached when referenceId is
+  // missing or not a UUID (old movements written before referenceId was
+  // exposed, or third-party writes). Groups by reservation UUID which is
+  // unique per item and will NOT collapse multi-item orders. Kept for
+  // backward-compat only; new rows hit the sale_online short-circuit above.
   const saleRes = notes.match(/Verkauf bestätigt[^—]*—\s*Reservierung\s+([a-f0-9-]+)/i)
   if (saleRes) {
     return { kind: 'reservation', id: saleRes[1], href: null }
@@ -337,7 +359,7 @@ export default function MovementsPage() {
     for (const [dateKey, items] of dateMap) {
       const pgMap = new Map<string, any[]>()
       for (const item of items) {
-        const src = parseSourceEvent(item.notes)
+        const src = parseSourceEvent(item.notes, item.referenceId, item.type)
         const pgKey = src
           ? `${item.type}__${src.kind}:${src.id}`
           : `${item.type}__fallback:${item.id}`
@@ -348,7 +370,7 @@ export default function MovementsPage() {
       const productGroups = [...pgMap.entries()].map(([pgKey, pgItems]) => {
         const first = pgItems[0]
         const pName = first.productName ? getProductName(first.productName, locale) : first.sku || ''
-        const source = parseSourceEvent(first.notes)
+        const source = parseSourceEvent(first.notes, first.referenceId, first.type)
         // Story-context metadata: distinct variants/warehouses in this event.
         const variants = new Set(pgItems.map((i: any) => i.sku).filter(Boolean))
         const warehouses = new Set(
