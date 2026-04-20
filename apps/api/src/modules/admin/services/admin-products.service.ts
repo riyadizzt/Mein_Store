@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException }
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
 import { ensureVariantBarcode } from '../../../common/helpers/variant-barcode'
+import { seedInventoryAcrossWarehouses } from '../../../common/helpers/inventory-seed'
+import { checkBarcodeUniqueness } from '../../../common/helpers/barcode-uniqueness'
 
 // Map color names (DE/EN/AR) to SKU-safe 3-letter codes
 const COLOR_SKU_MAP: Record<string, string> = {
@@ -449,6 +451,30 @@ export class AdminProductsService {
     const defaultWh = await this.prisma.warehouse.findFirst({ where: { isDefault: true } })
     const whId = defaultWh?.id
 
+    // Pre-check barcode uniqueness once — if the admin supplied an explicit
+    // EAN, it applies to all size-variants of this new color (they share
+    // the same barcode input). SKU-fallbacks are checked per-variant below
+    // because the SKU (hence the fallback barcode) varies by size.
+    if (data.barcode?.trim()) {
+      const barcodeCheck = await checkBarcodeUniqueness(this.prisma, data.barcode)
+      if (!barcodeCheck.ok) {
+        throw new BadRequestException({
+          statusCode: 400,
+          error: 'BarcodeAlreadyInUse',
+          message: {
+            de: `Barcode ${data.barcode} ist bereits vergeben (Produkt: ${barcodeCheck.conflictProductName}).`,
+            en: `Barcode ${data.barcode} is already in use (product: ${barcodeCheck.conflictProductName}).`,
+            ar: `الباركود ${data.barcode} مُستخدم مسبقاً (المنتج: ${barcodeCheck.conflictProductName}).`,
+          },
+          data: {
+            barcode: data.barcode,
+            conflictSku: barcodeCheck.conflictSku,
+            conflictProductName: barcodeCheck.conflictProductName,
+          },
+        })
+      }
+    }
+
     const created: any[] = []
     for (const size of data.sizes) {
       // Generate unique SKU
@@ -470,25 +496,26 @@ export class AdminProductsService {
         },
       })
 
-      // Create inventory record
-      if (whId) {
-        const stockQty = data.stock?.[size] ?? 0
-        await this.prisma.inventory.create({
-          data: { variantId: variant.id, warehouseId: whId, quantityOnHand: stockQty },
+      // Seed Inventory across all active warehouses. Admin's initialStock
+      // (if any) lands in the default warehouse; others get 0-qty rows so
+      // the variant is visible and bookable in every warehouse from day one.
+      const stockQty = data.stock?.[size] ?? 0
+      const initialStockMap: Record<string, number> = {}
+      if (whId) initialStockMap[whId] = stockQty
+      await seedInventoryAcrossWarehouses(this.prisma, variant.id, initialStockMap)
+
+      if (whId && stockQty > 0) {
+        await this.prisma.inventoryMovement.create({
+          data: {
+            variantId: variant.id, warehouseId: whId,
+            type: 'purchase_received', quantity: stockQty,
+            quantityBefore: 0, quantityAfter: stockQty,
+            notes: `New color added: ${data.color}`, createdBy: adminId,
+          },
         })
-        if (stockQty > 0) {
-          await this.prisma.inventoryMovement.create({
-            data: {
-              variantId: variant.id, warehouseId: whId,
-              type: 'purchase_received', quantity: stockQty,
-              quantityBefore: 0, quantityAfter: stockQty,
-              notes: `New color added: ${data.color}`, createdBy: adminId,
-            },
-          })
-        }
       }
 
-      created.push({ id: variant.id, sku, color: data.color, size, stock: data.stock?.[size] ?? 0 })
+      created.push({ id: variant.id, sku, color: data.color, size, stock: stockQty })
     }
 
     await this.audit.log({
@@ -543,24 +570,26 @@ export class AdminProductsService {
         },
       })
 
-      if (whId) {
-        const stockQty = data.stock?.[color] ?? 0
-        await this.prisma.inventory.create({
-          data: { variantId: variant.id, warehouseId: whId, quantityOnHand: stockQty },
+      // Seed Inventory across all active warehouses. admin-supplied
+      // initialStock (if any) lands in the default warehouse; others
+      // get 0-qty rows so the new size is visible everywhere.
+      const stockQty = data.stock?.[color] ?? 0
+      const initialStockMap: Record<string, number> = {}
+      if (whId) initialStockMap[whId] = stockQty
+      await seedInventoryAcrossWarehouses(this.prisma, variant.id, initialStockMap)
+
+      if (whId && stockQty > 0) {
+        await this.prisma.inventoryMovement.create({
+          data: {
+            variantId: variant.id, warehouseId: whId,
+            type: 'purchase_received', quantity: stockQty,
+            quantityBefore: 0, quantityAfter: stockQty,
+            notes: `New size added: ${data.size}`, createdBy: adminId,
+          },
         })
-        if (stockQty > 0) {
-          await this.prisma.inventoryMovement.create({
-            data: {
-              variantId: variant.id, warehouseId: whId,
-              type: 'purchase_received', quantity: stockQty,
-              quantityBefore: 0, quantityAfter: stockQty,
-              notes: `New size added: ${data.size}`, createdBy: adminId,
-            },
-          })
-        }
       }
 
-      created.push({ id: variant.id, sku, color, size: data.size, stock: data.stock?.[color] ?? 0 })
+      created.push({ id: variant.id, sku, color, size: data.size, stock: stockQty })
     }
 
     await this.audit.log({
@@ -602,7 +631,32 @@ export class AdminProductsService {
     // Clearing the field to null is not allowed — the helper enforces
     // it. Sending an explicit EAN overrides SKU as usual.
     if (data.barcode !== undefined) {
-      updateData.barcode = ensureVariantBarcode({ sku: variant.sku, barcode: data.barcode })
+      const finalBarcode = ensureVariantBarcode({ sku: variant.sku, barcode: data.barcode })
+      // Pre-check uniqueness ONLY when the barcode actually changes.
+      // No-op edits (same barcode as currently stored) would otherwise
+      // reject themselves; excluding the current row via excludeVariantId
+      // already covers that, but the early-return on unchanged values
+      // saves a DB round trip on every variant save.
+      if (finalBarcode !== variant.barcode) {
+        const barcodeCheck = await checkBarcodeUniqueness(this.prisma, finalBarcode, variantId)
+        if (!barcodeCheck.ok) {
+          throw new BadRequestException({
+            statusCode: 400,
+            error: 'BarcodeAlreadyInUse',
+            message: {
+              de: `Barcode ${finalBarcode} ist bereits vergeben (Produkt: ${barcodeCheck.conflictProductName}).`,
+              en: `Barcode ${finalBarcode} is already in use (product: ${barcodeCheck.conflictProductName}).`,
+              ar: `الباركود ${finalBarcode} مُستخدم مسبقاً (المنتج: ${barcodeCheck.conflictProductName}).`,
+            },
+            data: {
+              barcode: finalBarcode,
+              conflictSku: barcodeCheck.conflictSku,
+              conflictProductName: barcodeCheck.conflictProductName,
+            },
+          })
+        }
+      }
+      updateData.barcode = finalBarcode
     }
 
     const updated = await this.prisma.productVariant.update({ where: { id: variantId }, data: updateData })

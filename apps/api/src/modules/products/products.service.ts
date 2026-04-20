@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   Optional,
+  BadRequestException,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common'
@@ -11,6 +12,8 @@ import { CreateProductDto } from './dto/create-product.dto'
 import { Language } from '@omnichannel/types'
 import { ensureVariantBarcode } from '../../common/helpers/variant-barcode'
 import { resolveUniqueSkus, SkuAdjustment } from '../../common/helpers/sku-resolver'
+import { seedInventoryAcrossWarehouses } from '../../common/helpers/inventory-seed'
+import { checkBarcodeUniqueness } from '../../common/helpers/barcode-uniqueness'
 import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
 import { buildProductCreatedPayload } from '../webhooks/payload-builders/product'
 
@@ -91,7 +94,11 @@ export class ProductsService {
     })
     if (existing) throw new ConflictException(`Slug "${dto.slug}" bereits vergeben`)
 
-    // Find default warehouse for initial inventory
+    // Find default warehouse for the initialStock that the admin typed in
+    // the wizard. Initial stock only lands in the default warehouse; the
+    // other active warehouses get 0-qty rows via seedInventoryAcrossWarehouses
+    // further down so the new variant is visible everywhere and bookable
+    // from day one.
     const defaultWarehouse = await this.prisma.warehouse.findFirst({
       where: { isDefault: true, isActive: true },
     })
@@ -108,6 +115,39 @@ export class ProductsService {
     // a toast like "SKU war belegt, wurde zu ...-002 geändert".
     const baseSkus = dto.variants.map((v) => v.sku)
     const { resolved, adjustments } = await resolveUniqueSkus(this.prisma, baseSkus)
+
+    // Pre-check barcode uniqueness for every variant that carries an
+    // explicit barcode (external EAN). All-or-nothing: any collision
+    // rejects the whole product with a structured 400 carrying the
+    // conflict context, so the admin sees "this barcode is already
+    // used by XY" instead of a cryptic P2002.
+    const barcodeConflicts: Array<{ sku: string; barcode: string; conflictProductName: string; conflictSku: string | null }> = []
+    for (let i = 0; i < dto.variants.length; i++) {
+      const v = dto.variants[i]
+      const finalSku = resolved[i]
+      const finalBarcode = ensureVariantBarcode({ sku: finalSku, barcode: v.barcode })
+      const check = await checkBarcodeUniqueness(this.prisma, finalBarcode)
+      if (!check.ok) {
+        barcodeConflicts.push({
+          sku: finalSku,
+          barcode: finalBarcode,
+          conflictProductName: check.conflictProductName ?? '(unbekannt)',
+          conflictSku: check.conflictSku ?? null,
+        })
+      }
+    }
+    if (barcodeConflicts.length > 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'BarcodeAlreadyInUse',
+        message: {
+          de: `Barcode bereits vergeben: ${barcodeConflicts.length} Variante(n). Bitte Barcodes korrigieren.`,
+          en: `Barcode already in use: ${barcodeConflicts.length} variant(s). Please correct the barcodes.`,
+          ar: `الباركود مُستخدم مسبقاً: ${barcodeConflicts.length} متغير(ات). يرجى تصحيح الباركودات.`,
+        },
+        data: { conflicts: barcodeConflicts },
+      })
+    }
 
     const product = await this.prisma.product.create({
       data: {
@@ -148,16 +188,10 @@ export class ProductsService {
               sizeSystem: v.sizeSystem as any,
               priceModifier: v.priceModifier ?? 0,
               weightGrams: v.weightGrams,
-              ...(defaultWarehouse && v.initialStock !== undefined
-                ? {
-                    inventory: {
-                      create: {
-                        warehouseId: defaultWarehouse.id,
-                        quantityOnHand: v.initialStock,
-                      },
-                    },
-                  }
-                : {}),
+              // Inventory rows are NOT inlined here. We seed them after
+              // product.create via seedInventoryAcrossWarehouses — one
+              // row per active warehouse — so the variant is visible in
+              // every warehouse from day one (not only the default).
             }
           }),
         },
@@ -170,6 +204,31 @@ export class ProductsService {
         images: true,
       },
     })
+
+    // Seed Inventory across all active warehouses for every new variant.
+    // The admin's wizard-supplied initialStock (if any) lands in the
+    // default warehouse; other active warehouses get 0-qty rows so the
+    // admin can later book stock there without the row needing to be
+    // created manually. The helper is idempotent so accidental re-entry
+    // is safe.
+    for (let i = 0; i < product.variants.length; i++) {
+      const variant = product.variants[i]
+      const dtoVariant = dto.variants[i]
+      const initialStockMap: Record<string, number> = {}
+      if (defaultWarehouse && dtoVariant?.initialStock !== undefined) {
+        initialStockMap[defaultWarehouse.id] = dtoVariant.initialStock
+      }
+      await seedInventoryAcrossWarehouses(this.prisma, variant.id, initialStockMap)
+    }
+
+    // Reload variants with inventory so the response includes the full
+    // multi-warehouse shape. The initial product.create returned inventory
+    // as an empty array because the seeding happens after the transaction.
+    const reloadedVariants = await this.prisma.productVariant.findMany({
+      where: { productId: product.id },
+      include: { inventory: true },
+    })
+    product.variants = reloadedVariants as typeof product.variants
 
     // Fire-and-forget outbound webhook — product.created with full payload
     // (3 languages + all images + variants + shop URLs) so n8n can auto-post

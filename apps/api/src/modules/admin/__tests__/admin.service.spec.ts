@@ -42,6 +42,7 @@ const mockPrisma = {
   category: { findMany: jest.fn() },
   productVariant: {
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
@@ -786,11 +787,24 @@ describe('Admin — AdminProductsService', () => {
     beforeEach(() => {
       // Common stubs shared by all barcode-guard tests
       mockPrisma.productVariant.findUnique.mockReset()
+      // Gruppe 2 addition: the barcode-uniqueness pre-check reads
+      // productVariant.findFirst before every write. Default to "no
+      // collision" so the write-shape assertions below run identically
+      // to the pre-Gruppe-2 behaviour. Tests that WANT to assert the
+      // pre-check fires live in a separate spec (barcode-uniqueness).
+      mockPrisma.productVariant.findFirst.mockReset().mockResolvedValue(null)
       mockPrisma.productVariant.create.mockReset()
       mockPrisma.productVariant.update.mockReset().mockResolvedValue({})
       ;(mockPrisma as any).inventory.create = jest.fn().mockResolvedValue({})
+      ;(mockPrisma as any).inventory.findMany = jest.fn().mockResolvedValue([])
       mockPrisma.inventoryMovement.create.mockReset().mockResolvedValue({})
       ;(mockPrisma.warehouse as any).findFirst = jest.fn().mockResolvedValue({ id: 'wh1', isDefault: true })
+      // Multi-warehouse inventory seed calls warehouse.findMany({ where:
+      // { isActive: true } }). One active warehouse keeps the existing
+      // write-count assertions (N creates) unchanged.
+      ;(mockPrisma.warehouse as any).findMany = jest.fn().mockResolvedValue([
+        { id: 'wh1', isActive: true, isDefault: true },
+      ])
       mockPrisma.adminAuditLog.create.mockResolvedValue({})
     })
 
@@ -916,6 +930,116 @@ describe('Admin — AdminProductsService', () => {
       // the SKU default, which is wrong for pre-existing rows.
       expect(captured.barcode).toBeUndefined()
       expect(captured.priceModifier).toBe(5)
+    })
+  })
+
+  // ── Gruppe 2 integration guard ─────────────────────────────
+  //
+  // The helper unit tests (inventory-seed.spec.ts +
+  // barcode-uniqueness.spec.ts) pin the helper contracts in isolation.
+  // These tests pin that the SERVICE actually CALLS those helpers — so
+  // if a future edit accidentally drops the seedInventoryAcrossWarehouses
+  // call from addColor/addSize, or the checkBarcodeUniqueness gate from
+  // updateVariant, the regression shows up here at CI time.
+  //
+  // Structural approach: mock warehouse.findMany to return TWO active
+  // warehouses and count the inventory.create calls. A single-warehouse
+  // implementation would create N rows; the multi-warehouse helper
+  // creates 2N. The count assertion catches the drop without having to
+  // mock the helper itself.
+  describe('Gruppe 2 — helper integration (multi-warehouse seed + barcode pre-check)', () => {
+    beforeEach(() => {
+      // Two ACTIVE warehouses — the helper should seed in both
+      ;(mockPrisma.warehouse as any).findMany = jest.fn().mockResolvedValue([
+        { id: 'wh-marzahn', isActive: true, isDefault: true },
+        { id: 'wh-pannier', isActive: true, isDefault: false },
+      ])
+      ;(mockPrisma.warehouse as any).findFirst = jest.fn().mockResolvedValue({
+        id: 'wh-marzahn', isDefault: true,
+      })
+      mockPrisma.productVariant.findFirst.mockReset().mockResolvedValue(null)
+      mockPrisma.productVariant.findUnique.mockReset().mockResolvedValue(null)
+      mockPrisma.productVariant.create.mockReset().mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: `v-${data.sku}`, ...data }),
+      )
+      mockPrisma.productVariant.update.mockReset().mockResolvedValue({})
+      ;(mockPrisma as any).inventory.findMany = jest.fn().mockResolvedValue([])
+      ;(mockPrisma as any).inventory.create = jest.fn().mockResolvedValue({})
+      mockPrisma.inventoryMovement.create.mockReset().mockResolvedValue({})
+      mockPrisma.adminAuditLog.create.mockResolvedValue({})
+    })
+
+    it('addColor seeds inventory in ALL active warehouses, not only default', async () => {
+      // Product exists, admin adds 2-size color → 2 new variants.
+      // With 2 active warehouses, the helper must create 2×2 = 4
+      // Inventory rows, not 2. Single-warehouse regression would fail
+      // on this exact count.
+      mockPrisma.product.findFirst.mockResolvedValueOnce({
+        id: 'p1',
+        variants: [{ sku: 'MAL-100-SCH-M' }],
+      })
+
+      await productsService.addColor('p1', {
+        color: 'Blau', colorHex: '#0000FF', sizes: ['S', 'M'],
+      }, 'admin1', '127.0.0.1')
+
+      expect(mockPrisma.productVariant.create).toHaveBeenCalledTimes(2)
+      expect((mockPrisma as any).inventory.create).toHaveBeenCalledTimes(4)
+
+      // And: the default warehouse gets the admin-supplied stock (0
+      // here); non-default gets 0. Stock-map was not supplied so both
+      // should be 0 — but the fact that TWO rows per variant land is
+      // the regression-critical assertion.
+      const calls = (mockPrisma as any).inventory.create.mock.calls
+      const warehouseIds = calls.map((c: any) => c[0].data.warehouseId)
+      // Each warehouse appears exactly twice (once per variant)
+      expect(warehouseIds.filter((id: string) => id === 'wh-marzahn').length).toBe(2)
+      expect(warehouseIds.filter((id: string) => id === 'wh-pannier').length).toBe(2)
+    })
+
+    it('addSize seeds inventory in ALL active warehouses for each new color-variant', async () => {
+      // 2 colors × 1 new size = 2 variants × 2 warehouses = 4 rows
+      mockPrisma.product.findFirst.mockResolvedValueOnce({
+        id: 'p1',
+        variants: [
+          { sku: 'MAL-100-SCH-M', color: 'Schwarz', colorHex: '#000' },
+          { sku: 'MAL-100-ROT-M', color: 'Rot', colorHex: '#F00' },
+        ],
+      })
+
+      await productsService.addSize('p1', {
+        size: 'XXL', colors: ['Schwarz', 'Rot'],
+      }, 'admin1', '127.0.0.1')
+
+      expect(mockPrisma.productVariant.create).toHaveBeenCalledTimes(2)
+      expect((mockPrisma as any).inventory.create).toHaveBeenCalledTimes(4)
+    })
+
+    it('updateVariant: changing barcode to an already-used value → 400 BarcodeAlreadyInUse, no update written', async () => {
+      // Existing variant with barcode=SKU. Admin tries to change it to
+      // an EAN that's already assigned to another variant.
+      mockPrisma.productVariant.findUnique.mockResolvedValue({
+        id: 'v1', sku: 'MAL-100-SCH-M', barcode: 'MAL-100-SCH-M', productId: 'p1',
+      })
+      // Barcode pre-check finds a collision
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: 'v-other',
+        sku: 'MAL-050-ROT-M',
+        product: { translations: [{ language: 'de', name: 'Shirt Rot' }] },
+      })
+
+      let caught: any
+      try {
+        await productsService.updateVariant('v1', { barcode: '4006381333931' }, 'admin1', '127.0.0.1')
+      } catch (e) { caught = e }
+
+      expect(caught).toBeDefined()
+      expect(caught.response?.error).toBe('BarcodeAlreadyInUse')
+      expect(caught.response?.data?.conflictProductName).toBe('Shirt Rot')
+      expect(caught.response?.message?.de).toContain('Shirt Rot')
+
+      // The update must NOT have been persisted
+      expect(mockPrisma.productVariant.update).not.toHaveBeenCalled()
     })
   })
 })
