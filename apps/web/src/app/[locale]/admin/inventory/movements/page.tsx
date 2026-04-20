@@ -127,6 +127,20 @@ function parseSourceEvent(
     }
   }
 
+  // Post-payment-cancel restock — one row per item restocked, all sharing
+  // the same ORD-number. Without this pattern a 15-item partial cancel
+  // produced 15 ungrouped rows (ORD-20260420-000001 regression).
+  //   Partial cancel: "Order cancelled (post-payment restock): Partial cancel ORD-...: <reason>"
+  //   Full cancel:    "Order cancelled (post-payment restock): Full cancel ORD-...: <reason>"
+  const cancelRestock = notes.match(/Order cancelled.*?(ORD-\d{8}-\d+)/i)
+  if (cancelRestock) {
+    return {
+      kind: 'order',
+      id: cancelRestock[1],
+      href: `/admin/orders?q=${encodeURIComponent(cancelRestock[1])}`,
+    }
+  }
+
   // New-order reservation (written at create-time). Uses the Order's UUID;
   // we can't search on UUID in the admin-orders page, so no link — but the
   // id still serves as a unique group key so two separate orders don't merge.
