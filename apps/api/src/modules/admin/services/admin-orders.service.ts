@@ -1281,14 +1281,52 @@ export class AdminOrdersService {
       })
     }
 
-    // 2. Update order totals
+    // 2. Update order totals.
+    //
+    // Brutto convention (CLAUDE.md): prices are gross inkl. 19% MwSt, tax
+    // is rausgerechnet from the gross (newTotal − newTotal/1.19), NOT
+    // added on top. The old code computed newTax = newSubtotal × 0.19
+    // which adds Netto-style tax and produced totalAmount inflated by
+    // the tax portion (ORD-20260420-000001 had total=725.90 post-cancel
+    // instead of the correct 305.00). Same root cause family as the
+    // Invoice.netAmount (8bd0eb0) and VAT-Report (476bb87) bugs.
+    //
+    // Invariant enforced here: newSubtotal − newDiscount + shipping = newTotal
+    // Since calculateProportionalRefund() already gave us a refund that
+    // respects the original coupon math, we derive newTotal from the
+    // authoritative refund and then derive newDiscount from the
+    // invariant. That way the coupon scales correctly for BOTH
+    // percentage and fixed-amount types without having to branch on
+    // coupon kind.
     const remainingItems = order.items.filter((i: any) => !itemIds.includes(i.id))
-    const newSubtotal = remainingItems.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0)
-    const newTax = newSubtotal * 0.19
-    const newTotal = newSubtotal + Number(order.shippingCost) + newTax
+    const newSubtotal = Number(
+      remainingItems.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0).toFixed(2),
+    )
+    const shipping = Number(order.shippingCost)
+    const newTotal = Number((Number(order.totalAmount) - refundAmount).toFixed(2))
+    const newTax = Number((newTotal - newTotal / 1.19).toFixed(2))
+    const newDiscount = Number((newSubtotal + shipping - newTotal).toFixed(2))
+
+    // Runtime invariant guard — defensive. If derivation ever drifts
+    // beyond 1 cent due to a future regression (e.g. someone changes
+    // the refund formula without updating these lines), we log loud
+    // but do NOT throw: the cancel has already reserved the refund
+    // amount server-side and must complete to preserve GoBD-compliant
+    // bookkeeping. A tripped invariant is a bug to investigate, not
+    // a reason to leave the order in a half-cancelled state.
+    const invariantDrift = Math.abs((newSubtotal - newDiscount + shipping) - newTotal)
+    if (invariantDrift > 0.02) {
+      this.logger.error(
+        `cancelItems invariant drift for ${order.orderNumber}: ` +
+        `newSubtotal(${newSubtotal}) - newDiscount(${newDiscount}) + shipping(${shipping}) ` +
+        `= ${(newSubtotal - newDiscount + shipping).toFixed(2)} but newTotal=${newTotal}, ` +
+        `drift=€${invariantDrift.toFixed(4)}. Order will be updated anyway (defensive).`,
+      )
+    }
+
     await this.prisma.order.update({
       where: { id: orderId },
-      data: { subtotal: newSubtotal, taxAmount: newTax, totalAmount: newTotal, discountAmount: Number(order.discountAmount) },
+      data: { subtotal: newSubtotal, taxAmount: newTax, totalAmount: newTotal, discountAmount: newDiscount },
     })
 
     // 3. Partial refund via Stripe → auto-creates Gutschrift (GS-XXXX)
