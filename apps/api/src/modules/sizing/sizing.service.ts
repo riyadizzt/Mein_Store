@@ -129,10 +129,20 @@ export class SizingService {
   }
 
   // ── FIND CHART FOR PRODUCT ────────────────────────────────
-
+  //
+  // Three-tier fallback:
+  //   1. Supplier-specific chart (most recent delivery's supplier + category match)
+  //   2. Category-default chart (isDefault=true for the product's category)
+  //   3. Any chart for the category — deterministic order-by to remove the
+  //      audit-flagged "random chart wins" behaviour. Oldest chart wins.
+  //
+  // Soft-deleted products (deletedAt != null) no longer resolve a chart —
+  // historical order views would otherwise show a stale size guide for a
+  // product that's no longer on the shop. Returning null lets the
+  // consumer render a "chart unavailable" state instead.
   async findChartForProduct(productId: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId },
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: null },
       select: { categoryId: true },
     })
     if (!product?.categoryId) return null
@@ -167,11 +177,118 @@ export class SizingService {
     })
     if (defaultChart) return defaultChart
 
-    // 3. Fallback: any chart for category
+    // 3. Fallback: any chart for category, deterministic (oldest first).
+    // Pre-hardening this used findFirst with no orderBy — non-deterministic,
+    // customers could see different charts on refresh when a category had
+    // multiple non-default charts. Oldest-first is stable + gives the admin
+    // agency (the chart they created first wins).
     return this.prisma.sizeChart.findFirst({
       where: { categoryId: product.categoryId, isActive: true },
       include: { entries: { orderBy: { sortOrder: 'asc' } } },
+      orderBy: { createdAt: 'asc' },
     })
+  }
+
+  // ── ADMIN: preview which chart a product would resolve to under a
+  // hypothetical category change. Runs the same 3-tier fallback as
+  // findChartForProduct, but against a caller-supplied target
+  // categoryId instead of the product's current one. Used by the
+  // product-edit UI to warn "changing category X → Y will switch the
+  // customer's size guide from 'Chart A' to 'Chart B'".
+
+  async previewChartForCategory(productId: string, targetCategoryId: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, deletedAt: null },
+      select: { id: true, categoryId: true },
+    })
+    if (!product) return { current: null, preview: null, willChange: false }
+
+    const currentChart = await this.findChartForProduct(productId)
+
+    // Run the 3-tier resolution against the hypothetical categoryId
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { productId },
+      select: { id: true },
+    })
+    const deliveryItem = variant ? await this.prisma.supplierDeliveryItem.findFirst({
+      where: { variantId: variant.id },
+      include: { delivery: { select: { supplierId: true } } },
+      orderBy: { createdAt: 'desc' },
+    }) : null
+
+    let previewChart: any = null
+    if (deliveryItem?.delivery?.supplierId) {
+      previewChart = await this.prisma.sizeChart.findFirst({
+        where: {
+          supplierId: deliveryItem.delivery.supplierId,
+          categoryId: targetCategoryId,
+          isActive: true,
+        },
+        select: { id: true, name: true, chartType: true },
+      })
+    }
+    if (!previewChart) {
+      previewChart = await this.prisma.sizeChart.findFirst({
+        where: { categoryId: targetCategoryId, isDefault: true, isActive: true },
+        select: { id: true, name: true, chartType: true },
+      })
+    }
+    if (!previewChart) {
+      previewChart = await this.prisma.sizeChart.findFirst({
+        where: { categoryId: targetCategoryId, isActive: true },
+        select: { id: true, name: true, chartType: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    }
+
+    const currentId = currentChart?.id ?? null
+    const previewId = previewChart?.id ?? null
+    return {
+      current: currentChart ? { id: currentChart.id, name: currentChart.name, chartType: currentChart.chartType } : null,
+      preview: previewChart,
+      willChange: currentId !== previewId,
+    }
+  }
+
+  // Lists category ids where the tier-3 fallback is ambiguous — more
+  // than one non-default active chart attached to the same category.
+  // Admin UI flags these so the admin knows which categories need a
+  // designated default (currently oldest-chart wins silently).
+  async listCategoriesWithChartConflicts() {
+    const grouped = await this.prisma.sizeChart.groupBy({
+      by: ['categoryId'],
+      where: { isActive: true, categoryId: { not: null } },
+      _count: { id: true },
+      having: { id: { _count: { gt: 1 } } },
+    })
+
+    const conflicts: Array<{
+      categoryId: string
+      chartCount: number
+      hasDefault: boolean
+      chartNames: string[]
+    }> = []
+
+    for (const g of grouped) {
+      if (!g.categoryId) continue
+      const charts = await this.prisma.sizeChart.findMany({
+        where: { categoryId: g.categoryId, isActive: true },
+        select: { id: true, name: true, isDefault: true },
+        orderBy: { createdAt: 'asc' },
+      })
+      const hasDefault = charts.some((c) => c.isDefault)
+      // Only flag as conflict if tier-3 would actually trigger (no default)
+      if (!hasDefault && charts.length > 1) {
+        conflicts.push({
+          categoryId: g.categoryId,
+          chartCount: charts.length,
+          hasDefault: false,
+          chartNames: charts.map((c) => c.name),
+        })
+      }
+    }
+
+    return { conflicts, count: conflicts.length }
   }
 
   // ── CUSTOMER MEASUREMENTS ─────────────────────────────────

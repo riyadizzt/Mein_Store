@@ -1,0 +1,11 @@
+# Größentabellen — Änderungen ab 21.04.2026
+
+**Wichtig für den Tagesbetrieb:**
+
+- **Bei Kategorie-Wechsel im Produkt wird gewarnt, wenn sich die Größentabelle ändert.** Die Produkt-Bearbeiten-Seite zeigt jetzt unter der Kategorie-Auswahl an, welche Größentabelle der Kunde aktuell sieht — und falls sich beim Speichern eine andere Tabelle ergeben würde (z. B. weil die Ziel-Kategorie eine eigene Größentabelle hat), erscheint ein gelber Hinweis mit den beiden Tabellen-Namen. So sieht man vor dem Speichern, ob Kunden nach dem Save eine andere Größentabelle bekommen. Jeder Kategorie-Wechsel wird zusätzlich im Audit-Log mit Vorher/Nachher inkl. Tabellen-Namen festgehalten.
+- **Größentabellen können nicht mehr ungültige Maße enthalten.** Beim Anlegen oder Bearbeiten werden Größen-Bezeichnungen (XS bis 4XL, Zahlen, EU-38 etc.) und Körpermaße (10–250 cm) jetzt serverseitig geprüft. Tippfehler wie „bust = -50“ oder „size = ;<script>“ werden direkt abgelehnt. Doppelte Größen in derselben Tabelle (z. B. zwei Mal „M“) sind durch eine DB-Sperre nicht mehr möglich.
+- **Kategorie kann nicht mehr deaktiviert werden, solange Größentabellen daran hängen.** Statt die Tabellen verwaist zu lassen (Kunden hätten dann keine Größentabelle gesehen) wirft das System einen klaren Fehler mit der Liste der betroffenen Tabellen — der Admin entscheidet bewusst, ob er sie zuerst entfernen, neu zuordnen oder mit deaktivieren möchte.
+- **Wartungssichere Anzeige der Größentabelle auf Arabisch + im Admin.** Die Größentabelle im Kunden-Modal und im Admin-Editor wird jetzt korrekt rechts-nach-links dargestellt (Größen-Spalte rechts, Maße links daneben). Zahlen bleiben in lateinischer Schrift. Pre-Hardening sahen arabische Kunden eine verwirrte Anordnung von Beschriftung und Werten.
+- **Stabile Größentabelle für Kunden:** Wenn eine Kategorie mehrere Größentabellen hat ohne dass eine als „Standard“ markiert ist, gewinnt jetzt deterministisch die zuerst angelegte. Pre-Hardening konnten Kunden bei Refresh unterschiedliche Tabellen sehen. Außerdem zeigt die Sizing-Übersicht eine Warnung bei Kategorien mit mehreren Tabellen ohne Standard.
+
+Für den normalen Tagesbetrieb ändert sich nichts. Diese Härtungen greifen nur in Edge-Cases — saubere Größentabellen-Pflege funktioniert identisch weiter.

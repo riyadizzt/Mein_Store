@@ -48,6 +48,7 @@ import { StorageService } from '../../common/services/storage.service'
 import { PrismaService } from '../../prisma/prisma.service'
 import { ShipmentsService } from '../shipments/shipments.service'
 import { PaymentsService } from '../payments/payments.service'
+import { SizingService } from '../sizing/sizing.service'
 import { Response } from 'express'
 
 /**
@@ -153,6 +154,10 @@ export class AdminController {
     // positional constructor (Array(19) + prisma at index 9) keeps working.
     // The test only exercises getSettings() which doesn't touch payments.
     private readonly payments: PaymentsService,
+    // Appended at end for the same positional-constructor-test reason.
+    // Used by updateProduct() to compute size-chart diff for the audit
+    // log when the admin re-categorizes a product (size-charts hardening D).
+    private readonly sizing: SizingService,
   ) {}
 
   // ── Dashboard ─────────────────────────────────────────────
@@ -767,6 +772,8 @@ export class AdminController {
       excludeFromReturns?: boolean; returnExclusionReason?: string | null;
       translations?: { language: string; name: string; description?: string; metaTitle?: string; metaDesc?: string }[]
     },
+    @Req() req: any,
+    @Ip() ip: string,
   ) {
     const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } })
     if (!product) throw new NotFoundException('Product not found')
@@ -774,6 +781,20 @@ export class AdminController {
     const data: any = {}
     if (body.basePrice !== undefined) data.basePrice = body.basePrice
     if (body.salePrice !== undefined) data.salePrice = body.salePrice
+
+    // Track category change so we can audit it after the write succeeds.
+    // Resolve old + new chart names BEFORE the update so the audit row
+    // reflects the actual diff (sometimes the same category resolves to a
+    // different chart because the chart pool changed).
+    let categoryChange: {
+      fromId: string | null
+      fromName: string | null
+      toId: string
+      toName: string
+      fromChart: string | null
+      toChart: string | null
+    } | null = null
+
     // Category re-categorize: only accept the new id when it actually
     // differs from the current one AND the target category exists +
     // isn't soft-deleted. Silent no-op on identical id so repeat saves
@@ -781,9 +802,36 @@ export class AdminController {
     if (body.categoryId !== undefined && body.categoryId !== product.categoryId) {
       const target = await this.prisma.category.findFirst({
         where: { id: body.categoryId, isActive: true },
+        include: { translations: true },
       })
       if (!target) throw new NotFoundException('Target category not found or inactive')
       data.categoryId = body.categoryId
+
+      // Resolve the chart-name diff for the audit log. previewChartForCategory
+      // returns { current, preview } already shaped — `current` reflects the
+      // chart the product resolves to TODAY and `preview` what it will
+      // resolve to once the categoryId change commits.
+      const fromCat = product.categoryId
+        ? await this.prisma.category.findUnique({
+            where: { id: product.categoryId },
+            include: { translations: true },
+          })
+        : null
+      const pickName = (cat: any | null) => {
+        if (!cat) return null
+        const tDe = cat.translations?.find((t: any) => t.language === 'de')?.name
+        const tEn = cat.translations?.find((t: any) => t.language === 'en')?.name
+        return tDe || tEn || cat.slug
+      }
+      const preview = await this.sizing.previewChartForCategory(id, body.categoryId).catch(() => null)
+      categoryChange = {
+        fromId: product.categoryId ?? null,
+        fromName: pickName(fromCat),
+        toId: body.categoryId,
+        toName: pickName(target),
+        fromChart: preview?.current?.name ?? null,
+        toChart: preview?.preview?.name ?? null,
+      }
     }
     if (body.channelFacebook !== undefined) data.channelFacebook = body.channelFacebook
     if (body.channelTiktok !== undefined) data.channelTiktok = body.channelTiktok
@@ -802,6 +850,31 @@ export class AdminController {
           update: { name: t.name, description: t.description ?? undefined, metaTitle: t.metaTitle ?? undefined, metaDesc: t.metaDesc ?? undefined },
         })
       }
+    }
+
+    // Audit the category change AFTER the write so we never log a change
+    // that didn't commit. Includes the chart diff so the admin can later
+    // see why the customer-visible size guide flipped on a given day.
+    if (categoryChange) {
+      await this.audit.log({
+        adminId: req.user?.id,
+        action: 'PRODUCTS_CATEGORY_CHANGED',
+        entityType: 'product',
+        entityId: id,
+        changes: {
+          before: {
+            categoryId: categoryChange.fromId,
+            categoryName: categoryChange.fromName,
+            chartName: categoryChange.fromChart,
+          },
+          after: {
+            categoryId: categoryChange.toId,
+            categoryName: categoryChange.toName,
+            chartName: categoryChange.toChart,
+          },
+        },
+        ipAddress: ip,
+      }).catch(() => {})
     }
 
     return this.products.findOne(id)

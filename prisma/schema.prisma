@@ -1653,9 +1653,15 @@ model SizeChartEntry {
   bodyHeight    Decimal?  @map("body_height") @db.Decimal(5, 1)  // Körpergröße (Kinder)
   euSize        String?   @map("eu_size")     // EU-Größe Mapping (z.B. "38")
   createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   sizeChart     SizeChart @relation(fields: [sizeChartId], references: [id], onDelete: Cascade)
 
+  // Prevents two entries with the same size label (e.g. two "M" rows) in
+  // the same chart. The recommendation engine in sizing.service picks the
+  // "best match" by Σ|delta|; duplicate sizes made the tie-break non-
+  // deterministic. Pre-flight verified against Live-DB: 0 existing dupes.
+  @@unique([sizeChartId, size])
   @@index([sizeChartId, sortOrder])
   @@map("size_chart_entries")
 }

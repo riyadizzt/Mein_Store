@@ -70,9 +70,23 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
   }, [isOpen, productId, isAuthenticated])
 
   const entries = chart?.entries ?? []
-  const fields = entries.length > 0 ? Object.keys(entries[0]).filter(k =>
-    !['id', 'sizeChartId', 'size', 'sortOrder', 'createdAt'].includes(k) && entries.some((e: any) => e[k] != null)
+  const rawFields = entries.length > 0 ? Object.keys(entries[0]).filter(k =>
+    !['id', 'sizeChartId', 'size', 'sortOrder', 'createdAt', 'updatedAt'].includes(k) && entries.some((e: any) => e[k] != null)
   ) : []
+  // RTL fix (Gruppe: Size-Charts Hardening B-A).
+  //
+  // The size-guide table is rendered via CSS Grid with an inline
+  // `gridTemplateColumns` string. CSS Grid does NOT auto-reverse columns
+  // when the document direction is RTL — only the start/end alignment of
+  // text flips, leaving data in LTR order against an RTL page. Arabic
+  // customers saw headers on the right but the underlying column order
+  // unchanged, creating value/label misalignment confusion.
+  //
+  // Fix: reverse the `fields` array when locale=ar so the data shape
+  // renders right-to-left organically. The grid itself stays the same
+  // shape; only the iteration order flips. Numbers stay in a dir="ltr"
+  // wrapper (see row rendering below) to preserve Western digit order.
+  const fields = locale === 'ar' ? [...rawFields].reverse() : rawFields
   const fitNote = chart ? (locale === 'ar' ? (chart.fitNoteAr || chart.fitNote) : locale === 'en' ? (chart.fitNoteEn || chart.fitNote) : chart.fitNote) : null
 
   const TABS = [
@@ -226,30 +240,47 @@ export function SizeGuideModal({ productId, isOpen, onClose }: SizeGuideModalPro
                     )}
                     {entries.length > 0 ? (
                       <div className="overflow-x-auto rounded-xl border border-[#e5e0d8]">
-                        {/* Header */}
-                        <div className={`grid gap-x-1 bg-[#1a1a2e]/[0.04] border-b border-[#e5e0d8]`} style={{ gridTemplateColumns: `1fr repeat(${fields.length}, 1fr)` }}>
-                          <div className="px-3 py-3 text-sm font-semibold text-[#1a1a2e] text-center">{t3(locale, 'Größe', 'Size', 'المقاس')}</div>
+                        {/* Header. In Arabic the Size column moves to the
+                             right because `fields` is reversed AND the Size
+                             column comes last in the grid template. */}
+                        <div className={`grid gap-x-1 bg-[#1a1a2e]/[0.04] border-b border-[#e5e0d8]`} style={{ gridTemplateColumns: locale === 'ar' ? `repeat(${fields.length}, 1fr) 1fr` : `1fr repeat(${fields.length}, 1fr)` }}>
+                          {locale !== 'ar' && (
+                            <div className="px-3 py-3 text-sm font-semibold text-[#1a1a2e] text-center">{t3(locale, 'Größe', 'Size', 'المقاس')}</div>
+                          )}
                           {fields.map(f => (
                             <div key={f} className="px-2 py-3 text-center text-xs font-semibold text-[#1a1a2e]/50">
                               {FIELD_LABELS[f]?.[locale === 'ar' ? 'ar' : locale === 'en' ? 'en' : 'de'] ?? f}
                               <span className="text-[#1a1a2e]/20 font-normal"> cm</span>
                             </div>
                           ))}
+                          {locale === 'ar' && (
+                            <div className="px-3 py-3 text-sm font-semibold text-[#1a1a2e] text-center">المقاس</div>
+                          )}
                         </div>
                         {/* Rows */}
                         {entries.map((entry: any) => {
                           const isRecommended = recommendation?.recommendation === entry.size
                           return (
-                            <div key={entry.id} className={`grid gap-x-1 border-b border-[#e5e0d8] last:border-0 transition-colors ${isRecommended ? 'bg-[#d4a853]/10' : 'hover:bg-white'}`} style={{ gridTemplateColumns: `1fr repeat(${fields.length}, 1fr)` }}>
-                              <div className="px-3 py-3 text-sm font-bold text-center">
-                                {entry.size}
-                                {isRecommended && <span className="text-[9px] text-[#d4a853] font-medium block">{t3(locale, 'Empfohlen', 'Rec.', 'موصى')}</span>}
-                              </div>
+                            <div key={entry.id} className={`grid gap-x-1 border-b border-[#e5e0d8] last:border-0 transition-colors ${isRecommended ? 'bg-[#d4a853]/10' : 'hover:bg-white'}`} style={{ gridTemplateColumns: locale === 'ar' ? `repeat(${fields.length}, 1fr) 1fr` : `1fr repeat(${fields.length}, 1fr)` }}>
+                              {locale !== 'ar' && (
+                                <div className="px-3 py-3 text-sm font-bold text-center">
+                                  <span dir="ltr" className="tabular-nums">{entry.size}</span>
+                                  {isRecommended && <span className="text-[9px] text-[#d4a853] font-medium block">{t3(locale, 'Empfohlen', 'Rec.', 'موصى')}</span>}
+                                </div>
+                              )}
                               {fields.map(f => (
+                                // dir="ltr" on numeric cells keeps Western
+                                // digit order even when the page runs RTL.
                                 <div key={f} className="px-2 py-3 text-center text-sm tabular-nums text-[#1a1a2e]/65">
-                                  {entry[f] != null ? Number(entry[f]) : '—'}
+                                  <span dir="ltr">{entry[f] != null ? Number(entry[f]) : '—'}</span>
                                 </div>
                               ))}
+                              {locale === 'ar' && (
+                                <div className="px-3 py-3 text-sm font-bold text-center">
+                                  <span dir="ltr" className="tabular-nums">{entry.size}</span>
+                                  {isRecommended && <span className="text-[9px] text-[#d4a853] font-medium block">موصى</span>}
+                                </div>
+                              )}
                             </div>
                           )
                         })}

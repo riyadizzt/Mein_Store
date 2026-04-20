@@ -47,6 +47,11 @@ const FIELD_LABELS: Record<string, L> = {
   originalWarehouseId: { de: 'Ursprünglich. Lager', en: 'Original warehouse', ar: 'المستودع الأصلي' },
   qty: { de: 'Menge', en: 'Quantity', ar: 'الكمية' },
   cleanupReason: { de: 'Bereinigungs-Grund', en: 'Cleanup reason', ar: 'سبب التنظيف' },
+  // PRODUCTS_CATEGORY_CHANGED payload (size-charts hardening D)
+  categoryId: { de: 'Kategorie-ID', en: 'Category ID', ar: 'معرف الفئة' },
+  categoryName: { de: 'Kategorie', en: 'Category', ar: 'الفئة' },
+  categorySlug: { de: 'Kategorie-Slug', en: 'Category slug', ar: 'رمز الفئة' },
+  chartName: { de: 'Größentabelle', en: 'Size chart', ar: 'جدول المقاسات' },
   // R12 — pre/post payment cancel differentiation
   refunded: { de: 'Erstattet', en: 'Refunded', ar: 'تم الاسترداد' },
   paymentWas: { de: 'Zahlungsstatus', en: 'Payment was', ar: 'حالة الدفع' },

@@ -104,6 +104,25 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', id] }),
   })
 
+  // Chart preview: ask the backend what SizeChart this product currently
+  // resolves to, AND what chart it would resolve to if the admin saved
+  // the new categoryId. Lets us warn the admin BEFORE they click save
+  // that the customer-visible size guide will change. See sizing
+  // controller /admin/chart-preview (Gruppe: Size-Charts Hardening D).
+  const chartPreviewTarget = subCategoryId && product?.categoryId && subCategoryId !== product.categoryId
+    ? subCategoryId
+    : (product?.categoryId ?? null)
+  const { data: chartPreview } = useQuery({
+    queryKey: ['chart-preview', id, chartPreviewTarget],
+    queryFn: async () => {
+      const { data } = await api.get(`/sizing/admin/chart-preview`, {
+        params: { productId: id, categoryId: chartPreviewTarget },
+      })
+      return data
+    },
+    enabled: !!chartPreviewTarget,
+  })
+
   const saveMut = useMutation({
     mutationFn: async () => {
       await api.put(`/admin/products/${id}`, {
@@ -536,6 +555,52 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                   </p>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Resolved size chart badge + category-change chart warning.
+              The badge always reflects what the customer sees today; the
+              warning fires only when the selected category would resolve to
+              a different chart on save. See sizing service
+              previewChartForCategory (Gruppe: Size-Charts Hardening D). */}
+          {chartPreview && (
+            <div className="mt-4 pt-4 border-t border-border/40 space-y-2">
+              <div className="flex items-start gap-2 flex-wrap text-[13px]">
+                <span className="text-muted-foreground">
+                  {locale === 'ar' ? 'جدول المقاسات المعروض:' : locale === 'en' ? 'Resolved size chart:' : 'Größentabelle (aktuell):'}
+                </span>
+                {chartPreview.current ? (
+                  <a
+                    href={`/${locale}/admin/sizing`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#d4a853]/15 text-[#d4a853] font-medium hover:bg-[#d4a853]/25 transition-colors"
+                  >
+                    {chartPreview.current.name}
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {locale === 'ar' ? 'لا يوجد جدول' : locale === 'en' ? 'No chart' : 'Keine Tabelle'}
+                  </span>
+                )}
+              </div>
+
+              {chartPreview.willChange && subCategoryId && subCategoryId !== product?.categoryId && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-[12px] text-amber-900 dark:text-amber-200">
+                  <p className="font-semibold mb-1">
+                    {locale === 'ar'
+                      ? '⚠ سيتغير جدول المقاسات'
+                      : locale === 'en'
+                      ? '⚠ Size chart will change'
+                      : '⚠ Größentabelle wird sich ändern'}
+                  </p>
+                  <p className="leading-relaxed">
+                    {locale === 'ar'
+                      ? `سيرى العملاء "${chartPreview.preview?.name ?? 'لا يوجد جدول'}" بدلاً من "${chartPreview.current?.name ?? 'لا يوجد جدول'}" بعد الحفظ.`
+                      : locale === 'en'
+                      ? `Customers will see "${chartPreview.preview?.name ?? 'no chart'}" instead of "${chartPreview.current?.name ?? 'no chart'}" after save.`
+                      : `Kunden werden "${chartPreview.preview?.name ?? 'keine Tabelle'}" statt "${chartPreview.current?.name ?? 'keine Tabelle'}" sehen nach dem Speichern.`}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

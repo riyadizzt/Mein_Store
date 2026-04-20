@@ -9,6 +9,7 @@ import { ShipmentsModule } from '../shipments/shipments.module'
 // instead of manually deleting stock_reservations rows + drift-ing the
 // quantityReserved counter (incident 17.04.2026).
 import { InventoryModule } from '../inventory/inventory.module'
+import { SizingModule } from '../sizing/sizing.module'
 import { AdminController } from './admin.controller'
 import { ShippingZonesController } from './shipping-zones/shipping-zones.controller'
 import { ShippingZonesService } from './shipping-zones/shipping-zones.service'
@@ -34,7 +35,7 @@ import { CampaignService } from './services/campaign.service'
 import { CronCrashAlertService } from './services/cron-crash-alert.service'
 
 @Module({
-  imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule, InventoryModule],
+  imports: [PrismaModule, PaymentsModule, ShipmentsModule, EmailModule, InventoryModule, SizingModule],
   controllers: [AdminController, ShippingZonesController, NotificationSseController],
   providers: [
     AuditService,

@@ -65,6 +65,19 @@ export default function AdminSizingPage() {
     queryFn: async () => { const { data } = await api.get('/categories'); return data ?? [] },
   })
 
+  // Surface categories with multiple non-default charts so the admin
+  // sees them on the index page and can resolve the ambiguity by
+  // marking one chart as default. Pre-hardening the customer-visible
+  // chart was non-deterministic in this case (could swap on refresh).
+  // See sizing.service.listCategoriesWithChartConflicts (Hardening E).
+  const { data: conflicts } = useQuery({
+    queryKey: ['admin-sizing-conflicts'],
+    queryFn: async () => {
+      const { data } = await api.get('/sizing/admin/categories-with-conflicts')
+      return data
+    },
+  })
+
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.delete(`/sizing/charts/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-sizing-charts'] }),
@@ -89,6 +102,48 @@ export default function AdminSizingPage() {
           {t3(locale, 'Neue Tabelle', 'New Chart', 'جدول جديد')}
         </Button>
       </div>
+
+      {/* Conflict warning: categories with multiple non-default charts
+          where the customer's resolved chart is non-deterministic until
+          someone marks a default. (Size-Charts Hardening E.) */}
+      {conflicts && conflicts.count > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4">
+          <div className="flex items-start gap-3">
+            <div className="text-amber-700 dark:text-amber-400 text-lg leading-none mt-0.5">⚠</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                {t3(
+                  locale,
+                  `${conflicts.count} Kategorie${conflicts.count === 1 ? '' : 'n'} ohne Standard-Tabelle`,
+                  `${conflicts.count} categor${conflicts.count === 1 ? 'y' : 'ies'} without a default chart`,
+                  `${conflicts.count} ${conflicts.count === 1 ? 'فئة' : 'فئات'} بدون جدول افتراضي`,
+                )}
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                {t3(
+                  locale,
+                  'Diese Kategorien haben mehrere aktive Größentabellen, aber keine ist als Standard markiert. Kunden sehen die älteste — markiere eine Tabelle als Standard, um die Auswahl bewusst zu setzen.',
+                  'These categories have multiple active charts but none marked as default. Customers see the oldest one — mark one as default to make the choice explicit.',
+                  'هذه الفئات لديها عدة جداول مقاسات نشطة دون تعيين أي منها كافتراضي. يرى العملاء الأقدم — قم بتمييز جدول كافتراضي لتحديد الخيار بوضوح.',
+                )}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {(conflicts.conflicts ?? []).slice(0, 5).map((c: any) => {
+                  const cat = (categories ?? []).find((cc: any) => cc.id === c.categoryId)
+                  return (
+                    <li key={c.categoryId} className="text-xs text-amber-900 dark:text-amber-200">
+                      <span className="font-medium">{cat ? catName(cat) : c.categoryId}</span>
+                      <span className="text-amber-700 dark:text-amber-400">
+                        {' '}— {c.chartCount} {t3(locale, 'Tabellen', 'charts', 'جداول')}: {c.chartNames.join(', ')}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Form */}
       {showCreate && (
@@ -160,7 +215,7 @@ export default function AdminSizingPage() {
 function CreateChartForm({ locale, suppliers, categories, onClose, onSuccess }: {
   locale: string; suppliers: any[]; categories: any[]; onClose: () => void; onSuccess: () => void
 }) {
-  const [form, setForm] = useState({ name: '', supplierId: '', categoryId: '', chartType: 'tops', fitNote: '', fitNoteAr: '', isDefault: false })
+  const [form, setForm] = useState({ name: '', supplierId: '', categoryId: '', chartType: 'tops', fitNote: '', fitNoteAr: '', fitNoteEn: '', isDefault: false })
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -207,8 +262,12 @@ function CreateChartForm({ locale, suppliers, categories, onClose, onSuccess }: 
           <Input value={form.fitNote} onChange={e => setForm({ ...form, fitNote: e.target.value })} placeholder="z.B. Fällt klein aus" />
         </div>
         <div>
+          <label className="text-sm font-medium mb-1 block">{t3(locale, 'Passform-Hinweis (EN)', 'Fit Note (EN)', 'ملاحظة المقاس (إنجليزي)')}</label>
+          <Input value={form.fitNoteEn} onChange={e => setForm({ ...form, fitNoteEn: e.target.value })} placeholder="e.g. Runs small" />
+        </div>
+        <div>
           <label className="text-sm font-medium mb-1 block">{t3(locale, 'Passform-Hinweis (AR)', 'Fit Note (AR)', 'ملاحظة المقاس (عربي)')}</label>
-          <Input value={form.fitNoteAr} onChange={e => setForm({ ...form, fitNoteAr: e.target.value })} placeholder="مثال: يأتي بمقاس أصغر" />
+          <Input value={form.fitNoteAr} onChange={e => setForm({ ...form, fitNoteAr: e.target.value })} placeholder="مثال: يأتي بمقاس أصغر" dir="rtl" />
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm">
@@ -229,7 +288,12 @@ function CreateChartForm({ locale, suppliers, categories, onClose, onSuccess }: 
 // ── CHART ENTRIES EDITOR ──────────────────────────────────
 
 function ChartEntriesEditor({ chart, locale, onUpdate }: { chart: any; locale: string; onUpdate: () => void }) {
-  const fields = MEASUREMENT_FIELDS[chart.chartType] ?? []
+  const rawFields = MEASUREMENT_FIELDS[chart.chartType] ?? []
+  // RTL fix (Gruppe: Size-Charts Hardening, A-2): reverse the fields
+  // array for Arabic so the grid renders in natural RTL reading order.
+  // Pairs with the size-guide-modal.tsx fix — same approach, consistent
+  // across admin + customer surfaces.
+  const fields = locale === 'ar' ? [...rawFields].reverse() : rawFields
   const [entries, setEntries] = useState<any[]>(chart.entries ?? [])
   const [saving, setSaving] = useState(false)
 
@@ -255,25 +319,46 @@ function ChartEntriesEditor({ chart, locale, onUpdate }: { chart: any; locale: s
 
   const fieldLabel = (f: string) => FIELD_LABELS[f]?.[locale === 'ar' ? 'ar' : 'de'] ?? f
 
+  // Grid template + DOM-order flip for Arabic (same pattern as
+  // size-guide-modal.tsx). CSS Grid does not auto-reverse columns under RTL —
+  // we manually reverse both the column definition AND the DOM placement
+  // of the Size cell + delete button so the table reads right-to-left
+  // naturally. Numbers stay dir="ltr" to preserve Western digit order.
+  const gridCols = locale === 'ar'
+    ? `40px repeat(${fields.length}, 1fr) 80px`
+    : `80px repeat(${fields.length}, 1fr) 40px`
+
   return (
     <div className="space-y-3">
       {fields.length > 0 && (
         <div className="overflow-x-auto">
           <div className="min-w-[600px]">
             {/* Header */}
-            <div className="grid gap-2 text-xs font-semibold text-muted-foreground mb-2" style={{ gridTemplateColumns: `80px repeat(${fields.length}, 1fr) 40px` }}>
-              <div>{t3(locale, 'Größe', 'Size', 'المقاس')}</div>
+            <div className="grid gap-2 text-xs font-semibold text-muted-foreground mb-2" style={{ gridTemplateColumns: gridCols }}>
+              {locale !== 'ar' && <div>{t3(locale, 'Größe', 'Size', 'المقاس')}</div>}
+              {locale === 'ar' && <div />}
               {fields.map(f => <div key={f} className="text-center">{fieldLabel(f)} (cm)</div>)}
-              <div />
+              {locale !== 'ar' && <div />}
+              {locale === 'ar' && <div>المقاس</div>}
             </div>
             {/* Rows */}
             {entries.map((entry, idx) => (
-              <div key={idx} className="grid gap-2 mb-1.5" style={{ gridTemplateColumns: `80px repeat(${fields.length}, 1fr) 40px` }}>
-                <Input value={entry.size} onChange={e => updateField(idx, 'size', e.target.value)} className="h-8 text-sm font-bold" placeholder="S" />
+              <div key={idx} className="grid gap-2 mb-1.5" style={{ gridTemplateColumns: gridCols }}>
+                {locale !== 'ar' && (
+                  <Input value={entry.size} onChange={e => updateField(idx, 'size', e.target.value)} className="h-8 text-sm font-bold" placeholder="S" />
+                )}
+                {locale === 'ar' && (
+                  <button onClick={() => removeRow(idx)} className="h-8 flex items-center justify-center text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                )}
                 {fields.map(f => (
-                  <Input key={f} type="number" step="0.1" value={entry[f] ?? ''} onChange={e => updateField(idx, f, e.target.value)} className="h-8 text-sm text-center" placeholder="—" />
+                  <Input key={f} type="number" step="0.1" value={entry[f] ?? ''} onChange={e => updateField(idx, f, e.target.value)} className="h-8 text-sm text-center tabular-nums" placeholder="—" dir="ltr" />
                 ))}
-                <button onClick={() => removeRow(idx)} className="h-8 flex items-center justify-center text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                {locale !== 'ar' && (
+                  <button onClick={() => removeRow(idx)} className="h-8 flex items-center justify-center text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                )}
+                {locale === 'ar' && (
+                  <Input value={entry.size} onChange={e => updateField(idx, 'size', e.target.value)} className="h-8 text-sm font-bold" placeholder="S" dir="ltr" />
+                )}
               </div>
             ))}
           </div>

@@ -101,6 +101,29 @@ export class CategoriesService {
     const category = await this.prisma.category.findUnique({ where: { id } })
     if (!category) throw new NotFoundException('Kategorie nicht gefunden')
 
+    // Pre-delete check for attached SizeCharts. Pre-hardening, deactivating
+    // a category silently orphaned any charts attached to it — the charts
+    // stayed active but customers in that category saw no size guide until
+    // someone re-linked them. The audit flagged this as a "structured 409"
+    // so the admin is forced to decide explicitly: detach the charts first,
+    // or deactivate them alongside the category. Defense-in-depth.
+    const attachedCharts = await this.prisma.sizeChart.findMany({
+      where: { categoryId: id, isActive: true },
+      select: { id: true, name: true },
+    })
+    if (attachedCharts.length > 0) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'CategoryHasAttachedSizeCharts',
+        message: {
+          de: `Kategorie kann nicht deaktiviert werden — ${attachedCharts.length} Größentabelle(n) hängen daran. Bitte zuerst entfernen oder neu zuordnen.`,
+          en: `Category cannot be deactivated — ${attachedCharts.length} size chart(s) are attached. Please detach or reassign them first.`,
+          ar: `لا يمكن إلغاء تفعيل الفئة — يوجد ${attachedCharts.length} جدول(جداول) مقاسات مرتبطة بها. يرجى إزالتها أو إعادة تعيينها أولاً.`,
+        },
+        data: { attachedCharts },
+      })
+    }
+
     return this.prisma.category.update({
       where: { id },
       data: { isActive: false },

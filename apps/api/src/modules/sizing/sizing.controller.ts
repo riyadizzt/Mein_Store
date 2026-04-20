@@ -7,6 +7,10 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'
 import { Roles } from '../../common/decorators/roles.decorator'
 import { SizingService } from './sizing.service'
+import {
+  CreateSizeChartDto, UpdateSizeChartDto,
+  SizeChartEntryDto, BulkUpsertEntriesDto,
+} from './dto/size-chart.dto'
 
 @Controller('sizing')
 export class SizingController {
@@ -65,15 +69,40 @@ export class SizingController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.CREATED)
-  async createChart(@Body() body: any) {
+  async createChart(@Body() body: CreateSizeChartDto) {
     return this.sizingService.createChart(body)
   }
 
   @Patch('charts/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
-  async updateChart(@Param('id', ParseUUIDPipe) id: string, @Body() body: any) {
+  async updateChart(@Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateSizeChartDto) {
     return this.sizingService.updateChart(id, body)
+  }
+
+  // Preview which chart a product would resolve to if its category
+  // were changed to the target categoryId. Lets the admin UI warn
+  // the user before saving that the customer will see a different
+  // size chart. See frontend product-edit page.
+  @Get('admin/chart-preview')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async chartPreviewForCategory(
+    @Query('productId', ParseUUIDPipe) productId: string,
+    @Query('categoryId', ParseUUIDPipe) categoryId: string,
+  ) {
+    return this.sizingService.previewChartForCategory(productId, categoryId)
+  }
+
+  // Admin sizing page surfaces a warning badge on every category that
+  // has more than one non-default chart (non-deterministic tier-3
+  // fallback). This endpoint enumerates them once so the UI can
+  // render the flag without N queries.
+  @Get('admin/categories-with-conflicts')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  async categoriesWithConflicts() {
+    return this.sizingService.listCategoriesWithChartConflicts()
   }
 
   @Delete('charts/:id')
@@ -89,7 +118,7 @@ export class SizingController {
   @Post('charts/:chartId/entries')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
-  async addEntry(@Param('chartId', ParseUUIDPipe) chartId: string, @Body() body: any) {
+  async addEntry(@Param('chartId', ParseUUIDPipe) chartId: string, @Body() body: SizeChartEntryDto) {
     return this.sizingService.addEntry(chartId, body)
   }
 
@@ -97,7 +126,7 @@ export class SizingController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.OK)
-  async bulkUpsertEntries(@Param('chartId', ParseUUIDPipe) chartId: string, @Body() body: { entries: any[] }) {
+  async bulkUpsertEntries(@Param('chartId', ParseUUIDPipe) chartId: string, @Body() body: BulkUpsertEntriesDto) {
     await this.sizingService.bulkUpsertEntries(chartId, body.entries)
     return { success: true }
   }
@@ -105,7 +134,7 @@ export class SizingController {
   @Patch('entries/:entryId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
-  async updateEntry(@Param('entryId', ParseUUIDPipe) entryId: string, @Body() body: any) {
+  async updateEntry(@Param('entryId', ParseUUIDPipe) entryId: string, @Body() body: SizeChartEntryDto) {
     return this.sizingService.updateEntry(entryId, body)
   }
 
