@@ -6,8 +6,9 @@
  * (nodejs vs edge). This is the official Next.js pattern for early bootstrap
  * instrumentation.
  *
- * sentry.client.config.ts is NOT loaded here — Next.js auto-loads it for
- * the browser bundle via the @sentry/nextjs webpack plugin.
+ * Browser-side Sentry lives in src/instrumentation-client.ts — Next.js
+ * auto-loads that file into the browser bundle (Turbopack-compatible
+ * replacement for the legacy sentry.client.config.ts pattern).
  *
  * Graceful degradation: each config file has its own `if (dsn) Sentry.init()`
  * guard. If no DSN is configured, these imports are essentially no-ops.

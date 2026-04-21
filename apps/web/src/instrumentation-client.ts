@@ -10,6 +10,11 @@
  */
 import * as Sentry from '@sentry/nextjs'
 
+// Router-transition instrumentation hook — required when this file is
+// named `instrumentation-client.ts`. Exporting captureRouterTransitionStart
+// lets Sentry performance traces include client-side navigation timings.
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
+
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN
 
 if (dsn) {
