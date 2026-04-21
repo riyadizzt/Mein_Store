@@ -61,6 +61,7 @@ enum SalesChannel {
   tiktok
   google
   whatsapp
+  ebay
 }
 
 enum OrderStatus {
@@ -212,6 +213,7 @@ enum PaymentProvider {
   PAYPAL
   VORKASSE
   SUMUP
+  EBAY_MANAGED_PAYMENTS
 }
 
 enum RefundStatus {
@@ -1910,4 +1912,81 @@ enum BackupStatus {
   SUCCESS
   FAILED
   EXPIRED // R2 object pruned by retention, DB row kept for audit
+}
+
+// ─────────────────────────────────────────────────────────────
+// MARKETPLACE — Phase 2 (eBay) / Phase 3 (TikTok Shop)
+// ─────────────────────────────────────────────────────────────
+//
+// Sidecar pattern: Marketplace-specific metadata lives next to the
+// OrdersService output, not inside `orders`. Keeps the core Order
+// model untouched (see Phase-2 Arbeitsregel: "Null Touch an Orders").
+//
+// Lifecycle row per external-order import attempt. Serves THREE
+// purposes:
+//
+//   1. Idempotency-Gate: @@unique([marketplace, externalOrderId])
+//      raises P2002 on duplicate webhook + pull-cron race, so only
+//      one importer path succeeds in creating the local Order.
+//
+//   2. Failure-Audit: import can fail at preflight (no stock,
+//      address invalid, price mismatch) without any local Order
+//      existing yet. We still need a trace of "eBay order X was
+//      attempted, rejected because Y".
+//
+//   3. Metadata-Sidecar: eBay-specific fields (buyerUsername,
+//      eBay-item-IDs per line, eBay-return-policy-snapshot, etc.)
+//      live in `metadata` JSON. Order.channelOrderId holds the
+//      external ID as top-level indexable column; the rest stays
+//      here to keep `orders` schema stable.
+//
+// Status lifecycle:
+//   IMPORTING → IMPORTED (Order created + payment captured)
+//             → FAILED   (hard error before Order exists)
+//             → SKIPPED  (dedup hit — duplicate event for existing Order)
+
+model MarketplaceOrderImport {
+  id              String                     @id @default(uuid())
+  marketplace     Marketplace
+  externalOrderId String                     @map("external_order_id")
+  status          MarketplaceImportStatus    @default(IMPORTING)
+
+  // Linked local Order — populated once status transitions to IMPORTED.
+  // NOT a foreign-key on purpose: local Order may be soft-deleted or
+  // rebuilt after disaster recovery; keeping this loose preserves the
+  // audit trail. String-only reference.
+  orderId         String?                    @map("order_id")
+
+  // Arbitrary marketplace-specific payload. Shape documented per
+  // marketplace in the adapter module. Never read by the Orders/
+  // Invoice/Payment services — only by the marketplace adapter.
+  metadata        Json?
+
+  // On FAILED: short human-readable reason (max 500 chars enforced
+  // at service level). Full stack-trace goes to Sentry instead.
+  error           String?                    @db.Text
+
+  // Correlation to notification-api payload for replay/debug.
+  rawEventId      String?                    @map("raw_event_id")
+
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  updatedAt       DateTime                   @updatedAt      @map("updated_at")
+  importedAt      DateTime?                  @map("imported_at")
+
+  @@unique([marketplace, externalOrderId], name: "marketplace_external_order_unique")
+  @@index([marketplace, status, createdAt])
+  @@index([orderId])
+  @@map("marketplace_order_imports")
+}
+
+enum Marketplace {
+  EBAY
+  TIKTOK
+}
+
+enum MarketplaceImportStatus {
+  IMPORTING // row claimed by an importer, Order not yet created
+  IMPORTED  // local Order row exists, payment captured, invoice flow kicked off
+  FAILED    // hard error before Order creation — see `error` field
+  SKIPPED   // duplicate event, local Order already exists (dedup hit)
 }
