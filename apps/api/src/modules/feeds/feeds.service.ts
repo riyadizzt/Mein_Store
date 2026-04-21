@@ -455,49 +455,22 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ── WhatsApp Business Catalog Feed (JSON) ────────────────────
-
-  async getWhatsAppFeed(lang: string = 'de', force = false): Promise<{ json: string; stats: FeedStats }> {
-    const cacheKey = `whatsapp_${lang}`
-    const cached = this.cache.get(cacheKey)
-    if (cached && !force && Date.now() - cached.generatedAt.getTime() < this.CACHE_TTL) {
-      return { json: cached.data, stats: cached.stats }
-    }
-
-    try {
-    const { products, stats } = await this.getProducts(lang, 'whatsapp')
-    const utmParams = channelUtmParams('whatsapp')
-
-    const catalog = products.map((p) => {
-      const priceNum = parseFloat(p.price) || 0
-      const salePriceNum = p.salePrice ? parseFloat(p.salePrice) : null
-      return {
-        id: p.sku,
-        title: p.title.slice(0, 200),
-        description: (p.description || p.title).slice(0, 5000),
-        availability: p.availability === 'in stock' ? 'in stock' : 'out of stock',
-        condition: 'new',
-        price: Math.round(priceNum * 100), // cents (WhatsApp API format)
-        sale_price: salePriceNum ? Math.round(salePriceNum * 100) : undefined,
-        currency: 'EUR',
-        link: `${p.link}?${utmParams}`,
-        image_link: p.imageUrl,
-        additional_image_link: p.additionalImages.slice(0, 9),
-        brand: p.brand,
-        category: p.category || undefined,
-        color: p.color || undefined,
-        size: p.size || undefined,
-      }
-    })
-
-    const json = JSON.stringify({ data: catalog, total: catalog.length, generated_at: new Date().toISOString() }, null, 2)
-    this.cache.set(cacheKey, { data: json, stats, generatedAt: new Date() })
-    return { json, stats }
-    } catch (err) {
-      const res = this.handleFailure<{ data: string; stats: FeedStats }>('whatsapp', cacheKey, cached, err)
-      return { json: res.data, stats: res.stats }
-    }
-  }
+  // ── WhatsApp Business Catalog Feed — REMOVED in C7 ──────────
+  //
+  // The Meta Graph WhatsApp Catalog API is not callable without a
+  // proper Commerce integration (admin OAuth + Catalog ID setup).
+  // Pre-C7 the /feeds/whatsapp endpoint produced JSON that nobody
+  // was reading (Meta does not poll third-party URLs for Catalog
+  // data). Removing the fake surface prevents the "Fassade"
+  // anti-pattern the user explicitly flagged in the Phase-1 plan.
+  //
+  // Replacement: WhatsAppShareButton in the product editor generates
+  // a copy-paste-ready message the admin pastes into WhatsApp
+  // Business Catalog manually. See components/admin/whatsapp-share-
+  // button.tsx. Product.channelWhatsapp stays in the schema (default
+  // false as of C7/FA-05) and gates the share-button visibility.
+  //
+  // The /feeds/whatsapp endpoint now returns 410 Gone (controller).
 
   // ── Stats & Monitoring ───────────────────────────────────────
 
@@ -506,12 +479,13 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
     for (const [key, cached] of this.cache.entries()) {
       result[key] = { generatedAt: cached.generatedAt, productCount: cached.stats.exported, stats: cached.stats }
     }
-    // If no cache, generate stats per channel in parallel
-    const missing: { key: string; channel: 'facebook' | 'tiktok' | 'google' | 'whatsapp' }[] = []
+    // If no cache, generate stats per channel in parallel. C7 removed
+    // WhatsApp from the feed reader — it's handled via the
+    // WhatsAppShareButton admin tool, not a polled catalog.
+    const missing: { key: string; channel: 'facebook' | 'tiktok' | 'google' }[] = []
     if (!result.facebook_de) missing.push({ key: 'facebook_de', channel: 'facebook' })
     if (!result.tiktok_de) missing.push({ key: 'tiktok_de', channel: 'tiktok' })
     if (!result.google_de) missing.push({ key: 'google_de', channel: 'google' })
-    if (!result.whatsapp_de) missing.push({ key: 'whatsapp_de', channel: 'whatsapp' })
     if (missing.length) {
       const results = await Promise.all(missing.map((m) => this.getProducts('de', m.channel)))
       for (let i = 0; i < missing.length; i++) {

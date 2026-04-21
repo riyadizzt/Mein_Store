@@ -66,9 +66,7 @@ describe('FeedsService — graceful fallback (C3)', () => {
     const p3 = buildMockPrisma({ throwOnCall: 1 })
     const f3 = new FeedsService(p3 as any)
     await expect(f3.getGoogleFeed('de', true)).rejects.toThrow(/SIMULATED/)
-    const p4 = buildMockPrisma({ throwOnCall: 1 })
-    const f4 = new FeedsService(p4 as any)
-    await expect(f4.getWhatsAppFeed('de', true)).rejects.toThrow(/SIMULATED/)
+    // WhatsApp feed removed in C7 — no hard-fail test for it.
   })
 
   it('stale-cache fallback preserves the FeedStats shape', async () => {

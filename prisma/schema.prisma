@@ -448,10 +448,15 @@ model Product {
   isFeatured  Boolean  @default(false) @map("is_featured")
   excludeFromReturns Boolean @default(false) @map("exclude_from_returns")
   returnExclusionReason String? @map("return_exclusion_reason") // hygiene, custom_made, sealed
-  channelFacebook Boolean @default(true) @map("channel_facebook")
-  channelTiktok   Boolean @default(true) @map("channel_tiktok")
-  channelGoogle   Boolean @default(true) @map("channel_google")
-  channelWhatsapp Boolean @default(true) @map("channel_whatsapp")
+  // C7 / FA-05 — default flipped from true → false. New products are
+  // opt-IN to channel publishing; admin must explicitly toggle each
+  // channel. Existing rows retained their prior (true) value by the
+  // migration (bestehende Daten unangetastet — nur der DEFAULT ändert
+  // sich für zukünftige product.create calls ohne explizite Felder).
+  channelFacebook Boolean @default(false) @map("channel_facebook")
+  channelTiktok   Boolean @default(false) @map("channel_tiktok")
+  channelGoogle   Boolean @default(false) @map("channel_google")
+  channelWhatsapp Boolean @default(false) @map("channel_whatsapp")
   publishedAt DateTime? @map("published_at")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime @default(now()) @map("created_at")

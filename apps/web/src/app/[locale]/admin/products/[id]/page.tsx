@@ -19,6 +19,7 @@ import { FotoEtikettButton } from '@/components/admin/foto-etikett/FotoEtikettMo
 import { BatchFotoEtikettButton } from '@/components/admin/foto-etikett/BatchFotoEtikettButton'
 import { AiDescriptionButton } from '@/components/admin/ai-description-button'
 import { BatchHaengetikettenButton } from '@/components/admin/haengetikett/BatchHaengetikettenButton'
+import { WhatsAppShareButton } from '@/components/admin/whatsapp-share-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAdminCategories } from '@/hooks/use-categories'
@@ -680,6 +681,35 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
           })()}
         </div>
       </section>
+
+      {/* ══════════ WHATSAPP-SMART-LINK (C7) ══════════ */}
+      {/* Only visible when the WhatsApp channel is enabled on this
+           product AND the product has at least one variant. Generates
+           a copy-paste message — no Meta Commerce API call. */}
+      {channelWhatsapp && (product?.variants?.length ?? 0) > 0 && (
+        <section className="bg-background border rounded-2xl overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b bg-muted/20">
+            <h2 className="font-semibold text-sm">WhatsApp-Nachricht</h2>
+          </div>
+          <div className="p-6">
+            <WhatsAppShareButton
+              product={{
+                id,
+                slug: product?.slug ?? '',
+                basePrice,
+                salePrice: salePrice ?? null,
+                variants: product?.variants ?? [],
+                translations: Object.entries(translations).map(([language, t]) => ({
+                  language,
+                  name: t.name,
+                  description: t.description,
+                })),
+              }}
+              appUrl={process.env.NEXT_PUBLIC_APP_URL ?? 'https://malak-bekleidung.com'}
+            />
+          </div>
+        </section>
+      )}
 
       {/* ══════════ RÜCKGABE-EINSTELLUNGEN ══════════ */}
       <section className="bg-background border rounded-2xl overflow-hidden mb-6">

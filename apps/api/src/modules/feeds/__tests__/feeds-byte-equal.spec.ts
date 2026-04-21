@@ -249,24 +249,10 @@ describe('Feeds — byte-equal regression guard (C3)', () => {
     })
   })
 
-  describe('WhatsApp JSON — all 3 locales', () => {
-    it.each(['de', 'en', 'ar'])('locale=%s: stable JSON shape + cents pricing', async (locale) => {
-      const { json, stats } = await feeds.getWhatsAppFeed(locale, true)
-      const parsed = JSON.parse(json)
-      expect(parsed.data).toBeDefined()
-      expect(parsed.total).toBe(parsed.data.length)
-      expect(parsed.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
-      expect(stats.total).toBe(3)
-      expect(stats.exported).toBe(3)
-      expect(stats.skipped.noPrice).toBe(1)
-      for (const item of parsed.data) {
-        expect(typeof item.price).toBe('number')
-        expect(Number.isInteger(item.price)).toBe(true)
-        expect(item.currency).toBe('EUR')
-        expect(item.link).toContain('utm_source=whatsapp')
-      }
-    })
-  })
+  // WhatsApp Catalog feed removed in C7 — the prior JSON output was
+  // a Fassade (Meta doesn't poll third-party URLs for Catalog data).
+  // Replaced by the WhatsAppShareButton admin tool. The byte-equal
+  // tests for WhatsApp are intentionally absent to document this.
 
   describe('Cross-cutting invariants', () => {
     // Pre-C3 IS-state: `&` inside UTM query parameters is NOT entity-

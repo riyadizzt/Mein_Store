@@ -109,24 +109,19 @@ export class FeedsController {
     }
   }
 
+  // C7 — WhatsApp Catalog feed removed. Replaced by the
+  // WhatsAppShareButton admin-tool in the product editor (manual
+  // copy-paste workflow). Endpoint returns 410 Gone with a JSON
+  // body explaining the replacement, so Meta's URL checkers and
+  // curl-based probes get a clean stable response.
   @Get('feeds/whatsapp')
-  @Throttle({ default: { limit: 60, ttl: 3600000 } })
-  async whatsappFeed(@Query('token') token: string, @Query('lang') lang: string, @Query('force') force: string, @Req() req: Request, @Res() res: Response) {
-    if (!token || !(await this.feeds.validateTokenForChannel('whatsapp', token))) throw new ForbiddenException('Invalid feed token')
-    if (!(await this.isChannelEnabled('whatsapp'))) {
-      res.set('Content-Type', 'application/json; charset=utf-8')
-      return res.send(JSON.stringify({ data: [], total: 0, paused: true }))
-    }
-    this.feeds.logAccess(req.ip ?? '::1', 'whatsapp')
-    try {
-      const { json } = await this.feeds.getWhatsAppFeed(lang || 'de', force === 'true')
-      res.set('Content-Type', 'application/json; charset=utf-8')
-      res.set('Cache-Control', 'public, max-age=1800')
-      return res.send(json)
-    } catch {
-      return this.sendHardFail(res, 'application/json; charset=utf-8',
-        JSON.stringify({ data: [], total: 0, error: 'temporarily_unavailable' }))
-    }
+  async whatsappFeedGone(@Res() res: Response) {
+    res.status(HttpStatus.GONE)
+    res.set('Content-Type', 'application/json; charset=utf-8')
+    return res.send(JSON.stringify({
+      error: 'gone',
+      message: 'WhatsApp catalog feed removed, use the smart-link admin tool',
+    }))
   }
 
   // ── Admin Channel Settings ────────────────────────────────────
