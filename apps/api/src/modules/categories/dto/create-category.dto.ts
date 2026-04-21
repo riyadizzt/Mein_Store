@@ -37,6 +37,16 @@ export class CreateCategoryDto {
   @IsString()
   iconKey?: string
 
+  @ApiProperty({ required: false, description: 'Google Product Taxonomy ID (C6) — feeds emit this instead of the raw category name for better Shopping listing quality.' })
+  @IsOptional()
+  @IsString()
+  googleCategoryId?: string | null
+
+  @ApiProperty({ required: false, description: 'Cached human-readable label of the Google taxonomy row (displayed in admin UI; feed uses the ID only).' })
+  @IsOptional()
+  @IsString()
+  googleCategoryLabel?: string | null
+
   @ApiProperty({ default: 0 })
   @IsOptional()
   @IsInt()

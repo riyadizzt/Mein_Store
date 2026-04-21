@@ -31,7 +31,7 @@ import { FeedsService } from '../feeds.service'
 
 type AnyObj = Record<string, any>
 
-function buildMockPrisma(seedProducts: AnyObj[]) {
+function buildMockPrisma(seedProducts: AnyObj[], opts?: { shippingZones?: any[] }) {
   const shopSettings = [{ key: 'feed_token', value: 'TEST_TOKEN_12345678' }]
   return {
     shopSetting: {
@@ -43,16 +43,46 @@ function buildMockPrisma(seedProducts: AnyObj[]) {
       }),
       upsert: jest.fn(async () => ({})),
     },
+    // C6 — Google feed queries active shipping zones to build
+    // <g:shipping> blocks. Default: one DE zone at 4.99 (preserves the
+    // pre-C6 output shape). Tests override via opts.shippingZones.
+    shippingZone: {
+      findMany: jest.fn(async () => opts?.shippingZones ?? [
+        { zoneName: 'Germany', countryCodes: ['DE'], basePrice: 4.99, isActive: true, deletedAt: null },
+      ]),
+    },
+    salesChannelConfig: {
+      findUnique: jest.fn(async () => null),
+      upsert: jest.fn(async (args: any) => args.create),
+    },
     product: {
       findMany: jest.fn(async ({ where }: any) => {
-        // Mirror the production filter: channelX booleans
+        // C6 reader-cut (user Q3a): the production code now queries
+        // via `where.channelListings.some.channel + status IN
+        // ['active','pending']`. To keep the byte-equal regression
+        // guard meaningful, the mock derives synthetic listing rows
+        // from the legacy boolean fields — if Product.channelFacebook
+        // is true, a row (variant, 'facebook', 'active') is assumed
+        // to exist. That mapping is exactly what C4's dual-write
+        // produces in real life.
         return seedProducts.filter((p) => {
           if (where.isActive === true && !p.isActive) return false
           if (where.deletedAt === null && p.deletedAt !== null) return false
-          if (where.channelFacebook === true && !p.channelFacebook) return false
-          if (where.channelTiktok === true && !p.channelTiktok) return false
-          if (where.channelGoogle === true && !p.channelGoogle) return false
-          if (where.channelWhatsapp === true && !p.channelWhatsapp) return false
+          if (where.channelListings?.some) {
+            const { channel, status } = where.channelListings.some
+            const allowed: string[] = status?.in ?? ['active', 'pending']
+            // Derived listing exists iff the boolean flag is true AND
+            // 'active' is in the allowed status set (we synthesize
+            // rows as status='active').
+            const flagKey = ({
+              facebook: 'channelFacebook',
+              tiktok: 'channelTiktok',
+              google: 'channelGoogle',
+              whatsapp: 'channelWhatsapp',
+            } as const)[channel as 'facebook' | 'tiktok' | 'google' | 'whatsapp']
+            if (!flagKey || !p[flagKey]) return false
+            if (!allowed.includes('active')) return false
+          }
           return true
         })
       }),

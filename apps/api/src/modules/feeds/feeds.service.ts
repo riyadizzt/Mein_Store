@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional, OnModuleInit, OnModuleDestroy } from '@ne
 import { PrismaService } from '../../prisma/prisma.service'
 import { EmailService } from '../email/email.service'
 import { registerChannelFeedCache } from '../../common/helpers/channel-feed-cache-ref'
+import { channelUtmParams } from '../../common/helpers/channel-utm'
 import * as Sentry from '@sentry/nestjs'
 
 interface FeedProduct {
@@ -18,6 +19,10 @@ interface FeedProduct {
   availability: string
   brand: string
   category: string
+  // C6 — raw Google Product Taxonomy ID for this product's category.
+  // Null = category has no mapping yet; feed falls back to category name
+  // (pre-C6 behaviour, Google accepts but downgrades listings).
+  googleCategoryId: string | null
   color: string | null
   size: string | null
   sku: string
@@ -121,30 +126,69 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
     })
   }
 
-  // ── Feed Token ───────────────────────────────────────────────
+  // ── Feed Token — Per-Channel (C6, user P8) ──────────────────
+  //
+  // Every channel has its own token in SalesChannelConfig.feedToken.
+  // No legacy fallback to the global `shop_settings.feed_token`: on a
+  // clean install the reader accepts only per-channel tokens, and
+  // rotating one channel doesn't invalidate the others. The legacy
+  // setting row stays in the DB (no hard delete per Q4b) but nothing
+  // in the code reads it anymore.
+  //
+  // Lazy init: if the channel has no token yet, generate one on first
+  // read. Keeps tests and cold-start paths simple.
 
-  async getFeedToken(): Promise<string> {
-    let setting = await this.prisma.shopSetting.findFirst({ where: { key: 'feed_token' } })
-    if (!setting) {
-      const token = this.generateToken()
-      setting = await this.prisma.shopSetting.create({ data: { key: 'feed_token', value: token } })
-    }
-    return setting.value
-  }
-
-  async validateToken(token: string): Promise<boolean> {
-    const stored = await this.getFeedToken()
-    return token === stored
-  }
-
-  async regenerateToken(): Promise<string> {
+  async getFeedTokenForChannel(channel: 'facebook' | 'tiktok' | 'google' | 'whatsapp'): Promise<string> {
+    const existing = await this.prisma.salesChannelConfig.findUnique({
+      where: { channel: channel as any },
+      select: { feedToken: true },
+    })
+    if (existing?.feedToken) return existing.feedToken
     const token = this.generateToken()
-    await this.prisma.shopSetting.upsert({
-      where: { key: 'feed_token' },
-      create: { key: 'feed_token', value: token },
-      update: { value: token },
+    await this.prisma.salesChannelConfig.upsert({
+      where: { channel: channel as any },
+      create: { channel: channel as any, feedToken: token },
+      update: { feedToken: token },
     })
     return token
+  }
+
+  async validateTokenForChannel(channel: 'facebook' | 'tiktok' | 'google' | 'whatsapp', token: string): Promise<boolean> {
+    const cfg = await this.prisma.salesChannelConfig.findUnique({
+      where: { channel: channel as any },
+      select: { feedToken: true },
+    })
+    // Reject if no token has been set yet AND the caller sent one —
+    // admin must explicitly rotate/create a token before exposing
+    // the feed URL.
+    return cfg?.feedToken != null && cfg.feedToken === token
+  }
+
+  async regenerateTokenForChannel(channel: 'facebook' | 'tiktok' | 'google' | 'whatsapp'): Promise<string> {
+    const token = this.generateToken()
+    await this.prisma.salesChannelConfig.upsert({
+      where: { channel: channel as any },
+      create: { channel: channel as any, feedToken: token },
+      update: { feedToken: token },
+    })
+    return token
+  }
+
+  /**
+   * Legacy wrappers — used by tests and by feeds-byte-equal snapshot.
+   * Delegate to the facebook channel for backward compatibility.
+   * Removed in Phase 4 once no callers remain.
+   *
+   * @deprecated — use getFeedTokenForChannel / validateTokenForChannel
+   */
+  async getFeedToken(): Promise<string> {
+    return this.getFeedTokenForChannel('facebook')
+  }
+  async validateToken(token: string): Promise<boolean> {
+    return this.validateTokenForChannel('facebook', token)
+  }
+  async regenerateToken(): Promise<string> {
+    return this.regenerateTokenForChannel('facebook')
   }
 
   private generateToken(): string {
@@ -156,11 +200,27 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
   private async getProducts(lang: string = 'de', channel?: 'facebook' | 'tiktok' | 'google' | 'whatsapp'): Promise<{ products: FeedProduct[]; stats: FeedStats }> {
     const appUrl = process.env.APP_URL || 'http://localhost:3000'
 
-    const where: any = { isActive: true, deletedAt: null }
-    if (channel === 'facebook') where.channelFacebook = true
-    else if (channel === 'tiktok') where.channelTiktok = true
-    else if (channel === 'google') where.channelGoogle = true
-    else if (channel === 'whatsapp') where.channelWhatsapp = true
+    // C6 Reader-Cut (Q1a): query via ChannelProductListing instead of
+    // Product.channelX booleans. `some` relation-query — Prisma-native,
+    // one SQL round-trip. Status filter Q2(c): pending + active are
+    // both shown in feeds (paused / rejected / deleted are hidden).
+    //
+    // The boolean fields are STILL written by C4's dual-write, so a
+    // consistent DB has identical sets for both queries. Byte-equal
+    // regression guard (feeds-byte-equal.spec.ts) locks the output
+    // shape, proving the cut-over is transparent for external crawlers.
+    const where: any = {
+      isActive: true,
+      deletedAt: null,
+    }
+    if (channel) {
+      where.channelListings = {
+        some: {
+          channel,
+          status: { in: ['active', 'pending'] },
+        },
+      }
+    }
 
     const rawProducts = await this.prisma.product.findMany({
       where,
@@ -216,6 +276,7 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
             availability: variantStock > 0 ? 'in stock' : 'out of stock',
             brand: p.brand ?? 'Malak',
             category: catTranslation?.name ?? '',
+            googleCategoryId: p.category?.googleCategoryId ?? null,
             color: v.color,
             size: v.size,
             sku: v.sku,
@@ -237,6 +298,7 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
           availability: totalStock > 0 ? 'in stock' : 'out of stock',
           brand: p.brand ?? 'Malak',
           category: catTranslation?.name ?? '',
+          googleCategoryId: p.category?.googleCategoryId ?? null,
           color: null,
           size: null,
           sku: slug,
@@ -260,7 +322,7 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
 
     try {
     const { products, stats } = await this.getProducts(lang, 'facebook')
-    const utmParams = 'utm_source=facebook&utm_medium=shop&utm_campaign=catalog'
+    const utmParams = channelUtmParams('facebook')
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">\n<channel>\n<title>Malak Bekleidung</title>\n<link>${process.env.APP_URL || ''}</link>\n<description>Malak Bekleidung — Mode für die ganze Familie</description>\n`
 
@@ -306,7 +368,7 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
 
     try {
     const { products, stats } = await this.getProducts(lang, 'tiktok')
-    const utmParams = 'utm_source=tiktok&utm_medium=shop&utm_campaign=catalog'
+    const utmParams = channelUtmParams('tiktok')
 
     const header = 'sku_id\ttitle\tdescription\tavailability\tcondition\tprice\tlink\timage_link\tbrand\tcolor\tsize\n'
     const rows = products.map((p) =>
@@ -333,7 +395,24 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
 
     try {
     const { products, stats } = await this.getProducts(lang, 'google')
-    const utmParams = 'utm_source=google&utm_medium=shopping&utm_campaign=feed'
+    const utmParams = channelUtmParams('google')
+
+    // C6 — pull active shipping zones once. Each zone becomes one or
+    // more <g:shipping> blocks (one per country code), so Google
+    // shows customers the correct country-specific rate. Previously
+    // hardcoded DE / 4.99 EUR which ignored every multi-country
+    // setup. Free-shipping threshold is NOT emitted here (Google
+    // Shopping supports it via a separate <g:shipping> variant but
+    // that's a post-launch enhancement).
+    const shippingZones = await this.prisma.shippingZone.findMany({
+      where: { deletedAt: null, isActive: true },
+      orderBy: { basePrice: 'asc' },
+    })
+    const shippingBlock = shippingZones.flatMap((z) =>
+      z.countryCodes.map((cc: string) =>
+        `  <g:shipping>\n    <g:country>${this.escapeXml(cc)}</g:country>\n    <g:price>${Number(z.basePrice).toFixed(2)} EUR</g:price>\n  </g:shipping>\n`,
+      ),
+    ).join('')
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">\n<channel>\n<title>Malak Bekleidung</title>\n<link>${process.env.APP_URL || ''}</link>\n`
 
@@ -350,12 +429,19 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
       if (p.salePrice) xml += `  <g:sale_price>${p.salePrice}</g:sale_price>\n`
       xml += `  <g:availability>${p.availability}</g:availability>\n`
       xml += `  <g:brand>${this.escapeXml(p.brand)}</g:brand>\n`
-      if (p.category) xml += `  <g:google_product_category>${this.escapeXml(p.category)}</g:google_product_category>\n`
+      // C6 — prefer taxonomy ID if mapped, otherwise fall back to
+      // category name (legacy behaviour — Google accepts both but
+      // downgrades name-only listings).
+      if (p.googleCategoryId) {
+        xml += `  <g:google_product_category>${this.escapeXml(p.googleCategoryId)}</g:google_product_category>\n`
+      } else if (p.category) {
+        xml += `  <g:google_product_category>${this.escapeXml(p.category)}</g:google_product_category>\n`
+      }
       if (p.color) xml += `  <g:color>${this.escapeXml(p.color)}</g:color>\n`
       if (p.size) xml += `  <g:size>${this.escapeXml(p.size)}</g:size>\n`
       xml += `  <g:condition>${p.condition}</g:condition>\n`
       xml += `  <g:mpn>${this.escapeXml(p.sku)}</g:mpn>\n`
-      xml += `  <g:shipping>\n    <g:country>DE</g:country>\n    <g:price>4.99 EUR</g:price>\n  </g:shipping>\n`
+      xml += shippingBlock
       xml += `</item>\n`
     }
 
@@ -380,7 +466,7 @@ export class FeedsService implements OnModuleInit, OnModuleDestroy {
 
     try {
     const { products, stats } = await this.getProducts(lang, 'whatsapp')
-    const utmParams = 'utm_source=whatsapp&utm_medium=catalog&utm_campaign=business'
+    const utmParams = channelUtmParams('whatsapp')
 
     const catalog = products.map((p) => {
       const priceNum = parseFloat(p.price) || 0

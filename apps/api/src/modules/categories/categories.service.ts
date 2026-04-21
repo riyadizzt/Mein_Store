@@ -57,6 +57,8 @@ export class CategoriesService {
         parentId: dto.parentId,
         imageUrl: dto.imageUrl,
         iconKey: dto.iconKey ?? null,
+        googleCategoryId: dto.googleCategoryId ?? null,
+        googleCategoryLabel: dto.googleCategoryLabel ?? null,
         sortOrder: dto.sortOrder ?? 0,
         translations: {
           create: dto.translations.map((t) => ({
@@ -81,6 +83,8 @@ export class CategoriesService {
         parentId: dto.parentId,
         imageUrl: dto.imageUrl,
         iconKey: dto.iconKey,
+        googleCategoryId: dto.googleCategoryId,
+        googleCategoryLabel: dto.googleCategoryLabel,
         sortOrder: dto.sortOrder,
         translations: dto.translations
           ? {

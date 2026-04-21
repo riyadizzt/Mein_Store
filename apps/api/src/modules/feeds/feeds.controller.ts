@@ -52,7 +52,7 @@ export class FeedsController {
   @Get('feeds/facebook')
   @Throttle({ default: { limit: 60, ttl: 3600000 } })
   async facebookFeed(@Query('token') token: string, @Query('lang') lang: string, @Query('force') force: string, @Req() req: Request, @Res() res: Response) {
-    if (!token || !(await this.feeds.validateToken(token))) throw new ForbiddenException('Invalid feed token')
+    if (!token || !(await this.feeds.validateTokenForChannel('facebook', token))) throw new ForbiddenException('Invalid feed token')
     if (!(await this.isChannelEnabled('facebook'))) {
       res.set('Content-Type', 'application/xml; charset=utf-8')
       return res.send('<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel><title>Feed paused</title></channel></rss>')
@@ -72,7 +72,7 @@ export class FeedsController {
   @Get('feeds/tiktok')
   @Throttle({ default: { limit: 60, ttl: 3600000 } })
   async tiktokFeed(@Query('token') token: string, @Query('lang') lang: string, @Query('force') force: string, @Req() req: Request, @Res() res: Response) {
-    if (!token || !(await this.feeds.validateToken(token))) throw new ForbiddenException('Invalid feed token')
+    if (!token || !(await this.feeds.validateTokenForChannel('tiktok', token))) throw new ForbiddenException('Invalid feed token')
     if (!(await this.isChannelEnabled('tiktok'))) {
       res.set('Content-Type', 'text/tab-separated-values; charset=utf-8')
       return res.send('sku_id\ttitle\tdescription\tavailability\tcondition\tprice\tlink\timage_link\tbrand\tcolor\tsize\n')
@@ -92,7 +92,7 @@ export class FeedsController {
   @Get('feeds/google')
   @Throttle({ default: { limit: 60, ttl: 3600000 } })
   async googleFeed(@Query('token') token: string, @Query('lang') lang: string, @Query('force') force: string, @Req() req: Request, @Res() res: Response) {
-    if (!token || !(await this.feeds.validateToken(token))) throw new ForbiddenException('Invalid feed token')
+    if (!token || !(await this.feeds.validateTokenForChannel('google', token))) throw new ForbiddenException('Invalid feed token')
     if (!(await this.isChannelEnabled('google'))) {
       res.set('Content-Type', 'application/xml; charset=utf-8')
       return res.send('<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel><title>Feed paused</title></channel></rss>')
@@ -112,7 +112,7 @@ export class FeedsController {
   @Get('feeds/whatsapp')
   @Throttle({ default: { limit: 60, ttl: 3600000 } })
   async whatsappFeed(@Query('token') token: string, @Query('lang') lang: string, @Query('force') force: string, @Req() req: Request, @Res() res: Response) {
-    if (!token || !(await this.feeds.validateToken(token))) throw new ForbiddenException('Invalid feed token')
+    if (!token || !(await this.feeds.validateTokenForChannel('whatsapp', token))) throw new ForbiddenException('Invalid feed token')
     if (!(await this.isChannelEnabled('whatsapp'))) {
       res.set('Content-Type', 'application/json; charset=utf-8')
       return res.send(JSON.stringify({ data: [], total: 0, paused: true }))
@@ -158,16 +158,36 @@ export class FeedsController {
   @Get('admin/feeds/token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
-  async getToken() {
-    return { token: await this.feeds.getFeedToken() }
+  async getToken(@Query('channel') channel?: string) {
+    // Per-channel tokens (C6). When the admin UI calls this without
+    // a channel param (legacy behaviour) we return all 4 — lets the
+    // UI show per-card tokens on the channels page in a single fetch.
+    if (!channel) {
+      const [facebook, tiktok, google, whatsapp] = await Promise.all([
+        this.feeds.getFeedTokenForChannel('facebook'),
+        this.feeds.getFeedTokenForChannel('tiktok'),
+        this.feeds.getFeedTokenForChannel('google'),
+        this.feeds.getFeedTokenForChannel('whatsapp'),
+      ])
+      return { tokens: { facebook, tiktok, google, whatsapp } }
+    }
+    const validChannels = ['facebook', 'tiktok', 'google', 'whatsapp'] as const
+    if (!(validChannels as readonly string[]).includes(channel)) {
+      throw new ForbiddenException('Invalid channel')
+    }
+    return { token: await this.feeds.getFeedTokenForChannel(channel as any) }
   }
 
   @Post('admin/feeds/token/regenerate')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @HttpCode(HttpStatus.OK)
-  async regenerateToken(@Req() req: any, @Ip() ip: string) {
-    const token = await this.feeds.regenerateToken()
+  async regenerateToken(@Query('channel') channel: string, @Req() req: any, @Ip() ip: string) {
+    const validChannels = ['facebook', 'tiktok', 'google', 'whatsapp'] as const
+    if (!channel || !(validChannels as readonly string[]).includes(channel)) {
+      throw new ForbiddenException('channel query parameter is required and must be one of: facebook|tiktok|google|whatsapp')
+    }
+    const token = await this.feeds.regenerateTokenForChannel(channel as any)
     // Security-sensitive admin action — leave an audit trail.
     // We do NOT store the token value itself (that would defeat the
     // point of rotating it); just the fact-of-rotation + actor + when.

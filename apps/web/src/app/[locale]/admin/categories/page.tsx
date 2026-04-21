@@ -19,11 +19,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import { CategoryIconPicker } from '@/components/admin/category-icon-picker'
+import { GoogleTaxonomyPicker } from '@/components/admin/google-taxonomy-picker'
 
 interface Translation { language: string; name: string; description?: string }
 interface Category {
   id: string; slug: string; imageUrl: string | null; iconKey: string | null; sortOrder: number
   parentId: string | null; translations: Translation[]
+  // C6 — Google Product Taxonomy mapping. Null = falls back to
+  // category name in the Google Shopping feed (sub-optimal listing).
+  googleCategoryId?: string | null
+  googleCategoryLabel?: string | null
   _count?: { products: number }; children?: Category[]
 }
 
@@ -46,6 +51,8 @@ export default function AdminCategoriesPage() {
   const [parentId, setParentId] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [iconKey, setIconKey] = useState<string | null>(null)
+  const [googleCategoryId, setGoogleCategoryId] = useState<string | null>(null)
+  const [googleCategoryLabel, setGoogleCategoryLabel] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState(0)
   const [nameDe, setNameDe] = useState('')
   const [nameEn, setNameEn] = useState('')
@@ -91,12 +98,14 @@ export default function AdminCategoriesPage() {
     const g = (lang: string) => selected.translations.find((t) => t.language === lang)
     setSlug(selected.slug); setParentId(selected.parentId ?? ''); setImageUrl(selected.imageUrl ?? '')
     setIconKey(selected.iconKey ?? null)
+    setGoogleCategoryId(selected.googleCategoryId ?? null)
+    setGoogleCategoryLabel(selected.googleCategoryLabel ?? null)
     setSortOrder(selected.sortOrder); setNameDe(g('de')?.name ?? ''); setNameEn(g('en')?.name ?? '')
     setNameAr(g('ar')?.name ?? ''); setDescDe(g('de')?.description ?? '')
     setDescEn(g('en')?.description ?? ''); setDescAr(g('ar')?.description ?? '')
   }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clearForm = () => { setSlug(''); setParentId(''); setImageUrl(''); setIconKey(null); setSortOrder(0); setNameDe(''); setNameEn(''); setNameAr(''); setDescDe(''); setDescEn(''); setDescAr('') }
+  const clearForm = () => { setSlug(''); setParentId(''); setImageUrl(''); setIconKey(null); setGoogleCategoryId(null); setGoogleCategoryLabel(null); setSortOrder(0); setNameDe(''); setNameEn(''); setNameAr(''); setDescDe(''); setDescEn(''); setDescAr('') }
   const startNewRoot = () => { clearForm(); setSelectedId(null); setIsNew(true); setParentId('') }
   const startNewChild = (pid: string) => { clearForm(); setSelectedId(null); setIsNew(true); setParentId(pid) }
 
@@ -106,7 +115,7 @@ export default function AdminCategoriesPage() {
       { language: 'en', name: nameEn, description: descEn || undefined },
       { language: 'ar', name: nameAr, description: descAr || undefined },
     ].filter((tr) => tr.name.trim())
-    saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, iconKey: iconKey ?? null, sortOrder, translations } })
+    saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, iconKey: iconKey ?? null, googleCategoryId: googleCategoryId ?? null, googleCategoryLabel: googleCategoryLabel ?? null, sortOrder, translations } })
   }
 
   const handleDelete = async () => {
@@ -441,6 +450,31 @@ export default function AdminCategoriesPage() {
                 slug={slug}
                 locale={locale}
               />
+
+              {/* C6 — Google Product Taxonomy picker. Required by Google
+                   Shopping Merchant Center for best listing quality;
+                   falls back to the category name if null. */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  {locale === 'ar' ? 'تصنيف جوجل شوبينج' : locale === 'en' ? 'Google Shopping Category' : 'Google-Shopping-Kategorie'}
+                </label>
+                <GoogleTaxonomyPicker
+                  locale={locale}
+                  value={googleCategoryId}
+                  valueLabel={googleCategoryLabel}
+                  onChange={(id, label) => {
+                    setGoogleCategoryId(id)
+                    setGoogleCategoryLabel(label)
+                  }}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {locale === 'ar'
+                    ? 'مطلوب من Google Shopping Merchant Center لأفضل جودة قائمة.'
+                    : locale === 'en'
+                      ? 'Required by Google Shopping Merchant Center for best listing quality.'
+                      : 'Von Google Shopping Merchant Center für beste Listing-Qualität benötigt.'}
+                </p>
+              </div>
 
               {/* Delete error toast */}
               {deleteError && (
