@@ -1,0 +1,37 @@
+{{!-- Backup Failed — Admin alert (DE only) --}}
+<h1 style="margin:0 0 8px;font-size:24px;color:#b91c1c;text-align:center;font-weight:700;">⚠ Backup fehlgeschlagen</h1>
+<p style="text-align:center;color:#6b7280;margin:0 0 32px;font-size:14px;">{{timestampStr}}</p>
+
+<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px 20px;margin:0 0 24px;">
+  <p style="margin:0 0 8px;font-size:13px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Backup-Typ</p>
+  <p style="margin:0 0 16px;font-size:16px;color:#1a1a2e;font-weight:600;">{{backupType}}</p>
+  <p style="margin:0 0 8px;font-size:13px;color:#991b1b;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Fehler</p>
+  <pre style="margin:0;padding:12px;background:#fff;border-radius:8px;font-family:ui-monospace,monospace;font-size:12px;color:#1a1a2e;white-space:pre-wrap;word-break:break-word;">{{errorMessage}}</pre>
+</div>
+
+<p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 24px;">
+  Das automatische Backup-System konnte den geplanten Datenbank-Dump nicht
+  erstellen. Die letzten erfolgreichen Backups bleiben verfügbar, aber es
+  gibt <strong>keinen neuen Snapshot</strong> von diesem Zeitpunkt.
+</p>
+
+<p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 8px;"><strong>Nächste Schritte:</strong></p>
+<ol style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;padding-inline-start:20px;">
+  <li>Im Admin-Panel unter <em>/admin/backups</em> den Status prüfen</li>
+  <li>Fehlermeldung oben analysieren (fehlendes <code>pg_dump</code>? R2-Credentials? Netzwerk?)</li>
+  <li>Nach Behebung manuell einen Backup auslösen ("Manueller Backup"-Button)</li>
+  <li>Wenn die Ursache unklar ist: Sentry-Dashboard öffnen — dort liegt der volle Stack-Trace</li>
+</ol>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+  <tr><td align="center">
+    <a href="{{{dashboardUrl}}}" style="display:inline-block;padding:12px 28px;background:#d4a853;color:#0f1419;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;">
+      Zum Backup-Dashboard
+    </a>
+  </td></tr>
+</table>
+
+<p style="font-size:12px;color:#9ca3af;margin:0;text-align:center;">
+  Diese E-Mail wurde automatisch gesendet weil ein Backup fehlgeschlagen ist.
+  Erfolgreiche Backups erzeugen keine Benachrichtigungen.
+</p>

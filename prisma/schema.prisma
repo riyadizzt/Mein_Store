@@ -1814,3 +1814,51 @@ model WebhookDeliveryLog {
   @@index([createdAt])
   @@map("webhook_delivery_logs")
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// BACKUP SYSTEM (Pre-Launch Basic Level)
+// ═══════════════════════════════════════════════════════════════════
+//
+// Every backup attempt — successful or failed — gets a row. Retention
+// policy (30 daily + 12 monthly + 14-day manual) keeps the DB row
+// around even after the R2 object is deleted so the audit trail stays
+// intact. status=EXPIRED marks rows whose R2 object has been pruned.
+
+model BackupLog {
+  id                  String         @id @default(uuid())
+  type                BackupType     // DAILY | MONTHLY | MANUAL
+  status              BackupStatus   // RUNNING | SUCCESS | FAILED | EXPIRED
+
+  startedAt           DateTime       @default(now()) @map("started_at")
+  completedAt         DateTime?      @map("completed_at")
+
+  // Populated on SUCCESS only
+  sizeBytes           BigInt?        @map("size_bytes")
+  storageKey          String?        @map("storage_key")  // R2 object key, e.g. "daily/2026-04-22T03-00-00Z.sql.gz"
+  sha256              String?        // hex digest of the uploaded blob
+
+  // Populated on FAILED only
+  errorMessage        String?        @map("error_message") @db.Text
+
+  // Null for cron-triggered backups, set for /admin/backups/manual
+  triggeredByUserId   String?        @map("triggered_by_user_id")
+
+  createdAt           DateTime       @default(now()) @map("created_at")
+
+  @@index([type, status, startedAt(sort: Desc)])
+  @@index([status])
+  @@map("backup_log")
+}
+
+enum BackupType {
+  DAILY
+  MONTHLY
+  MANUAL
+}
+
+enum BackupStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  EXPIRED // R2 object pruned by retention, DB row kept for audit
+}

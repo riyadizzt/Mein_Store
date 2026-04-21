@@ -535,6 +535,7 @@
       "ai": "مساعد الذكاء الاصطناعي",
       "maintenance": "وضع الصيانة",
       "webhooks": "الويب هوك",
+      "backups": "النسخ الاحتياطية",
       "logout": "تسجيل الخروج",
       "analytics": "التحليلات",
       "campaigns": "الحملات"
@@ -640,8 +641,6 @@
       "inStock": "متوفر",
       "lowStock": "منخفض",
       "outOfStock": "نفد",
-      "scopeAll": "جميع المستودعات",
-      "scopeOnly": "{name} فقط",
       "missingTranslation": "مفقود",
       "allCategories": "جميع الأقسام",
       "allStatus": "جميع الحالات",
@@ -855,6 +854,8 @@
     "inventory": {
       "title": "إدارة المخزون",
       "searchPlaceholder": "الاسم أو SKU أو الباركود أو الموقع...",
+      "scopeAll": "جميع المستودعات",
+      "scopeOnly": "{name} فقط",
       "sku": "SKU",
       "barcode": "باركود",
       "product": "المنتج",

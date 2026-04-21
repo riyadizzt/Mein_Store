@@ -26,5 +26,10 @@
   ],
   "dependencies": {
     "@prisma/client": "5.22.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@smithy/types": "4.13.1"
+    }
   }
 }

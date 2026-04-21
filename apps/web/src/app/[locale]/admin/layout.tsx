@@ -12,7 +12,7 @@ import {
   MapPin, ScrollText, Menu, X, Bell, LogOut, Globe,
   RotateCcw, Truck, Settings, Users2, Mail, Palette, FileText,
   ScanBarcode, TrendingUp, Receipt, Ticket, Megaphone, Layers,
-  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert, Lock, Webhook, FileWarning,
+  HandCoins, PackageOpen, Bot, Camera, Construction, BarChart3, Flame, Ruler, ChevronDown, MessageSquare, ShieldAlert, Lock, Webhook, FileWarning, Database,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
@@ -95,6 +95,10 @@ const NAV_GROUPS = [
       { key: 'analytics', labelKey: 'analytics', href: '/admin/analytics', icon: BarChart3, permission: 'settings.view' },
       { key: 'maintenance', labelKey: 'maintenance', href: '/admin/maintenance', icon: Construction, permission: 'settings.edit' },
       { key: 'webhooks', labelKey: 'webhooks', href: '/admin/webhooks', icon: Webhook, permission: 'settings.view' },
+      // Backups: super_admin-only via hasRole gate on the page itself.
+      // Shown to all settings.view holders in the sidebar because the
+      // super-admin check happens server-side on /admin/backups API.
+      { key: 'backups', labelKey: 'backups', href: '/admin/backups', icon: Database, permission: 'settings.view' },
     ],
   },
 ]

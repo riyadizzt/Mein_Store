@@ -535,6 +535,7 @@
       "ai": "AI Assistant",
       "maintenance": "Maintenance",
       "webhooks": "Webhooks",
+      "backups": "Backups",
       "logout": "Logout",
       "analytics": "Analytics",
       "campaigns": "Campaigns"
@@ -640,8 +641,6 @@
       "inStock": "In Stock",
       "lowStock": "Low Stock",
       "outOfStock": "Out of Stock",
-      "scopeAll": "All warehouses",
-      "scopeOnly": "{name} only",
       "missingTranslation": "missing",
       "allCategories": "All Categories",
       "allStatus": "All Status",
@@ -855,6 +854,8 @@
     "inventory": {
       "title": "Inventory Management",
       "searchPlaceholder": "Name, SKU, barcode or location...",
+      "scopeAll": "All warehouses",
+      "scopeOnly": "{name} only",
       "sku": "SKU",
       "barcode": "Barcode",
       "product": "Product",

@@ -16,6 +16,8 @@ export const EMAIL_TYPES = {
   CONTACT_RECEIVED: 'contact-received',
   // Vorkasse — bank transfer instructions with IBAN/BIC/reference
   VORKASSE_INSTRUCTIONS: 'vorkasse-instructions',
+  // Backup system — admin alert on FAILED daily/manual backup (DE only)
+  BACKUP_FAILED: 'backup-failed',
 } as const
 
 export type EmailType = (typeof EMAIL_TYPES)[keyof typeof EMAIL_TYPES]
@@ -88,6 +90,13 @@ export const EMAIL_SUBJECTS: Record<EmailType, Record<string, string>> = {
     en: 'Payment instructions — Order #{orderNumber}',
     ar: '#{orderNumber} تعليمات الدفع — الطلب',
   },
+  [EMAIL_TYPES.BACKUP_FAILED]: {
+    // Admin-only alert. German-only per spec — shop languages are not
+    // relevant for an operational notification.
+    de: '⚠ Backup FEHLGESCHLAGEN — sofort prüfen',
+    en: '⚠ Backup FAILED — immediate attention required',
+    ar: '⚠ فشل النسخ الاحتياطي',
+  },
 }
 
 // ── From address mapping ───────────────────────────────────────
@@ -106,4 +115,5 @@ export const EMAIL_FROM_MAP: Record<EmailType, string> = {
   [EMAIL_TYPES.CONTACT_NEW]: 'EMAIL_FROM_SUPPORT',
   [EMAIL_TYPES.CONTACT_RECEIVED]: 'EMAIL_FROM_SUPPORT',
   [EMAIL_TYPES.VORKASSE_INSTRUCTIONS]: 'EMAIL_FROM_ORDERS',
+  [EMAIL_TYPES.BACKUP_FAILED]: 'EMAIL_FROM_NOREPLY',
 }
