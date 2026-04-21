@@ -70,15 +70,23 @@ verwendet `--no-owner --no-acl`, User-Berechtigungen werden nicht wiederhergeste
 ## 4. Voraussetzung auf dem Runtime-Image (einmalig)
 
 Das Backup-System ruft beim Erstellen eines Dumps `pg_dump` als Shell-Prozess auf.
-Die Railway-Instanz muss `postgresql-client` installiert haben. In `nixpacks.toml`:
+Das Runtime-Image muss `postgresql-client` installiert haben. Da Railway hier
+den Dockerfile-Builder nutzt (nicht Nixpacks), ist die Zeile im Runner-Stage
+von `apps/api/Dockerfile`:
 
-```toml
-[phases.setup]
-aptPkgs = ["postgresql-client"]
+```Dockerfile
+RUN apk add --no-cache postgresql-client gzip
 ```
 
-Prüfen: `railway run pg_dump --version` muss eine Versionsnummer ausgeben.
-Ohne `pg_dump` schlägt jeder Backup mit `pg_dump spawn failed: ENOENT` fehl.
+Prüfen nach dem Deploy:
+
+```bash
+railway run pg_dump --version
+# → pg_dump (PostgreSQL) 16.x
+```
+
+Ohne `pg_dump` schlägt jeder Backup mit `pg_dump spawn failed: ENOENT` fehl
+und erscheint unter `/admin/backups` mit Status `Fehlgeschlagen`.
 
 ---
 

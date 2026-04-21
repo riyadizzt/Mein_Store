@@ -22,6 +22,15 @@ RUN pnpm --filter api build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+# postgresql-client provides pg_dump — required by the daily backup cron
+# (apps/api/src/modules/backup/backup.service.ts). Without it pg_dump
+# shells out to ENOENT and every backup fails. gzip is in the alpine
+# base already but we install it explicitly so a future base-image
+# change never breaks the pipeline. See docs/admin-runbook/
+# backup-wiederherstellung.md.
+RUN apk add --no-cache postgresql-client gzip
+
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules

@@ -4,8 +4,9 @@
  * Design notes:
  *   - pg_dump is invoked via `child_process.spawn('pg_dump', ...)` piped
  *     through `gzip`. The runtime image must have `postgresql-client`
- *     installed (Railway: add `postgresql-client` to nixpacks.toml or
- *     the Docker base image). See admin runbook.
+ *     installed — see apps/api/Dockerfile (Runner stage does
+ *     `apk add --no-cache postgresql-client gzip`). Without it every
+ *     backup fails with ENOENT. See admin runbook.
  *   - SHA256 is computed by streaming the local dump file a second
  *     time (memory-safe even for multi-GB dumps).
  *   - On FAILURE: explicit Sentry.captureException + admin email.

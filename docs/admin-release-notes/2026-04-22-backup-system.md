@@ -9,7 +9,7 @@
 
 **Deploy-Voraussetzung (einmalig):**
 
-- Railway-Runtime-Image muss `postgresql-client` installiert haben (`nixpacks.toml` → `aptPkgs = ["postgresql-client"]`). Ohne `pg_dump` schlägt jeder Backup fehl.
+- Railway-Runtime-Image muss `postgresql-client` installiert haben. In `apps/api/Dockerfile` (Runner-Stage) steht dafür `RUN apk add --no-cache postgresql-client gzip`. Ohne `pg_dump` schlägt jeder Backup fehl.
 - Env-Variablen setzen: `R2_BACKUP_ENDPOINT`, `R2_BACKUP_ACCESS_KEY_ID`, `R2_BACKUP_SECRET_ACCESS_KEY`, `R2_BACKUP_BUCKET` (default: `malak-backups`), `BACKUP_ALERT_EMAIL`.
 
 Für den normalen Tagesbetrieb ist nichts zu tun — das System läuft eigenständig. Admin öffnet `/admin/backups` nur im Notfall oder zum Stichproben-Download.
