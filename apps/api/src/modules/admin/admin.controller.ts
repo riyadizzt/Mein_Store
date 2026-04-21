@@ -49,6 +49,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { ShipmentsService } from '../shipments/shipments.service'
 import { PaymentsService } from '../payments/payments.service'
 import { SizingService } from '../sizing/sizing.service'
+import { invalidateChannelFeedCache } from '../../common/helpers/channel-feed-cache-ref'
 import { Response } from 'express'
 
 /**
@@ -876,6 +877,12 @@ export class AdminController {
         ipAddress: ip,
       }).catch(() => {})
     }
+
+    // Channel-feed cache invalidation — fire-and-forget. Category /
+    // translations / channel-boolean changes all alter feed output;
+    // clearing cache ensures crawlers see fresh data on next hit
+    // rather than up-to-30-min-stale data. See Phase-1 Q4(a).
+    invalidateChannelFeedCache()
 
     return this.products.findOne(id)
   }
@@ -1937,6 +1944,12 @@ export class AdminController {
       changes: { after: Object.fromEntries(entries) },
       ipAddress: ip,
     })
+
+    // If any of the toggled settings affect the public feeds
+    // (channel_*_enabled flips), invalidate cache so external crawlers
+    // get the new state on their next poll. Invalidate unconditionally
+    // (bulletproof, per Q4(a)) — overhead on 4-key cache is trivial.
+    invalidateChannelFeedCache()
 
     return { success: true, updated: entries.length }
   }

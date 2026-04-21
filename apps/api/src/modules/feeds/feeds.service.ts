@@ -1,5 +1,8 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger, Optional, OnModuleInit, OnModuleDestroy } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
+import { EmailService } from '../email/email.service'
+import { registerChannelFeedCache } from '../../common/helpers/channel-feed-cache-ref'
+import * as Sentry from '@sentry/nestjs'
 
 interface FeedProduct {
   id: string
@@ -28,12 +31,95 @@ interface FeedStats {
 }
 
 @Injectable()
-export class FeedsService {
+export class FeedsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(FeedsService.name)
   private cache = new Map<string, { data: string; stats: FeedStats; generatedAt: Date }>()
   private readonly CACHE_TTL = 30 * 60 * 1000 // 30 minutes
   private accessLog: { date: Date; ip: string; feed: string }[] = []
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // EmailService is @Optional() so existing unit-test construction
+    // `new FeedsService(mockPrisma)` keeps working without providing an
+    // email mock. Production wiring injects it via FeedsModule / AppModule.
+    // Used only on hard-fail (no cache available) to alert the admin.
+    @Optional() private readonly email?: EmailService | null,
+  ) {}
+
+  // Register this instance as the active cache-holder so writers in
+  // other modules (AdminProductsService, AdminController) can invoke
+  // invalidateChannelFeedCache() without going through DI. Mirrors the
+  // static-helper pattern of revalidateProductTags.
+  onModuleInit(): void {
+    registerChannelFeedCache(this)
+  }
+
+  onModuleDestroy(): void {
+    registerChannelFeedCache(null)
+  }
+
+  // ── Failure handling ─────────────────────────────────────────
+  //
+  // Called from the outer catch in every getXFeed method. Two tiers:
+  //   1. stale cache available → return it, Sentry.captureMessage at
+  //      WARNING level so ops sees degraded operation but doesn't page
+  //   2. no cache available → throw so the controller returns 503
+  //      Service Unavailable, Sentry.captureException at ERROR level,
+  //      queue a German admin email (best-effort)
+  // This method never itself throws — it either returns stale data or
+  // re-throws the original error.
+  private handleFailure<T extends { data: string; stats: FeedStats }>(
+    channel: 'facebook' | 'tiktok' | 'google' | 'whatsapp',
+    cacheKey: string,
+    stale: { data: string; stats: FeedStats; generatedAt: Date } | undefined,
+    err: unknown,
+  ): T {
+    const message = err instanceof Error ? err.message : String(err)
+    if (stale) {
+      this.logger.warn(
+        `Feed ${channel} generation failed, serving stale cache from ${stale.generatedAt.toISOString()}: ${message}`,
+      )
+      Sentry.captureMessage(`Feed ${channel} degraded (stale cache served): ${message}`, {
+        level: 'warning',
+        tags: { feature: 'feeds', channel, cacheKey },
+      })
+      return { data: stale.data, stats: stale.stats } as T
+    }
+    // Hard fail — no safety net.
+    this.logger.error(`Feed ${channel} HARD FAIL (no cache fallback): ${message}`)
+    Sentry.captureException(err instanceof Error ? err : new Error(message), {
+      level: 'error',
+      tags: { feature: 'feeds', channel, cacheKey, severity: 'hard_fail' },
+    })
+    this.notifyHardFail(channel, message).catch(() => {
+      /* notification itself must never take down the feed — log only */
+    })
+    throw err
+  }
+
+  private async notifyHardFail(channel: string, message: string): Promise<void> {
+    if (!this.email) return
+    // Best-effort — we reuse the BACKUP_FAILED template shape (simple
+    // admin-alert, DE-only, German-only per spec Q2 + backup-system
+    // convention). A dedicated FEED_FAILED template can be added later;
+    // for now we stay minimal and use a plain transactional payload.
+    const to = process.env.BACKUP_ALERT_EMAIL ?? process.env.EMAIL_FROM_ADMIN
+    if (!to) {
+      this.logger.warn('BACKUP_ALERT_EMAIL not set — skipping feed-failure email')
+      return
+    }
+    await this.email.enqueue({
+      to,
+      type: 'backup-failed' as any,
+      lang: 'de',
+      data: {
+        backupType: `FEED_${channel.toUpperCase()}`, // reuse template variable
+        errorMessage: message.slice(0, 1000),
+        timestampStr: new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }),
+        dashboardUrl: `${process.env.APP_URL ?? 'https://malak-bekleidung.com'}/de/admin/channels`,
+      },
+    })
+  }
 
   // ── Feed Token ───────────────────────────────────────────────
 
@@ -172,6 +258,7 @@ export class FeedsService {
       return { xml: cached.data, stats: cached.stats }
     }
 
+    try {
     const { products, stats } = await this.getProducts(lang, 'facebook')
     const utmParams = 'utm_source=facebook&utm_medium=shop&utm_campaign=catalog'
 
@@ -202,6 +289,10 @@ export class FeedsService {
 
     this.cache.set(cacheKey, { data: xml, stats, generatedAt: new Date() })
     return { xml, stats }
+    } catch (err) {
+      const res = this.handleFailure<{ data: string; stats: FeedStats }>('facebook', cacheKey, cached, err)
+      return { xml: res.data, stats: res.stats }
+    }
   }
 
   // ── TikTok Feed (CSV) ────────────────────────────────────────
@@ -213,6 +304,7 @@ export class FeedsService {
       return { csv: cached.data, stats: cached.stats }
     }
 
+    try {
     const { products, stats } = await this.getProducts(lang, 'tiktok')
     const utmParams = 'utm_source=tiktok&utm_medium=shop&utm_campaign=catalog'
 
@@ -224,6 +316,10 @@ export class FeedsService {
     const csv = header + rows
     this.cache.set(cacheKey, { data: csv, stats, generatedAt: new Date() })
     return { csv, stats }
+    } catch (err) {
+      const res = this.handleFailure<{ data: string; stats: FeedStats }>('tiktok', cacheKey, cached, err)
+      return { csv: res.data, stats: res.stats }
+    }
   }
 
   // ── Google Shopping Feed (XML) ───────────────────────────────
@@ -235,6 +331,7 @@ export class FeedsService {
       return { xml: cached.data, stats: cached.stats }
     }
 
+    try {
     const { products, stats } = await this.getProducts(lang, 'google')
     const utmParams = 'utm_source=google&utm_medium=shopping&utm_campaign=feed'
 
@@ -266,6 +363,10 @@ export class FeedsService {
 
     this.cache.set(cacheKey, { data: xml, stats, generatedAt: new Date() })
     return { xml, stats }
+    } catch (err) {
+      const res = this.handleFailure<{ data: string; stats: FeedStats }>('google', cacheKey, cached, err)
+      return { xml: res.data, stats: res.stats }
+    }
   }
 
   // ── WhatsApp Business Catalog Feed (JSON) ────────────────────
@@ -277,6 +378,7 @@ export class FeedsService {
       return { json: cached.data, stats: cached.stats }
     }
 
+    try {
     const { products, stats } = await this.getProducts(lang, 'whatsapp')
     const utmParams = 'utm_source=whatsapp&utm_medium=catalog&utm_campaign=business'
 
@@ -305,6 +407,10 @@ export class FeedsService {
     const json = JSON.stringify({ data: catalog, total: catalog.length, generated_at: new Date().toISOString() }, null, 2)
     this.cache.set(cacheKey, { data: json, stats, generatedAt: new Date() })
     return { json, stats }
+    } catch (err) {
+      const res = this.handleFailure<{ data: string; stats: FeedStats }>('whatsapp', cacheKey, cached, err)
+      return { json: res.data, stats: res.stats }
+    }
   }
 
   // ── Stats & Monitoring ───────────────────────────────────────

@@ -4,6 +4,7 @@ import { AuditService } from './audit.service'
 import { ensureVariantBarcode } from '../../../common/helpers/variant-barcode'
 import { seedInventoryAcrossWarehouses } from '../../../common/helpers/inventory-seed'
 import { checkBarcodeUniqueness } from '../../../common/helpers/barcode-uniqueness'
+import { invalidateChannelFeedCache } from '../../../common/helpers/channel-feed-cache-ref'
 
 // Map color names (DE/EN/AR) to SKU-safe 3-letter codes
 const COLOR_SKU_MAP: Record<string, string> = {
@@ -523,6 +524,7 @@ export class AdminProductsService {
       changes: { after: { color: data.color, sizes: data.sizes, variants: created.length } }, ipAddress,
     })
 
+    invalidateChannelFeedCache()
     return { created: created.length, variants: created }
   }
 
@@ -597,6 +599,7 @@ export class AdminProductsService {
       changes: { after: { size: data.size, colors: data.colors, variants: created.length } }, ipAddress,
     })
 
+    invalidateChannelFeedCache()
     return { created: created.length, variants: created }
   }
 
@@ -615,6 +618,7 @@ export class AdminProductsService {
       changes: { before: { variantId, sku: variant.sku, color: variant.color, size: variant.size } }, ipAddress,
     })
 
+    invalidateChannelFeedCache()
     return { deleted: true, sku: variant.sku }
   }
 
@@ -666,6 +670,7 @@ export class AdminProductsService {
       changes: { after: updateData }, ipAddress,
     })
 
+    invalidateChannelFeedCache()
     return updated
   }
 
@@ -703,6 +708,7 @@ export class AdminProductsService {
       changes: { before: { basePrice: Number(product.basePrice), salePrice: product.salePrice ? Number(product.salePrice) : null }, after: { basePrice, salePrice } },
       ipAddress,
     })
+    invalidateChannelFeedCache()
     return updated
   }
 
@@ -716,6 +722,7 @@ export class AdminProductsService {
       entityType: 'product', entityId: productIds.join(','),
       changes: { after: { isActive, count: result.count } }, ipAddress,
     })
+    invalidateChannelFeedCache()
     return { updated: result.count }
   }
 
@@ -756,6 +763,7 @@ export class AdminProductsService {
       },
       ipAddress,
     })
+    invalidateChannelFeedCache()
     return { updated: result.count, categoryId, categorySlug: target.slug }
   }
 
@@ -786,6 +794,7 @@ export class AdminProductsService {
       console.error('[softDelete] storefront revalidation failed:', e?.message ?? e)
     })
 
+    invalidateChannelFeedCache()
     return { deleted: true, name: product.translations[0]?.name }
   }
 
@@ -942,6 +951,7 @@ export class AdminProductsService {
       console.error('[hardDelete] storefront revalidation failed:', e?.message ?? e)
     })
 
+    invalidateChannelFeedCache()
     return { hardDeleted: true, name }
   }
 
@@ -963,6 +973,7 @@ export class AdminProductsService {
       ipAddress,
     })
 
+    invalidateChannelFeedCache()
     return { restored: true, name: product.translations[0]?.name }
   }
 
