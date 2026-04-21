@@ -270,6 +270,29 @@ export function translateNotification(
         ),
       }
     }
+    case 'channel_auto_paused': {
+      // Persisted by propagateChannelSafety (C5) when a ChannelProduct-
+      // Listing drops to/below its safetyStock threshold. data.channel
+      // identifies which marketplace (facebook/tiktok/google/whatsapp/
+      // ebay/…); data.safetyStock + data.available give the admin the
+      // numbers to reason about whether to raise the threshold, ship
+      // in restock, or manually override.
+      const ch = (d.channel ?? '').toString()
+      const thr = d.safetyStock
+      const avail = d.available
+      return {
+        title: t(
+          `Channel-Listing pausiert${ch ? ` (${ch})` : ''}`,
+          `Channel listing paused${ch ? ` (${ch})` : ''}`,
+          `تم إيقاف عرض القناة${ch ? ` (${ch})` : ''}`,
+        ),
+        body: t(
+          `Bestand unter Safety-Stock (verfügbar: ${avail}, Schwelle: ${thr}). Automatisch pausiert — manuell prüfen oder nach Restock wieder aktivieren.`,
+          `Stock below safety threshold (available: ${avail}, threshold: ${thr}). Auto-paused — review manually or resume after restock.`,
+          `المخزون أقل من الحد الآمن (متاح: ${avail}, الحد: ${thr}). تم الإيقاف تلقائياً — راجع يدوياً أو أعد التشغيل بعد إعادة التخزين.`,
+        ),
+      }
+    }
     case 'cron_crashed': {
       // Persisted by CronCrashAlertService when @SafeCron catches an
       // exception. data.cronClass + data.method identify the failing

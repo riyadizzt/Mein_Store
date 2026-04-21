@@ -3,6 +3,7 @@ import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from './audit.service'
 import { WebhookDispatcherService } from '../../webhooks/webhook-dispatcher.service'
 import { buildInventoryRestockPayload } from '../../webhooks/payload-builders/inventory'
+import { propagateChannelSafetyCheck } from '../../../common/helpers/channel-safety-stock'
 
 @Injectable()
 export class AdminInventoryService {
@@ -937,6 +938,10 @@ export class AdminInventoryService {
 
     const type = reason === 'return' ? 'return_received' : 'purchase_received'
     const results: any[] = []
+    // C5 — collect touched variantIds for the post-commit safety-stock
+    // propagation call. Kept separate from `results` (which is the
+    // admin-API response shape) to avoid changing the response schema.
+    const touchedVariantIds = new Set<string>()
 
     for (const item of items) {
       if (!item.quantity || item.quantity <= 0 || item.quantity > 10000) continue
@@ -1000,6 +1005,7 @@ export class AdminInventoryService {
         after: resultData.after,
         added: item.quantity,
       })
+      touchedVariantIds.add(resultData.variantId)
 
       // Fire-and-forget outbound webhook — enriches payload via DB and emits.
       this.emitRestockWebhook({
@@ -1013,6 +1019,13 @@ export class AdminInventoryService {
 
     await this.audit.log({ adminId, action: 'INVENTORY_INTAKE', entityType: 'inventory',
       changes: { after: { items: results.length, type, reason } }, ipAddress })
+
+    // C5 — safety-stock propagation. Intake raises availableStock which
+    // may auto-resume low_stock-paused listings. Fire-and-forget.
+    if (touchedVariantIds.size > 0) {
+      propagateChannelSafetyCheck(this.prisma, Array.from(touchedVariantIds)).catch(() => {})
+    }
+
     return { processed: results.length, items: results }
   }
 

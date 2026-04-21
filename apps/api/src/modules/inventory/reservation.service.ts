@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { ReserveStockDto } from './dto/reserve-stock.dto'
 import { InventoryService } from './inventory.service'
 import { revalidateProductTags } from '../../common/helpers/revalidation'
+import { propagateChannelSafetyCheck } from '../../common/helpers/channel-safety-stock'
 
 interface InventoryRow {
   id: string
@@ -132,6 +133,11 @@ export class ReservationService {
       // revalidate call never rolls back the reservation. Outside the
       // $transaction callback so the DB txn commits first.
       revalidateProductTags(this.prisma, [dto.variantId]).catch(() => {})
+      // C5 — channel safety-stock propagation. Same fire-and-forget
+      // contract as revalidateProductTags: may decide to auto-pause
+      // ChannelProductListing rows whose (variant, channel) has
+      // dropped to/below safetyStock. Never blocks or rolls back.
+      propagateChannelSafetyCheck(this.prisma, [dto.variantId]).catch(() => {})
       return reservation
     })
   }
@@ -192,7 +198,12 @@ export class ReservationService {
     this.prisma.stockReservation
       .findUnique({ where: { id: reservationId }, select: { variantId: true } })
       .then((r) => {
-        if (r?.variantId) revalidateProductTags(this.prisma, [r.variantId]).catch(() => {})
+        if (r?.variantId) {
+          revalidateProductTags(this.prisma, [r.variantId]).catch(() => {})
+          // C5 — release raises availableStock; may auto-resume a
+          // low_stock-paused listing for this variant.
+          propagateChannelSafetyCheck(this.prisma, [r.variantId]).catch(() => {})
+        }
       })
       .catch(() => {})
     return { success: true, reservationId }
@@ -288,6 +299,8 @@ export class ReservationService {
 
     // R13 — onHand just changed at capture time; invalidate the product tag.
     revalidateProductTags(this.prisma, [reservation.variantId]).catch(() => {})
+    // C5 — onHand dropped on capture; check if safety-stock auto-pause triggers.
+    propagateChannelSafetyCheck(this.prisma, [reservation.variantId]).catch(() => {})
 
     return { success: true, reservationId, orderId }
   }
@@ -408,6 +421,9 @@ export class ReservationService {
     if (restockedCount > 0) {
       const touchedVariantIds = Array.from(new Set(confirmed.map((r) => r.variantId)))
       revalidateProductTags(this.prisma, touchedVariantIds).catch(() => {})
+      // C5 — restock raised availableStock; may auto-resume low_stock-
+      // paused listings for any of these variants.
+      propagateChannelSafetyCheck(this.prisma, touchedVariantIds).catch(() => {})
     }
 
     return { restocked: restockedCount }

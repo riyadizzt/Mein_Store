@@ -29,6 +29,7 @@ import { NotificationSseController } from './sse/notification-sse.controller'
 import { DailySummaryCron } from './cron/daily-summary.cron'
 import { PaymentTimeoutCron } from './cron/payment-timeout.cron'
 import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
+import { ChannelSafetyStockCron } from './cron/channel-safety-stock.cron'
 import { AdminSuppliersService } from './services/admin-suppliers.service'
 import { TranslationService } from '../../common/services/translation.service'
 import { CampaignService } from './services/campaign.service'
@@ -54,6 +55,7 @@ import { CronCrashAlertService } from './services/cron-crash-alert.service'
     DailySummaryCron,
     ExpiryReminderCron,
     PaymentTimeoutCron,
+    ChannelSafetyStockCron,
     AdminSuppliersService,
     TranslationService,
     CampaignService,
