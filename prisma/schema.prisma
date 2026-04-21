@@ -401,6 +401,12 @@ model Category {
   iconKey     String?   @map("icon_key") // canonical icon key from CategoryIcon set; null → slug-based fallback
   sortOrder   Int       @default(0) @map("sort_order")
   isActive    Boolean   @default(true) @map("is_active")
+  // Google Product Taxonomy ID (e.g. "1604" = "Apparel & Accessories > Clothing > Shirts & Tops").
+  // Required by Google Shopping Merchant Center; without it, listings are rejected or downgraded.
+  // Populated via searchable dropdown in /admin/categories (C6). Null = fallback to Malak category
+  // name in the Google feed (with an audit-log warning).
+  googleCategoryId    String? @map("google_category_id")
+  googleCategoryLabel String? @map("google_category_label") // cached human-readable label for UI
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -980,8 +986,19 @@ model SalesChannelConfig {
   channel        SalesChannel @unique
   isActive       Boolean      @default(true) @map("is_active")
   externalId     String?      @map("external_id")
-  accessToken    String?      @map("access_token") // verschlüsselt
+  // Envelope-encrypted. Format: `v1:{encDek}:{iv}:{tag}:{ciphertext}` (base64url).
+  // Plaintext semantics: OAuth access token (eBay/TikTok) — short-lived.
+  // Read via ChannelTokenEncryptionHelper.decrypt() — never touch raw.
+  accessToken    String?      @map("access_token")
   tokenExpiresAt DateTime?    @map("token_expires_at")
+  // Envelope-encrypted. OAuth refresh token — long-lived (eBay 18 months).
+  // Same format + helper as accessToken.
+  refreshToken           String?   @map("refresh_token")
+  refreshTokenExpiresAt  DateTime? @map("refresh_token_expires_at")
+  // Per-channel feed token (public feed URL auth). Plain string —
+  // not a secret on the same level as OAuth tokens, rotate-able from
+  // the admin UI. Replaces the global `feed_token` ShopSetting in C6.
+  feedToken      String?      @map("feed_token")
   settings       Json?
   lastSyncedAt   DateTime?    @map("last_synced_at")
   createdAt      DateTime     @default(now()) @map("created_at")
@@ -993,11 +1010,36 @@ model SalesChannelConfig {
 model ChannelProductListing {
   id                String               @id @default(uuid())
   productId         String               @map("product_id")
+  // Always set in practice — Malak's catalog is clothing + shoes, every
+  // product has at least one size/color variant (A3 decision, see admin
+  // runbook). Schema-nullability retained only for backward-compat with
+  // legacy feed code paths that will be removed in Phase 4. New writes
+  // MUST include variantId or the service layer throws a 3-lang error
+  // "Produkt muss mindestens eine aktive Variante haben" (enforced in C4).
   variantId         String?              @map("variant_id")
   channel           SalesChannel
   externalListingId String?              @map("external_listing_id")
   status            ChannelListingStatus @default(pending)
+  // Admin-entered per-channel price (incl. channel commission uplift for
+  // eBay/TikTok). Null = fall back to variant sale/base price. Differs
+  // from Product.basePrice + Variant.priceModifier — this price is
+  // channel-specific, not a variant-specific modifier.
   channelPrice      Decimal?             @map("channel_price") @db.Decimal(10, 2)
+  // ── Safety-Stock System (C5) ─────────────────────────────────────
+  // Buffer kept aside when reporting stock to external marketplaces.
+  // Listing is auto-paused when `availableStock <= safetyStock`.
+  // Default 1 (pro spec) — overridable per (variant, channel).
+  safetyStock       Int                  @default(1) @map("safety_stock")
+  // Why the listing is paused. Null when status != 'paused'.
+  // Enum-like: 'low_stock' | 'manual' | 'sync_error' | 'admin_disabled'.
+  // Critical invariant: 'low_stock' pauses may auto-resume; 'manual'
+  // never does (only admin action restores them).
+  pauseReason       String?              @map("pause_reason")
+  pausedAt          DateTime?            @map("paused_at")
+  autoResumeAt      DateTime?            @map("auto_resume_at")
+  // External-API retry tracker. Used by eBay/TikTok push adapters in
+  // Phase 2/3. Reset to 0 on first success after failures.
+  syncAttempts      Int                  @default(0) @map("sync_attempts")
   lastSyncedAt      DateTime?            @map("last_synced_at")
   syncError         String?              @map("sync_error")
   createdAt         DateTime             @default(now()) @map("created_at")
@@ -1007,6 +1049,8 @@ model ChannelProductListing {
   variant ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@unique([variantId, channel])
+  @@index([channel, status])
+  @@index([status, pauseReason])
   @@map("channel_product_listings")
 }
 
