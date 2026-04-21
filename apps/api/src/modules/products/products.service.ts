@@ -14,6 +14,7 @@ import { ensureVariantBarcode } from '../../common/helpers/variant-barcode'
 import { resolveUniqueSkus, SkuAdjustment } from '../../common/helpers/sku-resolver'
 import { seedInventoryAcrossWarehouses } from '../../common/helpers/inventory-seed'
 import { checkBarcodeUniqueness } from '../../common/helpers/barcode-uniqueness'
+import { createInitialListingsInTx } from '../../common/helpers/channel-listing-transitions'
 import { WebhookDispatcherService } from '../webhooks/webhook-dispatcher.service'
 import { buildProductCreatedPayload } from '../webhooks/payload-builders/product'
 
@@ -149,60 +150,77 @@ export class ProductsService {
       })
     }
 
-    const product = await this.prisma.product.create({
-      data: {
-        slug: dto.slug,
-        categoryId: dto.categoryId,
-        brand: dto.brand,
-        gender: dto.gender as any,
-        basePrice: dto.basePrice,
-        salePrice: dto.salePrice,
-        taxRate: dto.taxRate ?? 19,
-        isActive: dto.isActive ?? false, // New products default INACTIVE — admin must review first
-        isFeatured: dto.isFeatured ?? false,
-        publishedAt: dto.isActive ? new Date() : null,
-        translations: {
-          create: dto.translations.map((t) => ({
-            language: t.language as any,
-            name: t.name,
-            description: t.description,
-            sizeGuide: t.sizeGuide,
-            metaTitle: t.metaTitle,
-            metaDesc: t.metaDesc,
-          })),
+    // Dual-write (C4): product creation + initial channel listings
+    // in a single transaction. Respects the current Prisma schema
+    // defaults — channelFacebook/Tiktok/Google/Whatsapp are TRUE on
+    // new rows unless an admin has flipped them (C7 will flip the
+    // default to false as part of FA-05; until then, new products
+    // enter all 4 channels with status='pending' and a Malak admin
+    // reviews each before the listing propagates externally).
+    const product = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          slug: dto.slug,
+          categoryId: dto.categoryId,
+          brand: dto.brand,
+          gender: dto.gender as any,
+          basePrice: dto.basePrice,
+          salePrice: dto.salePrice,
+          taxRate: dto.taxRate ?? 19,
+          isActive: dto.isActive ?? false, // New products default INACTIVE — admin must review first
+          isFeatured: dto.isFeatured ?? false,
+          publishedAt: dto.isActive ? new Date() : null,
+          translations: {
+            create: dto.translations.map((t) => ({
+              language: t.language as any,
+              name: t.name,
+              description: t.description,
+              sizeGuide: t.sizeGuide,
+              metaTitle: t.metaTitle,
+              metaDesc: t.metaDesc,
+            })),
+          },
+          variants: {
+            create: dto.variants.map((v, i) => {
+              // Use the resolved SKU — may be suffixed if the base
+              // collided with an existing variant.
+              const finalSku = resolved[i]
+              return {
+                sku: finalSku,
+                // Guard: every variant must carry a non-empty barcode.
+                // Default = final SKU (not the original!) to keep sku
+                // and barcode in sync. External EAN overrides still win.
+                barcode: ensureVariantBarcode({ sku: finalSku, barcode: v.barcode }),
+                color: v.color,
+                colorHex: v.colorHex,
+                size: v.size,
+                sizeSystem: v.sizeSystem as any,
+                priceModifier: v.priceModifier ?? 0,
+                weightGrams: v.weightGrams,
+                // Inventory rows are NOT inlined here. We seed them after
+                // product.create via seedInventoryAcrossWarehouses — one
+                // row per active warehouse — so the variant is visible in
+                // every warehouse from day one (not only the default).
+              }
+            }),
+          },
         },
-        variants: {
-          create: dto.variants.map((v, i) => {
-            // Use the resolved SKU — may be suffixed if the base
-            // collided with an existing variant.
-            const finalSku = resolved[i]
-            return {
-              sku: finalSku,
-              // Guard: every variant must carry a non-empty barcode.
-              // Default = final SKU (not the original!) to keep sku
-              // and barcode in sync. External EAN overrides still win.
-              barcode: ensureVariantBarcode({ sku: finalSku, barcode: v.barcode }),
-              color: v.color,
-              colorHex: v.colorHex,
-              size: v.size,
-              sizeSystem: v.sizeSystem as any,
-              priceModifier: v.priceModifier ?? 0,
-              weightGrams: v.weightGrams,
-              // Inventory rows are NOT inlined here. We seed them after
-              // product.create via seedInventoryAcrossWarehouses — one
-              // row per active warehouse — so the variant is visible in
-              // every warehouse from day one (not only the default).
-            }
-          }),
+        include: {
+          translations: true,
+          variants: {
+            include: { inventory: true },
+          },
+          images: true,
         },
-      },
-      include: {
-        translations: true,
-        variants: {
-          include: { inventory: true },
-        },
-        images: true,
-      },
+      })
+
+      // Initial ChannelProductListing rows — one 'pending' row per
+      // (variant × channel-flag-true). Inside the same tx so a
+      // failure here rolls back the whole product creation (Q2
+      // atomicity).
+      await createInitialListingsInTx(tx as any, created as any)
+
+      return created
     })
 
     // Seed Inventory across all active warehouses for every new variant.

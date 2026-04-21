@@ -40,6 +40,16 @@ describe('AdminController.updateProduct — category change audit (Hardening D)'
         findUnique: jest.fn(),
       },
       productTranslation: { upsert: jest.fn() },
+      // C4: updateProduct wraps writes in prisma.$transaction for dual-
+      // write atomicity with ChannelProductListing. Tests here don't
+      // exercise channel transitions (body omits channel* flags), so
+      // the `tx` received by the callback is this mock itself.
+      productVariant: { findMany: jest.fn().mockResolvedValue([]) },
+      channelProductListing: {
+        upsert: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      $transaction: jest.fn((fn: any) => fn(prismaMock)),
     }
     sizingMock = {
       previewChartForCategory: jest.fn(),

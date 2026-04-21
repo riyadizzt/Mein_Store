@@ -50,6 +50,12 @@ import { ShipmentsService } from '../shipments/shipments.service'
 import { PaymentsService } from '../payments/payments.service'
 import { SizingService } from '../sizing/sizing.service'
 import { invalidateChannelFeedCache } from '../../common/helpers/channel-feed-cache-ref'
+import { validateCanPublishToChannel } from '../../common/helpers/channel-listing-guard'
+import {
+  computeTransitions,
+  applyTransitionInTx,
+  type TransitionEvent,
+} from '../../common/helpers/channel-listing-transitions'
 import { Response } from 'express'
 
 /**
@@ -779,6 +785,18 @@ export class AdminController {
     const product = await this.prisma.product.findFirst({ where: { id, deletedAt: null } })
     if (!product) throw new NotFoundException('Product not found')
 
+    // ─ Channel-Listing Dual-Write (C4) ──────────────────────────────
+    // Compute channel-boolean transitions BEFORE the DB transaction so
+    // we can (a) short-circuit on no-op, (b) validate the "publish"
+    // pre-condition (product must have >=1 active variant) and reject
+    // the whole PUT before any write lands. Validation is the HTTP-
+    // boundary half of Q1's defense-in-depth — the service-level
+    // guard (helpers/channel-listing-guard) stays as second layer.
+    const channelTransitions = computeTransitions(product, body)
+    if (channelTransitions.some((t) => t.to === true)) {
+      await validateCanPublishToChannel(this.prisma, product.id)
+    }
+
     const data: any = {}
     if (body.basePrice !== undefined) data.basePrice = body.basePrice
     if (body.salePrice !== undefined) data.salePrice = body.salePrice
@@ -841,17 +859,31 @@ export class AdminController {
     if (body.excludeFromReturns !== undefined) data.excludeFromReturns = body.excludeFromReturns
     if (body.returnExclusionReason !== undefined) data.returnExclusionReason = body.returnExclusionReason
 
-    await this.prisma.product.update({ where: { id }, data })
+    // Dual-write (C4): product update + translation upserts +
+    // channel-listing transitions in a SINGLE prisma transaction so
+    // a failure in any step rolls back the whole set. Partial writes
+    // forbidden per Q2 / transaction-safety check.
+    const transitionEvents: TransitionEvent[] = []
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({ where: { id }, data })
 
-    if (body.translations?.length) {
-      for (const t of body.translations) {
-        await this.prisma.productTranslation.upsert({
-          where: { productId_language: { productId: id, language: t.language as any } },
-          create: { productId: id, language: t.language as any, name: t.name, description: t.description ?? '' },
-          update: { name: t.name, description: t.description ?? undefined, metaTitle: t.metaTitle ?? undefined, metaDesc: t.metaDesc ?? undefined },
-        })
+      if (body.translations?.length) {
+        for (const t of body.translations) {
+          await tx.productTranslation.upsert({
+            where: { productId_language: { productId: id, language: t.language as any } },
+            create: { productId: id, language: t.language as any, name: t.name, description: t.description ?? '' },
+            update: { name: t.name, description: t.description ?? undefined, metaTitle: t.metaTitle ?? undefined, metaDesc: t.metaDesc ?? undefined },
+          })
+        }
       }
-    }
+
+      // Apply each detected channel transition inside the same
+      // transaction. Helper mutates ChannelProductListing rows only.
+      for (const t of channelTransitions) {
+        const event = await applyTransitionInTx(tx as any, id, t)
+        transitionEvents.push(event)
+      }
+    })
 
     // Audit the category change AFTER the write so we never log a change
     // that didn't commit. Includes the chart diff so the admin can later
@@ -872,6 +904,28 @@ export class AdminController {
             categoryId: categoryChange.toId,
             categoryName: categoryChange.toName,
             chartName: categoryChange.toChart,
+          },
+        },
+        ipAddress: ip,
+      }).catch(() => {})
+    }
+
+    // Audit each channel transition (one row per flipped channel) so
+    // "wer hat wann welchen Channel für welches Produkt geflippt" is
+    // forensically traceable. Separate rows (rather than one lumped
+    // entry) match the existing PRODUCTS_CATEGORY_CHANGED style and
+    // make filtering by channel trivial in /admin/audit-log.
+    for (const ev of transitionEvents) {
+      await this.audit.log({
+        adminId: req.user?.id,
+        action: ev.action === 'enabled' ? 'CHANNEL_LISTING_ENABLED' : 'CHANNEL_LISTING_DISABLED',
+        entityType: 'product',
+        entityId: id,
+        changes: {
+          after: {
+            channel: ev.channel,
+            action: ev.action,
+            affectedRows: ev.affectedRows,
           },
         },
         ipAddress: ip,
