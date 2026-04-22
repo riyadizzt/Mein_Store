@@ -2,8 +2,11 @@ FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
 # ──────────────────────────────────────────────────────────────
-# Stage 1 — Dependencies (cached on package.json + lockfile)
+# Stage 1 — Dependencies
 # ──────────────────────────────────────────────────────────────
+# Full install (incl. dev-deps) so the build stage has nest CLI,
+# tsc, prisma CLI, jest types, etc. Cached on package.json files
+# + lockfile — only reruns when any of those change.
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -13,8 +16,12 @@ COPY packages/utils/package.json packages/utils/
 RUN pnpm install --frozen-lockfile --filter @omnichannel/api...
 
 # ──────────────────────────────────────────────────────────────
-# Stage 2 — Build (TS → JS, prisma generate runs inside pnpm build)
+# Stage 2 — Build
 # ──────────────────────────────────────────────────────────────
+# Runs `pnpm --filter @omnichannel/api build` which itself calls
+# `prisma generate && nest build`. Emits compiled JS into
+# /app/apps/api/dist (including compiled workspace packages under
+# /app/apps/api/dist/packages/types/src/).
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -23,61 +30,68 @@ COPY . .
 RUN pnpm --filter @omnichannel/api build
 
 # ──────────────────────────────────────────────────────────────
-# Stage 3 — Bundle production deps without symlinks
+# Stage 3 — Runner
 # ──────────────────────────────────────────────────────────────
-# pnpm deploy produces a self-contained directory with a flat
-# node_modules — no .pnpm/ symlink indirection, no broken cross-
-# stage symlink paths. This is the pnpm-officially-recommended
-# pattern for Docker runtime images (Railway incident 22.04.2026:
-# @sentry/nestjs symlink dereferenced to nothing in runner stage).
-FROM base AS deploy
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
-COPY . .
-# --prod strips devDependencies. The filter selects the api
-# workspace package; pnpm resolves workspace-internal deps
-# (@omnichannel/types, @omnichannel/utils) and bundles them in.
-RUN pnpm deploy --filter=@omnichannel/api --prod /prod/api
-
-# The Prisma Client's generated `.prisma/client/` directory is NOT
-# a conventional npm package — it's emitted by `prisma generate` at
-# a known relative path that `@prisma/client/default.js` requires
-# via `require('.prisma/client/default')`. pnpm deploy only carries
-# declared npm packages, so the generated folder is missing from
-# /prod/api. We regenerate it INSIDE the deploy bundle here, which
-# writes the generated client directly into /prod/api/node_modules/
-# .prisma/ where the runtime loader looks for it.
-# (Railway incident 22.04.2026: UpdateProfileDto's @IsEnum(Language)
-# crashed at boot because Language was undefined — the generated
-# client was simply not there.)
-RUN cd /prod/api && npx prisma generate --schema=/app/prisma/schema.prisma
-
-# ──────────────────────────────────────────────────────────────
-# Stage 4 — Runner (minimal Alpine + pg_dump + built artifact)
-# ──────────────────────────────────────────────────────────────
+# Runner owns its own install + prisma generate. This guarantees a
+# clean, internally-consistent node_modules that resolves every
+# import correctly at runtime — no cross-stage symlink brittleness,
+# no generated-prisma-dir placement ambiguity, no Sentry resolution
+# failures (Railway incident cluster 22.04.2026).
+#
+# Cost: slightly larger image (+ build tools + prisma CLI still in
+# place). Acceptable for Staging; easy to strip later if we ever
+# need a minimal Production image.
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# postgresql-client provides pg_dump — required by the daily backup cron
-# (apps/api/src/modules/backup/backup.service.ts). Without it pg_dump
-# shells out to ENOENT and every backup fails. gzip is in the alpine
-# base already but we install it explicitly so a future base-image
-# change never breaks the pipeline. See docs/admin-runbook/
-# backup-wiederherstellung.md.
+# pg_dump for the backup cron; gzip for compression. See
+# docs/admin-runbook/backup-wiederherstellung.md.
 RUN apk add --no-cache postgresql-client gzip
 
-# Compiled JavaScript artefact (from builder stage).
+# pnpm CLI for install + prisma generate.
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+# Install layout: lockfile + all manifests. Keep these BEFORE
+# source copies so Docker layer-caching kicks in on every
+# unchanged-dependency rebuild.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY packages/types/package.json packages/types/
+COPY packages/utils/package.json packages/utils/
+
+# Clean, runner-local prod install. Filter only @omnichannel/api
+# and its transitive deps. Workspace deps (@omnichannel/types) are
+# linked as expected; dev-deps are stripped.
+RUN pnpm install --frozen-lockfile --prod --filter @omnichannel/api...
+
+# Prisma schema needed for `prisma generate` AND for runtime
+# `prisma migrate deploy` (see railway.json startCommand).
+COPY prisma ./prisma
+
+# Generate Prisma Client INSIDE runner's own node_modules. This
+# is the same pnpm workspace resolution as local dev, so the
+# generated .prisma/client lands where @prisma/client/default.js
+# expects to `require('.prisma/client/default')`.
+RUN pnpm --filter @omnichannel/api exec prisma generate --schema=/app/prisma/schema.prisma
+
+# Workspace-package source — @omnichannel/types' package.json sets
+# main: ./src/index.ts. That TS entry is compiled into the API's
+# dist tree by nest build (see /app/dist/packages/types/src/index.js
+# after the COPY below). But the symlink `node_modules/@omnichannel/
+# types → packages/types` needs the directory to exist at runtime
+# for module resolution, so we copy the minimal manifest + compiled
+# artefact. The manifest was already copied above; the compiled
+# source comes with the dist tree below.
+# (No separate handling needed — pnpm install already wired up the
+# symlink during the install step above.)
+
+# Compiled output from builder. This brings:
+#   /app/dist/apps/api/src/**         — compiled API source
+#   /app/dist/packages/types/src/**   — compiled workspace types
+#   /app/dist/modules/email/templates/**  — handlebars templates
+# Matches the railway.json startCommand path `dist/apps/api/src/main.js`.
 COPY --from=builder /app/apps/api/dist ./dist
-
-# Production node_modules bundle (from deploy stage — flat,
-# symlink-free, guaranteed to resolve in the runner stage).
-COPY --from=deploy /prod/api/node_modules ./node_modules
-
-# Prisma schema + migrations — needed by `prisma migrate deploy`
-# on startup (see railway.json startCommand).
-COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 3001
 CMD ["node", "dist/apps/api/src/main.js"]
