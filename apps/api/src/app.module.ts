@@ -4,7 +4,13 @@ import { ConfigModule } from '@nestjs/config'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { ScheduleModule } from '@nestjs/schedule'
 import { EventEmitterModule } from '@nestjs/event-emitter'
-import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup'
+// Sentry is loaded through an optional resolver so a missing
+// @sentry/nestjs at runtime (Railway pnpm-symlink-drop 22.04.2026)
+// cannot crash container boot. When the package is present, the
+// resolved symbols ARE the real ones — semantics unchanged.
+import { resolveSentryNestModule, resolveSentryGlobalFilter } from './sentry-optional'
+const SentryModule = resolveSentryNestModule()
+const SentryGlobalFilter = resolveSentryGlobalFilter()
 import { SentryUserContextInterceptor } from './common/interceptors/sentry-user-context.interceptor'
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware'
 import { PrismaModule } from './prisma/prisma.module'

@@ -3,15 +3,18 @@
  * so that Sentry's auto-instrumentation hooks can wrap all subsequent imports
  * (DB drivers, HTTP clients, NestJS internals).
  *
- * Graceful degradation: if SENTRY_DSN is not set, this file is a no-op.
- * The SDK is never initialized, no telemetry is collected, no network calls
- * are made. The system behaves EXACTLY as it does today.
+ * Graceful degradation layers (Railway incident 22.04.2026):
+ *   1. If SENTRY_DSN is not set   → no-op, silent (dev + staging default)
+ *   2. If @sentry/nestjs module   → no-op + warn line (defensive net
+ *      cannot be resolved             behind the Dockerfile pnpm-deploy
+ *      at runtime                     fix; never crash container boot)
  */
-import * as Sentry from '@sentry/nestjs'
+import { getSentryModule } from './sentry-optional'
 
 const dsn = process.env.SENTRY_DSN
+const Sentry = getSentryModule()
 
-if (dsn) {
+if (dsn && Sentry) {
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV ?? 'development',

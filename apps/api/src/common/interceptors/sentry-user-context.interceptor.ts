@@ -27,7 +27,12 @@ import {
   NestInterceptor,
 } from '@nestjs/common'
 import { Observable } from 'rxjs'
-import * as Sentry from '@sentry/nestjs'
+import { getSentryModule } from '../../sentry-optional'
+
+// Resolved ONCE at import time. If @sentry/nestjs was not installable
+// (Railway pnpm-symlink-drop 22.04.2026), all intercept() calls
+// short-circuit via the early return below.
+const Sentry = getSentryModule()
 
 interface RequestUser {
   id?: string
@@ -40,8 +45,10 @@ interface RequestUser {
 @Injectable()
 export class SentryUserContextInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    // No-op when Sentry isn't initialized (SENTRY_DSN missing).
-    // This makes the interceptor free in dev / graceful-degraded mode.
+    // No-op when Sentry isn't initialized (SENTRY_DSN missing) OR when
+    // @sentry/nestjs itself is unresolvable at runtime (Railway pnpm-
+    // symlink-drop safety-net).
+    if (!Sentry) return next.handle()
     const client = Sentry.getClient()
     if (!client) return next.handle()
 
