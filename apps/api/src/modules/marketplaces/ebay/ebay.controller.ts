@@ -1,0 +1,194 @@
+/**
+ * Admin controller for eBay connection + sandbox policies (C10).
+ *
+ * Endpoint surface (all under /admin/marketplaces/ebay):
+ *
+ *   GET   /status                      Connection + env probe (safe, never throws)
+ *   POST  /connect                     Build the authorize-URL, return to UI
+ *   GET   /oauth-callback              User-consent landing. Param: ?code=…&state=…
+ *   POST  /disconnect                  Clear stored tokens + mark inactive
+ *   POST  /bootstrap-sandbox-policies  Sandbox-only, idempotent policy creation
+ *
+ * Permission gate: SETTINGS_EDIT for every write endpoint + connect/
+ * callback. Status is also behind SETTINGS_EDIT so we never leak the
+ * presence/absence of eBay connection to unauthorised admins.
+ */
+
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Res,
+  Req,
+  UseGuards,
+  Logger,
+} from '@nestjs/common'
+import type { Response, Request } from 'express'
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'
+import { PermissionGuard } from '../../../common/permissions/permission.guard'
+import { RequirePermission } from '../../../common/permissions/require-permission.decorator'
+import { PERMISSIONS } from '../../../common/permissions/permission.constants'
+import { AuditService } from '../../admin/services/audit.service'
+import {
+  EbayAuthService,
+  EbayNotConnectedError,
+  EbayRefreshRevokedError,
+} from './ebay-auth.service'
+import { EbaySandboxPoliciesService } from './ebay-sandbox-policies.service'
+import { resolveEbayMode } from './ebay-env'
+import { randomBytes } from 'node:crypto'
+
+// In-memory state store for OAuth state tokens. Phase-2-only
+// mechanism — low volume, single-admin-at-a-time, 10-minute TTL.
+// For multi-replica deployments this would move to Redis, but
+// Phase-2 is single-instance.
+const stateStore = new Map<string, number>()
+const STATE_TTL_MS = 10 * 60 * 1000
+
+function storeState(token: string): void {
+  stateStore.set(token, Date.now())
+  // Cheap cleanup every call
+  const now = Date.now()
+  for (const [k, ts] of stateStore.entries()) {
+    if (now - ts > STATE_TTL_MS) stateStore.delete(k)
+  }
+}
+
+function consumeState(token: string): boolean {
+  const ts = stateStore.get(token)
+  if (!ts) return false
+  stateStore.delete(token)
+  return Date.now() - ts <= STATE_TTL_MS
+}
+
+@Controller('admin/marketplaces/ebay')
+@UseGuards(JwtAuthGuard, PermissionGuard)
+export class EbayController {
+  private readonly logger = new Logger(EbayController.name)
+
+  constructor(
+    private readonly auth: EbayAuthService,
+    private readonly sandbox: EbaySandboxPoliciesService,
+    private readonly audit: AuditService,
+  ) {}
+
+  @Get('status')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async status() {
+    return this.auth.getStatus()
+  }
+
+  @Post('connect')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async connect(@Req() req: Request) {
+    const token = randomBytes(32).toString('base64url')
+    storeState(token)
+    const url = this.auth.buildAuthorizeUrl(token)
+    await this.audit.log({
+      action: 'EBAY_OAUTH_CONNECT_INITIATED',
+      entityType: 'sales_channel_config',
+      entityId: 'ebay',
+      adminId: (req as any).user?.id ?? 'system',
+      changes: { after: { mode: resolveEbayMode() } },
+    })
+    return { url }
+  }
+
+  @Get('oauth-callback')
+  async oauthCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    // NO permission guard on the callback itself — eBay (unauthenticated
+    // from our side) issues a GET to this URL. We verify legitimacy via
+    // the `state` token that was minted by /connect (which is gated).
+
+    // Lazy-load the admin UI URL for redirect
+    const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
+    const successUrl = `${appUrl}/admin/channels?ebay=connected`
+    const errorUrl = (code: string) => `${appUrl}/admin/channels?ebay=error&code=${code}`
+
+    if (!state || !consumeState(state)) {
+      await this.audit.log({
+        action: 'EBAY_OAUTH_STATE_MISMATCH',
+        entityType: 'sales_channel_config',
+        entityId: 'ebay',
+        adminId: 'system',
+        changes: { after: { reason: 'state-missing-or-expired' } },
+      })
+      return res.redirect(errorUrl('state_mismatch'))
+    }
+
+    try {
+      const result = await this.auth.handleCallback(code, state)
+      await this.audit.log({
+        action: 'EBAY_OAUTH_CONNECTED',
+        entityType: 'sales_channel_config',
+        entityId: 'ebay',
+        adminId: 'system',
+        changes: {
+          after: {
+            mode: resolveEbayMode(),
+            tokenExpiresAt: result.tokenExpiresAt.toISOString(),
+            refreshTokenExpiresAt: result.refreshTokenExpiresAt.toISOString(),
+          },
+        },
+      })
+      return res.redirect(successUrl)
+    } catch (e: any) {
+      this.logger.error(`OAuth callback failure: ${e?.message ?? e}`)
+      await this.audit.log({
+        action: 'EBAY_OAUTH_CALLBACK_FAILED',
+        entityType: 'sales_channel_config',
+        entityId: 'ebay',
+        adminId: 'system',
+        changes: { after: { error: String(e?.message ?? e).slice(0, 300) } },
+      })
+      return res.redirect(errorUrl('callback_failed'))
+    }
+  }
+
+  @Post('disconnect')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async disconnect(@Req() req: Request) {
+    await this.auth.disconnect()
+    await this.audit.log({
+      action: 'EBAY_OAUTH_DISCONNECTED',
+      entityType: 'sales_channel_config',
+      entityId: 'ebay',
+      adminId: (req as any).user?.id ?? 'system',
+    })
+    return { ok: true }
+  }
+
+  @Post('bootstrap-sandbox-policies')
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async bootstrapSandboxPolicies(@Req() req: Request) {
+    try {
+      const result = await this.sandbox.bootstrapPolicies()
+      await this.audit.log({
+        action: 'EBAY_SANDBOX_POLICIES_BOOTSTRAPPED',
+        entityType: 'sales_channel_config',
+        entityId: 'ebay',
+        adminId: (req as any).user?.id ?? 'system',
+        changes: {
+          after: {
+            fulfillmentPolicyId: result.fulfillmentPolicyId,
+            returnPolicyId: result.returnPolicyId,
+            paymentPolicyId: result.paymentPolicyId,
+            alreadyExisted: result.alreadyExisted,
+          },
+        },
+      })
+      return result
+    } catch (e: any) {
+      if (e instanceof EbayNotConnectedError || e instanceof EbayRefreshRevokedError) {
+        // Translate to HTTP 403 with 3-lang message.
+        return { error: e.code, message: e.message3, ok: false, statusCode: 403 }
+      }
+      throw e
+    }
+  }
+}

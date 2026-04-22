@@ -12,6 +12,7 @@ import {
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { EbayConnectionCard } from '@/components/admin/ebay-connection-card'
 
 const t3 = (l: string, d: string, a: string) => l === 'ar' ? a : d
 
@@ -209,6 +210,9 @@ export default function ChannelsPage() {
         <Globe className="h-6 w-6 text-[#d4a853]" />
         {t3(locale, 'Verkaufskanale', 'قنوات البيع')}
       </h1>
+
+      {/* ═══════ eBay Marketplace (C10 — Phase 2) ═══════ */}
+      <EbayConnectionCard />
 
       {/* ═══════ ONLINE SHOP — Always On ═══════ */}
       <div className="bg-background border rounded-2xl p-5 mb-4">
