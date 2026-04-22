@@ -31,6 +31,7 @@ import { PrismaMarketplaceImportStore } from './adapters/prisma-marketplace-impo
 import { MarketplaceAuditAdapter } from './adapters/marketplace-audit.adapter'
 import { MarketplaceNotificationAdapter } from './adapters/marketplace-notification.adapter'
 import { EbayAuthService } from './ebay/ebay-auth.service'
+import { EbayMerchantLocationService } from './ebay/ebay-merchant-location.service'
 import { EbaySandboxPoliciesService } from './ebay/ebay-sandbox-policies.service'
 import { EbayTokenRefreshCron } from './ebay/ebay-token-refresh.cron'
 import { EbayController } from './ebay/ebay.controller'
@@ -49,6 +50,7 @@ import { EbayController } from './ebay/ebay.controller'
     MarketplaceAuditAdapter,
     MarketplaceNotificationAdapter,
     EbayAuthService,
+    EbayMerchantLocationService,
     EbaySandboxPoliciesService,
     EbayTokenRefreshCron,
   ],
@@ -57,6 +59,7 @@ import { EbayController } from './ebay/ebay.controller'
     MarketplaceAuditAdapter,
     MarketplaceNotificationAdapter,
     EbayAuthService,
+    EbayMerchantLocationService,
   ],
 })
 export class MarketplacesModule {}

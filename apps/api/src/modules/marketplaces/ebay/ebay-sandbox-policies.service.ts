@@ -26,6 +26,7 @@ import { Injectable, Logger, ForbiddenException } from '@nestjs/common'
 import { resolveEbayEnv } from './ebay-env'
 import { EbayApiClient, EbayApiError, type FetchLike } from './ebay-api.client'
 import { EbayAuthService } from './ebay-auth.service'
+import { EbayMerchantLocationService, type EnsureLocationResult } from './ebay-merchant-location.service'
 
 // ──────────────────────────────────────────────────────────────
 // Well-known policy names — the idempotency key.
@@ -123,6 +124,12 @@ export interface BootstrapResult {
   programOptIn: {
     alreadyOptedIn: boolean
   }
+  /**
+   * Merchant inventory location ensured before policies. Every
+   * eBay Offer carries this key (C11). Currently one global
+   * location for Malak's warehouse in Berlin.
+   */
+  merchantLocation: EnsureLocationResult
 }
 
 @Injectable()
@@ -130,7 +137,10 @@ export class EbaySandboxPoliciesService {
   private readonly logger = new Logger(EbaySandboxPoliciesService.name)
   private fetchOverrideForTests: FetchLike | undefined
 
-  constructor(private readonly auth: EbayAuthService) {}
+  constructor(
+    private readonly auth: EbayAuthService,
+    private readonly merchantLocation: EbayMerchantLocationService,
+  ) {}
 
   /**
    * Main entry. Throws ForbiddenException('SandboxOnly') in
@@ -153,10 +163,19 @@ export class EbaySandboxPoliciesService {
     const token = await this.auth.getAccessTokenOrRefresh()
     const client = this.buildClient()
 
-    // ── Pre-step: opt-in to the Selling-Policy-Management program.
+    // ── Pre-step 1: opt-in to the Selling-Policy-Management program.
     // Sandbox sellers are not auto-enrolled. MUST succeed (or be
     // already-opted-in) before ANY policy list/create call.
     const optIn = await this.ensureOptedInToSellingPolicyProgram(client, token)
+
+    // ── Pre-step 2: ensure the merchant inventory location.
+    // Every Offer requires a valid merchantLocationKey. We run
+    // this BEFORE policy creation because (a) both are prereqs
+    // for Offers, and (b) a failing location is cheaper to fix
+    // than dealing with 3 orphan policies, and (c) sharing the
+    // same token/client across opt-in + location + policies
+    // minimises the chance of a mid-sequence token refresh.
+    const merchantLocation = await this.merchantLocation.ensureMerchantLocation(client, token)
 
     // ── Policy creation. If the opt-in was just performed (not
     // already-opted-in), these calls may still fail with
@@ -179,6 +198,7 @@ export class EbaySandboxPoliciesService {
       programOptIn: {
         alreadyOptedIn: optIn.alreadyOptedIn,
       },
+      merchantLocation,
     }
 
     // Persist IDs on settings JSON for C11+ to consume.

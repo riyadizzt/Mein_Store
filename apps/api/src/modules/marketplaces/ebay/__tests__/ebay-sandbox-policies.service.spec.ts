@@ -56,6 +56,28 @@ function mkFakeAuth(tokenString = 'fake-bearer-token'): EbayAuthService {
 }
 
 /**
+ * Fake EbayMerchantLocationService for sandbox-policies tests.
+ * Returns a deterministic success result without making any HTTP
+ * calls. Real merchant-location behaviour is covered by its own
+ * spec file; these tests only need the method to exist + return
+ * a well-formed shape so bootstrap can build its result.
+ */
+function mkFakeMerchantLocation(alreadyExisted = false) {
+  const calls: number[] = []
+  return {
+    ensureMerchantLocation: async () => {
+      calls.push(Date.now())
+      return {
+        locationKey: 'malak-lager-berlin',
+        alreadyExisted,
+        wasDisabled: false,
+      }
+    },
+    _calls: calls,
+  } as any
+}
+
+/**
  * Fake-fetch that routes by path. Each call returns what the
  * per-path handler gives it; absence → 404 empty.
  */
@@ -86,7 +108,7 @@ describe('EbaySandboxPoliciesService — MV-4 production guard', () => {
   it('rejects with SandboxOnly in production env and makes no HTTP calls', async () => {
     await withEnv(PRODUCTION_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
       const { fetch, callLog } = mkRoutingFetch({})
       svc.__setFetchForTests(fetch)
 
@@ -105,7 +127,7 @@ describe('EbaySandboxPoliciesService — create-fresh path', () => {
   it('creates all three policies when none exist and persists IDs to settings', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
 
       const { fetch, callLog } = mkRoutingFetch({
         // Pre-step: opt-in succeeds fresh (200 OK, no errors).
@@ -169,7 +191,7 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
   it('discovers existing policies by name and does NOT POST again', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
 
       const { fetch, callLog } = mkRoutingFetch({
         // Pre-step: opt-in already done (HTTP 409 → silent skip).
@@ -211,6 +233,11 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
         paymentPolicyId: 'P-EXIST',
         alreadyExisted: { fulfillment: true, return: true, payment: true },
         programOptIn: { alreadyOptedIn: true },
+        merchantLocation: {
+          locationKey: 'malak-lager-berlin',
+          alreadyExisted: false,
+          wasDisabled: false,
+        },
       })
       // 1 opt-in POST + 3 GETs = 4 calls — NO policy POSTs
       expect(callLog).toHaveLength(4)
@@ -222,7 +249,7 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
   it('mixed state: creates the ones missing, keeps the ones present', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
 
       const { fetch, callLog } = mkRoutingFetch({
         // Pre-step: opt-in already done.
@@ -270,7 +297,7 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
   it('tolerates 404 on policy-list endpoint (no policies of this type yet)', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
 
       const { fetch, callLog } = mkRoutingFetch({
         // Pre-step: fresh opt-in.
@@ -315,7 +342,7 @@ describe('EbaySandboxPoliciesService — MV: program opt-in pre-step', () => {
   it('MV-1: fresh 200 opt-in response → bootstrap continues normally, programOptIn.alreadyOptedIn=false', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
       const { fetch, callLog } = mkRoutingFetch({
         '/sell/account/v1/program/opt_in': () => ({ status: 200, body: '{}' }),
         '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"fulfillmentPolicies":[]}' }),
@@ -346,7 +373,7 @@ describe('EbaySandboxPoliciesService — MV: program opt-in pre-step', () => {
   it('MV-2: 409 Conflict on opt-in → silent skip, programOptIn.alreadyOptedIn=true, bootstrap continues', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
       const { fetch } = mkRoutingFetch({
         '/sell/account/v1/program/opt_in': () => ({
           status: 409,
@@ -372,7 +399,7 @@ describe('EbaySandboxPoliciesService — MV: program opt-in pre-step', () => {
   it('MV-2b: non-409 response carrying errorId 25803 is also treated as already-opted-in', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
       const { fetch } = mkRoutingFetch({
         // Some sandbox variants return 400 (not 409) with errorId 25803.
         '/sell/account/v1/program/opt_in': () => ({
@@ -396,7 +423,7 @@ describe('EbaySandboxPoliciesService — MV: program opt-in pre-step', () => {
   it('MV-3: 500 Internal Server Error on opt-in → throws, policy endpoints never reached', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
       const { fetch, callLog } = mkRoutingFetch({
         // Opt-in crashes server-side. Not retryable after MAX_RETRIES.
         '/sell/account/v1/program/opt_in': () => ({
@@ -421,7 +448,7 @@ describe('EbaySandboxPoliciesService — MV: program opt-in pre-step', () => {
   it('MV-4: 400 Bad Request with UNKNOWN errorId on opt-in → throws (not silent-skip)', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const fakeAuth = mkFakeAuth()
-      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const svc = new EbaySandboxPoliciesService(fakeAuth, mkFakeMerchantLocation())
       const { fetch, callLog } = mkRoutingFetch({
         '/sell/account/v1/program/opt_in': () => ({
           status: 400,

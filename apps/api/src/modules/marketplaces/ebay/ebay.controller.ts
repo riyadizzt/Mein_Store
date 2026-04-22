@@ -189,6 +189,7 @@ export class EbayController {
             paymentPolicyId: result.paymentPolicyId,
             alreadyExisted: result.alreadyExisted,
             programOptIn: result.programOptIn,
+            merchantLocation: result.merchantLocation,
           },
         },
       })
