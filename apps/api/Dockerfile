@@ -86,12 +86,15 @@ RUN pnpm --filter @omnichannel/api exec prisma generate --schema=/app/prisma/sch
 # (No separate handling needed — pnpm install already wired up the
 # symlink during the install step above.)
 
-# Compiled output from builder. This brings:
-#   /app/dist/apps/api/src/**         — compiled API source
-#   /app/dist/packages/types/src/**   — compiled workspace types
-#   /app/dist/modules/email/templates/**  — handlebars templates
-# Matches the railway.json startCommand path `dist/apps/api/src/main.js`.
-COPY --from=builder /app/apps/api/dist ./dist
+# Compiled output from builder, placed UNDER apps/api so Node's
+# upward module resolution from dist/apps/api/src/main.js reaches
+# /app/apps/api/node_modules (where pnpm --filter installed deps).
+# Railway incident 22.04.2026: flat /app/dist/ layout caused
+# Cannot find module '@nestjs/common' at container start.
+#   /app/apps/api/dist/apps/api/src/**        — compiled API source
+#   /app/apps/api/dist/packages/types/src/**  — compiled workspace types
+#   /app/apps/api/dist/modules/email/**       — handlebars templates
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
 EXPOSE 3001
-CMD ["node", "dist/apps/api/src/main.js"]
+CMD ["node", "apps/api/dist/apps/api/src/main.js"]
