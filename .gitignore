@@ -69,3 +69,17 @@ apps/api/storage/labels/
 
 # Separate standalone shop repo — not part of omnichannel-store
 Mein_Store/
+
+# Dead / WIP source files — git IS the backup mechanism, these
+# shapes do not belong in the compiled source tree. tsconfig also
+# excludes them from compilation (apps/api/tsconfig.json).
+# Historic case: orders.service.backup.ts (07.04.2026) silently
+# survived a prisma schema drift and broke Railway's fresh-build.
+*.backup.ts
+*.backup.tsx
+*.old.ts
+*.old.tsx
+*.bak.ts
+*.bak.tsx
+*.draft.ts
+*.draft.tsx
