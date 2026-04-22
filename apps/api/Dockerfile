@@ -40,6 +40,19 @@ COPY . .
 # (@omnichannel/types, @omnichannel/utils) and bundles them in.
 RUN pnpm deploy --filter=@omnichannel/api --prod /prod/api
 
+# The Prisma Client's generated `.prisma/client/` directory is NOT
+# a conventional npm package — it's emitted by `prisma generate` at
+# a known relative path that `@prisma/client/default.js` requires
+# via `require('.prisma/client/default')`. pnpm deploy only carries
+# declared npm packages, so the generated folder is missing from
+# /prod/api. We regenerate it INSIDE the deploy bundle here, which
+# writes the generated client directly into /prod/api/node_modules/
+# .prisma/ where the runtime loader looks for it.
+# (Railway incident 22.04.2026: UpdateProfileDto's @IsEnum(Language)
+# crashed at boot because Language was undefined — the generated
+# client was simply not there.)
+RUN cd /prod/api && npx prisma generate --schema=/app/prisma/schema.prisma
+
 # ──────────────────────────────────────────────────────────────
 # Stage 4 — Runner (minimal Alpine + pg_dump + built artifact)
 # ──────────────────────────────────────────────────────────────
