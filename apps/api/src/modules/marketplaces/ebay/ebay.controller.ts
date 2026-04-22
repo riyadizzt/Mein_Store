@@ -62,8 +62,13 @@ function consumeState(token: string): boolean {
   return Date.now() - ts <= STATE_TTL_MS
 }
 
+// Guards are applied PER METHOD, not at the class level. The
+// `oauth-callback` handler must stay public so eBay's own HTTP GET
+// (unauthenticated from our side) can land — its legitimacy is
+// proven by the single-use state token minted during /connect and
+// consumed inside the callback. All other endpoints are guarded
+// individually below, matching the pattern used in AuthController.
 @Controller('admin/marketplaces/ebay')
-@UseGuards(JwtAuthGuard, PermissionGuard)
 export class EbayController {
   private readonly logger = new Logger(EbayController.name)
 
@@ -74,12 +79,14 @@ export class EbayController {
   ) {}
 
   @Get('status')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
   async status() {
     return this.auth.getStatus()
   }
 
   @Post('connect')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
   async connect(@Req() req: Request) {
     const token = randomBytes(32).toString('base64url')
@@ -151,6 +158,7 @@ export class EbayController {
   }
 
   @Post('disconnect')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
   async disconnect(@Req() req: Request) {
     await this.auth.disconnect()
@@ -164,6 +172,7 @@ export class EbayController {
   }
 
   @Post('bootstrap-sandbox-policies')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
   async bootstrapSandboxPolicies(@Req() req: Request) {
     try {
