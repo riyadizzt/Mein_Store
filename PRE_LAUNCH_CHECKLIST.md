@@ -1661,71 +1661,71 @@
 
 # 7. RESPONSIVE
 
-⬜ **[Responsive] Mobile 320px (iPhone SE 1)**
+✅ **[Responsive] Mobile 320px (iPhone SE 1)**
    Schritt: Chrome DevTools → 320px
    Erwartet: Keine horizontale Scrollbar, alle Inhalte sichtbar
 
-⬜ **[Responsive] Mobile 375px (iPhone SE 2/3)**
+✅ **[Responsive] Mobile 375px (iPhone SE 2/3)**
    Schritt: 375px
    Erwartet: Layout korrekt
 
-⬜ **[Responsive] Mobile 414px (iPhone Plus)**
+✅ **[Responsive] Mobile 414px (iPhone Plus)**
    Schritt: 414px
    Erwartet: Layout korrekt
 
-⬜ **[Responsive] Tablet 768px (iPad)**
+✅ **[Responsive] Tablet 768px (iPad)**
    Schritt: 768px
    Erwartet: Tablet-Layout, 2-Col Grids
 
-⬜ **[Responsive] Tablet 1024px**
+✅ **[Responsive] Tablet 1024px**
    Schritt: 1024px
    Erwartet: Desktop-artiges Layout
 
-⬜ **[Responsive] Desktop 1280px**
+✅ **[Responsive] Desktop 1280px**
    Schritt: 1280px
    Erwartet: Volles Desktop-Layout
 
-⬜ **[Responsive] Desktop 1440px**
+✅ **[Responsive] Desktop 1440px**
    Schritt: 1440px
    Erwartet: max-w-[1440px] Container greift
 
-⬜ **[Responsive] Desktop 1920px**
+✅ **[Responsive] Desktop 1920px**
    Schritt: 1920px
    Erwartet: Inhalt zentriert, Whitespace links/rechts
 
-⬜ **[Responsive] Touch-Targets ≥ 44px**
+✅ **[Responsive] Touch-Targets ≥ 44px**
    Schritt: Mobile, Buttons messen
    Erwartet: Alle Buttons ≥ 44×44px
 
-⬜ **[Responsive] Header kollabiert Mobile**
+✅ **[Responsive] Header kollabiert Mobile**
    Schritt: < 768px
    Erwartet: Burger-Menu, kein Desktop-Nav
 
-⬜ **[Responsive] Mobile Menu funktioniert**
+✅ **[Responsive] Mobile Menu funktioniert**
    Schritt: Burger → Menu
    Erwartet: Slide-in, alle Links erreichbar
 
-⬜ **[Responsive] PDP Sticky Bar Mobile**
+✅ **[Responsive] PDP Sticky Bar Mobile**
    Schritt: Mobile PDP, scrollen
    Erwartet: Sticky Bar unten funktioniert
 
-⬜ **[Responsive] Tabellen horizontal scrollbar**
+✅ **[Responsive] Tabellen horizontal scrollbar**
    Schritt: Mobile Admin-Tabelle
    Erwartet: Overflow-x: auto, kein Breakage
 
-⬜ **[Responsive] Keine Horizontal-Scrollbar Homepage**
+✅ **[Responsive] Keine Horizontal-Scrollbar Homepage**
    Schritt: Alle Breakpoints
    Erwartet: Nie horizontales Scrollen
 
-⬜ **[Responsive] Bilder skalieren sauber**
+✅ **[Responsive] Bilder skalieren sauber**
    Schritt: Breakpoints durchgehen
    Erwartet: Keine Verzerrungen
 
-⬜ **[Responsive] Modals fit on Mobile**
+✅ **[Responsive] Modals fit on Mobile**
    Schritt: Mobile, Modal öffnen
    Erwartet: Passt in Viewport, scrollbar wenn lang
 
-⬜ **[Responsive] Forms auf Mobile nutzbar**
+✅ **[Responsive] Forms auf Mobile nutzbar**
    Schritt: Mobile Checkout
    Erwartet: Felder groß genug, Keyboard funktioniert
 
@@ -1733,51 +1733,51 @@
 
 # 8. DHL ADRESSVALIDIERUNG
 
-⬜ **[DHL-Addr] Checkout: Adresse wird vor Submit geprüft**
+✅ **[DHL-Addr] Checkout: Adresse wird vor Submit geprüft**
    Schritt: Checkout → Adresse eintragen → "Weiter"
    Erwartet: Spinner "Adresse wird geprüft", DHL-API call an /address/validate
 
-⬜ **[DHL-Addr] Checkout: Gültige Adresse → Weiter möglich**
+✅ **[DHL-Addr] Checkout: Gültige Adresse → Weiter möglich**
    Schritt: Echte Adresse "Alexanderplatz 1, 10178 Berlin"
    Erwartet: Grünes Häkchen, Button "Weiter" aktiv
 
-⬜ **[DHL-Addr] Checkout: Ungültige PLZ → Warnung**
+✅ **[DHL-Addr] Checkout: Ungültige PLZ → Warnung**
    Schritt: "99999" als PLZ eingeben
    Erwartet: Warnung mit Korrekturvorschlag, "Trotzdem fortfahren" möglich
 
-⬜ **[DHL-Addr] Checkout: Fehlende Hausnummer → Warnung**
+✅ **[DHL-Addr] Checkout: Fehlende Hausnummer → Warnung**
    Schritt: Straße ohne Hausnummer
    Erwartet: Warnung "Hausnummer fehlt"
 
-⬜ **[DHL-Addr] Account: Validierung bei neuer Adresse**
+✅ **[DHL-Addr] Account: Validierung bei neuer Adresse**
    Schritt: /account/addresses → "Neue Adresse" → Speichern
    Erwartet: DHL-Prüfung vor Speichern
 
-⬜ **[DHL-Addr] Account: Adresse bearbeiten prüft auch**
+✅ **[DHL-Addr] Account: Adresse bearbeiten prüft auch**
    Schritt: Bestehende Adresse editieren
    Erwartet: Re-Validierung bei Änderung
 
-⬜ **[DHL-Addr] PLZ→Stadt Offline-Validierung**
+✅  **[DHL-Addr] PLZ→Stadt Offline-Validierung**
    Schritt: "10115" eingeben (ohne Netzwerk)
    Erwartet: "Berlin" offline vorgeschlagen (99 Leitzonen)
 
-⬜ **[DHL-Addr] PLZ↔Stadt Mismatch-Erkennung**
+✅  **[DHL-Addr] PLZ↔Stadt Mismatch-Erkennung**
    Schritt: "10115" + "München"
    Erwartet: Warnung "PLZ gehört zu Berlin"
 
-⬜ **[DHL-Addr] Photon Autocomplete: Straßenvorschläge**
+✅  **[DHL-Addr] Photon Autocomplete: Straßenvorschläge**
    Schritt: "Pannierstr" im Straßenfeld eingeben
    Erwartet: Dropdown mit "Pannierstraße 4, 12047 Berlin" etc.
 
-⬜ **[DHL-Addr] Photon: Kostenlos, kein Google-Key nötig**
+✅  **[DHL-Addr] Photon: Kostenlos, kein Google-Key nötig**
    Schritt: Network-Tab prüfen
    Erwartet: Requests an photon.komoot.io, kein Google Places
 
-⬜ **[DHL-Addr] Unicode Bidi-Marker für PLZ in AR**
+✅  **[DHL-Addr] Unicode Bidi-Marker für PLZ in AR**
    Schritt: /ar Checkout mit Fehler
    Erwartet: PLZ/Stadt in Fehlermeldung korrekt LTR angezeigt
 
-⬜ **[DHL-Addr] Admin: Adresse im Admin-Panel editierbar**
+✅ **[DHL-Addr] Admin: Adresse im Admin-Panel editierbar**
    Schritt: Admin-Order → Pencil → Adresse ändern
    Erwartet: DHL-Prüfung auch hier aktiv
 
@@ -1785,47 +1785,47 @@
 
 # 9. SMART SIZING SYSTEM
 
-⬜ **[Sizing] Admin: Größentabelle erstellen**
+✅ **[Sizing] Admin: Größentabelle erstellen**
    Schritt: /admin/sizing → "Neu" → Name "Herren Oberteile"
    Erwartet: SizeChart in DB, Editor öffnet
 
-⬜ **[Sizing] Admin: Größen-Einträge hinzufügen**
+✅ **[Sizing] Admin: Größen-Einträge hinzufügen**
    Schritt: Größen S, M, L mit Maßen (Brust, Taille, Hüfte)
    Erwartet: SizeChartEntry pro Größe gespeichert
 
-⬜ **[Sizing] Admin: Größentabelle einem Lieferanten zuweisen**
+✅ **[Sizing] Admin: Größentabelle einem Lieferanten zuweisen**
    Schritt: Supplier-Edit → Größentabelle auswählen
    Erwartet: Alle Produkte des Lieferanten nutzen diese Tabelle
 
-⬜ **[Sizing] PDP: Größenberatungs-Modal öffnet**
+✅ **[Sizing] PDP: Größenberatungs-Modal öffnet**
    Schritt: Produkt → "Größentabelle" Link klicken
    Erwartet: Modal mit Tabelle + Mannequin + 3 Tabs
 
-⬜ **[Sizing] PDP: Tab 1 — Größentabelle**
+✅ **[Sizing] PDP: Tab 1 — Größentabelle**
    Schritt: Erster Tab
    Erwartet: Tabelle aller Größen des Produkts
 
-⬜ **[Sizing] PDP: Tab 2 — Maße eingeben**
+✅ **[Sizing] PDP: Tab 2 — Maße eingeben**
    Schritt: Zweiter Tab → Maße eingeben
    Erwartet: Input-Felder für Brust, Taille, Hüfte
 
-⬜ **[Sizing] PDP: Tab 3 — Empfehlung anzeigen**
+✅ **[Sizing] PDP: Tab 3 — Empfehlung anzeigen**
    Schritt: Maße eingetragen → Tab 3
    Erwartet: KI-Empfehlung "Wir empfehlen Größe L"
 
-⬜ **[Sizing] PDP: Distanz-basiertes Matching**
+✅ **[Sizing] PDP: Distanz-basiertes Matching**
    Schritt: Maße knapp zwischen M und L
    Erwartet: Größe mit minimaler Distanz wird empfohlen
 
-⬜ **[Sizing] Account: Kundenmaße speichern**
+✅ **[Sizing] Account: Kundenmaße speichern**
    Schritt: /account/measurements → Maße → Speichern
    Erwartet: CustomerMeasurement in DB
 
-⬜ **[Sizing] Account: Gespeicherte Maße auf PDP laden**
+✅ **[Sizing] Account: Gespeicherte Maße auf PDP laden**
    Schritt: PDP als eingeloggter Kunde öffnen
    Erwartet: Maße vorausgefüllt + Empfehlung direkt sichtbar
 
-⬜ **[Sizing] Mannequin-Figur reagiert auf Maße**
+✅ **[Sizing] Mannequin-Figur reagiert auf Maße**
    Schritt: Maße ändern
    Erwartet: Mannequin-Grafik aktualisiert
 
@@ -1833,75 +1833,75 @@
 
 # 10. KI-INTEGRATION
 
-⬜ **[AI] Alle 6 Features standardmäßig AUS**
+✅ **[AI] Alle 6 Features standardmäßig AUS**
    Schritt: Neuinstallation / Fresh DB → /admin/ai
    Erwartet: Alle Toggles auf AUS
 
-⬜ **[AI] Chatbot (Kunde) AN-Toggle**
+✅ **[AI] Chatbot (Kunde) AN-Toggle**
    Schritt: Toggle AN → Frontend Chat-Widget prüfen
    Erwartet: Chat sichtbar, Antworten funktionieren
 
-⬜ **[AI] Chatbot AUS-Toggle**
+✅ **[AI] Chatbot AUS-Toggle**
    Schritt: Toggle AUS → Frontend prüfen
    Erwartet: Chat-Widget verschwindet
 
-⬜ **[AI] Admin-Assistent AN**
+✅ **[AI] Admin-Assistent AN**
    Schritt: Toggle AN → /admin Dashboard
    Erwartet: Admin-Chat verfügbar
 
-⬜ **[AI] Produktbeschreibung generieren**
+✅ **[AI] Produktbeschreibung generieren**
    Schritt: Produkt → "KI-Beschreibung" Button
    Erwartet: Claude Vision analysiert Bild → DE/EN/AR generiert
 
-⬜ **[AI] Produktbeschreibung: Realistischer Ton**
+✅ **[AI] Produktbeschreibung: Realistischer Ton**
    Schritt: Generierte Beschreibung prüfen
    Erwartet: Sachlich, keine Übertreibungen wie "das Beste ever"
 
-⬜ **[AI] Produktbeschreibung: Vorschau + Übernehmen**
+✅ **[AI] Produktbeschreibung: Vorschau + Übernehmen**
    Schritt: Preview anzeigen → "Übernehmen"
    Erwartet: Felder werden gefüllt, speicherbar
 
-⬜ **[AI] Produktbeschreibung: Verwerfen funktioniert**
+✅ **[AI] Produktbeschreibung: Verwerfen funktioniert**
    Schritt: "Verwerfen" klicken
    Erwartet: Originaltext unverändert
 
-⬜ **[AI] SEO Meta-Tags mit generiert**
+✅ **[AI] SEO Meta-Tags mit generiert**
    Schritt: KI-Beschreibung generieren
    Erwartet: SEO Title + SEO Description in allen 3 Sprachen
 
-⬜ **[AI] Inventar-Vorschläge**
+✅ **[AI] Inventar-Vorschläge**
    Schritt: KI-Feature AN → Inventar-Ansicht
    Erwartet: Vorschläge für Nachbestellung basierend auf Verkauf
 
-⬜ **[AI] Marketing-Texte generieren**
+✅ **[AI] Marketing-Texte generieren**
    Schritt: Kampagne → "KI-Text generieren"
    Erwartet: 3-sprachiger Kampagnen-Text
 
-⬜ **[AI] Social Media Replies**
+✅ **[AI] Social Media Replies**
    Schritt: WhatsApp/Social-Nachricht
    Erwartet: KI antwortet in der Sprache des Kunden
 
-⬜ **[AI] Rate-Limiting greift**
+✅ **[AI] Rate-Limiting greift**
    Schritt: >20 Requests/Minute
    Erwartet: 429 Too Many Requests
 
-⬜ **[AI] Caching funktioniert**
+✅ **[AI] Caching funktioniert**
    Schritt: 2× gleiche Produktbeschreibung generieren
    Erwartet: 2. Request aus Cache (schneller + kein API-Call)
 
-⬜ **[AI] Claude Sonnet als Default**
+✅ **[AI] Claude Sonnet als Default**
    Schritt: /admin/ai → Model-Dropdown
    Erwartet: claude-sonnet-4-20250514 default
 
-⬜ **[AI] Gemini Fallback bei Claude-Ausfall**
+✅ **[AI] Gemini Fallback bei Claude-Ausfall**
    Schritt: Claude-Key ungültig
    Erwartet: Auto-Fallback zu Gemini
 
-⬜ **[AI] Logs in Admin sichtbar**
+✅ **[AI] Logs in Admin sichtbar**
    Schritt: /admin/ai → "Logs" Tab
    Erwartet: Alle Requests mit Response-Time + Kosten
 
-⬜ **[AI] Kein KI-Call ohne Consent (Chatbot)**
+✅ **[AI] Kein KI-Call ohne Consent (Chatbot)**
    Schritt: Consent abgelehnt → Chat öffnen
    Erwartet: Info "KI deaktiviert — Consent erforderlich"
 
@@ -1909,31 +1909,31 @@
 
 # 11. DEEPL ÜBERSETZUNG
 
-⬜ **[DeepL] AR → DE Vorschlag im Wareneingang**
+✅ **[DeepL] AR → DE Vorschlag im Wareneingang**
    Schritt: Supplier-Intake → AR-Produktname eingeben
    Erwartet: DE-Übersetzungs-Vorschlag erscheint
 
-⬜ **[DeepL] Vorschlag wird NICHT auto-gespeichert**
+✅ **[DeepL] Vorschlag wird NICHT auto-gespeichert**
    Schritt: AR-Name eingeben
    Erwartet: DE-Feld leer, Admin muss "Übernehmen" klicken
 
-⬜ **[DeepL] Admin-Bestätigung via Button**
+✅ **[DeepL] Admin-Bestätigung via Button**
    Schritt: Vorschlag → "Übernehmen"
    Erwartet: DE-Feld gefüllt, speicherbar
 
-⬜ **[DeepL] Admin kann Vorschlag bearbeiten**
+✅ **[DeepL] Admin kann Vorschlag bearbeiten**
    Schritt: "Übernehmen" → Text ändern
    Erwartet: Modifizierte Version wird gespeichert
 
-⬜ **[DeepL] Batch-Übersetzung funktioniert**
+✅ **[DeepL] Batch-Übersetzung funktioniert**
    Schritt: Mehrere Produkte markieren → "Übersetzen"
    Erwartet: Alle werden übersetzt (Bestätigung pro Produkt)
 
-⬜ **[DeepL] Cache für wiederholte Phrasen**
+✅ **[DeepL] Cache für wiederholte Phrasen**
    Schritt: Gleichen AR-Text 2× eingeben
    Erwartet: 2. Request aus Cache (kein DeepL-Call)
 
-⬜ **[DeepL] API-Fehler graceful handeln**
+✅ **[DeepL] API-Fehler graceful handeln**
    Schritt: DeepL-Key ungültig
    Erwartet: Kein Crash, Vorschlag bleibt leer mit Hinweis
 
@@ -1941,67 +1941,67 @@
 
 # 12. SOCIAL COMMERCE
 
-⬜ **[Social] Facebook Feed erreichbar**
+✅ **[Social] Facebook Feed erreichbar**
    Schritt: GET /api/v1/feeds/facebook.xml
    Erwartet: XML mit allen Produkten die channelFacebook=true
 
-⬜ **[Social] Facebook Feed: Produkt-AUS blendet aus**
+✅ **[Social] Facebook Feed: Produkt-AUS blendet aus**
    Schritt: Produkt channelFacebook=false → Feed laden
    Erwartet: Produkt nicht im XML
 
-⬜ **[Social] Facebook Feed: Globale AUS-Schalter**
+✅ **[Social] Facebook Feed: Globale AUS-Schalter**
    Schritt: Admin → Kanäle → Facebook AUS
    Erwartet: Feed liefert leere Liste oder 404
 
-⬜ **[Social] TikTok Feed (TSV)**
+✅ **[Social] TikTok Feed (TSV)**
    Schritt: GET /api/v1/feeds/tiktok.tsv
    Erwartet: TSV-Datei mit Produkten
 
-⬜ **[Social] Google Feed (XML)**
+✅ **[Social] Google Feed (XML)**
    Schritt: GET /api/v1/feeds/google.xml
    Erwartet: Google-Shopping konformes XML
 
-⬜ **[Social] WhatsApp Business Catalog Feed**
+✅ **[Social] WhatsApp Business Catalog Feed**
    Schritt: GET /api/v1/feeds/whatsapp.json
    Erwartet: JSON für WhatsApp Commerce
 
-⬜ **[Social] Feeds enthalten Bruttopreise**
+✅ **[Social] Feeds enthalten Bruttopreise**
    Schritt: Feed-Inhalt prüfen
    Erwartet: Preise inkl. 19% MwSt, Währung EUR
 
-⬜ **[Social] Feeds enthalten Varianten**
+✅ **[Social] Feeds enthalten Varianten**
    Schritt: Produkt mit Varianten → Feed
    Erwartet: Jede Variante als eigenes Item mit item_group_id
 
-⬜ **[Social] UTM-Parameter werden erkannt**
+✅ **[Social] UTM-Parameter werden erkannt**
    Schritt: Shop mit ?utm_source=facebook&utm_medium=shop aufrufen
    Erwartet: sessionStorage speichert Attribution
 
-⬜ **[Social] UTM → Order Channel-Attribution**
+✅ **[Social] UTM → Order Channel-Attribution**
    Schritt: Mit UTM bestellen
    Erwartet: Order.channel = 'facebook' in DB
 
-⬜ **[Social] Open Graph Tags auf PDP**
+✅ **[Social] Open Graph Tags auf PDP**
    Schritt: PDP → View Source
    Erwartet: og:title, og:description, og:image, og:url
 
-⬜ **[Social] WhatsApp-Teilen Button funktioniert**
+✅ **[Social] WhatsApp-Teilen Button funktioniert**
    Schritt: PDP → WhatsApp-Icon klicken
    Erwartet: wa.me mit Produkt-Link öffnet
 
-⬜ **[Social] WhatsApp Floating Button sichtbar**
+✅ **[Social] WhatsApp Floating Button sichtbar**
    Schritt: Shop öffnen
    Erwartet: Button unten rechts, min 56×56px
 
-⬜ **[Social] WhatsApp Button RTL-aware**
+✅ **[Social] WhatsApp Button RTL-aware**
    Schritt: /ar öffnen
    Erwartet: Button unten LINKS (nicht rechts)
 
-⬜ **[Social] Facebook Pixel tracked PageView**
+✅ **[Social] Facebook Pixel tracked PageView**
    Schritt: Consent erteilt → Homepage
    Erwartet: Pixel fires PageView Event
 
-⬜ **[Social] Facebook Pixel tracked Purchase**
+✅ **[Social] Facebook Pixel tracked Purchase**
    Schritt: Bestellung abschließen
    Erwartet: Pixel Purchase Event mit value
 
@@ -2065,41 +2065,41 @@
 
 # 14. CRON-JOBS
 
-⬜ **[Cron] Vorkasse: 7-Tage-Reminder**
+✅ **[Cron] Vorkasse: 7-Tage-Reminder**
    Schritt: Vorkasse-Order 7 Tage alt ohne Zahlung
    Erwartet: Reminder-E-Mail wird gesendet
 
-⬜ **[Cron] Vorkasse: 10-Tage-Stornierung**
+✅ **[Cron] Vorkasse: 10-Tage-Stornierung**
    Schritt: Vorkasse-Order 10 Tage alt
    Erwartet: Auto-Cancel, Bestand freigegeben, E-Mail an Kunde
 
-⬜ **[Cron] Payment-Timeout 30min**
+✅ **[Cron] Payment-Timeout 30min**
    Schritt: Order in pending_payment > 30min
    Erwartet: Status → cancelled, Reservierung aufgehoben
 
-⬜ **[Cron] Reservierungs-Cleanup**
+✅ **[Cron] Reservierungs-Cleanup**
    Schritt: Abgelaufene Reservierungen in DB
    Erwartet: Auto-Delete, quantityReserved zurück
 
-⬜ **[Cron] DHL Tracking Update (alle 2h)**
+✅ **[Cron] DHL Tracking Update (alle 2h)**
    Schritt: Shipment mit DHL Tracking ID
    Erwartet: Status wird aktualisiert (z.B. in_transit → delivered)
 
-⬜ **[Cron] Maintenance Auto-Disable**
+✅ **[Cron] Maintenance Auto-Disable**
    Schritt: Wartungsmodus mit End-Datum in Vergangenheit
    Erwartet: Auto-OFF
 
-⬜ **[Cron] Daily-Summary E-Mail**
+✅ **[Cron] Daily-Summary E-Mail**
    Schritt: Nach Tages-End Cron
    Erwartet: E-Mail mit KPIs an Admin
 
-⬜ **[Cron] Logs für jeden Cron-Run**
+✅ **[Cron] Logs für jeden Cron-Run**
    Schritt: Audit-Log oder Logs prüfen
    Erwartet: Jeder Cron-Run dokumentiert
 
-⬜ **[Cron] Fehler in Cron → Alert**
+✅ **[Cron] Fehler in Cron → Alert**
    Schritt: Cron crasht
-   Erwartet: Admin wird benachrichtigt
+   Erwartet: Admin wird benachrichtigt 
 
 ---
 

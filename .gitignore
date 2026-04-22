@@ -83,3 +83,11 @@ Mein_Store/
 *.bak.tsx
 *.draft.ts
 *.draft.tsx
+
+# Next-sitemap auto-generated on every `pnpm build` via the
+# postbuild hook. Committing it creates permanent diff-noise
+# (timestamp-only changes every build). Crawlers always get a
+# fresh copy from the deploy artifact.
+apps/web/public/sitemap.xml
+apps/web/public/sitemap-*.xml
+apps/web/public/robots.txt
