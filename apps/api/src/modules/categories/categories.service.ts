@@ -59,6 +59,7 @@ export class CategoriesService {
         iconKey: dto.iconKey ?? null,
         googleCategoryId: dto.googleCategoryId ?? null,
         googleCategoryLabel: dto.googleCategoryLabel ?? null,
+        ebayCategoryId: dto.ebayCategoryId ?? null,
         sortOrder: dto.sortOrder ?? 0,
         translations: {
           create: dto.translations.map((t) => ({
@@ -85,6 +86,7 @@ export class CategoriesService {
         iconKey: dto.iconKey,
         googleCategoryId: dto.googleCategoryId,
         googleCategoryLabel: dto.googleCategoryLabel,
+        ebayCategoryId: dto.ebayCategoryId,
         sortOrder: dto.sortOrder,
         translations: dto.translations
           ? {

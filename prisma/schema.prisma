@@ -418,6 +418,13 @@ model Category {
   // name in the Google feed (with an audit-log warning).
   googleCategoryId    String? @map("google_category_id")
   googleCategoryLabel String? @map("google_category_label") // cached human-readable label for UI
+  // eBay Category-Tree leaf ID (e.g. "11483" = "Damen > Jeans"). Required per
+  // eBay Offer create/publish call (C11). Distinct from Google's taxonomy —
+  // eBay has its own category tree, unrelated to Google's. Null = listing
+  // push will fail with sync_error "missing_ebay_category_id" forcing admin
+  // to fill this field via the category editor. Admin pflegt einmalig pro
+  // Kategorie; eBay-IDs sind stabil über Jahre.
+  ebayCategoryId      String? @map("ebay_category_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 

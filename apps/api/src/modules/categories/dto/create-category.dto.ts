@@ -47,6 +47,11 @@ export class CreateCategoryDto {
   @IsString()
   googleCategoryLabel?: string | null
 
+  @ApiProperty({ required: false, description: 'eBay Category-Tree leaf ID (e.g. "11483" = "Damen > Jeans"). Required by the eBay Offer API (C11). Distinct from Google taxonomy. Null → listing-push fails with clear sync_error.' })
+  @IsOptional()
+  @IsString()
+  ebayCategoryId?: string | null
+
   @ApiProperty({ default: 0 })
   @IsOptional()
   @IsInt()
