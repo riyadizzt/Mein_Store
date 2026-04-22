@@ -106,6 +106,23 @@ export interface BootstrapResult {
     return: boolean
     payment: boolean
   }
+  /**
+   * Sandbox seller accounts are NOT auto-enrolled in the
+   * Selling-Policy-Management program. We opt in via
+   * POST /sell/account/v1/program/opt_in as a pre-step.
+   *   alreadyOptedIn: true  — skipped (409 / errorId 25803)
+   *   alreadyOptedIn: false — opt-in was just performed
+   *
+   * Note: per eBay docs, a fresh opt-in can take up to 24 hours
+   * to propagate. If the follow-up listPolicies / create-policy
+   * calls fail with "User is not eligible for Business Policy",
+   * that is the propagation lag — not an error in the opt-in call.
+   * The service surfaces this distinctly so the admin UI can
+   * render the 24h-wait explanation.
+   */
+  programOptIn: {
+    alreadyOptedIn: boolean
+  }
 }
 
 @Injectable()
@@ -136,6 +153,16 @@ export class EbaySandboxPoliciesService {
     const token = await this.auth.getAccessTokenOrRefresh()
     const client = this.buildClient()
 
+    // ── Pre-step: opt-in to the Selling-Policy-Management program.
+    // Sandbox sellers are not auto-enrolled. MUST succeed (or be
+    // already-opted-in) before ANY policy list/create call.
+    const optIn = await this.ensureOptedInToSellingPolicyProgram(client, token)
+
+    // ── Policy creation. If the opt-in was just performed (not
+    // already-opted-in), these calls may still fail with
+    // "not eligible for Business Policy" because eBay's program
+    // queue takes up to 24h to propagate. The fail bubbles up
+    // with a friendly 3-lang message (see handleNotEligibleError).
     const fulfillment = await this.ensureFulfillmentPolicy(client, token)
     const ret = await this.ensureReturnPolicy(client, token)
     const payment = await this.ensurePaymentPolicy(client, token)
@@ -148,6 +175,9 @@ export class EbaySandboxPoliciesService {
         fulfillment: fulfillment.alreadyExisted,
         return: ret.alreadyExisted,
         payment: payment.alreadyExisted,
+      },
+      programOptIn: {
+        alreadyOptedIn: optIn.alreadyOptedIn,
       },
     }
 
@@ -165,6 +195,64 @@ export class EbaySandboxPoliciesService {
     )
 
     return result
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Program opt-in — sandbox-only pre-step
+  // ────────────────────────────────────────────────────────────
+  //
+  // eBay official API:
+  //   POST /sell/account/v1/program/opt_in
+  //   body: { "programType": "SELLING_POLICY_MANAGEMENT" }
+  //
+  // Documented responses (per eBay Seller Account API):
+  //   200 Success       — opt-in accepted
+  //   409 Conflict      — program already applied to this user
+  //   200 + errorId=25803 — some sandbox variants return 200 with
+  //                        an errorId inside a warnings/errors
+  //                        array meaning "already applied"
+  //   400/404/500        — real errors, must propagate
+  //
+  // Tolerance strategy (user-confirmed 2026-04-23):
+  //   HTTP 409       → alreadyOptedIn=true, silent skip
+  //   errorId 25803  → alreadyOptedIn=true, silent skip
+  //   everything else → throw, let bootstrap surface it
+
+  private async ensureOptedInToSellingPolicyProgram(
+    client: EbayApiClient,
+    token: string,
+  ): Promise<{ alreadyOptedIn: boolean }> {
+    try {
+      await client.request('POST', '/sell/account/v1/program/opt_in', {
+        bearer: token,
+        bodyKind: 'json',
+        body: { programType: 'SELLING_POLICY_MANAGEMENT' },
+        // Single-use request: a retry on 5xx would NOT hurt (idempotent
+        // on eBay's side), so we keep retry enabled — EbayApiClient
+        // already only retries on 429/5xx, not on 4xx.
+      })
+      this.logger.log('Opted in to SELLING_POLICY_MANAGEMENT (fresh)')
+      return { alreadyOptedIn: false }
+    } catch (e) {
+      if (e instanceof EbayApiError && this.isAlreadyOptedInSignal(e)) {
+        this.logger.log('SELLING_POLICY_MANAGEMENT: already opted in, skipping')
+        return { alreadyOptedIn: true }
+      }
+      throw e
+    }
+  }
+
+  /**
+   * Returns true iff the given EbayApiError represents "this program
+   * is already applied to the caller" — either via HTTP 409 or via
+   * the documented errorId 25803 "{fieldName} already exists" even
+   * in an otherwise-200 response that our client would have still
+   * thrown on (non-empty errors array with 4xx).
+   */
+  private isAlreadyOptedInSignal(err: EbayApiError): boolean {
+    if (err.status === 409) return true
+    if (err.ebayErrors.some((e) => e.errorId === 25803)) return true
+    return false
   }
 
   // ────────────────────────────────────────────────────────────

@@ -188,6 +188,7 @@ export class EbayController {
             returnPolicyId: result.returnPolicyId,
             paymentPolicyId: result.paymentPolicyId,
             alreadyExisted: result.alreadyExisted,
+            programOptIn: result.programOptIn,
           },
         },
       })
@@ -197,7 +198,45 @@ export class EbayController {
         // Translate to HTTP 403 with 3-lang message.
         return { error: e.code, message: e.message3, ok: false, statusCode: 403 }
       }
+      // Special-case the 24h propagation delay after a FRESH opt-in.
+      // eBay returns "User is not eligible for Business Policy" even
+      // though our opt-in call succeeded — the account-side enrolment
+      // takes up to 24 hours to propagate through their internal
+      // pipeline. Give the admin a clear, actionable message instead
+      // of the raw eBay error.
+      if (this.isBusinessPolicyNotEligibleError(e)) {
+        return {
+          ok: false,
+          statusCode: 425, // "Too Early" — semantically accurate
+          error: 'EBAY_PROGRAM_OPT_IN_PROPAGATING',
+          message: {
+            de: 'Die eBay-Programm-Aktivierung wurde angenommen, ist aber noch nicht vollständig verarbeitet. eBay braucht dafür bis zu 24 Stunden. Bitte klicke in 1-24 Stunden erneut auf "Sandbox-Policies anlegen".',
+            en: 'Your eBay program opt-in was accepted but has not finished propagating yet. eBay needs up to 24 hours for this. Please click "Bootstrap sandbox policies" again in 1-24 hours.',
+            ar: 'تم قبول اشتراك برنامج eBay ولكنه لم يكتمل بعد. قد تحتاج eBay إلى 24 ساعة لذلك. يرجى النقر على "إعداد سياسات Sandbox" مرة أخرى خلال 1-24 ساعة.',
+          },
+        }
+      }
       throw e
     }
+  }
+
+  /**
+   * Detects the "User is not eligible for Business Policy" error
+   * that eBay returns during the 24-hour opt-in propagation window.
+   * Based on eBay documented and observed response shapes:
+   *   HTTP 403 with a message mentioning "eligible" / "Business Policy"
+   *   Error id 20403 (documented eligibility error)
+   *   Or the plain message includes "not eligible"
+   */
+  private isBusinessPolicyNotEligibleError(e: any): boolean {
+    if (!e || typeof e !== 'object') return false
+    // Raw EbayApiError shape carries ebayErrors array + rawBody.
+    const ebayErrs: any[] = Array.isArray(e.ebayErrors) ? e.ebayErrors : []
+    if (ebayErrs.some((x) => x?.errorId === 20403)) return true
+    const msg = String(e.message ?? '').toLowerCase()
+    if (msg.includes('not eligible') && msg.includes('business policy')) return true
+    const raw = String(e.rawBody ?? '').toLowerCase()
+    if (raw.includes('not eligible') && raw.includes('business policy')) return true
+    return false
   }
 }

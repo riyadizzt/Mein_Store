@@ -108,6 +108,8 @@ describe('EbaySandboxPoliciesService — create-fresh path', () => {
       const svc = new EbaySandboxPoliciesService(fakeAuth)
 
       const { fetch, callLog } = mkRoutingFetch({
+        // Pre-step: opt-in succeeds fresh (200 OK, no errors).
+        '/sell/account/v1/program/opt_in': () => ({ status: 200, body: '{}' }),
         '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({
           status: 200,
           body: JSON.stringify({ fulfillmentPolicies: [] }),
@@ -145,10 +147,11 @@ describe('EbaySandboxPoliciesService — create-fresh path', () => {
         return: false,
         payment: false,
       })
+      expect(result.programOptIn).toEqual({ alreadyOptedIn: false })
 
-      // Expected call pattern: 3 GETs + 3 POSTs = 6 calls
+      // Expected call pattern: 1 opt-in POST + 3 GETs + 3 POSTs = 7 calls
       expect(callLog.filter((c) => c.method === 'GET')).toHaveLength(3)
-      expect(callLog.filter((c) => c.method === 'POST')).toHaveLength(3)
+      expect(callLog.filter((c) => c.method === 'POST')).toHaveLength(4)
 
       // Settings patched with policy IDs
       const patches = (fakeAuth as any)._patches
@@ -169,6 +172,13 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
       const svc = new EbaySandboxPoliciesService(fakeAuth)
 
       const { fetch, callLog } = mkRoutingFetch({
+        // Pre-step: opt-in already done (HTTP 409 → silent skip).
+        '/sell/account/v1/program/opt_in': () => ({
+          status: 409,
+          body: JSON.stringify({
+            errors: [{ errorId: 25803, message: 'already exists' }],
+          }),
+        }),
         '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({
           status: 200,
           body: JSON.stringify({
@@ -200,10 +210,12 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
         returnPolicyId: 'R-EXIST',
         paymentPolicyId: 'P-EXIST',
         alreadyExisted: { fulfillment: true, return: true, payment: true },
+        programOptIn: { alreadyOptedIn: true },
       })
-      // Exactly 3 GETs — no POSTs
-      expect(callLog).toHaveLength(3)
-      expect(callLog.every((c) => c.method === 'GET')).toBe(true)
+      // 1 opt-in POST + 3 GETs = 4 calls — NO policy POSTs
+      expect(callLog).toHaveLength(4)
+      expect(callLog.filter((c) => c.method === 'GET')).toHaveLength(3)
+      expect(callLog.filter((c) => c.method === 'POST')).toHaveLength(1)
     })
   })
 
@@ -213,6 +225,8 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
       const svc = new EbaySandboxPoliciesService(fakeAuth)
 
       const { fetch, callLog } = mkRoutingFetch({
+        // Pre-step: opt-in already done.
+        '/sell/account/v1/program/opt_in': () => ({ status: 409, body: '{}' }),
         '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({
           status: 200,
           body: JSON.stringify({
@@ -246,9 +260,10 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
         return: false,
         payment: true,
       })
-      // 3 GETs + 1 POST for return only
+      expect(result.programOptIn).toEqual({ alreadyOptedIn: true })
+      // 1 opt-in POST + 3 GETs + 1 return-policy POST = 5 calls
       expect(callLog.filter((c) => c.method === 'GET')).toHaveLength(3)
-      expect(callLog.filter((c) => c.method === 'POST')).toHaveLength(1)
+      expect(callLog.filter((c) => c.method === 'POST')).toHaveLength(2)
     })
   })
 
@@ -258,6 +273,8 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
       const svc = new EbaySandboxPoliciesService(fakeAuth)
 
       const { fetch, callLog } = mkRoutingFetch({
+        // Pre-step: fresh opt-in.
+        '/sell/account/v1/program/opt_in': () => ({ status: 200, body: '{}' }),
         '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({
           status: 404,
           body: JSON.stringify({ errors: [{ message: 'no policies' }] }),
@@ -289,7 +306,139 @@ describe('EbaySandboxPoliciesService — MV-3 idempotent rerun', () => {
       expect(result.fulfillmentPolicyId).toBe('F-1')
       // 404 on list was retried by the client (retryable). Not an
       // assertion target — we just assert it didn't crash.
-      expect(callLog.length).toBeGreaterThanOrEqual(6)
+      expect(callLog.length).toBeGreaterThanOrEqual(7) // 1 opt-in + 3 GETs (incl retries on 404) + 3 POSTs
+    })
+  })
+})
+
+describe('EbaySandboxPoliciesService — MV: program opt-in pre-step', () => {
+  it('MV-1: fresh 200 opt-in response → bootstrap continues normally, programOptIn.alreadyOptedIn=false', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const fakeAuth = mkFakeAuth()
+      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const { fetch, callLog } = mkRoutingFetch({
+        '/sell/account/v1/program/opt_in': () => ({ status: 200, body: '{}' }),
+        '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"fulfillmentPolicies":[]}' }),
+        '/sell/account/v1/fulfillment_policy': () => ({ status: 201, body: '{"fulfillmentPolicyId":"F-MV1"}' }),
+        '/sell/account/v1/return_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"returnPolicies":[]}' }),
+        '/sell/account/v1/return_policy': () => ({ status: 201, body: '{"returnPolicyId":"R-MV1"}' }),
+        '/sell/account/v1/payment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"paymentPolicies":[]}' }),
+        '/sell/account/v1/payment_policy': () => ({ status: 201, body: '{"paymentPolicyId":"P-MV1"}' }),
+      })
+      svc.__setFetchForTests(fetch)
+
+      const result = await svc.bootstrapPolicies()
+
+      expect(result.programOptIn).toEqual({ alreadyOptedIn: false })
+      expect(result.fulfillmentPolicyId).toBe('F-MV1')
+
+      // Opt-in was the FIRST call (before any policy list).
+      expect(callLog[0].method).toBe('POST')
+      expect(callLog[0].url).toContain('/sell/account/v1/program/opt_in')
+
+      // And it sent the correct programType.
+      expect(callLog[0].body).toBeDefined()
+      const body = JSON.parse(callLog[0].body!)
+      expect(body).toEqual({ programType: 'SELLING_POLICY_MANAGEMENT' })
+    })
+  })
+
+  it('MV-2: 409 Conflict on opt-in → silent skip, programOptIn.alreadyOptedIn=true, bootstrap continues', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const fakeAuth = mkFakeAuth()
+      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const { fetch } = mkRoutingFetch({
+        '/sell/account/v1/program/opt_in': () => ({
+          status: 409,
+          body: JSON.stringify({
+            errors: [{ errorId: 25803, message: 'programType already exists' }],
+          }),
+        }),
+        '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"fulfillmentPolicies":[]}' }),
+        '/sell/account/v1/fulfillment_policy': () => ({ status: 201, body: '{"fulfillmentPolicyId":"F-MV2"}' }),
+        '/sell/account/v1/return_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"returnPolicies":[]}' }),
+        '/sell/account/v1/return_policy': () => ({ status: 201, body: '{"returnPolicyId":"R-MV2"}' }),
+        '/sell/account/v1/payment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"paymentPolicies":[]}' }),
+        '/sell/account/v1/payment_policy': () => ({ status: 201, body: '{"paymentPolicyId":"P-MV2"}' }),
+      })
+      svc.__setFetchForTests(fetch)
+
+      const result = await svc.bootstrapPolicies()
+      expect(result.programOptIn).toEqual({ alreadyOptedIn: true })
+      expect(result.fulfillmentPolicyId).toBe('F-MV2')
+    })
+  })
+
+  it('MV-2b: non-409 response carrying errorId 25803 is also treated as already-opted-in', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const fakeAuth = mkFakeAuth()
+      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const { fetch } = mkRoutingFetch({
+        // Some sandbox variants return 400 (not 409) with errorId 25803.
+        '/sell/account/v1/program/opt_in': () => ({
+          status: 400,
+          body: JSON.stringify({ errors: [{ errorId: 25803, message: 'already applied' }] }),
+        }),
+        '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"fulfillmentPolicies":[]}' }),
+        '/sell/account/v1/fulfillment_policy': () => ({ status: 201, body: '{"fulfillmentPolicyId":"F-MV2b"}' }),
+        '/sell/account/v1/return_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"returnPolicies":[]}' }),
+        '/sell/account/v1/return_policy': () => ({ status: 201, body: '{"returnPolicyId":"R-MV2b"}' }),
+        '/sell/account/v1/payment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"paymentPolicies":[]}' }),
+        '/sell/account/v1/payment_policy': () => ({ status: 201, body: '{"paymentPolicyId":"P-MV2b"}' }),
+      })
+      svc.__setFetchForTests(fetch)
+
+      const result = await svc.bootstrapPolicies()
+      expect(result.programOptIn).toEqual({ alreadyOptedIn: true })
+    })
+  })
+
+  it('MV-3: 500 Internal Server Error on opt-in → throws, policy endpoints never reached', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const fakeAuth = mkFakeAuth()
+      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const { fetch, callLog } = mkRoutingFetch({
+        // Opt-in crashes server-side. Not retryable after MAX_RETRIES.
+        '/sell/account/v1/program/opt_in': () => ({
+          status: 500,
+          body: JSON.stringify({ errors: [{ errorId: 20500, message: 'system error' }] }),
+        }),
+        // Policy routes are defined but should NEVER be hit — opt-in throws first.
+        '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"fulfillmentPolicies":[]}' }),
+      })
+      svc.__setFetchForTests(fetch)
+
+      await expect(svc.bootstrapPolicies()).rejects.toThrow()
+
+      // Every call in the log must be to the opt-in endpoint. No
+      // policy-list / policy-create call may have been attempted.
+      for (const c of callLog) {
+        expect(c.url).toContain('/sell/account/v1/program/opt_in')
+      }
+    })
+  })
+
+  it('MV-4: 400 Bad Request with UNKNOWN errorId on opt-in → throws (not silent-skip)', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const fakeAuth = mkFakeAuth()
+      const svc = new EbaySandboxPoliciesService(fakeAuth)
+      const { fetch, callLog } = mkRoutingFetch({
+        '/sell/account/v1/program/opt_in': () => ({
+          status: 400,
+          body: JSON.stringify({
+            errors: [{ errorId: 20401, message: 'Missing required field' }],
+          }),
+        }),
+        '/sell/account/v1/fulfillment_policy?marketplace_id=EBAY_DE': () => ({ status: 200, body: '{"fulfillmentPolicies":[]}' }),
+      })
+      svc.__setFetchForTests(fetch)
+
+      await expect(svc.bootstrapPolicies()).rejects.toThrow()
+
+      // Again, policy endpoints must NOT have been hit.
+      for (const c of callLog) {
+        expect(c.url).toContain('/sell/account/v1/program/opt_in')
+      }
     })
   })
 })
