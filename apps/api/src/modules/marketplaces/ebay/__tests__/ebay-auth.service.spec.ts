@@ -294,16 +294,38 @@ describe('getStatus — admin UI probe', () => {
   })
 
   it('reports missingEnvVars when EBAY_SANDBOX_* are blank', async () => {
+    // If the developer transcribed real eBay credentials into
+    // apps/api/.env (per C10 runbook), process.env already has them
+    // at test time. We must EXPLICITLY delete them for this test's
+    // "blank" assumption to hold, same trick the masterKeyMissing
+    // test uses for CHANNEL_TOKEN_MASTER_KEY.
+    const sandboxKeys = [
+      'EBAY_SANDBOX_APP_ID',
+      'EBAY_SANDBOX_DEV_ID',
+      'EBAY_SANDBOX_CERT_ID',
+      'EBAY_SANDBOX_RUNAME',
+    ] as const
+    const savedSandbox: Record<string, string | undefined> = {}
+    for (const k of sandboxKeys) {
+      savedSandbox[k] = process.env[k]
+      delete process.env[k]
+    }
     const env = {
       EBAY_ENV: 'sandbox',
       CHANNEL_TOKEN_MASTER_KEY: EBAY_ENV_VARS.CHANNEL_TOKEN_MASTER_KEY,
     }
-    await withEnv(env, async () => {
-      const prisma = mkPrisma()
-      const svc = new EbayAuthService(prisma as any)
-      const status = await svc.getStatus()
-      expect(status.missingEnvVars.length).toBeGreaterThan(0)
-    })
+    try {
+      await withEnv(env, async () => {
+        const prisma = mkPrisma()
+        const svc = new EbayAuthService(prisma as any)
+        const status = await svc.getStatus()
+        expect(status.missingEnvVars.length).toBeGreaterThan(0)
+      })
+    } finally {
+      for (const k of sandboxKeys) {
+        if (savedSandbox[k] !== undefined) process.env[k] = savedSandbox[k]
+      }
+    }
   })
 })
 
