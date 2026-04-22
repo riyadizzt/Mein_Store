@@ -4,7 +4,16 @@
 // =============================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Engine binaries for every target we actually deploy to.
+  //   native                     — local dev (macOS / Linux glibc-openssl-3)
+  //   linux-musl-openssl-3.0.x   — Alpine Linux runners (Railway Docker base
+  //                                node:20-alpine ships OpenSSL 3; Prisma's
+  //                                default musl engine links against 1.1).
+  // Adding this list makes `prisma generate` emit a query-engine .so.node
+  // for each target; the runtime picks the matching one. Safe to grow
+  // this list (extra targets only add a few MB per engine file).
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

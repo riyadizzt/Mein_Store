@@ -45,9 +45,18 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# pg_dump for the backup cron; gzip for compression. See
-# docs/admin-runbook/backup-wiederherstellung.md.
-RUN apk add --no-cache postgresql-client gzip
+# System packages:
+#   postgresql-client — pg_dump for the backup cron
+#   gzip             — compression for backup pipeline
+#   openssl          — Prisma's linux-musl query engine needs libssl.
+#                      node:20-alpine ships OpenSSL 3; this apk add makes
+#                      it explicit so a future base-image change that
+#                      drops openssl from the default layers does not
+#                      silently break Prisma client instantiation
+#                      (Railway incident 22.04.2026 — libssl.so.1.1
+#                      missing; fixed via the new binaryTarget +
+#                      this install).
+RUN apk add --no-cache postgresql-client gzip openssl
 
 # pnpm CLI for install + prisma generate.
 RUN corepack enable && corepack prepare pnpm@9 --activate
