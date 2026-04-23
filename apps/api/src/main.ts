@@ -8,6 +8,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { AppModule } from './app.module'
+import { makeCorsOriginFn } from './common/helpers/cors-origin'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -19,7 +20,7 @@ async function bootstrap() {
   app.use(cookieParser())
   app.use(helmet())
   app.enableCors({
-    origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    origin: makeCorsOriginFn(),
     credentials: true,
   })
 

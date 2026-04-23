@@ -27,6 +27,10 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { PrismaService } from '../../prisma/prisma.service'
 import { OAuthRedirectFilter } from './guards/google-oauth.guard'
+import {
+  adminCookieOptions,
+  customerCookieOptions,
+} from '../../common/helpers/cookie-options'
 
 // ── Separate cookies for Admin vs Customer ──────────────────
 const ADMIN_COOKIE = 'malak_admin_rt'
@@ -38,8 +42,6 @@ const CUSTOMER_COOKIE = 'malak_customer_rt'
 // Safe to remove this constant once zero users still have the cookie —
 // check devtools across a few sessions a month from now.
 const LEGACY_COOKIE = 'malak_refresh'
-const ADMIN_COOKIE_MAX_AGE = 8 * 60 * 60 * 1000 // 8 hours (Admin security)
-const CUSTOMER_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000 // 30 days (Customer convenience)
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -54,36 +56,28 @@ export class AuthController {
   // ── Cookie helpers ──────────────────────────────────────────
 
   private setAdminCookie(res: Response, refreshToken: string) {
-    res.cookie(ADMIN_COOKIE, refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: ADMIN_COOKIE_MAX_AGE, // 8 hours — admin security
-      path: '/',
-    })
+    res.cookie(ADMIN_COOKIE, refreshToken, adminCookieOptions())
     // Housekeeping: kill the legacy malak_refresh cookie on every login
     // so browsers that carry it from pre-split sessions get cleaned up.
     res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
   private setCustomerCookie(res: Response, refreshToken: string) {
-    res.cookie(CUSTOMER_COOKIE, refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: CUSTOMER_COOKIE_MAX_AGE, // 30 days — customer convenience
-      path: '/',
-    })
+    res.cookie(CUSTOMER_COOKIE, refreshToken, customerCookieOptions())
     res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
   private clearAdminCookie(res: Response) {
-    res.clearCookie(ADMIN_COOKIE, { path: '/' })
+    // Match options on clear, otherwise some browsers (esp. Safari) refuse
+    // to delete a cookie that was set with sameSite=none + secure.
+    const { maxAge, ...opts } = adminCookieOptions()
+    res.clearCookie(ADMIN_COOKIE, opts)
     res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
   private clearCustomerCookie(res: Response) {
-    res.clearCookie(CUSTOMER_COOKIE, { path: '/' })
+    const { maxAge, ...opts } = customerCookieOptions()
+    res.clearCookie(CUSTOMER_COOKIE, opts)
     res.clearCookie(LEGACY_COOKIE, { path: '/' })
   }
 
