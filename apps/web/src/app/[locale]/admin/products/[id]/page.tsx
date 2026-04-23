@@ -20,6 +20,7 @@ import { BatchFotoEtikettButton } from '@/components/admin/foto-etikett/BatchFot
 import { AiDescriptionButton } from '@/components/admin/ai-description-button'
 import { BatchHaengetikettenButton } from '@/components/admin/haengetikett/BatchHaengetikettenButton'
 import { WhatsAppShareButton } from '@/components/admin/whatsapp-share-button'
+import { ProductEbaySection } from '@/components/admin/product-ebay-section'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAdminCategories } from '@/hooks/use-categories'
@@ -681,6 +682,18 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
           })()}
         </div>
       </section>
+
+      {/* ══════════ EBAY-LISTING (C11) ══════════ */}
+      {/* Separate section from the generic channel-grid above because eBay
+           is a true marketplace: it owns its own inventory-item + offer
+           state (ChannelProductListing rows) and needs per-variant status,
+           external listing IDs, and an optional channel-price override. */}
+      <ProductEbaySection
+        productId={id}
+        productActive={product?.isActive !== false}
+        basePrice={basePrice}
+        salePrice={salePrice}
+      />
 
       {/* ══════════ WHATSAPP-SMART-LINK (C7) ══════════ */}
       {/* Only visible when the WhatsApp channel is enabled on this

@@ -35,10 +35,32 @@ import {
   Power,
   Wrench,
   KeyRound,
+  Upload,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 const t3 = (l: string, d: string, e: string, a: string) =>
   l === 'ar' ? a : l === 'en' ? e : d
+
+interface PublishEntry {
+  listingId: string
+  ok: boolean
+  externalListingId?: string
+  alreadyPublished?: boolean
+  marginWarning?: boolean
+  errorCode?: string
+  errorMessage?: string
+  retryable?: boolean
+}
+
+interface PublishPendingSummary {
+  requested: number
+  published: number
+  failed: number
+  remaining: number
+  results: PublishEntry[]
+}
 
 interface Status {
   mode: 'sandbox' | 'production'
@@ -63,6 +85,8 @@ export function EbayConnectionCard() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [banner, setBanner] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const [publishSummary, setPublishSummary] = useState<PublishPendingSummary | null>(null)
+  const [summaryExpanded, setSummaryExpanded] = useState(false)
 
   // Surface ?ebay=connected / ?ebay=error from OAuth redirect.
   useEffect(() => {
@@ -147,6 +171,79 @@ export function EbayConnectionCard() {
     },
   })
 
+  // Pending count — only fetched when connected (endpoint requires auth
+  // and the count is meaningless without a live eBay connection).
+  const pendingQuery = useQuery<{ count: number }>({
+    queryKey: ['admin', 'marketplaces', 'ebay', 'pending-count'],
+    queryFn: async () => (await api.get('/admin/marketplaces/ebay/pending-count')).data as { count: number },
+    enabled: !!status?.connected,
+    refetchInterval: 60_000,
+  })
+
+  const publishMutation = useMutation({
+    mutationFn: async () =>
+      (await api.post('/admin/marketplaces/ebay/publish-pending', {})).data as
+        | PublishPendingSummary
+        | { ok: false; statusCode: number; error: string; message: { de: string; en: string; ar: string } },
+    onSuccess: (d) => {
+      // Backend may return a token-level failure envelope (403 / 425) instead
+      // of a summary. Distinguish by shape.
+      if ('ok' in d && d.ok === false) {
+        const msg = (d as any).message
+        setBanner({
+          kind: 'error',
+          text: typeof msg === 'object' ? msg[locale] ?? msg.de : String(msg),
+        })
+        return
+      }
+      const s = d as PublishPendingSummary
+      setPublishSummary(s)
+      setSummaryExpanded(false)
+      qc.invalidateQueries({ queryKey: ['admin', 'marketplaces', 'ebay', 'pending-count'] })
+      qc.invalidateQueries({ queryKey: ['ebay', 'listings'] })
+      if (s.published > 0 && s.failed === 0) {
+        setBanner({
+          kind: 'success',
+          text: t3(
+            locale,
+            `${s.published} Angebote veröffentlicht.`,
+            `${s.published} listings published.`,
+            `تم نشر ${s.published} من العروض.`,
+          ),
+        })
+      } else if (s.published > 0 && s.failed > 0) {
+        setBanner({
+          kind: 'error',
+          text: t3(
+            locale,
+            `${s.published} veröffentlicht, ${s.failed} fehlgeschlagen.`,
+            `${s.published} published, ${s.failed} failed.`,
+            `تم نشر ${s.published}، وفشل ${s.failed}.`,
+          ),
+        })
+      } else if (s.failed > 0) {
+        setBanner({
+          kind: 'error',
+          text: t3(
+            locale,
+            `Alle ${s.failed} Versuche fehlgeschlagen. Details unten.`,
+            `All ${s.failed} attempts failed. Details below.`,
+            `فشلت جميع المحاولات ${s.failed}. التفاصيل أدناه.`,
+          ),
+        })
+      }
+    },
+    onError: (e: any) => {
+      const msg = e?.message
+      setBanner({
+        kind: 'error',
+        text:
+          (typeof msg === 'object' ? msg[locale] ?? msg.de : msg) ??
+          t3(locale, 'Veröffentlichung fehlgeschlagen', 'Publish failed', 'فشل النشر'),
+      })
+    },
+  })
+
   if (isLoading) {
     return (
       <div className="rounded-xl border bg-card p-6 mb-4">
@@ -156,6 +253,7 @@ export function EbayConnectionCard() {
   }
 
   const s = status!
+  const pendingCount = pendingQuery.data?.count ?? 0
 
   return (
     <div className="rounded-xl border bg-card p-6 mb-4 space-y-4">
@@ -310,7 +408,79 @@ export function EbayConnectionCard() {
             {t3(locale, 'Sandbox-Policies anlegen', 'Bootstrap sandbox policies', 'إعداد سياسات Sandbox')}
           </Button>
         )}
+
+        {s.connected && pendingCount > 0 && (
+          <Button
+            size="sm"
+            onClick={() => publishMutation.mutate()}
+            disabled={publishMutation.isPending}
+            title={t3(
+              locale,
+              'Veröffentlicht alle ausstehenden eBay-Angebote (max. 25 pro Durchgang)',
+              'Publishes all pending eBay listings (max 25 per run)',
+              'ينشر جميع عروض eBay المعلقة (بحد أقصى 25 لكل تشغيل)',
+            )}
+          >
+            {publishMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Upload className="h-4 w-4 mr-2" />
+            )}
+            {t3(
+              locale,
+              `Veröffentlichen (${pendingCount})`,
+              `Publish (${pendingCount})`,
+              `نشر (${pendingCount})`,
+            )}
+          </Button>
+        )}
       </div>
+
+      {/* Publish-result summary (sticky until user clears or reruns). */}
+      {publishSummary && (
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-4 text-sm flex-wrap">
+              <span className="text-muted-foreground">
+                {t3(locale, 'Versucht', 'Attempted', 'تم المحاولة')}:{' '}
+                <span className="font-medium text-foreground">{publishSummary.requested}</span>
+              </span>
+              <span className="text-green-700 dark:text-green-400">
+                {t3(locale, 'Veröffentlicht', 'Published', 'تم النشر')}:{' '}
+                <span className="font-medium">{publishSummary.published}</span>
+              </span>
+              <span className="text-amber-700 dark:text-amber-400">
+                {t3(locale, 'Fehlgeschlagen', 'Failed', 'فشل')}:{' '}
+                <span className="font-medium">{publishSummary.failed}</span>
+              </span>
+              <span className="text-muted-foreground">
+                {t3(locale, 'Verbleibend', 'Remaining', 'متبقي')}:{' '}
+                <span className="font-medium text-foreground">{publishSummary.remaining}</span>
+              </span>
+            </div>
+            {publishSummary.results.length > 0 && (
+              <button
+                onClick={() => setSummaryExpanded(!summaryExpanded)}
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 flex-shrink-0"
+                type="button"
+              >
+                {summaryExpanded
+                  ? t3(locale, 'Details ausblenden', 'Hide details', 'إخفاء التفاصيل')
+                  : t3(locale, 'Details anzeigen', 'Show details', 'عرض التفاصيل')}
+                {summaryExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+            )}
+          </div>
+
+          {summaryExpanded && publishSummary.results.length > 0 && (
+            <div className="pt-2 border-t space-y-1.5">
+              {publishSummary.results.map((r) => (
+                <PublishResultRow key={r.listingId} entry={r} locale={locale} sandbox={s.mode === 'sandbox'} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -357,6 +527,80 @@ function StatusTile({
         }
       >
         {value}
+      </div>
+    </div>
+  )
+}
+
+function PublishResultRow({
+  entry,
+  locale,
+  sandbox,
+}: {
+  entry: PublishEntry
+  locale: string
+  sandbox: boolean
+}) {
+  const itemUrlBase = sandbox ? 'https://sandbox.ebay.de/itm/' : 'https://www.ebay.de/itm/'
+  if (entry.ok) {
+    return (
+      <div className="flex items-start gap-2 text-xs">
+        <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-green-600 dark:text-green-400" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-[11px] text-muted-foreground truncate">{entry.listingId}</span>
+            {entry.externalListingId && (
+              <a
+                href={itemUrlBase + entry.externalListingId}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-mono text-[11px]"
+              >
+                {entry.externalListingId}
+                <ExternalLink className="inline h-3 w-3 ltr:ml-1 rtl:mr-1" />
+              </a>
+            )}
+            {entry.alreadyPublished && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300">
+                {t3(locale, 'bereits veröffentlicht', 'already published', 'منشور مسبقًا')}
+              </span>
+            )}
+            {entry.marginWarning && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                title={t3(
+                  locale,
+                  'eBay-Preis liegt unter Shop-Preis × 1,15 — Provision könnte nicht gedeckt sein.',
+                  'eBay price is below shop price × 1.15 — commission may not be covered.',
+                  'سعر eBay أقل من سعر المتجر × 1.15 — قد لا تتم تغطية العمولة.',
+                )}
+              >
+                {t3(locale, 'Margen-Warnung', 'Margin warning', 'تحذير الهامش')}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-[11px] text-muted-foreground truncate">{entry.listingId}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 font-mono">
+            {entry.errorCode}
+          </span>
+          {entry.retryable && (
+            <span className="text-[10px] text-muted-foreground">
+              {t3(locale, 'wird erneut versucht', 'will retry', 'ستتم إعادة المحاولة')}
+            </span>
+          )}
+        </div>
+        {entry.errorMessage && (
+          <div className="mt-1 text-muted-foreground break-words">{entry.errorMessage}</div>
+        )}
       </div>
     </div>
   )

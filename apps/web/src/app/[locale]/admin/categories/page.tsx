@@ -28,6 +28,7 @@ interface Category {
   // C6 — Google Product Taxonomy mapping. Null = falls back to
   // category name in the Google Shopping feed (sub-optimal listing).
   googleCategoryId?: string | null
+  ebayCategoryId?: string | null
   googleCategoryLabel?: string | null
   _count?: { products: number }; children?: Category[]
 }
@@ -52,6 +53,7 @@ export default function AdminCategoriesPage() {
   const [imageUrl, setImageUrl] = useState('')
   const [iconKey, setIconKey] = useState<string | null>(null)
   const [googleCategoryId, setGoogleCategoryId] = useState<string | null>(null)
+  const [ebayCategoryId, setEbayCategoryId] = useState<string | null>(null)
   const [googleCategoryLabel, setGoogleCategoryLabel] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState(0)
   const [nameDe, setNameDe] = useState('')
@@ -99,13 +101,14 @@ export default function AdminCategoriesPage() {
     setSlug(selected.slug); setParentId(selected.parentId ?? ''); setImageUrl(selected.imageUrl ?? '')
     setIconKey(selected.iconKey ?? null)
     setGoogleCategoryId(selected.googleCategoryId ?? null)
+    setEbayCategoryId(selected.ebayCategoryId ?? null)
     setGoogleCategoryLabel(selected.googleCategoryLabel ?? null)
     setSortOrder(selected.sortOrder); setNameDe(g('de')?.name ?? ''); setNameEn(g('en')?.name ?? '')
     setNameAr(g('ar')?.name ?? ''); setDescDe(g('de')?.description ?? '')
     setDescEn(g('en')?.description ?? ''); setDescAr(g('ar')?.description ?? '')
   }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clearForm = () => { setSlug(''); setParentId(''); setImageUrl(''); setIconKey(null); setGoogleCategoryId(null); setGoogleCategoryLabel(null); setSortOrder(0); setNameDe(''); setNameEn(''); setNameAr(''); setDescDe(''); setDescEn(''); setDescAr('') }
+  const clearForm = () => { setSlug(''); setParentId(''); setImageUrl(''); setIconKey(null); setGoogleCategoryId(null); setGoogleCategoryLabel(null); setEbayCategoryId(null); setSortOrder(0); setNameDe(''); setNameEn(''); setNameAr(''); setDescDe(''); setDescEn(''); setDescAr('') }
   const startNewRoot = () => { clearForm(); setSelectedId(null); setIsNew(true); setParentId('') }
   const startNewChild = (pid: string) => { clearForm(); setSelectedId(null); setIsNew(true); setParentId(pid) }
 
@@ -115,7 +118,7 @@ export default function AdminCategoriesPage() {
       { language: 'en', name: nameEn, description: descEn || undefined },
       { language: 'ar', name: nameAr, description: descAr || undefined },
     ].filter((tr) => tr.name.trim())
-    saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, iconKey: iconKey ?? null, googleCategoryId: googleCategoryId ?? null, googleCategoryLabel: googleCategoryLabel ?? null, sortOrder, translations } })
+    saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, iconKey: iconKey ?? null, googleCategoryId: googleCategoryId ?? null, googleCategoryLabel: googleCategoryLabel ?? null, ebayCategoryId: ebayCategoryId ?? null, sortOrder, translations } })
   }
 
   const handleDelete = async () => {
@@ -473,6 +476,32 @@ export default function AdminCategoriesPage() {
                     : locale === 'en'
                       ? 'Required by Google Shopping Merchant Center for best listing quality.'
                       : 'Von Google Shopping Merchant Center für beste Listing-Qualität benötigt.'}
+                </p>
+              </div>
+
+              {/* eBay Category-Tree ID (C11a) */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">
+                  {locale === 'ar' ? 'معرف فئة eBay' : locale === 'en' ? 'eBay Category ID' : 'eBay-Kategorie-ID'}
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={ebayCategoryId ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9]/g, '').trim()
+                    setEbayCategoryId(v.length > 0 ? v : null)
+                  }}
+                  placeholder={locale === 'ar' ? 'مثال: 11483' : 'z.B. 11483'}
+                  className="w-full h-10 px-3 rounded-lg border bg-background text-sm"
+                  maxLength={12}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {locale === 'ar'
+                    ? 'رقم فئة من شجرة eBay (غير مرتبط بـ Google). مطلوب قبل نشر المنتجات على eBay.'
+                    : locale === 'en'
+                      ? 'Leaf category ID from eBay’s own tree (distinct from Google). Required before publishing products to eBay.'
+                      : 'Blatt-Kategorie-ID aus eBay’s eigenem Kategoriebaum (unabhängig von Google). Pflicht vor dem Publish auf eBay.'}
                 </p>
               </div>
 

@@ -18,11 +18,13 @@ import {
   Controller,
   Get,
   Post,
+  Body,
   Query,
   Res,
   Req,
   UseGuards,
   Logger,
+  BadRequestException,
 } from '@nestjs/common'
 import type { Response, Request } from 'express'
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'
@@ -36,6 +38,7 @@ import {
   EbayRefreshRevokedError,
 } from './ebay-auth.service'
 import { EbaySandboxPoliciesService } from './ebay-sandbox-policies.service'
+import { EbayListingService } from './ebay-listing.service'
 import { resolveEbayMode } from './ebay-env'
 import { randomBytes } from 'node:crypto'
 
@@ -76,6 +79,7 @@ export class EbayController {
     private readonly auth: EbayAuthService,
     private readonly sandbox: EbaySandboxPoliciesService,
     private readonly audit: AuditService,
+    private readonly listing: EbayListingService,
   ) {}
 
   @Get('status')
@@ -239,5 +243,119 @@ export class EbayController {
     const raw = String(e.rawBody ?? '').toLowerCase()
     if (raw.includes('not eligible') && raw.includes('business policy')) return true
     return false
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // C11c — Listing publishing
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Read-endpoint for the Admin product editor. Returns one entry
+   * per variant of this product with its eBay listing state.
+   */
+  @Get('listings')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async getListingsForProduct(@Query('productId') productId?: string) {
+    if (!productId || typeof productId !== 'string') {
+      throw new BadRequestException({
+        code: 'EBAY_LISTINGS_MISSING_PRODUCT_ID',
+        message: { de: 'productId Query-Parameter erforderlich.', en: 'productId query param required.', ar: 'productId مطلوب.' },
+      })
+    }
+    const rows = await this.listing.listForProduct(productId)
+    return { rows }
+  }
+
+  /** Count of pending eBay listings (fuels the "Publish (N)" badge). */
+  @Get('pending-count')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async getPendingCount() {
+    const count = await this.listing.countPending()
+    return { count }
+  }
+
+  /**
+   * Toggle eBay listing intent for a product.
+   * Body: { productId: string, enabled: boolean, channelPrice?: string | null }
+   * When enabled=true we upsert one ChannelProductListing row per
+   * active variant with status='pending'. When enabled=false we
+   * soft-delete all rows of this product (eBay-side unpublish is
+   * handled in C11.5 — the admin UI surfaces a clear warning).
+   */
+  @Post('toggle-listing')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async toggleListing(
+    @Body() body: { productId?: string; enabled?: boolean; channelPrice?: string | null },
+    @Req() req: Request,
+  ) {
+    if (!body?.productId || typeof body.productId !== 'string') {
+      throw new BadRequestException({
+        code: 'EBAY_TOGGLE_MISSING_PRODUCT_ID',
+        message: {
+          de: 'productId ist erforderlich.',
+          en: 'productId is required.',
+          ar: 'productId مطلوب.',
+        },
+      })
+    }
+    if (typeof body.enabled !== 'boolean') {
+      throw new BadRequestException({
+        code: 'EBAY_TOGGLE_MISSING_ENABLED',
+        message: {
+          de: 'Das Feld "enabled" muss true oder false sein.',
+          en: 'Field "enabled" must be true or false.',
+          ar: 'يجب أن تكون قيمة "enabled" true أو false.',
+        },
+      })
+    }
+    const adminId = (req as any).user?.id ?? 'system'
+    try {
+      return await this.listing.toggleForProduct(
+        body.productId,
+        body.enabled,
+        adminId,
+        body.channelPrice ?? null,
+      )
+    } catch (e: any) {
+      if (e?.code === 'product_not_found') {
+        throw new BadRequestException({
+          code: 'EBAY_TOGGLE_PRODUCT_NOT_FOUND',
+          message: {
+            de: 'Produkt nicht gefunden.',
+            en: 'Product not found.',
+            ar: 'المنتج غير موجود.',
+          },
+        })
+      }
+      throw e
+    }
+  }
+
+  /**
+   * Bulk-publish all pending eBay listings (up to `batchLimit`,
+   * default 25, hard-capped at 100 to avoid browser-timeout).
+   * Sequential to respect rate limits and keep error attribution
+   * clean. Response returns per-listing details + summary counts.
+   */
+  @Post('publish-pending')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async publishPending(
+    @Body() body: { batchLimit?: number },
+    @Req() req: Request,
+  ) {
+    const adminId = (req as any).user?.id ?? 'system'
+    try {
+      return await this.listing.publishPending(adminId, body?.batchLimit)
+    } catch (e: any) {
+      // Token-level failures halt the batch entirely and must reach the admin.
+      if (e instanceof EbayNotConnectedError || e instanceof EbayRefreshRevokedError) {
+        return { ok: false, statusCode: 403, error: e.code, message: e.message3 }
+      }
+      throw e
+    }
   }
 }
