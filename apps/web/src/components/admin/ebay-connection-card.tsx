@@ -161,7 +161,11 @@ export function EbayConnectionCard() {
       })
     },
     onError: (e: any) => {
-      const msg = e?.message
+      // 3-lang message is preserved in e.response.data.message by the
+      // shared api.ts handler. e.message is the Error-constructor
+      // toString() of the same object — looks like "[object Object]" —
+      // so we always prefer the structured source.
+      const msg = e?.response?.data?.message ?? e?.message
       setBanner({
         kind: 'error',
         text:
@@ -182,21 +186,11 @@ export function EbayConnectionCard() {
 
   const publishMutation = useMutation({
     mutationFn: async () =>
-      (await api.post('/admin/marketplaces/ebay/publish-pending', {})).data as
-        | PublishPendingSummary
-        | { ok: false; statusCode: number; error: string; message: { de: string; en: string; ar: string } },
+      (await api.post('/admin/marketplaces/ebay/publish-pending', {})).data as PublishPendingSummary,
     onSuccess: (d) => {
-      // Backend may return a token-level failure envelope (403 / 425) instead
-      // of a summary. Distinguish by shape.
-      if ('ok' in d && d.ok === false) {
-        const msg = (d as any).message
-        setBanner({
-          kind: 'error',
-          text: typeof msg === 'object' ? msg[locale] ?? msg.de : String(msg),
-        })
-        return
-      }
-      const s = d as PublishPendingSummary
+      // Backend now throws HttpException on token-level failures, so any
+      // response reaching onSuccess is guaranteed to be a real summary.
+      const s = d
       setPublishSummary(s)
       setSummaryExpanded(false)
       qc.invalidateQueries({ queryKey: ['admin', 'marketplaces', 'ebay', 'pending-count'] })
@@ -234,7 +228,10 @@ export function EbayConnectionCard() {
       }
     },
     onError: (e: any) => {
-      const msg = e?.message
+      // Structured 3-lang message lives in e.response.data.message. The
+      // Error-constructor toString()s the object into e.message, so
+      // prefer the structured source.
+      const msg = e?.response?.data?.message ?? e?.message
       setBanner({
         kind: 'error',
         text:

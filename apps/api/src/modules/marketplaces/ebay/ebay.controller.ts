@@ -25,6 +25,8 @@ import {
   UseGuards,
   Logger,
   BadRequestException,
+  ForbiddenException,
+  HttpException,
 } from '@nestjs/common'
 import type { Response, Request } from 'express'
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard'
@@ -200,8 +202,14 @@ export class EbayController {
       return result
     } catch (e: any) {
       if (e instanceof EbayNotConnectedError || e instanceof EbayRefreshRevokedError) {
-        // Translate to HTTP 403 with 3-lang message.
-        return { error: e.code, message: e.message3, ok: false, statusCode: 403 }
+        // Translate to HTTP 403 with 3-lang message. MUST throw so the
+        // framework emits an actual 4xx response — returning an envelope
+        // lets the browser see HTTP 200 and fire onSuccess with a false
+        // "success" banner.
+        throw new ForbiddenException({
+          error: e.code,
+          message: e.message3,
+        })
       }
       // Special-case the 24h propagation delay after a FRESH opt-in.
       // eBay returns "User is not eligible for Business Policy" even
@@ -210,16 +218,21 @@ export class EbayController {
       // pipeline. Give the admin a clear, actionable message instead
       // of the raw eBay error.
       if (this.isBusinessPolicyNotEligibleError(e)) {
-        return {
-          ok: false,
-          statusCode: 425, // "Too Early" — semantically accurate
-          error: 'EBAY_PROGRAM_OPT_IN_PROPAGATING',
-          message: {
-            de: 'Die eBay-Programm-Aktivierung wurde angenommen, ist aber noch nicht vollständig verarbeitet. eBay braucht dafür bis zu 24 Stunden. Bitte klicke in 1-24 Stunden erneut auf "Sandbox-Policies anlegen".',
-            en: 'Your eBay program opt-in was accepted but has not finished propagating yet. eBay needs up to 24 hours for this. Please click "Bootstrap sandbox policies" again in 1-24 hours.',
-            ar: 'تم قبول اشتراك برنامج eBay ولكنه لم يكتمل بعد. قد تحتاج eBay إلى 24 ساعة لذلك. يرجى النقر على "إعداد سياسات Sandbox" مرة أخرى خلال 1-24 ساعة.',
+        // HTTP 425 "Too Early" — semantically correct signal that the
+        // account-side enrolment is still propagating through eBay's
+        // internal pipeline. Must throw (not return) so the browser
+        // sees a real 4xx status and the mutation fires onError.
+        throw new HttpException(
+          {
+            error: 'EBAY_PROGRAM_OPT_IN_PROPAGATING',
+            message: {
+              de: 'Die eBay-Programm-Aktivierung wurde angenommen, ist aber noch nicht vollständig verarbeitet. eBay braucht dafür bis zu 24 Stunden. Bitte klicke in 1-24 Stunden erneut auf "Sandbox-Policies anlegen".',
+              en: 'Your eBay program opt-in was accepted but has not finished propagating yet. eBay needs up to 24 hours for this. Please click "Bootstrap sandbox policies" again in 1-24 hours.',
+              ar: 'تم قبول اشتراك برنامج eBay ولكنه لم يكتمل بعد. قد تحتاج eBay إلى 24 ساعة لذلك. يرجى النقر على "إعداد سياسات Sandbox" مرة أخرى خلال 1-24 ساعة.',
+            },
           },
-        }
+          425,
+        )
       }
       throw e
     }
@@ -352,8 +365,13 @@ export class EbayController {
       return await this.listing.publishPending(adminId, body?.batchLimit)
     } catch (e: any) {
       // Token-level failures halt the batch entirely and must reach the admin.
+      // MUST throw (not return) so the browser sees a real 4xx and the
+      // mutation fires onError instead of onSuccess with a fake envelope.
       if (e instanceof EbayNotConnectedError || e instanceof EbayRefreshRevokedError) {
-        return { ok: false, statusCode: 403, error: e.code, message: e.message3 }
+        throw new ForbiddenException({
+          error: e.code,
+          message: e.message3,
+        })
       }
       throw e
     }
