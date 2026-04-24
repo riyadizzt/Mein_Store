@@ -31,6 +31,7 @@ import { createHash, createVerify } from 'node:crypto'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from '../../admin/services/audit.service'
 import { resolveEbayMode } from './ebay-env'
+import { EbayAuthService } from './ebay-auth.service'
 
 // `RequestInfo` isn't in the api tsconfig's `lib` set; use a minimal
 // shape that covers both string URLs and URL objects — enough for our
@@ -66,11 +67,17 @@ export class EbayAccountDeletionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly auth: EbayAuthService,
   ) {}
 
   /** Test-only: inject a stub fetch for the getPublicKey lookup. */
   __setFetchForTests(f: FetchLike | undefined): void {
     this.fetchImpl = f ?? ((input, init) => fetch(input as any, init))
+  }
+
+  /** Test-only: reset the module-level public-key cache between tests. */
+  __clearPublicKeyCacheForTests(): void {
+    publicKeyCache.clear()
   }
 
   /**
@@ -231,22 +238,26 @@ export class EbayAccountDeletionService {
     const cached = publicKeyCache.get(kid)
     if (cached && cached.expiresAt > Date.now()) return cached.pem
 
-    // EBAY_ENV drives the base URL — same convention the rest of the eBay
-    // code uses. resolveEbayMode() matches 'production' literally + falls
-    // back to sandbox for any other value (see ebay-env.ts:80-83) — the
-    // safer default. Previously this code read a non-existent `EBAY_MODE`
-    // env var, so even with EBAY_ENV=production set on Railway the
-    // public-key lookup always hit sandbox → 400 on real production
-    // notifications. Hotfix for Commit a2c218f.
     const mode = resolveEbayMode()
     const base =
       mode === 'production' ? 'https://api.ebay.com' : 'https://api.sandbox.ebay.com'
+
+    // getPublicKey REQUIRES an application-level access token per the
+    // docs (client-credentials grant, scope=api_scope). The initial
+    // implementation called it unauthenticated → eBay's API gateway
+    // returned HTTP 400 which then bubbled as UnauthorizedException
+    // from the signature verifier, which eBay saw as our-side 401.
+    // Hotfix: acquire + cache the app token via EbayAuthService.
+    const appToken = await this.auth.getApplicationAccessToken()
 
     const res = await this.fetchImpl(
       `${base}/commerce/notification/v1/public_key/${kid}`,
       {
         method: 'GET',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Authorization: `Bearer ${appToken}`,
+          Accept: 'application/json',
+        },
         signal: AbortSignal.timeout(PUBLIC_KEY_REQUEST_TIMEOUT_MS),
       },
     )
@@ -254,7 +265,7 @@ export class EbayAccountDeletionService {
       throw new UnauthorizedException(`getPublicKey failed: ${res.status}`)
     }
     const body = (await res.json()) as { key: string; algorithm?: string }
-    const pem = this.base64ToPem(body.key)
+    const pem = this.normalizePem(body.key)
     publicKeyCache.set(kid, {
       pem,
       expiresAt: Date.now() + PUBLIC_KEY_CACHE_TTL_MS,
@@ -263,12 +274,32 @@ export class EbayAccountDeletionService {
   }
 
   /**
-   * eBay returns either a bare base64 SPKI blob OR a full PEM block.
-   * Normalize to PEM either way so createVerify.verify() accepts it.
+   * eBay returns the public key as a SINGLE-LINE PEM block:
+   *   "-----BEGIN PUBLIC KEY-----MFkwEw...==-----END PUBLIC KEY-----"
+   * Node's createVerify.verify() requires proper newlines around the
+   * markers. Inject them — identical transform to the official eBay
+   * Node SDK (event-notification-nodejs-sdk, validator.js formatKey).
+   *
+   * IDEMPOTENT: if the input already has newlines around the markers
+   * (e.g. already properly formatted PEM from a crypto.export call or
+   * a correctly-shaped response) the regex match fails and the string
+   * is returned unchanged. This keeps the test fixtures + any future
+   * eBay shape-change both working.
+   *
+   * Fallback: a bare base64 SPKI blob (no BEGIN marker) gets wrapped
+   * into standard PEM. Defence-in-depth against eBay ever changing
+   * the returned shape.
    */
-  private base64ToPem(keyBase64: string): string {
-    if (keyBase64.includes('-----BEGIN')) return keyBase64
-    const wrapped = keyBase64.match(/.{1,64}/g)?.join('\n') ?? keyBase64
+  private normalizePem(keyFromResponse: string): string {
+    if (keyFromResponse.includes('-----BEGIN PUBLIC KEY-----')) {
+      let out = keyFromResponse
+      // Only inject \n after BEGIN if not already there (idempotent).
+      out = out.replace(/-----BEGIN PUBLIC KEY-----(?!\n)/, '-----BEGIN PUBLIC KEY-----\n')
+      // Only inject \n before END if not already there.
+      out = out.replace(/(?<!\n)-----END PUBLIC KEY-----/, '\n-----END PUBLIC KEY-----')
+      return out
+    }
+    const wrapped = keyFromResponse.match(/.{1,64}/g)?.join('\n') ?? keyFromResponse
     return `-----BEGIN PUBLIC KEY-----\n${wrapped}\n-----END PUBLIC KEY-----\n`
   }
 

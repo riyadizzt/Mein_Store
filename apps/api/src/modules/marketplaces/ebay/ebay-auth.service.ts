@@ -44,6 +44,24 @@ export const EBAY_OAUTH_SCOPES: readonly string[] = [
   'https://api.ebay.com/oauth/api_scope/sell.marketing',
 ] as const
 
+// Scope used for application-level (client-credentials) grant.
+// Required for public endpoints like Commerce Notification getPublicKey
+// and Commerce Taxonomy get_category_suggestions.
+const EBAY_APPLICATION_SCOPE = 'https://api.ebay.com/oauth/api_scope'
+
+// Safety margin: refresh the cached app token this many ms BEFORE
+// eBay's declared expiry to avoid races with in-flight requests.
+const APP_TOKEN_SAFETY_MARGIN_MS = 60_000
+
+// Module-level cache. Single process + single set of app credentials →
+// one token shared across every service that needs app-auth (deletion
+// webhook today, Taxonomy matcher soon). Process restart resets it;
+// one extra OAuth round-trip on first call is trivial.
+const applicationTokenCache: { token: string | null; expiresAt: number } = {
+  token: null,
+  expiresAt: 0,
+}
+
 export interface EbayConnectionStatus {
   mode: 'sandbox' | 'production'
   connected: boolean
@@ -275,6 +293,56 @@ export class EbayAuthService {
       },
     })
     return resp.access_token
+  }
+
+  /**
+   * Get an application-level OAuth token via client-credentials grant.
+   *
+   * DIFFERENT from getAccessTokenOrRefresh() which returns the USER
+   * OAuth token (authorization-code flow, merchant's account). Some
+   * eBay endpoints — notably Commerce Notification getPublicKey and
+   * Commerce Taxonomy get_category_suggestions — require an app-level
+   * token instead. Same app+cert credentials, different grant type.
+   *
+   * Caching: module-level `applicationTokenCache`, TTL = expires_in
+   * minus 60s safety margin (matches the User-token-refresh pattern
+   * above). Future consumers (Taxonomy matcher) share the same cache.
+   *
+   * Throws EbayEnvConfigError if credentials aren't configured for
+   * the current EBAY_ENV (same fail-loud as the user-flow).
+   */
+  async getApplicationAccessToken(): Promise<string> {
+    const now = Date.now()
+    if (applicationTokenCache.token && applicationTokenCache.expiresAt > now) {
+      return applicationTokenCache.token
+    }
+
+    const env = this.mustResolveEnv()
+    const client = this.buildClient(env)
+
+    const resp = await client.request<{
+      access_token: string
+      token_type: string
+      expires_in: number
+    }>('POST', '/identity/v1/oauth2/token', {
+      auth: { appId: env.appId, certId: env.certId },
+      bodyKind: 'form',
+      body: {
+        grant_type: 'client_credentials',
+        scope: EBAY_APPLICATION_SCOPE,
+      },
+      retry: true, // idempotent fetch — safe to retry on 5xx/429
+    })
+
+    applicationTokenCache.token = resp.access_token
+    applicationTokenCache.expiresAt = now + resp.expires_in * 1000 - APP_TOKEN_SAFETY_MARGIN_MS
+    return resp.access_token
+  }
+
+  /** Test-only: flush the module-level application-token cache. */
+  __clearApplicationTokenCacheForTests(): void {
+    applicationTokenCache.token = null
+    applicationTokenCache.expiresAt = 0
   }
 
   /**

@@ -21,7 +21,7 @@ import { createSign, generateKeyPairSync } from 'node:crypto'
 import { createHash } from 'node:crypto'
 import { EbayAccountDeletionService } from '../ebay-account-deletion.service'
 
-function makeService(overrides?: { prisma?: any; audit?: any }) {
+function makeService(overrides?: { prisma?: any; audit?: any; auth?: any }) {
   const prisma = overrides?.prisma ?? {
     ebayDeletionNotification: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -29,8 +29,13 @@ function makeService(overrides?: { prisma?: any; audit?: any }) {
     },
   }
   const audit = overrides?.audit ?? { log: jest.fn().mockResolvedValue(undefined) }
-  const service = new EbayAccountDeletionService(prisma as any, audit as any)
-  return { service, prisma, audit }
+  // Stub EbayAuthService — always returns a dummy app token so the
+  // public-key lookup proceeds to the fetchImpl stub.
+  const auth = overrides?.auth ?? {
+    getApplicationAccessToken: jest.fn().mockResolvedValue('test-app-token'),
+  }
+  const service = new EbayAccountDeletionService(prisma as any, audit as any, auth as any)
+  return { service, prisma, audit, auth }
 }
 
 describe('EbayAccountDeletionService.handleChallenge', () => {
@@ -105,6 +110,15 @@ describe('EbayAccountDeletionService.handleNotification — full flow (ECDSA rea
   const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
   const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString()
   const KID = 'test-key-id'
+
+  // Reset the module-level public-key cache between every test so
+  // fetchImpl stubs get called fresh each time (otherwise the second
+  // test in this block gets a cached PEM and never touches fetchImpl
+  // → URL/Auth assertions silently fail).
+  beforeEach(() => {
+    const { service } = makeService()
+    service.__clearPublicKeyCacheForTests()
+  })
 
   function signBody(body: Buffer): string {
     const signer = createSign('SHA1')
@@ -246,5 +260,82 @@ describe('EbayAccountDeletionService.handleNotification — full flow (ECDSA rea
       (c: any[]) => c[0]?.action === 'EBAY_USER_DATA_DELETED',
     )
     expect(deletedCalls).toHaveLength(0)
+  })
+
+  it('sends Authorization: Bearer <app-token> to getPublicKey', async () => {
+    const { service, auth } = makeService()
+    const captured: Array<{ url: string; init: any }> = []
+    const fetchStub = jest.fn(async (url: string, init: any) => {
+      captured.push({ url: String(url), init })
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ key: publicKeyPem }),
+      }
+    })
+    service.__setFetchForTests(fetchStub as any)
+    const body = Buffer.from(JSON.stringify(validPayload))
+    const header = signBody(body)
+
+    await service.handleNotification(body, header)
+
+    expect(auth.getApplicationAccessToken).toHaveBeenCalledTimes(1)
+    expect(captured).toHaveLength(1)
+    expect(captured[0].init.headers.Authorization).toBe('Bearer test-app-token')
+    expect(captured[0].init.headers.Accept).toBe('application/json')
+  })
+
+  it('normalizes single-line PEM from eBay (SDK formatKey pattern)', async () => {
+    // eBay's getPublicKey returns single-line PEM: no newlines around
+    // BEGIN/END markers. Node's createVerify.verify() requires them.
+    // If normalizePem is broken, ECDSA verify throws. If it succeeds,
+    // we've proven single-line → multi-line normalization works.
+    const singleLinePem = publicKeyPem.replace(/\n/g, '')
+    expect(singleLinePem).not.toContain('\n')
+    expect(singleLinePem).toContain('-----BEGIN PUBLIC KEY-----')
+
+    const prisma = {
+      ebayDeletionNotification: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'r' }),
+      },
+    }
+    const { service } = makeService({ prisma })
+    service.__setFetchForTests(
+      jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ key: singleLinePem }),
+      })) as any,
+    )
+    const body = Buffer.from(JSON.stringify(validPayload))
+    const header = signBody(body)
+
+    await expect(service.handleNotification(body, header)).resolves.toBeUndefined()
+    expect(prisma.ebayDeletionNotification.create).toHaveBeenCalled()
+  })
+
+  it('constructs the getPublicKey URL with the correct path + kid', async () => {
+    const { service } = makeService()
+    const capturedUrls: string[] = []
+    service.__setFetchForTests(
+      jest.fn(async (url: string) => {
+        capturedUrls.push(String(url))
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ key: publicKeyPem }),
+        }
+      }) as any,
+    )
+    const body = Buffer.from(JSON.stringify(validPayload))
+    const header = signBody(body)
+
+    await service.handleNotification(body, header)
+
+    expect(capturedUrls).toHaveLength(1)
+    expect(capturedUrls[0]).toContain('/commerce/notification/v1/public_key/test-key-id')
+    // EBAY_ENV unset in test env → sandbox
+    expect(capturedUrls[0]).toContain('api.sandbox.ebay.com')
   })
 })
