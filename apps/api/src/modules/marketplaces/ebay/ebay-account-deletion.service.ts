@@ -30,6 +30,7 @@ import {
 import { createHash, createVerify } from 'node:crypto'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { AuditService } from '../../admin/services/audit.service'
+import { resolveEbayMode } from './ebay-env'
 
 // `RequestInfo` isn't in the api tsconfig's `lib` set; use a minimal
 // shape that covers both string URLs and URL objects — enough for our
@@ -230,10 +231,16 @@ export class EbayAccountDeletionService {
     const cached = publicKeyCache.get(kid)
     if (cached && cached.expiresAt > Date.now()) return cached.pem
 
-    // EBAY_MODE drives the base URL — same env var the rest of the eBay
-    // code uses (resolveEbayEnv). No new config surface needed.
-    const isProduction = process.env.EBAY_MODE === 'production'
-    const base = isProduction ? 'https://api.ebay.com' : 'https://api.sandbox.ebay.com'
+    // EBAY_ENV drives the base URL — same convention the rest of the eBay
+    // code uses. resolveEbayMode() matches 'production' literally + falls
+    // back to sandbox for any other value (see ebay-env.ts:80-83) — the
+    // safer default. Previously this code read a non-existent `EBAY_MODE`
+    // env var, so even with EBAY_ENV=production set on Railway the
+    // public-key lookup always hit sandbox → 400 on real production
+    // notifications. Hotfix for Commit a2c218f.
+    const mode = resolveEbayMode()
+    const base =
+      mode === 'production' ? 'https://api.ebay.com' : 'https://api.sandbox.ebay.com'
 
     const res = await this.fetchImpl(
       `${base}/commerce/notification/v1/public_key/${kid}`,
