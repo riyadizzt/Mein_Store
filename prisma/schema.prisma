@@ -1995,6 +1995,33 @@ model MarketplaceOrderImport {
   @@map("marketplace_order_imports")
 }
 
+// Idempotent record + audit trail of every Marketplace-Account-Deletion
+// notification eBay sends us. Required for GDPR-compliance + production
+// keyset unblocking. Today the actual DB-redaction scan is a no-op
+// (zero eBay-buyer data held), but every notification is logged here so
+// post-C12 we have a full audit chain from "eBay said delete" →
+// "we processed + redacted N rows" for the full retention window.
+model EbayDeletionNotification {
+  id                  String   @id @default(uuid())
+  // eBay's unique notificationId — idempotency key. Duplicates silently
+  // return 200 without re-processing (eBay retries on non-2xx so we see
+  // legitimate repeats).
+  notificationId      String   @unique @map("notification_id")
+  ebayUserId          String   @map("ebay_user_id")
+  ebayUsername        String   @map("ebay_username")
+  eiasToken           String   @map("eias_token")
+  eventDate           DateTime @map("event_date")
+  publishDate         DateTime @map("publish_date")
+  publishAttemptCount Int      @map("publish_attempt_count")
+  receivedAt          DateTime @default(now()) @map("received_at")
+  // True iff we actually found + redacted data during processing. Today
+  // always false (zero eBay-buyer data in DB — see audit 2026-04-24).
+  // Becomes meaningful once C12 (eBay Order Import) ships.
+  dataFoundInDb       Boolean  @default(false) @map("data_found_in_db")
+
+  @@map("ebay_deletion_notifications")
+}
+
 enum Marketplace {
   EBAY
   TIKTOK

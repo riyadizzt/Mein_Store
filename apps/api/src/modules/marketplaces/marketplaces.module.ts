@@ -36,6 +36,8 @@ import { EbayMerchantLocationService } from './ebay/ebay-merchant-location.servi
 import { EbaySandboxPoliciesService } from './ebay/ebay-sandbox-policies.service'
 import { EbayTokenRefreshCron } from './ebay/ebay-token-refresh.cron'
 import { EbayController } from './ebay/ebay.controller'
+import { EbayAccountDeletionController } from './ebay/ebay-account-deletion.controller'
+import { EbayAccountDeletionService } from './ebay/ebay-account-deletion.service'
 
 @Module({
   imports: [
@@ -45,7 +47,7 @@ import { EbayController } from './ebay/ebay.controller'
     // AdminModule itself ever consume something from marketplaces.
     forwardRef(() => AdminModule),
   ],
-  controllers: [EbayController],
+  controllers: [EbayController, EbayAccountDeletionController],
   providers: [
     PrismaMarketplaceImportStore,
     MarketplaceAuditAdapter,
@@ -55,6 +57,7 @@ import { EbayController } from './ebay/ebay.controller'
     EbayListingService,
     EbaySandboxPoliciesService,
     EbayTokenRefreshCron,
+    EbayAccountDeletionService,
   ],
   exports: [
     PrismaMarketplaceImportStore,
