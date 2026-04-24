@@ -72,6 +72,7 @@ const NAV_GROUPS = [
     label: { de: 'Verkaufskanäle', en: 'Channels', ar: 'قنوات البيع' },
     items: [
       { key: 'channels', labelKey: 'channels', href: '/admin/channels', icon: Globe, permission: 'settings.view' },
+      { key: 'ebayCategoryMapping', labelKey: 'ebayCategoryMapping', href: '/admin/ebay/category-mapping', icon: Tag, permission: 'settings.edit' },
     ],
   },
   {

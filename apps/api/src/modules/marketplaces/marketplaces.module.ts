@@ -38,6 +38,8 @@ import { EbayTokenRefreshCron } from './ebay/ebay-token-refresh.cron'
 import { EbayController } from './ebay/ebay.controller'
 import { EbayAccountDeletionController } from './ebay/ebay-account-deletion.controller'
 import { EbayAccountDeletionService } from './ebay/ebay-account-deletion.service'
+import { EbayCategoryMatcherController } from './ebay/ebay-category-matcher.controller'
+import { EbayCategoryMatcherService } from './ebay/ebay-category-matcher.service'
 
 @Module({
   imports: [
@@ -47,7 +49,11 @@ import { EbayAccountDeletionService } from './ebay/ebay-account-deletion.service
     // AdminModule itself ever consume something from marketplaces.
     forwardRef(() => AdminModule),
   ],
-  controllers: [EbayController, EbayAccountDeletionController],
+  controllers: [
+    EbayController,
+    EbayAccountDeletionController,
+    EbayCategoryMatcherController,
+  ],
   providers: [
     PrismaMarketplaceImportStore,
     MarketplaceAuditAdapter,
@@ -58,6 +64,7 @@ import { EbayAccountDeletionService } from './ebay/ebay-account-deletion.service
     EbaySandboxPoliciesService,
     EbayTokenRefreshCron,
     EbayAccountDeletionService,
+    EbayCategoryMatcherService,
   ],
   exports: [
     PrismaMarketplaceImportStore,
