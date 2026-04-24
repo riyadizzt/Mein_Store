@@ -16,14 +16,33 @@ import { CategoriesService } from '../categories.service'
 import { PrismaService } from '../../../prisma/prisma.service'
 
 function buildPrisma() {
+  // Stub surface expanded in Commit 2: remove() now queries five dependency
+  // types (products, coupons, promotions, children, size-charts) both
+  // findMany + count. Defaults are all-empty so a test only needs to
+  // override the single dimension it cares about.
   return {
     category: {
       findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
       update: jest.fn(),
       create: jest.fn(),
     },
+    product: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    coupon: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    promotion: {
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
     sizeChart: {
-      findMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
   }
 }
@@ -38,42 +57,110 @@ async function makeService(prisma: any) {
   return module.get(CategoriesService)
 }
 
-describe('CategoriesService.remove — pre-delete chart guard (Hardening G)', () => {
-  it('throws 409 with structured 3-language message when charts are attached', async () => {
-    const prisma = buildPrisma()
-    prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', isActive: true })
-    prisma.sizeChart.findMany.mockResolvedValue([
-      { id: 'chart-1', name: 'Damen Tops' },
-      { id: 'chart-2', name: 'Damen Tops Saison 2' },
-    ])
-    const service = await makeService(prisma)
-
-    let thrown: any = null
-    try {
-      await service.remove('cat-1')
-    } catch (err: any) {
-      thrown = err
-    }
-
+describe('CategoriesService.remove — multi-blocker guard (Commit 2 — extends Hardening G)', () => {
+  // Shared assertions for any blocker variant — every blocker path throws
+  // the same ConflictException shape, only the counts + messages differ.
+  function expectBlockedFor(thrown: any, expectedErrorKey: string, expectedCounts: Partial<Record<string, number>>) {
     expect(thrown).toBeInstanceOf(ConflictException)
     const body = thrown.getResponse()
     expect(body.statusCode).toBe(409)
-    expect(body.error).toBe('CategoryHasAttachedSizeCharts')
-    // 3-language message structure (de/en/ar)
-    expect(body.message.de).toContain('2')
-    expect(body.message.en).toContain('2')
-    expect(body.message.ar).toContain('2')
-    // Data payload exposes the chart list so the UI can render it
-    expect(body.data.attachedCharts).toHaveLength(2)
-    // Crucially: prisma.category.update was NOT called — soft-delete blocked
+    expect(body.error).toBe('CategoryHasAttachedResources')
+    expect(body.message.de).toEqual(expect.any(String))
+    expect(body.message.en).toEqual(expect.any(String))
+    expect(body.message.ar).toEqual(expect.any(String))
+    expect(body.data.blockers).toEqual(expect.objectContaining(expectedCounts))
+    // The specific blocker-type name must also show up in the user-visible
+    // message so the admin knows WHICH dependency to fix first.
+    void expectedErrorKey
+  }
+
+  it('throws 409 when products are attached', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', isActive: true })
+    prisma.product.findMany.mockResolvedValue([{ id: 'p1', slug: 'tshirt-basic' }])
+    prisma.product.count.mockResolvedValue(3)
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.remove('cat-1') } catch (e) { thrown = e }
+
+    expectBlockedFor(thrown, 'products', { products: 3 })
+    expect(thrown.getResponse().data.attachedProducts.count).toBe(3)
+    expect(thrown.getResponse().message.de).toContain('Produkt')
     expect(prisma.category.update).not.toHaveBeenCalled()
   })
 
-  it('proceeds with soft-delete when no charts are attached', async () => {
+  it('throws 409 when coupons are attached', async () => {
     const prisma = buildPrisma()
     prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', isActive: true })
-    prisma.sizeChart.findMany.mockResolvedValue([])
-    prisma.category.update.mockResolvedValue({ id: 'cat-1', isActive: false })
+    prisma.coupon.findMany.mockResolvedValue([{ id: 'cp1', code: 'SAVE10' }])
+    prisma.coupon.count.mockResolvedValue(2)
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.remove('cat-1') } catch (e) { thrown = e }
+
+    expectBlockedFor(thrown, 'coupons', { coupons: 2 })
+    expect(thrown.getResponse().message.de).toContain('Gutschein')
+    expect(thrown.getResponse().message.en).toContain('coupon')
+  })
+
+  it('throws 409 when promotions are attached', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', isActive: true })
+    prisma.promotion.findMany.mockResolvedValue([{ id: 'pr1', name: 'Sommer-Sale' }])
+    prisma.promotion.count.mockResolvedValue(1)
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.remove('cat-1') } catch (e) { thrown = e }
+
+    expectBlockedFor(thrown, 'promotions', { promotions: 1 })
+    expect(thrown.getResponse().message.de).toContain('Promotion')
+  })
+
+  it('throws 409 when children exist', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', isActive: true })
+    prisma.category.findMany.mockResolvedValue([{ id: 'c2', slug: 'sub', isActive: true }])
+    prisma.category.count.mockResolvedValue(4)
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.remove('cat-1') } catch (e) { thrown = e }
+
+    expectBlockedFor(thrown, 'children', { children: 4 })
+    expect(thrown.getResponse().message.en).toContain('sub-categor')
+  })
+
+  it('aggregates multiple blocker types into one structured 409', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', isActive: true })
+    prisma.product.count.mockResolvedValue(3)
+    prisma.product.findMany.mockResolvedValue([{ id: 'p1', slug: 'x' }])
+    prisma.coupon.count.mockResolvedValue(2)
+    prisma.promotion.count.mockResolvedValue(1)
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.remove('cat-1') } catch (e) { thrown = e }
+
+    expect(thrown).toBeInstanceOf(ConflictException)
+    const body = thrown.getResponse()
+    expect(body.data.blockers).toEqual({ products: 3, coupons: 2, promotions: 1 })
+    // Message must list ALL three types, not just one
+    expect(body.message.de).toContain('Produkt')
+    expect(body.message.de).toContain('Gutschein')
+    expect(body.message.de).toContain('Promotion')
+    expect(body.message.ar).toContain('منتج')
+    expect(body.message.ar).toContain('كوبون')
+    expect(prisma.category.update).not.toHaveBeenCalled()
+  })
+
+  it('proceeds with soft-delete when all dependency checks clean', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({ id: 'cat-1', isActive: true })
+    prisma.category.update.mockResolvedValue({ id: 'cat-1', slug: 'test', isActive: false })
     const service = await makeService(prisma)
 
     await service.remove('cat-1')
@@ -90,6 +177,57 @@ describe('CategoriesService.remove — pre-delete chart guard (Hardening G)', ()
     const service = await makeService(prisma)
 
     await expect(service.remove('missing')).rejects.toBeInstanceOf(NotFoundException)
+  })
+})
+
+describe('CategoriesService.getImpact — dry-run endpoint (Commit 2)', () => {
+  it('returns canArchive=true with empty samples when clean', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({
+      id: 'cat-1', slug: 'test', isActive: true, parentId: null,
+    })
+    const service = await makeService(prisma)
+
+    const result = await service.getImpact('cat-1')
+
+    expect(result.canArchive).toBe(true)
+    expect(result.blockingReasons).toEqual([])
+    expect(result.attachedProducts.count).toBe(0)
+    expect(result.attachedCoupons.count).toBe(0)
+    expect(result.attachedPromotions.count).toBe(0)
+    expect(result.children.count).toBe(0)
+    expect(result.attachedSizeCharts.count).toBe(0)
+    expect(result.category).toEqual({ id: 'cat-1', slug: 'test', isActive: true, parentId: null })
+  })
+
+  it('returns canArchive=false with blockingReasons list when dependencies exist', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({
+      id: 'cat-1', slug: 'test', isActive: true, parentId: null,
+    })
+    prisma.product.count.mockResolvedValue(5)
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'p1', slug: 'one' }, { id: 'p2', slug: 'two' },
+    ])
+    prisma.coupon.count.mockResolvedValue(2)
+    prisma.coupon.findMany.mockResolvedValue([{ id: 'cp1', code: 'SAVE' }])
+    const service = await makeService(prisma)
+
+    const result = await service.getImpact('cat-1')
+
+    expect(result.canArchive).toBe(false)
+    expect(result.blockingReasons).toEqual(['products', 'coupons'])
+    expect(result.attachedProducts.count).toBe(5)
+    expect(result.attachedProducts.sample).toHaveLength(2)
+    expect(result.attachedCoupons.count).toBe(2)
+  })
+
+  it('throws NotFoundException when category does not exist', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue(null)
+    const service = await makeService(prisma)
+
+    await expect(service.getImpact('missing')).rejects.toBeInstanceOf(NotFoundException)
   })
 })
 

@@ -3,6 +3,17 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { CreateCategoryDto } from './dto/create-category.dto'
 import { Language } from '@omnichannel/types'
 
+export interface CategoryImpact {
+  category: { id: string; slug: string; isActive: boolean; parentId: string | null }
+  attachedProducts:   { count: number; sample: Array<{ id: string; slug: string }> }
+  attachedCoupons:    { count: number; sample: Array<{ id: string; code: string }> }
+  attachedPromotions: { count: number; sample: Array<{ id: string; name: string }> }
+  children:           { count: number; sample: Array<{ id: string; slug: string; isActive: boolean }> }
+  attachedSizeCharts: { count: number; sample: Array<{ id: string; name: string }> }
+  canArchive: boolean
+  blockingReasons: string[]
+}
+
 @Injectable()
 export class CategoriesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -107,26 +118,85 @@ export class CategoriesService {
     const category = await this.prisma.category.findUnique({ where: { id } })
     if (!category) throw new NotFoundException('Kategorie nicht gefunden')
 
-    // Pre-delete check for attached SizeCharts. Pre-hardening, deactivating
-    // a category silently orphaned any charts attached to it — the charts
-    // stayed active but customers in that category saw no size guide until
-    // someone re-linked them. The audit flagged this as a "structured 409"
-    // so the admin is forced to decide explicitly: detach the charts first,
-    // or deactivate them alongside the category. Defense-in-depth.
-    const attachedCharts = await this.prisma.sizeChart.findMany({
-      where: { categoryId: id, isActive: true },
-      select: { id: true, name: true },
-    })
-    if (attachedCharts.length > 0) {
+    // Pre-archive integrity checks. A category archive (isActive=false)
+    // hides the category from the shop but keeps all FK references
+    // intact. Without these guards, archiving a category silently
+    // orphaned every reference to it — products became invisible,
+    // coupons stopped applying, promotions lost their target, children
+    // pointed to an archived parent. Defense-in-depth: check every
+    // downstream in parallel, aggregate blockers, throw one structured
+    // 409 so the admin sees the full picture in a single round-trip.
+    //
+    // Pattern extends the SizeChart guard from Size-Charts Hardening G
+    // (2026-04-21) — same shape, four more dependency types.
+    const [products, coupons, promotions, children, charts] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { categoryId: id, deletedAt: null },
+        select: { id: true, slug: true },
+        take: 5,
+      }),
+      this.prisma.coupon.findMany({
+        where: { appliesToCategoryId: id },
+        select: { id: true, code: true },
+        take: 5,
+      }),
+      this.prisma.promotion.findMany({
+        where: { categoryId: id },
+        select: { id: true, name: true },
+        take: 5,
+      }),
+      this.prisma.category.findMany({
+        where: { parentId: id },
+        select: { id: true, slug: true, isActive: true },
+        take: 5,
+      }),
+      this.prisma.sizeChart.findMany({
+        where: { categoryId: id, isActive: true },
+        select: { id: true, name: true },
+        take: 5,
+      }),
+    ])
+    const [pCount, cCount, prCount, chCount, scCount] = await Promise.all([
+      this.prisma.product.count({ where: { categoryId: id, deletedAt: null } }),
+      this.prisma.coupon.count({ where: { appliesToCategoryId: id } }),
+      this.prisma.promotion.count({ where: { categoryId: id } }),
+      this.prisma.category.count({ where: { parentId: id } }),
+      this.prisma.sizeChart.count({ where: { categoryId: id, isActive: true } }),
+    ])
+
+    const blockers: Record<string, number> = {}
+    if (pCount > 0) blockers.products = pCount
+    if (cCount > 0) blockers.coupons = cCount
+    if (prCount > 0) blockers.promotions = prCount
+    if (chCount > 0) blockers.children = chCount
+    if (scCount > 0) blockers.sizeCharts = scCount
+
+    if (Object.keys(blockers).length > 0) {
+      const de: string[] = []
+      const en: string[] = []
+      const ar: string[] = []
+      if (pCount > 0)  { de.push(`${pCount} Produkt(e)`);         en.push(`${pCount} product(s)`);                            ar.push(`${pCount} منتج`) }
+      if (cCount > 0)  { de.push(`${cCount} Gutschein(e)`);       en.push(`${cCount} coupon(s)`);                             ar.push(`${cCount} كوبون`) }
+      if (prCount > 0) { de.push(`${prCount} Promotion(en)`);     en.push(`${prCount} promotion(s)`);                         ar.push(`${prCount} عرض ترويجي`) }
+      if (chCount > 0) { de.push(`${chCount} Unterkategorie(n)`); en.push(`${chCount} sub-categor${chCount === 1 ? 'y' : 'ies'}`); ar.push(`${chCount} فئة فرعية`) }
+      if (scCount > 0) { de.push(`${scCount} Größentabelle(n)`);  en.push(`${scCount} size chart(s)`);                        ar.push(`${scCount} جدول مقاسات`) }
+
       throw new ConflictException({
         statusCode: 409,
-        error: 'CategoryHasAttachedSizeCharts',
+        error: 'CategoryHasAttachedResources',
         message: {
-          de: `Kategorie kann nicht deaktiviert werden — ${attachedCharts.length} Größentabelle(n) hängen daran. Bitte zuerst entfernen oder neu zuordnen.`,
-          en: `Category cannot be deactivated — ${attachedCharts.length} size chart(s) are attached. Please detach or reassign them first.`,
-          ar: `لا يمكن إلغاء تفعيل الفئة — يوجد ${attachedCharts.length} جدول(جداول) مقاسات مرتبطة بها. يرجى إزالتها أو إعادة تعيينها أولاً.`,
+          de: `Kategorie kann nicht archiviert werden — ${de.join(', ')} sind noch zugeordnet. Bitte zuerst entfernen oder neu zuordnen.`,
+          en: `Category cannot be archived — ${en.join(', ')} still attached. Please detach or reassign first.`,
+          ar: `لا يمكن أرشفة الفئة — ${ar.join('، ')} لا يزالون مرتبطين. يرجى إزالتهم أو إعادة تعيينهم أولاً.`,
         },
-        data: { attachedCharts },
+        data: {
+          blockers,
+          attachedProducts:   { count: pCount,  sample: products },
+          attachedCoupons:    { count: cCount,  sample: coupons },
+          attachedPromotions: { count: prCount, sample: promotions },
+          children:           { count: chCount, sample: children },
+          attachedSizeCharts: { count: scCount, sample: charts },
+        },
       })
     }
 
@@ -134,6 +204,72 @@ export class CategoriesService {
       where: { id },
       data: { isActive: false },
     })
+  }
+
+  /**
+   * Dry-run: what would happen if this category were archived RIGHT NOW?
+   * Drives the admin delete-confirm modal — counts + 5-sample per
+   * dependency type. Read-only, safe to call speculatively on modal open.
+   */
+  async getImpact(id: string): Promise<CategoryImpact> {
+    const category = await this.prisma.category.findUnique({
+      where: { id },
+      select: { id: true, slug: true, isActive: true, parentId: true },
+    })
+    if (!category) throw new NotFoundException('Kategorie nicht gefunden')
+
+    const [products, coupons, promotions, children, charts] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { categoryId: id, deletedAt: null },
+        select: { id: true, slug: true },
+        take: 5,
+      }),
+      this.prisma.coupon.findMany({
+        where: { appliesToCategoryId: id },
+        select: { id: true, code: true },
+        take: 5,
+      }),
+      this.prisma.promotion.findMany({
+        where: { categoryId: id },
+        select: { id: true, name: true },
+        take: 5,
+      }),
+      this.prisma.category.findMany({
+        where: { parentId: id },
+        select: { id: true, slug: true, isActive: true },
+        take: 5,
+      }),
+      this.prisma.sizeChart.findMany({
+        where: { categoryId: id, isActive: true },
+        select: { id: true, name: true },
+        take: 5,
+      }),
+    ])
+    const [pCount, cCount, prCount, chCount, scCount] = await Promise.all([
+      this.prisma.product.count({ where: { categoryId: id, deletedAt: null } }),
+      this.prisma.coupon.count({ where: { appliesToCategoryId: id } }),
+      this.prisma.promotion.count({ where: { categoryId: id } }),
+      this.prisma.category.count({ where: { parentId: id } }),
+      this.prisma.sizeChart.count({ where: { categoryId: id, isActive: true } }),
+    ])
+
+    const blockingReasons: string[] = []
+    if (pCount > 0) blockingReasons.push('products')
+    if (cCount > 0) blockingReasons.push('coupons')
+    if (prCount > 0) blockingReasons.push('promotions')
+    if (chCount > 0) blockingReasons.push('children')
+    if (scCount > 0) blockingReasons.push('sizeCharts')
+
+    return {
+      category,
+      attachedProducts:   { count: pCount,  sample: products },
+      attachedCoupons:    { count: cCount,  sample: coupons },
+      attachedPromotions: { count: prCount, sample: promotions },
+      children:           { count: chCount, sample: children },
+      attachedSizeCharts: { count: scCount, sample: charts },
+      canArchive: blockingReasons.length === 0,
+      blockingReasons,
+    }
   }
 
   private formatCategory(category: any, lang: Language = 'de') {
