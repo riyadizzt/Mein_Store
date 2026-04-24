@@ -196,3 +196,88 @@ describe('C11a — Prisma schema contract', () => {
     // loaded.
   })
 })
+
+describe('CategoriesService.formatCategory — taxonomy ID projection (Commit 1)', () => {
+  // Regression guard for the C6-gap documented in schema.prisma: the
+  // public /categories response previously dropped googleCategoryId,
+  // googleCategoryLabel, and ebayCategoryId, so the Google Shopping
+  // feed silently fell back to category.name and admin UIs reading
+  // the public endpoint couldn't pre-fill the taxonomy pickers.
+
+  function prismaFor(cat: any) {
+    return {
+      category: {
+        findMany: jest.fn().mockResolvedValue([cat]),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+      sizeChart: { findMany: jest.fn() },
+    }
+  }
+
+  it('projects googleCategoryId + googleCategoryLabel when present', async () => {
+    const prisma = prismaFor({
+      id: 'c1',
+      slug: 'damen-jeans',
+      parentId: null,
+      imageUrl: null,
+      iconKey: null,
+      sortOrder: 0,
+      googleCategoryId: '1604',
+      googleCategoryLabel: 'Apparel & Accessories > Clothing > Jeans',
+      ebayCategoryId: null,
+      translations: [{ language: 'de', name: 'Jeans', description: null }],
+      children: [],
+    })
+    const service = await makeService(prisma)
+    const result = await service.findAll('de')
+    expect(result[0].googleCategoryId).toBe('1604')
+    expect(result[0].googleCategoryLabel).toBe('Apparel & Accessories > Clothing > Jeans')
+    expect(result[0].parentId).toBeNull()
+  })
+
+  it('projects ebayCategoryId when present', async () => {
+    const prisma = prismaFor({
+      id: 'c2',
+      slug: 'herren-jeans',
+      parentId: 'herren-root',
+      imageUrl: null,
+      iconKey: null,
+      sortOrder: 0,
+      googleCategoryId: null,
+      googleCategoryLabel: null,
+      ebayCategoryId: '11483',
+      translations: [{ language: 'de', name: 'Jeans', description: null }],
+      children: [],
+    })
+    const service = await makeService(prisma)
+    const result = await service.findAll('de')
+    expect(result[0].ebayCategoryId).toBe('11483')
+    expect(result[0].parentId).toBe('herren-root')
+  })
+
+  it('null-safe for legacy rows: all four fields rendered as null, never omitted', async () => {
+    // Simulates a category row that pre-dates the taxonomy columns
+    // (no google/ebay keys at all on the object). Downstream consumers
+    // (feeds, admin UI) do presence-checks rather than existence-checks,
+    // so the keys MUST be in the response shape with null values.
+    const prisma = prismaFor({
+      id: 'c3',
+      slug: 'legacy',
+      // parentId, googleCategoryId, googleCategoryLabel, ebayCategoryId all
+      // deliberately missing from this shape.
+      imageUrl: null,
+      iconKey: null,
+      sortOrder: 0,
+      translations: [{ language: 'de', name: 'Legacy', description: null }],
+      children: [],
+    })
+    const service = await makeService(prisma)
+    const result = await service.findAll('de')
+    expect(result[0]).toHaveProperty('parentId', null)
+    expect(result[0]).toHaveProperty('googleCategoryId', null)
+    expect(result[0]).toHaveProperty('googleCategoryLabel', null)
+    expect(result[0]).toHaveProperty('ebayCategoryId', null)
+  })
+})

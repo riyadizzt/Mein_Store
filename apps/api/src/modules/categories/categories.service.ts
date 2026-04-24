@@ -144,9 +144,18 @@ export class CategoriesService {
     const translation = primary ?? fallback
     return {
       id: category.id,
+      parentId: category.parentId ?? null,
       slug: category.slug,
       imageUrl: category.imageUrl,
       iconKey: category.iconKey ?? null,
+      // Taxonomy-IDs: previously dropped from the public projection,
+      // causing the Google Shopping feed to silently fall back to
+      // category.name (see C6 note in schema.prisma). Admin UIs that
+      // read /categories instead of the direct Prisma path also need
+      // these fields to render the taxonomy pickers correctly.
+      googleCategoryId: category.googleCategoryId ?? null,
+      googleCategoryLabel: category.googleCategoryLabel ?? null,
+      ebayCategoryId: category.ebayCategoryId ?? null,
       sortOrder: category.sortOrder,
       name: translation?.name ?? category.slug,
       description: translation?.description,

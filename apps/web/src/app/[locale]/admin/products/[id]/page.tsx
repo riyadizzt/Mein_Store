@@ -127,14 +127,27 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
 
   const saveMut = useMutation({
     mutationFn: async () => {
+      // A product MUST have a leaf category (schema enforces
+      // Product.categoryId NOT NULL). If the admin opened the edit
+      // form, changed the parent, and didn't pick a sub-category
+      // before saving, surface a structured error to the user
+      // instead of silently falling back to the original value —
+      // the old fallback was how the "removed from category but
+      // still attached" bug crept in.
+      if (!subCategoryId) {
+        throw new Error(
+          locale === 'ar'
+            ? 'يرجى اختيار الفئة الفرعية قبل الحفظ'
+            : locale === 'en'
+            ? 'Please select a sub-category before saving'
+            : 'Bitte wähle eine Unterkategorie bevor du speicherst',
+        )
+      }
       await api.put(`/admin/products/${id}`, {
         basePrice, salePrice,
-        // Only send categoryId when the user actually picked something;
-        // sending undefined leaves the existing value untouched on the
-        // backend (Prisma partial-update semantic). Defensive fallback
-        // to the original product.categoryId so we never accidentally
-        // null it out on save.
-        categoryId: subCategoryId || product?.categoryId,
+        // Schema-enforced NOT NULL — we just validated above, so
+        // pass through the user's explicit choice as-is.
+        categoryId: subCategoryId,
         channelFacebook, channelTiktok, channelGoogle, channelWhatsapp,
         excludeFromReturns, returnExclusionReason: excludeFromReturns ? returnExclusionReason : null,
         translations: Object.entries(translations)
@@ -503,7 +516,7 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                 <label className="text-sm font-medium mb-1.5 block">
                   {locale === 'ar' ? 'الفئة الرئيسية' : locale === 'en' ? 'Main Category' : 'Hauptkategorie'}
                 </label>
-                <select
+<select
                   value={parentCategoryId}
                   onChange={(e) => {
                     const newParent = e.target.value
@@ -514,7 +527,9 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                   }}
                   className="w-full h-10 px-3 rounded-xl border bg-background text-sm"
                 >
-                  <option value="">—</option>
+                  <option value="" disabled>
+                    {locale === 'ar' ? '— اختر الفئة الرئيسية —' : locale === 'en' ? '— Select main category —' : '— Hauptkategorie wählen —'}
+                  </option>
                   {allCategories.map((cat: any) => {
                     const label = cat.translations?.find((t: any) => t.language === locale)?.name
                       ?? cat.translations?.find((t: any) => t.language === 'de')?.name
@@ -528,13 +543,15 @@ export default function EditProductPage({ params: { id } }: { params: { id: stri
                 <label className="text-sm font-medium mb-1.5 block">
                   {locale === 'ar' ? 'الفئة الفرعية' : locale === 'en' ? 'Sub Category' : 'Unterkategorie'}
                 </label>
-                <select
+<select
                   value={subCategoryId}
                   onChange={(e) => setSubCategoryId(e.target.value)}
                   disabled={!parentCategoryId}
                   className="w-full h-10 px-3 rounded-xl border bg-background text-sm disabled:opacity-50"
                 >
-                  <option value="">—</option>
+                  <option value="" disabled>
+                    {locale === 'ar' ? '— اختر الفئة الفرعية —' : locale === 'en' ? '— Select sub-category —' : '— Unterkategorie wählen —'}
+                  </option>
                   {(() => {
                     const parent = allCategories.find((c: any) => c.id === parentCategoryId)
                     const children = parent?.children ?? []
