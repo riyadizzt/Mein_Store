@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useConfirm } from '@/components/ui/confirm-modal'
+import { DeleteCategoryModal } from '@/components/admin/delete-category-modal'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
   DragEndEvent, DragOverlay, DragStartEvent,
@@ -25,6 +25,11 @@ interface Translation { language: string; name: string; description?: string }
 interface Category {
   id: string; slug: string; imageUrl: string | null; iconKey: string | null; sortOrder: number
   parentId: string | null; translations: Translation[]
+  // Commit 3: isActive lets the tree render archived cats as greyscale
+  // + "Archiviert" badge. Only populated when useAdminCategories is
+  // called with includeArchived=true (default omits the field, not
+  // false — filtered on the server side).
+  isActive?: boolean
   // C6 — Google Product Taxonomy mapping. Null = falls back to
   // category name in the Google Shopping feed (sub-optimal listing).
   googleCategoryId?: string | null
@@ -37,9 +42,12 @@ export default function AdminCategoriesPage() {
   const locale = useLocale()
   const t = useTranslations('admin')
   const qc = useQueryClient()
-  const confirmDialog = useConfirm()
 
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  // Commit 3: old productCount > 0 pre-check + useConfirm dialog
+  // removed — DeleteCategoryModal now handles all archive flows
+  // (clean / blocked / reactivate) via the /impact endpoint.
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -64,8 +72,13 @@ export default function AdminCategoriesPage() {
   const [descAr, setDescAr] = useState('')
 
   const { data: categories, isLoading } = useQuery<Category[]>({
-    queryKey: ['admin-categories'],
-    queryFn: async () => { const { data } = await api.get('/admin/categories'); return data },
+    queryKey: ['admin-categories', showArchived],
+    queryFn: async () => {
+      const { data } = await api.get('/admin/categories', {
+        params: showArchived ? { includeArchived: 'true' } : {},
+      })
+      return data
+    },
   })
 
   const saveMutation = useMutation({
@@ -73,10 +86,9 @@ export default function AdminCategoriesPage() {
       p.id ? api.put(`/categories/${p.id}`, p.payload) : api.post('/categories', p.payload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-categories'] }); if (isNew) setIsNew(false) },
   })
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/categories/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-categories'] }); setSelectedId(null) },
-  })
+  // Commit 3: old deleteMutation removed — DeleteCategoryModal fires the
+  // DELETE request itself and notifies via onArchived which invalidates
+  // the query + clears selection. Kept as comment anchor for reviewers.
   const reorderMutation = useMutation({
     mutationFn: (p: { id: string; sortOrder: number; parentId?: string }) =>
       api.put(`/categories/${p.id}`, { sortOrder: p.sortOrder, ...(p.parentId !== undefined ? { parentId: p.parentId || null } : {}) }),
@@ -121,22 +133,13 @@ export default function AdminCategoriesPage() {
     saveMutation.mutate({ id: isNew ? undefined : selectedId ?? undefined, payload: { slug, parentId: parentId || undefined, imageUrl: imageUrl || undefined, iconKey: iconKey ?? null, googleCategoryId: googleCategoryId ?? null, googleCategoryLabel: googleCategoryLabel ?? null, ebayCategoryId: ebayCategoryId ?? null, sortOrder, translations } })
   }
 
-  const handleDelete = async () => {
+  // Commit 3: click "Delete" opens the modal. The modal handles the full
+  // archive flow (impact query, sample rendering, conditional move-picker,
+  // reactivate) and calls back via onArchived / onReactivated to refetch.
+  // The old productCount > 0 preemption + useConfirm dialog are gone.
+  const handleDelete = () => {
     if (!selected) return
-    const cnt = selected._count?.products ?? 0
-    if (cnt > 0) {
-      setDeleteError(t('categories.deleteHasProducts', { count: cnt }))
-      setTimeout(() => setDeleteError(null), 4000)
-      return
-    }
-    const ok = await confirmDialog({
-      title: t('categories.delete'),
-      description: t('categories.deleteConfirm'),
-      variant: 'danger',
-      confirmLabel: t('categories.delete'),
-      cancelLabel: t('categories.cancel'),
-    })
-    if (ok) deleteMutation.mutate(selected.id)
+    setDeleteModalOpen(true)
   }
 
   const autoSlug = () => {
@@ -237,6 +240,18 @@ export default function AdminCategoriesPage() {
               placeholder={locale === 'ar' ? 'بحث في الأقسام...' : 'Kategorie suchen...'}
               className="w-full h-8 px-3 rounded-lg bg-white/[0.05] border border-white/[0.06] text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-[#d4a853]/30 transition-colors"
             />
+            {/* Commit 3: Archive toggle — lets admin see/reactivate archived cats */}
+            <label className="flex items-center gap-2 mt-2 text-[11px] text-white/50 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05]"
+              />
+              <span>
+                {locale === 'ar' ? 'إظهار المؤرشفة' : locale === 'en' ? 'Show archived' : 'Archivierte anzeigen'}
+              </span>
+            </label>
           </div>
 
           {/* Tree Body */}
@@ -505,12 +520,9 @@ export default function AdminCategoriesPage() {
                 </p>
               </div>
 
-              {/* Delete error toast */}
-              {deleteError && (
-                <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm font-medium flex items-center gap-2">
-                  <span>✕</span> {deleteError}
-                </div>
-              )}
+              {/* Delete error toast — removed in Commit 3 (replaced
+                  by DeleteCategoryModal). Kept comment as anchor for
+                  any late reviewer wondering where the 4s flash went. */}
 
               {/* Actions */}
               <div className="flex items-center gap-3 pt-4 border-t">
@@ -531,6 +543,23 @@ export default function AdminCategoriesPage() {
           )}
         </div>
       </div>
+
+      {/* Commit 3: delete / archive / reactivate modal */}
+      <DeleteCategoryModal
+        open={deleteModalOpen}
+        category={selected as any}
+        allCategories={(categories ?? []) as any}
+        onClose={() => setDeleteModalOpen(false)}
+        onArchived={() => {
+          setDeleteModalOpen(false)
+          qc.invalidateQueries({ queryKey: ['admin-categories'] })
+          setSelectedId(null)
+        }}
+        onReactivated={() => {
+          setDeleteModalOpen(false)
+          qc.invalidateQueries({ queryKey: ['admin-categories'] })
+        }}
+      />
     </div>
   )
 }
@@ -592,6 +621,8 @@ function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, has
       <button
         onClick={onSelect}
         className={`flex-1 text-start px-2 py-2 truncate transition-colors ${
+          cat.isActive === false ? 'grayscale opacity-60' : ''
+        } ${
           isSelected
             ? 'text-[#d4a853] font-semibold'
             : isParent
@@ -601,6 +632,15 @@ function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, has
       >
         {getName(cat)}
       </button>
+
+      {/* Commit 3: Archived badge — shown only when isActive=false.
+          TreeItem doesn't receive locale explicitly, and adding a param
+          would churn every call-site; since the admin UI is language-
+          tabbed but the badge is purely status-metadata, the 3-lang
+          word fits inline via a tiny inline map. */}
+      {cat.isActive === false && (
+        <ArchivedBadge />
+      )}
 
       {/* Product count badge */}
       <span className={`text-[10px] tabular-nums px-2 py-0.5 rounded-full ltr:mr-1 rtl:ml-1 ${
@@ -622,6 +662,16 @@ function TreeItem({ cat, depth, isSelected, onSelect, onToggle, isCollapsed, has
         </button>
       )}
     </div>
+  )
+}
+
+function ArchivedBadge() {
+  const locale = useLocale()
+  const label = locale === 'ar' ? 'مؤرشفة' : locale === 'en' ? 'Archived' : 'Archiviert'
+  return (
+    <span className="text-[10px] px-2 py-0.5 rounded-full ltr:mr-1 rtl:ml-1 bg-white/[0.04] text-white/40 border border-white/[0.08]">
+      {label}
+    </span>
   )
 }
 

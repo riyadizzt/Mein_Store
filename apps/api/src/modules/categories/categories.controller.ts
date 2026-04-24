@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  BadRequestException,
 } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { CategoriesService } from './categories.service'
@@ -19,6 +20,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'
 import { Roles } from '../../common/decorators/roles.decorator'
 import { AuditService } from '../admin/services/audit.service'
+import { PrismaService } from '../../prisma/prisma.service'
+import { postRevalidateTags, revalidateProductTags } from '../../common/helpers/revalidation'
 import type { Request } from 'express'
 import { Language } from '@omnichannel/types'
 
@@ -28,6 +31,7 @@ export class CategoriesController {
   constructor(
     private readonly categoriesService: CategoriesService,
     private readonly audit: AuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get()
@@ -120,5 +124,96 @@ export class CategoriesController {
       }
       throw e
     }
+  }
+
+  @Post('admin/:id/archive-with-move')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '[Admin] Archive category + move all products to target' })
+  async archiveWithMove(
+    @Param('id') id: string,
+    @Body() body: { targetCategoryId?: string },
+    @Req() req: Request,
+  ) {
+    const adminId = (req as any).user?.id ?? 'system'
+    const ipAddress = req.ip
+    if (!body?.targetCategoryId || typeof body.targetCategoryId !== 'string') {
+      throw new BadRequestException({
+        error: 'TargetRequired',
+        message: {
+          de: 'Zielkategorie ist erforderlich.',
+          en: 'Target category is required.',
+          ar: 'الفئة المستهدفة مطلوبة.',
+        },
+      })
+    }
+
+    const result = await this.categoriesService.archiveWithMove(id, body.targetCategoryId)
+
+    // Two audit rows: the move event (with target + count) AND the
+    // archive event (same shape as DELETE /:id path). Audit-log grouping
+    // by action='CATEGORY_ARCHIVED' catches all archive events
+    // regardless of context. Both non-blocking.
+    await Promise.all([
+      this.audit
+        .log({
+          adminId,
+          action: 'CATEGORY_ARCHIVED_WITH_MOVE',
+          entityType: 'category',
+          entityId: id,
+          ipAddress,
+          changes: {
+            after: {
+              targetCategoryId: result.targetCategoryId,
+              targetCategorySlug: result.targetCategorySlug,
+              productsMoved: result.productsMoved,
+            },
+          },
+        })
+        .catch(() => {}),
+      this.audit
+        .log({
+          adminId,
+          action: 'CATEGORY_ARCHIVED',
+          entityType: 'category',
+          entityId: id,
+          ipAddress,
+          changes: { after: { isActive: false, slug: result.archivedCategorySlug } },
+        })
+        .catch(() => {}),
+    ])
+
+    // Fire-and-forget revalidation: PDP + global list tags for every
+    // moved product so the shop shows them under the new category
+    // without waiting for the 60s ISR cycle.
+    revalidateProductTags(this.prisma as any, result.movedVariantIds).catch(() => {})
+
+    return result
+  }
+
+  @Post('admin/:id/reactivate')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '[Admin] Un-archive a category' })
+  async reactivate(@Param('id') id: string, @Req() req: Request) {
+    const adminId = (req as any).user?.id ?? 'system'
+    const ipAddress = req.ip
+    const result = await this.categoriesService.reactivate(id)
+    await this.audit
+      .log({
+        adminId,
+        action: 'CATEGORY_REACTIVATED',
+        entityType: 'category',
+        entityId: id,
+        ipAddress,
+        changes: { after: { isActive: true, slug: result.slug } },
+      })
+      .catch(() => {})
+    // Consistency push: products under this category re-appear in the
+    // shop without waiting for ISR-60s.
+    postRevalidateTags(['products:list']).catch(() => {})
+    return result
   }
 }

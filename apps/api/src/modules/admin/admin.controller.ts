@@ -2218,9 +2218,14 @@ export class AdminController {
 
   @Get('categories')
   @RequirePermission(PERMISSIONS.CATEGORIES_VIEW)
-  async getAdminCategories() {
+  async getAdminCategories(@Query('includeArchived') includeArchived?: string) {
+    // Additive query param (Commit 3): default behaviour unchanged
+    // (only active categories). `?includeArchived=true` returns archived
+    // too so the admin UI can render a "Show archived" toggle and
+    // support the reactivate flow.
+    const showArchived = includeArchived === 'true'
     const all = await this.prisma.category.findMany({
-      where: { isActive: true },
+      where: showArchived ? undefined : { isActive: true },
       include: { translations: true, _count: { select: { products: true } } },
       orderBy: { sortOrder: 'asc' },
     })

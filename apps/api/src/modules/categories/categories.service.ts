@@ -3,6 +3,16 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { CreateCategoryDto } from './dto/create-category.dto'
 import { Language } from '@omnichannel/types'
 
+export interface ArchiveWithMoveResult {
+  archivedCategoryId: string
+  archivedCategorySlug: string
+  targetCategoryId: string
+  targetCategorySlug: string
+  productsMoved: number
+  movedProductSlugs: string[]
+  movedVariantIds: string[]
+}
+
 export interface CategoryImpact {
   category: { id: string; slug: string; isActive: boolean; parentId: string | null }
   attachedProducts:   { count: number; sample: Array<{ id: string; slug: string }> }
@@ -270,6 +280,178 @@ export class CategoriesService {
       canArchive: blockingReasons.length === 0,
       blockingReasons,
     }
+  }
+
+  /**
+   * Archives a category after moving all its active products to a target
+   * category. Atomic: either all products move + source archives, or
+   * nothing changes.
+   *
+   * Guards (all throw BEFORE any DB write — defense-in-depth; client
+   * also filters archived/self/descendants from the picker):
+   *   NotFound            — source or target missing
+   *   409 TargetIsSelf    — source === target
+   *   409 TargetIsArchived — target.isActive === false
+   *   409 TargetIsDescendant — target is in source's subtree
+   *   409 CategoryHasNonProductBlockers — coupons/promotions/children/
+   *                                        charts still attached
+   */
+  async archiveWithMove(
+    sourceId: string,
+    targetCategoryId: string,
+  ): Promise<ArchiveWithMoveResult> {
+    if (sourceId === targetCategoryId) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'TargetIsSelf',
+        message: {
+          de: 'Die Zielkategorie kann nicht die gleiche sein wie die zu archivierende.',
+          en: 'The target category cannot be the same as the one being archived.',
+          ar: 'لا يمكن أن تكون الفئة المستهدفة هي نفس الفئة المؤرشفة.',
+        },
+      })
+    }
+
+    const [source, target] = await Promise.all([
+      this.prisma.category.findUnique({ where: { id: sourceId } }),
+      this.prisma.category.findUnique({ where: { id: targetCategoryId } }),
+    ])
+    if (!source) throw new NotFoundException('Quellkategorie nicht gefunden')
+    if (!target) throw new NotFoundException('Zielkategorie nicht gefunden')
+
+    if (!target.isActive) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'TargetIsArchived',
+        message: {
+          de: 'Die Zielkategorie ist archiviert und kann keine Produkte aufnehmen.',
+          en: 'The target category is archived and cannot receive products.',
+          ar: 'الفئة المستهدفة مؤرشفة ولا يمكنها استقبال منتجات.',
+        },
+      })
+    }
+
+    // Descendant-check: walk target's ancestry upward, fail if sourceId
+    // ever appears. Bounded at 16 hops to stop runaway loops if an
+    // orphaned hierarchy somehow forms a cycle (shouldn't happen, but
+    // defense-in-depth against future data-integrity issues).
+    const descendantOfSource = await this.isDescendantOf(targetCategoryId, sourceId)
+    if (descendantOfSource) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'TargetIsDescendant',
+        message: {
+          de: 'Die Zielkategorie liegt unterhalb der zu archivierenden Kategorie.',
+          en: 'The target category is below the category being archived.',
+          ar: 'الفئة المستهدفة تقع تحت الفئة المؤرشفة في التسلسل.',
+        },
+      })
+    }
+
+    // Non-product blockers MUST be resolved separately — this endpoint
+    // only handles products. UI hides the move-picker in this case, the
+    // server-guard ensures the contract even if someone calls the API
+    // directly.
+    const [cCount, prCount, chCount, scCount] = await Promise.all([
+      this.prisma.coupon.count({ where: { appliesToCategoryId: sourceId } }),
+      this.prisma.promotion.count({ where: { categoryId: sourceId } }),
+      this.prisma.category.count({ where: { parentId: sourceId } }),
+      this.prisma.sizeChart.count({ where: { categoryId: sourceId, isActive: true } }),
+    ])
+    if (cCount + prCount + chCount + scCount > 0) {
+      const blockers: Record<string, number> = {}
+      if (cCount > 0) blockers.coupons = cCount
+      if (prCount > 0) blockers.promotions = prCount
+      if (chCount > 0) blockers.children = chCount
+      if (scCount > 0) blockers.sizeCharts = scCount
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'CategoryHasNonProductBlockers',
+        message: {
+          de: 'Weitere Zuordnungen (Gutscheine, Promotionen, Unterkategorien oder Größentabellen) blockieren die Archivierung. Bitte zuerst separat auflösen.',
+          en: 'Other attachments (coupons, promotions, sub-categories or size charts) are blocking the archive. Please resolve them separately first.',
+          ar: 'هناك ارتباطات أخرى (كوبونات، عروض ترويجية، فئات فرعية، أو جداول مقاسات) تمنع الأرشفة. يرجى حلها بشكل منفصل أولاً.',
+        },
+        data: { blockers },
+      })
+    }
+
+    // Capture products + variantIds BEFORE the update — needed for
+    // revalidation + audit context. Runs outside the tx; a product
+    // concurrently moving to sourceId between query and tx just gets
+    // swept along by the updateMany filter, which is fine.
+    const productsToMove = await this.prisma.product.findMany({
+      where: { categoryId: sourceId, deletedAt: null },
+      select: { id: true, slug: true, variants: { select: { id: true } } },
+    })
+    const movedProductSlugs = productsToMove.map((p) => p.slug)
+    const movedVariantIds = productsToMove.flatMap((p) => p.variants.map((v) => v.id))
+
+    // Atomic: all-or-nothing.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.product.updateMany({
+        where: { categoryId: sourceId, deletedAt: null },
+        data: { categoryId: targetCategoryId },
+      })
+      await tx.category.update({
+        where: { id: sourceId },
+        data: { isActive: false },
+      })
+      return { productsMoved: moved.count }
+    })
+
+    return {
+      archivedCategoryId: sourceId,
+      archivedCategorySlug: source.slug,
+      targetCategoryId,
+      targetCategorySlug: target.slug,
+      productsMoved: result.productsMoved,
+      movedProductSlugs,
+      movedVariantIds,
+    }
+  }
+
+  /**
+   * Un-archives a category. No touch on products, translations, or any
+   * other linked data — just flips isActive back to true. Idempotent:
+   * calling on an already-active category is a no-op (not an error).
+   */
+  async reactivate(id: string): Promise<{ id: string; slug: string; isActive: true }> {
+    const cat = await this.prisma.category.findUnique({
+      where: { id },
+      select: { id: true, slug: true, isActive: true },
+    })
+    if (!cat) throw new NotFoundException('Kategorie nicht gefunden')
+    if (cat.isActive) {
+      return { id: cat.id, slug: cat.slug, isActive: true }
+    }
+    const updated = await this.prisma.category.update({
+      where: { id },
+      data: { isActive: true },
+      select: { id: true, slug: true, isActive: true },
+    })
+    return { id: updated.id, slug: updated.slug, isActive: true }
+  }
+
+  /**
+   * True iff `candidateId` is in the subtree rooted at `ancestorId`.
+   * Walks parent chain upward; bounded at 16 hops to stop runaway
+   * loops if an orphaned hierarchy somehow forms a cycle. The project's
+   * real hierarchy is 2-3 levels, so 16 is extremely conservative.
+   */
+  private async isDescendantOf(candidateId: string, ancestorId: string): Promise<boolean> {
+    let currentId: string | null = candidateId
+    let hops = 0
+    while (currentId && hops < 16) {
+      if (currentId === ancestorId) return true
+      const parent: { parentId: string | null } | null = await this.prisma.category.findUnique({
+        where: { id: currentId },
+        select: { parentId: true },
+      })
+      currentId = parent?.parentId ?? null
+      hops++
+    }
+    return false
   }
 
   private formatCategory(category: any, lang: Language = 'de') {

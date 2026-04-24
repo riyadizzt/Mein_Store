@@ -4,9 +4,14 @@ import { api } from '@/lib/api'
 
 export interface Category {
   id: string
+  parentId?: string | null
   slug: string
+  isActive?: boolean           // Admin variant sets this; public endpoint omits
   imageUrl?: string
   iconKey?: string | null
+  googleCategoryId?: string | null
+  googleCategoryLabel?: string | null
+  ebayCategoryId?: string | null
   sortOrder: number
   name?: string
   children?: Category[]
@@ -36,12 +41,18 @@ export function useCategories() {
  *
  * Tree shape (parents with .children[]) is identical to useCategories(),
  * so the same cascading dropdown logic works.
+ *
+ * Commit 3: accepts optional { includeArchived } to support the admin
+ * "Show archived" toggle and the reactivate flow.
  */
-export function useAdminCategories() {
+export function useAdminCategories(options?: { includeArchived?: boolean }) {
+  const includeArchived = options?.includeArchived === true
   return useQuery<Category[]>({
-    queryKey: ['admin-categories-full'],
+    queryKey: ['admin-categories-full', includeArchived],
     queryFn: async () => {
-      const { data } = await api.get('/admin/categories')
+      const { data } = await api.get('/admin/categories', {
+        params: includeArchived ? { includeArchived: 'true' } : {},
+      })
       return Array.isArray(data) ? data : data?.data ?? data?.items ?? []
     },
     staleTime: 5 * 60 * 1000,

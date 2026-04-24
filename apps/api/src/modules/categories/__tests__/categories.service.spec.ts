@@ -20,6 +20,15 @@ function buildPrisma() {
   // types (products, coupons, promotions, children, size-charts) both
   // findMany + count. Defaults are all-empty so a test only needs to
   // override the single dimension it cares about.
+  // Commit 3: $transaction callback + updateMany added for archiveWithMove.
+  const tx = {
+    product: {
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    category: {
+      update: jest.fn(),
+    },
+  }
   return {
     category: {
       findUnique: jest.fn(),
@@ -28,6 +37,8 @@ function buildPrisma() {
       update: jest.fn(),
       create: jest.fn(),
     },
+    $transaction: jest.fn(async (cb: any) => cb(tx)),
+    _tx: tx,
     product: {
       findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
@@ -417,5 +428,180 @@ describe('CategoriesService.formatCategory — taxonomy ID projection (Commit 1)
     expect(result[0]).toHaveProperty('googleCategoryId', null)
     expect(result[0]).toHaveProperty('googleCategoryLabel', null)
     expect(result[0]).toHaveProperty('ebayCategoryId', null)
+  })
+})
+
+describe('CategoriesService.archiveWithMove — atomic move + archive (Commit 3)', () => {
+  it('moves products and archives source in one transaction (happy path)', async () => {
+    const prisma = buildPrisma()
+    const sourceId = 'cat-source'
+    const targetId = 'cat-target'
+
+    // Lookup returns: source (active, no parent), target (active, no parent)
+    prisma.category.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === sourceId) return Promise.resolve({ id: sourceId, slug: 'shorts', isActive: true, parentId: null })
+      if (where.id === targetId) return Promise.resolve({ id: targetId, slug: 'hosen', isActive: true, parentId: null })
+      return Promise.resolve(null)
+    })
+    // No non-product blockers (defaults=0 from buildPrisma)
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'p1', slug: 'short-a', variants: [{ id: 'v1' }, { id: 'v2' }] },
+      { id: 'p2', slug: 'short-b', variants: [{ id: 'v3' }] },
+    ])
+    // Inside-tx updateMany returns count=2
+    prisma._tx.product.updateMany.mockResolvedValue({ count: 2 })
+    prisma._tx.category.update.mockResolvedValue({ id: sourceId, isActive: false })
+
+    const service = await makeService(prisma)
+    const result = await service.archiveWithMove(sourceId, targetId)
+
+    expect(result.archivedCategoryId).toBe(sourceId)
+    expect(result.archivedCategorySlug).toBe('shorts')
+    expect(result.targetCategoryId).toBe(targetId)
+    expect(result.targetCategorySlug).toBe('hosen')
+    expect(result.productsMoved).toBe(2)
+    expect(result.movedProductSlugs).toEqual(['short-a', 'short-b'])
+    expect(result.movedVariantIds).toEqual(['v1', 'v2', 'v3'])
+    // Atomic: $transaction was called with one callback
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(prisma._tx.product.updateMany).toHaveBeenCalledWith({
+      where: { categoryId: sourceId, deletedAt: null },
+      data: { categoryId: targetId },
+    })
+    expect(prisma._tx.category.update).toHaveBeenCalledWith({
+      where: { id: sourceId },
+      data: { isActive: false },
+    })
+  })
+
+  it('throws 409 TargetIsSelf when source === target', async () => {
+    const prisma = buildPrisma()
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.archiveWithMove('same', 'same') } catch (e) { thrown = e }
+
+    expect(thrown).toBeInstanceOf(ConflictException)
+    expect(thrown.getResponse().error).toBe('TargetIsSelf')
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('throws 409 TargetIsArchived when target.isActive is false', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === 'src') return Promise.resolve({ id: 'src', slug: 's', isActive: true, parentId: null })
+      if (where.id === 'tgt') return Promise.resolve({ id: 'tgt', slug: 't', isActive: false, parentId: null })
+      return Promise.resolve(null)
+    })
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.archiveWithMove('src', 'tgt') } catch (e) { thrown = e }
+
+    expect(thrown).toBeInstanceOf(ConflictException)
+    expect(thrown.getResponse().error).toBe('TargetIsArchived')
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('throws 409 TargetIsDescendant when target is in source subtree', async () => {
+    const prisma = buildPrisma()
+    // Hierarchy: src (root) → child → grandchild. Trying to move into child.
+    prisma.category.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === 'src')    return Promise.resolve({ id: 'src',    slug: 'src',    isActive: true, parentId: null })
+      if (where.id === 'child')  return Promise.resolve({ id: 'child',  slug: 'child',  isActive: true, parentId: 'src' })
+      return Promise.resolve(null)
+    })
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.archiveWithMove('src', 'child') } catch (e) { thrown = e }
+
+    expect(thrown).toBeInstanceOf(ConflictException)
+    expect(thrown.getResponse().error).toBe('TargetIsDescendant')
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('throws NotFound when target missing', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === 'src') return Promise.resolve({ id: 'src', slug: 's', isActive: true, parentId: null })
+      return Promise.resolve(null) // target missing
+    })
+    const service = await makeService(prisma)
+    await expect(service.archiveWithMove('src', 'missing')).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it('throws 409 CategoryHasNonProductBlockers when coupons/promos/children/charts exist', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === 'src') return Promise.resolve({ id: 'src', slug: 's', isActive: true, parentId: null })
+      if (where.id === 'tgt') return Promise.resolve({ id: 'tgt', slug: 't', isActive: true, parentId: null })
+      return Promise.resolve(null)
+    })
+    prisma.coupon.count.mockResolvedValue(2)
+    prisma.promotion.count.mockResolvedValue(1)
+    const service = await makeService(prisma)
+
+    let thrown: any = null
+    try { await service.archiveWithMove('src', 'tgt') } catch (e) { thrown = e }
+
+    expect(thrown).toBeInstanceOf(ConflictException)
+    const body = thrown.getResponse()
+    expect(body.error).toBe('CategoryHasNonProductBlockers')
+    expect(body.data.blockers).toEqual({ coupons: 2, promotions: 1 })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('returns movedProductSlugs + movedVariantIds for revalidation', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockImplementation(({ where }: any) => {
+      if (where.id === 'src') return Promise.resolve({ id: 'src', slug: 's', isActive: true, parentId: null })
+      if (where.id === 'tgt') return Promise.resolve({ id: 'tgt', slug: 't', isActive: true, parentId: null })
+      return Promise.resolve(null)
+    })
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'p1', slug: 'foo', variants: [{ id: 'va' }] },
+      { id: 'p2', slug: 'bar', variants: [{ id: 'vb' }, { id: 'vc' }] },
+    ])
+    prisma._tx.product.updateMany.mockResolvedValue({ count: 2 })
+    const service = await makeService(prisma)
+
+    const result = await service.archiveWithMove('src', 'tgt')
+    expect(result.movedProductSlugs).toEqual(['foo', 'bar'])
+    expect(result.movedVariantIds).toEqual(['va', 'vb', 'vc'])
+  })
+})
+
+describe('CategoriesService.reactivate — un-archive (Commit 3)', () => {
+  it('flips isActive back to true and returns shape', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({ id: 'c1', slug: 'test', isActive: false })
+    prisma.category.update.mockResolvedValue({ id: 'c1', slug: 'test', isActive: true })
+    const service = await makeService(prisma)
+
+    const result = await service.reactivate('c1')
+    expect(result).toEqual({ id: 'c1', slug: 'test', isActive: true })
+    expect(prisma.category.update).toHaveBeenCalledWith({
+      where: { id: 'c1' },
+      data: { isActive: true },
+      select: { id: true, slug: true, isActive: true },
+    })
+  })
+
+  it('idempotent no-op when already active (no update call)', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue({ id: 'c1', slug: 'test', isActive: true })
+    const service = await makeService(prisma)
+
+    const result = await service.reactivate('c1')
+    expect(result).toEqual({ id: 'c1', slug: 'test', isActive: true })
+    expect(prisma.category.update).not.toHaveBeenCalled()
+  })
+
+  it('throws NotFoundException when category missing', async () => {
+    const prisma = buildPrisma()
+    prisma.category.findUnique.mockResolvedValue(null)
+    const service = await makeService(prisma)
+    await expect(service.reactivate('missing')).rejects.toBeInstanceOf(NotFoundException)
   })
 })
