@@ -12,7 +12,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import {
   Plus, Loader2, ChevronDown, ChevronRight,
-  FolderPlus, Trash2, FolderTree, Package, GripVertical, Save, Image as ImageIcon, ArrowUp, ArrowDown,
+  FolderPlus, Trash2, FolderTree, Package, GripVertical, Save, Image as ImageIcon, ArrowUp, ArrowDown, RotateCcw,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -534,9 +534,26 @@ export default function AdminCategoriesPage() {
                   <Button variant="outline" onClick={() => { setIsNew(false); clearForm() }}>{t('categories.cancel')}</Button>
                 )}
                 {!isNew && selected && (
-                  <Button variant="destructive" size="sm" onClick={handleDelete} className="ml-auto gap-1.5">
-                    <Trash2 className="h-3.5 w-3.5" />{t('categories.delete')}
-                  </Button>
+                  selected.isActive === false ? (
+                    // Context-adaptive: archived categories show a green
+                    // "Reactivate" button instead of the destructive "Delete".
+                    // Same handleDelete → same DeleteCategoryModal, which
+                    // detects isActive=false and renders State C. No new
+                    // click-handler needed — the modal routing already
+                    // handles the branch (delete-category-modal.tsx:75).
+                    <Button
+                      size="sm"
+                      onClick={handleDelete}
+                      className="ml-auto gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      {locale === 'ar' ? 'إعادة تفعيل' : locale === 'en' ? 'Reactivate' : 'Reaktivieren'}
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" size="sm" onClick={handleDelete} className="ml-auto gap-1.5">
+                      <Trash2 className="h-3.5 w-3.5" />{t('categories.delete')}
+                    </Button>
+                  )
                 )}
               </div>
             </div>
