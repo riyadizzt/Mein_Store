@@ -10,7 +10,9 @@
  */
 
 import { ForbiddenException, HttpException } from '@nestjs/common'
-import { EbayController } from '../ebay.controller'
+import { validate } from 'class-validator'
+import { plainToInstance } from 'class-transformer'
+import { EbayController, SetPolicyIdsDto } from '../ebay.controller'
 import {
   EbayNotConnectedError,
   EbayRefreshRevokedError,
@@ -250,5 +252,68 @@ describe('EbayController.setPolicyIds (Sub-Task 1 — production policies UI)', 
     expect(hooks.audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ adminId: 'system' }),
     )
+  })
+})
+
+describe('SetPolicyIdsDto — validation contract (Sub-Task 1 regression)', () => {
+  // Regression for the empty-string bug: frontend form sends
+  // merchantLocationKey: "" by default → @IsOptional() did not skip
+  // because class-validator only treats null/undefined as "absent".
+  // Fix: ValidateIf with truthy-check skips ALL subsequent validators
+  // when value is falsy.
+  async function validateDto(input: any) {
+    const dto = plainToInstance(SetPolicyIdsDto, input)
+    return validate(dto)
+  }
+
+  it('accepts empty-string merchantLocationKey (skips validators)', async () => {
+    const errors = await validateDto({
+      fulfillmentPolicyId: '111111',
+      returnPolicyId: '222222',
+      paymentPolicyId: '333333',
+      merchantLocationKey: '',
+    })
+    expect(errors).toHaveLength(0)
+  })
+
+  it('accepts missing merchantLocationKey field', async () => {
+    const errors = await validateDto({
+      fulfillmentPolicyId: '111111',
+      returnPolicyId: '222222',
+      paymentPolicyId: '333333',
+    })
+    expect(errors).toHaveLength(0)
+  })
+
+  it('accepts a valid merchantLocationKey', async () => {
+    const errors = await validateDto({
+      fulfillmentPolicyId: '111111',
+      returnPolicyId: '222222',
+      paymentPolicyId: '333333',
+      merchantLocationKey: 'malak-lager-berlin',
+    })
+    expect(errors).toHaveLength(0)
+  })
+
+  it('rejects merchantLocationKey with invalid characters', async () => {
+    const errors = await validateDto({
+      fulfillmentPolicyId: '111111',
+      returnPolicyId: '222222',
+      paymentPolicyId: '333333',
+      merchantLocationKey: 'invalid!chars',
+    })
+    expect(errors.length).toBeGreaterThan(0)
+    expect(errors[0].property).toBe('merchantLocationKey')
+  })
+
+  it('rejects non-numeric fulfillmentPolicyId regardless of merchantLocationKey', async () => {
+    const errors = await validateDto({
+      fulfillmentPolicyId: 'abc',
+      returnPolicyId: '222222',
+      paymentPolicyId: '333333',
+      merchantLocationKey: '',
+    })
+    expect(errors.length).toBeGreaterThan(0)
+    expect(errors[0].property).toBe('fulfillmentPolicyId')
   })
 })

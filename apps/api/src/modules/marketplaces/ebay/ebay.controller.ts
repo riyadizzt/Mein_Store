@@ -43,7 +43,7 @@ import { EbaySandboxPoliciesService } from './ebay-sandbox-policies.service'
 import { EbayListingService } from './ebay-listing.service'
 import { resolveEbayMode } from './ebay-env'
 import { randomBytes } from 'node:crypto'
-import { IsString, IsOptional, Matches, MaxLength, MinLength } from 'class-validator'
+import { IsString, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator'
 
 // In-memory state store for OAuth state tokens. Phase-2-only
 // mechanism — low volume, single-admin-at-a-time, 10-minute TTL.
@@ -72,7 +72,11 @@ function consumeState(token: string): boolean {
 // IDs (and optional merchant-location-key) from the eBay Seller Hub
 // into our settings JSON. Sandbox uses the bootstrap-service; this
 // DTO is exclusively for the manual production path.
-class SetPolicyIdsDto {
+//
+// Exported so the spec file can run class-validator's `validate()`
+// directly against an instance — covers the empty-string regression
+// that the controller-method-level tests don't exercise.
+export class SetPolicyIdsDto {
   @IsString()
   @MinLength(1)
   @MaxLength(32)
@@ -91,7 +95,12 @@ class SetPolicyIdsDto {
   @Matches(/^\d+$/, { message: 'paymentPolicyId must be numeric' })
   paymentPolicyId!: string
 
-  @IsOptional()
+  // class-validator's @IsOptional() only skips for null/undefined.
+  // Empty string "" still runs the other validators — and the frontend
+  // form sends "" as the default for the un-filled merchantLocationKey
+  // input. ValidateIf with a truthy-check skips ALL subsequent
+  // decorators when the value is falsy (null/undefined/"").
+  @ValidateIf((o) => o.merchantLocationKey !== undefined && o.merchantLocationKey !== null && o.merchantLocationKey !== '')
   @IsString()
   @MinLength(1)
   @MaxLength(36)
