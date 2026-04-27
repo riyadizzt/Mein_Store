@@ -439,7 +439,13 @@ export class EbayListingService {
         brand: true,
         basePrice: true,
         salePrice: true,
-        category: { select: { ebayCategoryId: true } },
+        category: {
+          select: {
+            ebayCategoryId: true,
+            slug: true,
+            parent: { select: { slug: true } },
+          },
+        },
         translations: {
           select: { language: true, name: true, description: true },
         },
@@ -511,7 +517,15 @@ export class EbayListingService {
       brand: product.brand,
       basePrice: product.basePrice.toString(),
       salePrice: product.salePrice?.toString() ?? null,
-      category: product.category,
+      category: product.category
+        ? {
+            ebayCategoryId: product.category.ebayCategoryId,
+            // Top-level parent slug for Abteilung resolution.
+            // For products under a top-level category directly (no parent),
+            // fall back to the category's own slug.
+            departmentSlug: product.category.parent?.slug ?? product.category.slug ?? null,
+          }
+        : null,
       translations: product.translations as MapperProduct['translations'],
       images: product.images,
     }
@@ -632,10 +646,28 @@ export class EbayListingService {
       )
       externalListingId = pub.listingId ?? null
     } catch (e) {
-      // eBay returns error when offer is already published on the
-      // marketplace — we accept this as success and keep going.
+      // Bug B fix: eBay's errorId 25002 covers MANY sub-reasons —
+      // "already published" is just one. The previous code treated
+      // every 25002 as success, hiding real failures (BrandMPN missing,
+      // Abteilung missing, …). Now we branch on the actual message.
       if (e instanceof EbayApiError && e.ebayErrors.some((x) => x.errorId === 25002)) {
-        alreadyPublished = true
+        const ebay25002 = e.ebayErrors.find((x) => x.errorId === 25002)
+        const firstMsg = (ebay25002?.message ?? '').trim()
+        const longMsg  = (ebay25002?.longMessage ?? '').trim()
+        const haystack = (firstMsg + ' | ' + longMsg).toLowerCase()
+        // Match-list intentionally narrow (D-3 strategy): widen iteratively
+        // when audit-log surfaces a new sub-phrase. Better fail-loud than
+        // a false-positive "already published".
+        const isAlreadyPublished =
+          haystack.includes('already published') ||
+          haystack.includes('bereits veröffentlicht')
+        if (isAlreadyPublished) {
+          alreadyPublished = true
+        } else {
+          // Real publish failure — preserve eBay's full error in syncError.
+          const detailedMsg = `${firstMsg}${longMsg ? ' / ' + longMsg : ''}`.slice(0, 500)
+          return this.recordFail(listingId, 'rejected', 'publish_rejected', detailedMsg, false)
+        }
       } else {
         return this.handleApiFailure(listingId, e, 'publish_failed')
       }
@@ -655,7 +687,21 @@ export class EbayListingService {
       }
     }
 
-    // Step 6 — Success persistence
+    // Bug A fix: never mark a row as 'active' without an externalListingId.
+    // Reaching this branch means either the GET-fallback failed OR the
+    // alreadyPublished claim was wrong. Either way the row is NOT live on
+    // eBay — recordFail keeps the DB honest and surfaces the issue.
+    if (!externalListingId) {
+      return this.recordFail(
+        listingId,
+        'rejected',
+        'no_listing_id_after_publish',
+        `Publish accepted but eBay returned no listingId (alreadyPublished=${alreadyPublished})`,
+        false,
+      )
+    }
+
+    // Step 6 — Success persistence (externalListingId guaranteed non-null)
     await this.prisma.channelProductListing.update({
       where: { id: listingId },
       data: {

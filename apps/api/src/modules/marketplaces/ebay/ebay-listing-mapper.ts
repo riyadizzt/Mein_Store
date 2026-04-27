@@ -62,6 +62,11 @@ export interface MapperProduct {
   salePrice: string | number | null
   category: {
     ebayCategoryId: string | null
+    /** Top-level parent slug (e.g. 'herren') used to derive Abteilung
+     *  aspect. For products under a top-level category directly, this
+     *  is the category's own slug. Null only if the product has no
+     *  category at all (legacy edge-case). */
+    departmentSlug: string | null
   } | null
   translations: Array<{
     language: 'ar' | 'en' | 'de'
@@ -197,14 +202,43 @@ export function resolveEan(barcode: string | null | undefined): string {
 // eBay Inventory API docs (MPNs unique within a brand), eBay Taxonomy
 // API (aspect names are localized per marketplace).
 // ──────────────────────────────────────────────────────────────
-const ASPECT_KEY_BRAND_DE = 'Marke'
-const ASPECT_KEY_MPN_DE   = 'Herstellernummer'
-const ASPECT_KEY_COLOR_DE = 'Farbe'
-const ASPECT_KEY_SIZE_DE  = 'Größe'
+const ASPECT_KEY_BRAND_DE      = 'Marke'
+const ASPECT_KEY_MPN_DE        = 'Herstellernummer'
+const ASPECT_KEY_COLOR_DE      = 'Farbe'
+const ASPECT_KEY_SIZE_DE       = 'Größe'
+const ASPECT_KEY_DEPARTMENT_DE = 'Abteilung'
+
+// Top-level category slug → eBay "Abteilung" label.
+// eBay.de fashion categories require this aspect ("Department"). The
+// values are localized German strings exactly as eBay expects them.
+// Source of truth: the live category tree's top-level slugs (verified
+// 2026-04-27 via DB query). New top-level categories must be added
+// here, otherwise resolveDepartment returns null and
+// buildInventoryItemPayload throws MappingBlockError.
+//
+// Note: 'baybay' is a typo from the live DB — we map it intentionally.
+// A DB slug-rename is a separate refactor (URL/Frontend impact).
+const DEPARTMENT_DE: Record<string, string> = {
+  herren:   'Herren',
+  damen:    'Damen',
+  jungen:   'Jungen',
+  maedchen: 'Mädchen',
+  baybay:   'Baby',
+}
+
+/**
+ * Resolve the eBay-Abteilung label from a top-level category slug.
+ * Returns null when the slug is unknown — caller decides whether to
+ * fail-loud (buildInventoryItemPayload does) or skip silently.
+ */
+export function resolveDepartment(slug: string | null | undefined): string | null {
+  if (!slug) return null
+  return DEPARTMENT_DE[slug.toLowerCase()] ?? null
+}
 
 // ──────────────────────────────────────────────────────────────
 // Aspects — eBay expects { [aspectName]: string[] }.
-// For C11c we send Marke + Herstellernummer + Farbe + Größe (DE).
+// For C11c we send Marke + Herstellernummer + Farbe + Größe + Abteilung (DE).
 // MPN is the variant SKU (unique per variant) — see const block above.
 // ──────────────────────────────────────────────────────────────
 
@@ -213,6 +247,7 @@ export function buildAspects(
   color: string | null,
   size: string | null,
   sku: string,
+  department: string | null,
 ): Record<string, string[]> {
   const aspects: Record<string, string[]> = {
     [ASPECT_KEY_BRAND_DE]: [brand],
@@ -222,6 +257,8 @@ export function buildAspects(
   const s = (size ?? '').trim()
   if (c.length > 0) aspects[ASPECT_KEY_COLOR_DE] = [c]
   if (s.length > 0) aspects[ASPECT_KEY_SIZE_DE]  = [s]
+  const d = (department ?? '').trim()
+  if (d.length > 0) aspects[ASPECT_KEY_DEPARTMENT_DE] = [d]
   return aspects
 }
 
@@ -403,7 +440,19 @@ export function buildInventoryItemPayload(
   const description = truncateDescription(translation.description)
   const brand = resolveBrand(product.brand)
   const ean = resolveEan(variant.barcode)
-  const aspects = buildAspects(brand, variant.color, variant.size, variant.sku)
+  // Abteilung — fail-loud when the top-level category slug is missing
+  // or unmapped. Same pattern as weight_missing / no_images. Admin sees
+  // the explicit error in the publish-result UI and either updates the
+  // product's category or extends DEPARTMENT_DE.
+  const departmentSlug = product.category?.departmentSlug ?? null
+  const department = resolveDepartment(departmentSlug)
+  if (!department) {
+    throw new MappingBlockError(
+      'department_unmapped',
+      `Variante ${variant.sku} hat keine zuordenbare Abteilung (Kategorie-Top-Level-Slug=${departmentSlug ?? 'null'}). Bitte Kategorie pflegen.`,
+    )
+  }
+  const aspects = buildAspects(brand, variant.color, variant.size, variant.sku, department)
   const images = pickImages(product.images, variant.color)
   if (images.length === 0) {
     throw new MappingBlockError(

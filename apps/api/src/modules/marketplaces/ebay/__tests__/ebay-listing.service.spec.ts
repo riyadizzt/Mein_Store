@@ -186,7 +186,7 @@ function mkBaselineSnapshot(): DbSnapshot {
         brand: 'Malak',
         basePrice: '49.99',
         salePrice: null,
-        category: { ebayCategoryId: '11483' },
+        category: { ebayCategoryId: '11483', slug: 'herren-hemden', parent: { slug: 'herren' } },
         translations: [
           { language: 'de', name: 'Herren Hemd', description: 'Beschreibung' },
         ],
@@ -319,6 +319,106 @@ describe('EbayListingService.publishOne — MV-1 happy path', () => {
         expect(result.externalListingId).toBe('EBAY-ALREADY')
       }
       expect(snap.listings['L1'].status).toBe('active')
+    })
+  })
+
+  it('Bug B: 25002 with German "bereits veröffentlicht" → success path', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const snap = mkBaselineSnapshot()
+      const prisma = mkPrisma(snap)
+      const svc = new EbayListingService(prisma, mkAuth(), mkAudit())
+      const { fetch } = mkRoutingFetch({
+        '/sell/inventory/v1/inventory_item/MAL-001-SCH-L': () => ({ status: 204, body: '' }),
+        '/sell/inventory/v1/offer?sku=MAL-001-SCH-L': () => ({
+          status: 200, body: JSON.stringify({ offers: [] }),
+        }),
+        '/sell/inventory/v1/offer': () => ({ status: 201, body: JSON.stringify({ offerId: 'O-2' }) }),
+        '/sell/inventory/v1/offer/O-2/publish': () => ({
+          status: 400,
+          body: JSON.stringify({ errors: [{ errorId: 25002, message: 'Das Angebot ist bereits veröffentlicht' }] }),
+        }),
+        '/sell/inventory/v1/offer/O-2': () => ({
+          status: 200, body: JSON.stringify({ listing: { listingId: 'EBAY-DE-OK' } }),
+        }),
+      })
+      svc.__setFetchForTests(fetch)
+      const result = await svc.publishOne('L1')
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.alreadyPublished).toBe(true)
+        expect(result.externalListingId).toBe('EBAY-DE-OK')
+      }
+      expect(snap.listings['L1'].status).toBe('active')
+    })
+  })
+
+  it('Bug B: 25002 with "Abteilung fehlt" message → recordFail rejected (not success)', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const snap = mkBaselineSnapshot()
+      const prisma = mkPrisma(snap)
+      const svc = new EbayListingService(prisma, mkAuth(), mkAudit())
+      const { fetch } = mkRoutingFetch({
+        '/sell/inventory/v1/inventory_item/MAL-001-SCH-L': () => ({ status: 204, body: '' }),
+        '/sell/inventory/v1/offer?sku=MAL-001-SCH-L': () => ({
+          status: 200, body: JSON.stringify({ offers: [] }),
+        }),
+        '/sell/inventory/v1/offer': () => ({ status: 201, body: JSON.stringify({ offerId: 'O-3' }) }),
+        '/sell/inventory/v1/offer/O-3/publish': () => ({
+          status: 400,
+          body: JSON.stringify({
+            errors: [{
+              errorId: 25002,
+              message: 'Das Artikelmerkmal Abteilung fehlt',
+              longMessage: 'Fügen Sie Abteilung zu diesem Angebot hinzu',
+              parameters: [{ name: '0', value: 'Abteilung' }],
+            }],
+          }),
+        }),
+      })
+      svc.__setFetchForTests(fetch)
+      const result = await svc.publishOne('L1')
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.errorCode).toBe('publish_rejected')
+        // syncError must contain the actual eBay message, NOT "already published"
+        expect(result.errorMessage).toContain('Abteilung')
+        expect(result.retryable).toBe(false)
+      }
+      // Bug A guard: row stays NOT active
+      expect(snap.listings['L1'].status).toBe('rejected')
+      expect(snap.listings['L1'].externalListingId ?? null).toBeNull()
+      expect(snap.listings['L1'].syncError).toContain('Abteilung')
+    })
+  })
+
+  it('Bug A: 25002 already-published but GET-fallback returns no listingId → rejected (not active)', async () => {
+    await withEnv(SANDBOX_ENV, async () => {
+      const snap = mkBaselineSnapshot()
+      const prisma = mkPrisma(snap)
+      const svc = new EbayListingService(prisma, mkAuth(), mkAudit())
+      const { fetch } = mkRoutingFetch({
+        '/sell/inventory/v1/inventory_item/MAL-001-SCH-L': () => ({ status: 204, body: '' }),
+        '/sell/inventory/v1/offer?sku=MAL-001-SCH-L': () => ({
+          status: 200, body: JSON.stringify({ offers: [] }),
+        }),
+        '/sell/inventory/v1/offer': () => ({ status: 201, body: JSON.stringify({ offerId: 'O-4' }) }),
+        '/sell/inventory/v1/offer/O-4/publish': () => ({
+          status: 400,
+          body: JSON.stringify({ errors: [{ errorId: 25002, message: 'already published' }] }),
+        }),
+        // GET fallback returns no listingId — pre-Bug-A this would have flipped to active anyway
+        '/sell/inventory/v1/offer/O-4': () => ({
+          status: 200, body: JSON.stringify({ listing: {} }),
+        }),
+      })
+      svc.__setFetchForTests(fetch)
+      const result = await svc.publishOne('L1')
+      expect(result.ok).toBe(false)
+      if (!result.ok) {
+        expect(result.errorCode).toBe('no_listing_id_after_publish')
+      }
+      expect(snap.listings['L1'].status).toBe('rejected')
+      expect(snap.listings['L1'].externalListingId ?? null).toBeNull()
     })
   })
 })
@@ -506,7 +606,7 @@ describe('EbayListingService.publishOne — MV-6 mapping-block errors', () => {
   it('missing_ebay_category_id → status=rejected, ZERO HTTP calls', async () => {
     await withEnv(SANDBOX_ENV, async () => {
       const snap = mkBaselineSnapshot()
-      snap.products['P1'].category = { ebayCategoryId: null }
+      snap.products['P1'].category = { ebayCategoryId: null, slug: 'herren-hemden', parent: { slug: 'herren' } }
       const prisma = mkPrisma(snap)
       const svc = new EbayListingService(prisma, mkAuth(), mkAudit())
       const { fetch, callLog } = mkRoutingFetch(happyPathRoutes())

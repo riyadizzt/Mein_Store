@@ -12,6 +12,7 @@ import {
   resolveBrand,
   resolveEan,
   buildAspects,
+  resolveDepartment,
   pickImages,
   pickTranslation,
   resolvePrice,
@@ -126,13 +127,13 @@ describe('resolveEan', () => {
 
 describe('buildAspects', () => {
   it('emits localized DE aspect keys (Marke/Herstellernummer)', () => {
-    expect(buildAspects('Malak Bekleidung', null, null, 'MAL-X-1')).toEqual({
+    expect(buildAspects('Malak Bekleidung', null, null, 'MAL-X-1', null)).toEqual({
       Marke: ['Malak Bekleidung'],
       Herstellernummer: ['MAL-X-1'],
     })
   })
   it('includes Farbe and Größe when present', () => {
-    expect(buildAspects('Malak', 'Schwarz', 'L', 'MAL-Y-2')).toEqual({
+    expect(buildAspects('Malak', 'Schwarz', 'L', 'MAL-Y-2', null)).toEqual({
       Marke: ['Malak'],
       Herstellernummer: ['MAL-Y-2'],
       Farbe: ['Schwarz'],
@@ -140,7 +141,7 @@ describe('buildAspects', () => {
     })
   })
   it('skips Farbe/Größe if empty/whitespace', () => {
-    expect(buildAspects('Malak', '   ', 'L', 'MAL-Z-3')).toEqual({
+    expect(buildAspects('Malak', '   ', 'L', 'MAL-Z-3', null)).toEqual({
       Marke: ['Malak'],
       Herstellernummer: ['MAL-Z-3'],
       Größe: ['L'],
@@ -149,21 +150,60 @@ describe('buildAspects', () => {
   it('Herstellernummer = the variant SKU (eBay needs unique Brand+MPN)', () => {
     // Regression guard: MPN must be unique-per-variant. eBay rejects
     // placeholder values like "Does Not Apply" when paired with a real Brand.
-    expect(buildAspects('Malak', null, null, 'MAL-HERREN-SCH-40').Herstellernummer)
+    expect(buildAspects('Malak', null, null, 'MAL-HERREN-SCH-40', null).Herstellernummer)
       .toEqual(['MAL-HERREN-SCH-40'])
   })
   it('two variants of the same product get distinct Herstellernummer', () => {
-    const a = buildAspects('Malak', 'Schwarz', '40', 'MAL-HERREN-SCH-40')
-    const b = buildAspects('Malak', 'Schwarz', '41', 'MAL-HERREN-SCH-41')
+    const a = buildAspects('Malak', 'Schwarz', '40', 'MAL-HERREN-SCH-40', null)
+    const b = buildAspects('Malak', 'Schwarz', '41', 'MAL-HERREN-SCH-41', null)
     expect(a.Herstellernummer).not.toEqual(b.Herstellernummer)
   })
   it('does NOT emit English aspect keys (Brand/MPN/Color/Size)', () => {
     // Regression guard: localized keys only on EBAY_DE.
-    const a = buildAspects('Malak', 'Schwarz', 'L', 'MAL-X-1')
+    const a = buildAspects('Malak', 'Schwarz', 'L', 'MAL-X-1', null)
     expect(a.Brand).toBeUndefined()
     expect(a.MPN).toBeUndefined()
     expect(a.Color).toBeUndefined()
     expect(a.Size).toBeUndefined()
+  })
+  it('emits Abteilung when department is provided', () => {
+    expect(buildAspects('Malak', 'Schwarz', '40', 'MAL-X-1', 'Herren')).toEqual({
+      Marke: ['Malak'],
+      Herstellernummer: ['MAL-X-1'],
+      Farbe: ['Schwarz'],
+      Größe: ['40'],
+      Abteilung: ['Herren'],
+    })
+  })
+  it('omits Abteilung when department is null', () => {
+    const a = buildAspects('Malak', null, null, 'MAL-X-1', null)
+    expect(a.Abteilung).toBeUndefined()
+  })
+  it('omits Abteilung when department is empty/whitespace', () => {
+    const a = buildAspects('Malak', null, null, 'MAL-X-1', '   ')
+    expect(a.Abteilung).toBeUndefined()
+  })
+})
+
+describe('resolveDepartment', () => {
+  it('maps known top-level slugs to DE labels', () => {
+    expect(resolveDepartment('herren')).toBe('Herren')
+    expect(resolveDepartment('damen')).toBe('Damen')
+    expect(resolveDepartment('jungen')).toBe('Jungen')
+    expect(resolveDepartment('maedchen')).toBe('Mädchen')
+    expect(resolveDepartment('baybay')).toBe('Baby')
+  })
+  it('returns null for unknown slug', () => {
+    expect(resolveDepartment('foobar')).toBeNull()
+  })
+  it('returns null for null / undefined / empty', () => {
+    expect(resolveDepartment(null)).toBeNull()
+    expect(resolveDepartment(undefined)).toBeNull()
+    expect(resolveDepartment('')).toBeNull()
+  })
+  it('is case-insensitive on input slug', () => {
+    expect(resolveDepartment('HERREN')).toBe('Herren')
+    expect(resolveDepartment('Damen')).toBe('Damen')
   })
 })
 
@@ -377,7 +417,7 @@ describe('buildInventoryItemPayload', () => {
     brand: 'Malak',
     basePrice: '49.99',
     salePrice: null,
-    category: { ebayCategoryId: '11483' },
+    category: { ebayCategoryId: '11483', departmentSlug: 'herren' },
     translations: [
       { language: 'de', name: 'Herren Hemd', description: 'Ein tolles Hemd' },
     ],
@@ -410,6 +450,7 @@ describe('buildInventoryItemPayload', () => {
       Herstellernummer: ['MAL-001-SCH-L'],
       Farbe: ['Schwarz'],
       Größe: ['L'],
+      Abteilung: ['Herren'],
     })
     expect(payload.product.imageUrls).toEqual(['https://cdn.malak.com/img1.jpg'])
     expect(payload.packageWeightAndSize.weight).toEqual({ value: 300, unit: 'GRAM' })
@@ -427,6 +468,36 @@ describe('buildInventoryItemPayload', () => {
       buildInventoryItemPayload(listing, product, { ...variant, weightGrams: null }, inventory),
     ).toThrow(MappingBlockError)
   })
+
+  it('includes top-level product.mpn = variant.sku (defense-in-depth)', () => {
+    const payload = buildInventoryItemPayload(listing, product, variant, inventory)
+    expect(payload.product.mpn).toBe('MAL-001-SCH-L')
+  })
+
+  it('throws MappingBlockError(department_unmapped) when category is null', () => {
+    const noCatProduct = { ...product, category: null }
+    try {
+      buildInventoryItemPayload(listing, noCatProduct, variant, inventory)
+      throw new Error('expected MappingBlockError')
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MappingBlockError)
+      expect(e.code).toBe('department_unmapped')
+    }
+  })
+
+  it('throws MappingBlockError(department_unmapped) for unknown departmentSlug', () => {
+    const badCatProduct = {
+      ...product,
+      category: { ebayCategoryId: '11483', departmentSlug: 'unknown-slug' },
+    }
+    try {
+      buildInventoryItemPayload(listing, badCatProduct, variant, inventory)
+      throw new Error('expected MappingBlockError')
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MappingBlockError)
+      expect(e.code).toBe('department_unmapped')
+    }
+  })
 })
 
 // ──────────────────────────────────────────────────────────────
@@ -441,7 +512,7 @@ describe('buildOfferPayload', () => {
     brand: 'Malak',
     basePrice: '49.99',
     salePrice: null,
-    category: { ebayCategoryId: '11483' },
+    category: { ebayCategoryId: '11483', departmentSlug: 'herren' },
     translations: [{ language: 'de', name: 'Hemd', description: 'Beschreibung' }],
     images: [{ url: 'a.jpg', colorName: 'Schwarz', isPrimary: true, sortOrder: 0 }],
   }
@@ -481,7 +552,7 @@ describe('buildOfferPayload', () => {
   it('throws MappingBlockError(missing_ebay_category_id) when category has no ebay id', () => {
     expect(() =>
       buildOfferPayload({
-        listing, product: { ...product, category: { ebayCategoryId: null } },
+        listing, product: { ...product, category: { ebayCategoryId: null, departmentSlug: 'herren' } },
         variant, inventoryRows: inventory, policyIds, merchantLocationKey: 'k',
       }),
     ).toThrow(MappingBlockError)
