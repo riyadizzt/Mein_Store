@@ -168,6 +168,28 @@ export class AdminProductsService {
       this.prisma.product.count({ where }),
     ])
 
+    // Bulk-lookup eBay-active variants (no N+1):
+    // ChannelProductListing rows for the loaded product set with
+    // channel='ebay' AND status IN ('pending','active'). Single
+    // indexed query — uses [variantId, channel] composite unique
+    // index from the C1 schema. Set-based lookup keeps the per-product
+    // check O(1). Skips when there are no variants on the page.
+    const allVariantIds = products.flatMap((p) => p.variants.map((v) => v.id))
+    const ebayActiveVariantIds = new Set<string>()
+    if (allVariantIds.length > 0) {
+      const ebayRows = await this.prisma.channelProductListing.findMany({
+        where: {
+          channel: 'ebay',
+          status: { in: ['pending', 'active'] },
+          variantId: { in: allVariantIds },
+        },
+        select: { variantId: true },
+      })
+      for (const r of ebayRows) {
+        if (r.variantId) ebayActiveVariantIds.add(r.variantId)
+      }
+    }
+
     // Enrich with computed fields
     let enriched = products.map((p) => {
       // Calculate total stock across all variants and warehouses
@@ -220,6 +242,11 @@ export class AdminProductsService {
         channelTiktok: (p as any).channelTiktok ?? false,
         channelGoogle: (p as any).channelGoogle ?? false,
         channelWhatsapp: (p as any).channelWhatsapp ?? false,
+        // True iff at least one active variant has a ChannelProductListing
+        // row with channel='ebay' AND status IN ('pending','active').
+        // Drives the eBay icon in the product list. Sidecar table —
+        // no Product.channelEbay boolean (intentional Phase-1 design).
+        hasActiveEbayListing: p.variants.some((v) => ebayActiveVariantIds.has(v.id)),
         deletedAt: p.deletedAt,
         createdAt: p.createdAt,
         translations: p.translations,
