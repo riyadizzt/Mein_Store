@@ -1,0 +1,38 @@
+{
+  "orderId": "13-12345-67890",
+  "legacyOrderId": "284567890123-1234567890012",
+  "creationDate": "2026-04-27T09:15:00.000Z",
+  "lastModifiedDate": "2026-04-27T09:18:42.000Z",
+  "orderFulfillmentStatus": "NOT_STARTED",
+  "orderPaymentStatus": "PAID",
+  "buyer": { "username": "anna_b_de2024" },
+  "pricingSummary": {
+    "priceSubtotal": { "value": "59.90", "currency": "EUR" },
+    "deliveryCost":  { "value": "4.99",  "currency": "EUR" },
+    "total":         { "value": "64.89", "currency": "EUR" }
+  },
+  "fulfillmentStartInstructions": [{
+    "shippingStep": {
+      "shipTo": {
+        "fullName": "Anna Becker",
+        "contactAddress": {
+          "addressLine1": "Hauptstrasse 42",
+          "city": "Berlin",
+          "postalCode": "10117",
+          "countryCode": "DE"
+        },
+        "email": "a3f9c2d1e8b7@members.ebay.com"
+      }
+    }
+  }],
+  "lineItems": [{
+    "lineItemId": "10099887766554",
+    "sku": "MAL-HERREN-SCH-40",
+    "legacyItemId": "284567890123",
+    "title": "Herren Schuhe Schwarz 40",
+    "quantity": 1,
+    "lineItemCost": { "value": "59.90", "currency": "EUR" },
+    "listingMarketplaceId": "EBAY_DE",
+    "purchaseMarketplaceId": "EBAY_DE"
+  }]
+}

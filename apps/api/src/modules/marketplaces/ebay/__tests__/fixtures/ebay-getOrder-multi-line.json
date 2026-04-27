@@ -1,0 +1,49 @@
+{
+  "orderId": "13-99999-11111",
+  "legacyOrderId": "284567890123-9999999900012",
+  "creationDate": "2026-04-27T10:00:00.000Z",
+  "lastModifiedDate": "2026-04-27T10:05:00.000Z",
+  "orderFulfillmentStatus": "NOT_STARTED",
+  "orderPaymentStatus": "PAID",
+  "buyer": { "username": "max_mustermann" },
+  "pricingSummary": {
+    "priceSubtotal": { "value": "99.80", "currency": "EUR" },
+    "deliveryCost":  { "value": "4.99",  "currency": "EUR" },
+    "total":         { "value": "104.79", "currency": "EUR" }
+  },
+  "fulfillmentStartInstructions": [{
+    "shippingStep": {
+      "shipTo": {
+        "fullName": "Max Mustermann",
+        "contactAddress": {
+          "addressLine1": "Goethestr. 5b",
+          "city": "Hamburg",
+          "postalCode": "20095",
+          "countryCode": "DE"
+        }
+      }
+    }
+  }],
+  "lineItems": [
+    {
+      "lineItemId": "10010000000001",
+      "sku": "MAL-HERREN-SCH-40",
+      "legacyItemId": "284567890123",
+      "title": "Herren Schuhe Schwarz 40",
+      "quantity": 1,
+      "lineItemCost": { "value": "59.90", "currency": "EUR" },
+      "listingMarketplaceId": "EBAY_DE",
+      "purchaseMarketplaceId": "EBAY_DE"
+    },
+    {
+      "lineItemId": "10010000000002",
+      "sku": "MAL-HERREN-WEI-42",
+      "legacyItemId": "284567890124",
+      "title": "Herren Schuhe Weiß 42",
+      "quantity": 1,
+      "lineItemCost": { "value": "39.90", "currency": "EUR" },
+      "listingMarketplaceId": "EBAY_DE",
+      "purchaseMarketplaceId": "EBAY_DE"
+    }
+  ]
+}
