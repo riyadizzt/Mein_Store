@@ -78,11 +78,6 @@ export function ProductEbaySection({ productId, productActive, basePrice, salePr
     return first?.channelPrice ?? null
   }, [activeRows])
 
-  // Keep priceDraft in sync with persisted value when not editing.
-  useEffect(() => {
-    if (!priceEditing) setPriceDraft(persistedChannelPrice ?? '')
-  }, [persistedChannelPrice, priceEditing])
-
   // Margin-warning check — mirror backend logic.
   const effectiveShopPrice = salePrice ?? basePrice
   const threshold = effectiveShopPrice * 1.15
@@ -101,13 +96,14 @@ export function ProductEbaySection({ productId, productActive, basePrice, salePr
       })).data
     },
     onSuccess: (d: any) => {
+      const priceMsg = priceDraft ? ` (€${priceDraft})` : ''
       setBanner({
         kind: 'success',
         text: d.enabled
           ? t3(locale,
-              `eBay aktiviert für ${d.affectedVariants} Variante(n). Klicke "Publish Pending" in der eBay-Karte um auf eBay zu pushen.`,
-              `eBay enabled for ${d.affectedVariants} variant(s). Click "Publish Pending" in the eBay card to push to eBay.`,
-              `تم تفعيل eBay لـ ${d.affectedVariants} متغير(ات). انقر "نشر المعلقة" في بطاقة eBay للنشر على eBay.`)
+              `eBay-Preis gespeichert${priceMsg} für ${d.affectedVariants} Variante(n). Klicke "Publish Pending" in der eBay-Karte um auf eBay zu pushen.`,
+              `eBay price saved${priceMsg} for ${d.affectedVariants} variant(s). Click "Publish Pending" in the eBay card to push to eBay.`,
+              `تم حفظ سعر eBay${priceMsg} لـ ${d.affectedVariants} متغير(ات). انقر "نشر المعلقة" في بطاقة eBay للنشر على eBay.`)
           : t3(locale,
               `eBay deaktiviert. Das Listing bleibt auf eBay aktiv bis zum nächsten Sync-Update (kommt in C11.5). Alternativ: Manuell im eBay Seller Hub delisten.`,
               `eBay disabled. The listing remains active on eBay until the next sync update (coming in C11.5). Alternative: Manually delist in eBay Seller Hub.`,
@@ -125,6 +121,20 @@ export function ProductEbaySection({ productId, productActive, basePrice, salePr
       })
     },
   })
+
+  // Keep priceDraft in sync with persisted value when not editing AND
+  // not currently mid-save. The mid-save guard prevents a flicker where
+  // onBlur (fired on Save-button mousedown) flips priceEditing→false a
+  // tick before the mutation resolves, which would briefly overwrite
+  // priceDraft with the stale persistedChannelPrice (still null in
+  // cache pre-refetch). Result was the typed value vanishing for
+  // ~50–500ms — looked like the save did nothing. Declared after
+  // toggleMut to avoid TDZ on the dependency reference.
+  useEffect(() => {
+    if (!priceEditing && !toggleMut.isPending) {
+      setPriceDraft(persistedChannelPrice ?? '')
+    }
+  }, [persistedChannelPrice, priceEditing, toggleMut.isPending])
 
   const statusChip = (status: string) => {
     const map: Record<string, { bg: string; text: string; label: { de: string; en: string; ar: string } }> = {
@@ -223,6 +233,10 @@ export function ProductEbaySection({ productId, productActive, basePrice, salePr
               type="button"
               size="sm"
               variant="outline"
+              // preventDefault on mousedown stops the input's onBlur from
+              // firing before our onClick — keeps priceEditing=true while
+              // the mutation runs (paired with the useEffect guard above).
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 toggleMut.mutate(true)
               }}
