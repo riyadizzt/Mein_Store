@@ -155,6 +155,9 @@ export class EbayOrderAdapter implements IOrderImporter {
         externalListingId: li.legacyItemId,
         quantity: li.quantity,
         unitPriceGross,
+        // Capture eBay's title as snapshot — preserves what the buyer
+        // saw at purchase. Falls back to SKU if eBay omits title (rare).
+        snapshotName: (li.title ?? '').trim() || li.sku!,
       }
     })
 

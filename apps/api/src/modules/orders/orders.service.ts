@@ -24,6 +24,15 @@ import { OrderNotFoundException } from './exceptions/order-not-found.exception'
 import { InvalidOrderStateException } from './exceptions/invalid-order-state.exception'
 import { DuplicateOrderException } from './exceptions/duplicate-order.exception'
 import { AdminMarketingService } from '../admin/services/admin-marketing.service'
+import {
+  MARKETPLACE_ORDER_EVENTS,
+  MarketplaceOrderImportedEvent,
+} from './events/marketplace-order-imported.event'
+import type {
+  MarketplaceOrderDraft,
+  MarketplaceBuyer,
+  MarketplaceAddress,
+} from '../marketplaces/core/types'
 
 // ── Zustandsmaschine ──────────────────────────────────────────
 
@@ -1040,6 +1049,326 @@ export class OrdersService {
 
     await this.prisma.order.update({ where: { id }, data: { deletedAt: new Date() } })
     this.logger.log(`[${correlationId}] Soft-Delete: ${order.orderNumber}`)
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // FOR MARKETPLACE ADAPTERS ONLY (C12.3)
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * **FOR MARKETPLACE ADAPTERS ONLY.** Do not call from HTTP controllers
+   * handling shop orders — use create() instead.
+   *
+   * Translates a MarketplaceOrderDraft (built by the C12.2 adapter from
+   * raw eBay/TikTok payload) into a local Order + Payment + History
+   * record. Fundamentally different from create() in five ways:
+   *
+   *   1. Order is ALREADY PAID → Payment row written with provider=
+   *      EBAY_MANAGED_PAYMENTS, status='captured', paidAt=now.
+   *      Stripe/PayPal flow bypassed entirely.
+   *
+   *   2. Order.status starts at 'confirmed' (not 'pending') because
+   *      the marketplace already settled payment. We're recording history.
+   *
+   *   3. Stock check is SOFT: mismatch produces an admin notification
+   *      via EventEmitter ('marketplace.oversell.drift'), NOT a throw.
+   *      The marketplace already promised the customer their item, we
+   *      MUST import the order even if local stock disagrees.
+   *
+   *   4. No Reuse-Window: every call creates a new Order row. Idempotency
+   *      is handled UPSTREAM by C12.1's PrismaMarketplaceImportStore.claim()
+   *      and by the partial-unique-index on orders(channel, channelOrderId).
+   *
+   *   5. Customer email is suppressed: emits MarketplaceOrderImportedEvent
+   *      (NOT OrderCreatedEvent) so the email-listener does not fire.
+   *      Reservation-listener is wired to BOTH events (additive @OnEvent
+   *      decorator on inventory.listener.ts).
+   *
+   * Throws:
+   *   - DuplicateOrderException(externalOrderId) on Prisma P2002 from the
+   *     orders(channel, channelOrderId) partial-unique-index. The C12.6
+   *     glue catches this and treats it as MarketplaceImportStore-skipped.
+   *   - Other Prisma errors bubble up untouched (caller logs / Sentry).
+   *
+   * Does NOT throw:
+   *   - InsufficientStockForMarketplaceOrderError — soft-stock-check
+   *     emits a notification instead.
+   */
+  async createFromMarketplace(
+    draft: MarketplaceOrderDraft,
+    buyer: MarketplaceBuyer,
+    marketplace: 'EBAY' | 'TIKTOK',
+    externalOrderId: string,
+    correlationId: string,
+  ): Promise<{ id: string; orderNumber: string }> {
+    // Step 1 — Stub-user (synthetic email, never backfill)
+    const stubUserId = await this.resolveOrCreateMarketplaceStubUser(buyer, correlationId)
+
+    // Step 2 — Address row under stub-user
+    const addressId = await this.resolveOrCreateMarketplaceAddress(stubUserId, draft.shippingAddress)
+
+    // Step 3 — Soft stock check + warehouse picker
+    const { warehouseByVariant } = await this.softStockCheckForMarketplace(
+      draft.lines,
+      externalOrderId,
+      correlationId,
+    )
+
+    // Step 4 — Order number (atomic counter, reuses existing helper)
+    const orderNumber = await this.generateOrderNumber()
+
+    // Step 5–7 — Atomic write
+    const reservationSessionId = randomUUID()
+    const channelValue = marketplace === 'EBAY' ? 'ebay' : 'tiktok'
+    // TODO Phase-3: derive provider/method from marketplace param when
+    // TIKTOK_MANAGED_PAYMENTS is added to the enums.
+    const paymentProvider = 'EBAY_MANAGED_PAYMENTS'
+    const paymentMethod = 'ebay_managed_payments'
+
+    let created: any
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const order = await tx.order.create({
+          data: {
+            orderNumber,
+            userId: stubUserId,
+            guestEmail: null,
+            shippingAddressId: addressId,
+            shippingAddressSnapshot: undefined,
+            status: 'confirmed',
+            channel: channelValue as any,
+            channelOrderId: externalOrderId,
+            subtotal: draft.subtotalGross,
+            shippingCost: draft.shippingCostGross,
+            taxAmount: this.computeVatFromGross(draft.totalGross),
+            discountAmount: this.computeMarketplaceDiscount(draft),
+            totalAmount: draft.totalGross,
+            currency: 'EUR',
+            couponCode: null,
+            fulfillmentWarehouseId: null,
+            notes: JSON.stringify({
+              marketplace,
+              externalOrderId,
+              ...(draft.notes ? { marketplaceNotes: draft.notes } : {}),
+              locale: buyer.locale ?? 'de',
+              buyerExternalRef: buyer.externalBuyerRef,
+            }),
+            items: {
+              create: draft.lines.map((line) => ({
+                variantId: line.variantId,
+                quantity: line.quantity,
+                unitPrice: line.unitPriceGross,
+                taxRate: 19,
+                totalPrice: (Number(line.unitPriceGross) * line.quantity).toFixed(2),
+                snapshotName: line.snapshotName,
+                snapshotSku: line.externalSkuRef,
+              })),
+            },
+          },
+          include: { items: true },
+        })
+
+        await tx.payment.create({
+          data: {
+            orderId: order.id,
+            provider: paymentProvider as any,
+            method: paymentMethod as any,
+            status: 'captured',
+            amount: draft.totalGross,
+            currency: 'EUR',
+            providerPaymentId: externalOrderId,
+            paidAt: new Date(),
+          },
+        })
+
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: order.id,
+            fromStatus: null,
+            toStatus: 'confirmed',
+            source: 'marketplace',
+            notes: `Imported from ${marketplace}: ${externalOrderId}`,
+            createdBy: 'marketplace-import',
+          },
+        })
+
+        return order
+      })
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new DuplicateOrderException(externalOrderId)
+      }
+      throw e
+    }
+
+    this.logger.log(
+      `[${correlationId}] Marketplace order imported: ${orderNumber} | marketplace=${marketplace} externalOrderId=${externalOrderId} total=€${draft.totalGross}`,
+    )
+
+    // Step 8 — Emit MarketplaceOrderImportedEvent (reservation listener fires)
+    await this.eventEmitter.emitAsync(
+      MARKETPLACE_ORDER_EVENTS.IMPORTED,
+      new MarketplaceOrderImportedEvent(
+        created.id,
+        created.orderNumber,
+        marketplace,
+        externalOrderId,
+        correlationId,
+        draft.lines.map((line) => ({
+          variantId: line.variantId,
+          warehouseId: warehouseByVariant.get(line.variantId) ?? '',
+          quantity: line.quantity,
+          reservationSessionId,
+        })),
+      ),
+    )
+
+    return { id: created.id, orderNumber }
+  }
+
+  // ── Private helpers (C12.3, marketplace-only) ─────────────────
+
+  private async resolveOrCreateMarketplaceStubUser(
+    buyer: MarketplaceBuyer,
+    correlationId: string,
+  ): Promise<string> {
+    const email = buyer.email.toLowerCase()
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    })
+    if (existing) return existing.id
+
+    const created = await this.prisma.user.create({
+      data: {
+        email,
+        firstName: buyer.firstName ?? '',
+        lastName: buyer.lastName ?? '',
+        role: 'customer',
+        preferredLang: (buyer.locale ?? 'de') as any,
+        isActive: true,
+        isVerified: false,
+        // No passwordHash → marketplace stub. Distinct from shop guest stubs
+        // by the synthetic email domain (@marketplace.local).
+      },
+      select: { id: true },
+    })
+    this.logger.log(
+      `[${correlationId}] Marketplace stub-user created: ${email} → ${created.id}`,
+    )
+    return created.id
+  }
+
+  private async resolveOrCreateMarketplaceAddress(
+    userId: string,
+    addr: MarketplaceAddress,
+  ): Promise<string> {
+    // Iteration-1: always create fresh address row. Future-optimization
+    // (find-by-equality dedup) deferred — pre-launch simplicity wins.
+    const created = await this.prisma.address.create({
+      data: {
+        userId,
+        firstName: addr.firstName,
+        lastName: addr.lastName,
+        street: addr.street,
+        houseNumber: addr.houseNumber,
+        addressLine2: addr.addressLine2 ?? null,
+        postalCode: addr.postalCode,
+        city: addr.city,
+        country: addr.country,
+        company: addr.company ?? null,
+      },
+      select: { id: true },
+    })
+    return created.id
+  }
+
+  /**
+   * Soft stock check + warehouse picker. NEVER throws — emits drift
+   * event for any line where total available < requested. Returns a
+   * map of variantId → warehouseId picked by the per-warehouse-max
+   * heuristic (mirrors create()'s auto-resolver).
+   */
+  private async softStockCheckForMarketplace(
+    lines: MarketplaceOrderDraft['lines'],
+    externalOrderId: string,
+    correlationId: string,
+  ): Promise<{ warehouseByVariant: Map<string, string> }> {
+    const warehouseByVariant = new Map<string, string>()
+    const drifts: Array<{
+      variantId: string
+      sku: string
+      requested: number
+      available: number
+    }> = []
+
+    for (const line of lines) {
+      const inventories = await this.prisma.inventory.findMany({
+        where: { variantId: line.variantId, warehouse: { isActive: true } },
+        include: { warehouse: { select: { id: true, isDefault: true } } },
+      })
+
+      let bestWarehouseId: string | null = null
+      let bestAvailable = 0
+      let totalAvailable = 0
+      for (const inv of inventories) {
+        const avail = inv.quantityOnHand - inv.quantityReserved
+        totalAvailable += avail
+        if (avail > bestAvailable) {
+          bestAvailable = avail
+          bestWarehouseId = inv.warehouse.id
+        }
+      }
+
+      // Pick best warehouse (most stock). If 0 available everywhere,
+      // fall back to default warehouse so reservation can still fire.
+      if (!bestWarehouseId) {
+        const defaultWh = await this.prisma.warehouse.findFirst({
+          where: { isDefault: true, isActive: true },
+          select: { id: true },
+        })
+        bestWarehouseId = defaultWh?.id ?? ''
+      }
+      warehouseByVariant.set(line.variantId, bestWarehouseId)
+
+      if (totalAvailable < line.quantity) {
+        drifts.push({
+          variantId: line.variantId,
+          sku: line.externalSkuRef,
+          requested: line.quantity,
+          available: totalAvailable,
+        })
+      }
+    }
+
+    if (drifts.length > 0) {
+      this.logger.warn(
+        `[${correlationId}] Marketplace oversell drift on ${externalOrderId}: ${JSON.stringify(drifts)}`,
+      )
+      this.eventEmitter.emit('marketplace.oversell.drift', {
+        externalOrderId,
+        lines: drifts,
+        correlationId,
+      })
+    }
+
+    return { warehouseByVariant }
+  }
+
+  /** VAT computation per German tax law: VAT = gross - (gross / 1.19). */
+  private computeVatFromGross(grossString: string): number {
+    const gross = Number(grossString)
+    const net = gross / 1.19
+    return Math.round((gross - net) * 100) / 100
+  }
+
+  /** Discount = subtotal + shipping - total (defensive, may be 0). */
+  private computeMarketplaceDiscount(draft: MarketplaceOrderDraft): number {
+    const sub = Number(draft.subtotalGross)
+    const ship = Number(draft.shippingCostGross)
+    const total = Number(draft.totalGross)
+    const diff = sub + ship - total
+    return diff > 0 ? Math.round(diff * 100) / 100 : 0
   }
 
   // ── Internal: Bestellnummer generieren ───────────────────────

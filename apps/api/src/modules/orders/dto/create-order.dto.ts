@@ -62,9 +62,9 @@ export class CreateOrderDto {
   @IsString()
   countryCode?: string
 
-  @ApiProperty({ required: false, enum: ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp'] })
+  @ApiProperty({ required: false, enum: ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay'] })
   @IsOptional()
-  @IsEnum(['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp'])
+  @IsEnum(['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay'])
   channel?: string
 
   @ApiProperty({ required: false, example: 'SOMMER20' })

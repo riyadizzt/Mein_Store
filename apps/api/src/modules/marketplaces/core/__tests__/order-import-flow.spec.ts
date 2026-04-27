@@ -113,7 +113,7 @@ class RecordingNotify implements MarketplaceNotificationPort {
 function validDraft(): MarketplaceOrderDraft {
   return {
     lines: [
-      { variantId: 'variant-uuid-1', externalSkuRef: 'SKU-1', quantity: 1, unitPriceGross: '49.99' },
+      { variantId: 'variant-uuid-1', externalSkuRef: 'SKU-1', quantity: 1, unitPriceGross: '49.99', snapshotName: 'Test Product' },
     ],
     shippingAddress: {
       firstName: 'Buyer', lastName: 'Test', street: 'Pannierstr.', houseNumber: '4',

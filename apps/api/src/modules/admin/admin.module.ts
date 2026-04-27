@@ -25,6 +25,7 @@ import { FinanceReportsService } from './services/finance-reports.service'
 import { AdminMarketingService } from './services/admin-marketing.service'
 import { NotificationService } from './services/notification.service'
 import { NotificationListener } from './listeners/notification.listener'
+import { MarketplaceOversellListener } from './listeners/marketplace-oversell.listener'
 import { NotificationSseController } from './sse/notification-sse.controller'
 import { DailySummaryCron } from './cron/daily-summary.cron'
 import { PaymentTimeoutCron } from './cron/payment-timeout.cron'
@@ -52,6 +53,7 @@ import { CronCrashAlertService } from './services/cron-crash-alert.service'
     AdminMarketingService,
     NotificationService,
     NotificationListener,
+    MarketplaceOversellListener,
     DailySummaryCron,
     ExpiryReminderCron,
     PaymentTimeoutCron,

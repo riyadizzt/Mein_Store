@@ -136,6 +136,13 @@ export interface MarketplaceOrderLine {
    * Frage 3 analysis).
    */
   unitPriceGross: string
+  /**
+   * Marketplace-side product title at the moment of purchase.
+   * Captured for OrderItem.snapshotName so we render what the buyer
+   * actually saw on the marketplace, not what our local product
+   * translation says today (titles can drift over time).
+   */
+  snapshotName: string
 }
 
 /**

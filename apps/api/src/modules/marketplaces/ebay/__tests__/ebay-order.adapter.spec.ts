@@ -114,6 +114,7 @@ describe('EbayOrderAdapter.mapToOrderDraft — happy path', () => {
       externalListingId: '284567890123',
       quantity: 1,
       unitPriceGross: '59.90',
+      snapshotName: 'Herren Schuhe Schwarz 40',
     })
     expect(draft.shippingAddress).toEqual({
       firstName: 'Anna',
@@ -129,6 +130,18 @@ describe('EbayOrderAdapter.mapToOrderDraft — happy path', () => {
     expect(draft.shippingCostGross).toBe('4.99')
     expect(draft.totalGross).toBe('64.89')
     expect(draft.currency).toBe('EUR')
+  })
+
+  it('falls back to SKU as snapshotName if eBay omits title', async () => {
+    const noTitle = clone(minimalFixture) as any
+    delete noTitle.lineItems[0].title
+    const prisma = buildPrisma()
+    ;(prisma.productVariant.findMany as AnyJest).mockResolvedValue([
+      { id: 'variant-uuid-1', sku: 'MAL-HERREN-SCH-40' },
+    ])
+    const adapter = buildAdapter(prisma)
+    const draft = await adapter.mapToOrderDraft(buildEvent(noTitle), buildBuyer())
+    expect(draft.lines[0].snapshotName).toBe('MAL-HERREN-SCH-40')
   })
 })
 

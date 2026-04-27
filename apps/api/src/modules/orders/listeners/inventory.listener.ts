@@ -7,6 +7,10 @@ import {
   OrderCancelledEvent,
   OrderConfirmedEvent,
 } from '../events/order.events'
+import {
+  MARKETPLACE_ORDER_EVENTS,
+  MarketplaceOrderImportedEvent,
+} from '../events/marketplace-order-imported.event'
 
 @Injectable()
 export class InventoryListener {
@@ -34,7 +38,8 @@ export class InventoryListener {
   // returned to emitAsync, which awaits it. By the time emitAsync
   // returns, every reservation row is in the DB.
   @OnEvent(ORDER_EVENTS.CREATED)
-  async handleOrderCreated(event: OrderCreatedEvent): Promise<string[]> {
+  @OnEvent(MARKETPLACE_ORDER_EVENTS.IMPORTED)
+  async handleOrderCreated(event: OrderCreatedEvent | MarketplaceOrderImportedEvent): Promise<string[]> {
     const { orderId, orderNumber, correlationId, items } = event
     const reservationIds: string[] = []
 
