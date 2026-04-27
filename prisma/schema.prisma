@@ -108,6 +108,7 @@ enum PaymentMethod {
   cash_on_delivery
   vorkasse
   sumup
+  ebay_managed_payments
 }
 
 enum ShipmentStatus {
