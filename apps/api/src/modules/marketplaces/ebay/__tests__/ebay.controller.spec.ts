@@ -9,7 +9,7 @@
  * the mutation fires onError.
  */
 
-import { ForbiddenException, HttpException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, HttpException } from '@nestjs/common'
 import { validate } from 'class-validator'
 import { plainToInstance } from 'class-transformer'
 import { EbayController, SetPolicyIdsDto } from '../ebay.controller'
@@ -19,12 +19,13 @@ import {
 } from '../ebay-auth.service'
 
 // Minimal typed stubs — direct instantiate, no NestJS DI.
-// Constructor order: (auth, sandbox, audit, listing).
+// Constructor order: (auth, sandbox, audit, listing, merchantLocation).
 function makeController(overrides: {
   bootstrap?: jest.Mock
   publish?: jest.Mock
   authPatch?: jest.Mock
   audit?: { log: jest.Mock }
+  merchantLocation?: jest.Mock
 } = {}) {
   // Default audit.log returns a resolved promise so the controller's
   // `.catch(() => {})` chain doesn't crash on undefined.
@@ -33,8 +34,18 @@ function makeController(overrides: {
   const auth = { patchSettings: overrides.authPatch ?? jest.fn().mockResolvedValue(undefined) } as any
   const sandbox = { bootstrapPolicies: overrides.bootstrap ?? jest.fn() } as any
   const listing = { publishPending: overrides.publish ?? jest.fn() } as any
-  const ctrl = new EbayController(auth, sandbox, audit as any, listing)
-  return Object.assign(ctrl, { __testHooks: { auth, audit } })
+  // Sub-Task 2: setupMerchantLocation calls merchantLocation.ensureAutonomously.
+  const merchantLocation = {
+    ensureAutonomously:
+      overrides.merchantLocation ??
+      jest.fn().mockResolvedValue({
+        locationKey: 'malak-lager-berlin',
+        alreadyExisted: false,
+        wasDisabled: false,
+      }),
+  } as any
+  const ctrl = new EbayController(auth, sandbox, audit as any, listing, merchantLocation)
+  return Object.assign(ctrl, { __testHooks: { auth, audit, merchantLocation } })
 }
 
 const req = { user: { id: 'admin-1' } } as any
@@ -315,5 +326,109 @@ describe('SetPolicyIdsDto — validation contract (Sub-Task 1 regression)', () =
     })
     expect(errors.length).toBeGreaterThan(0)
     expect(errors[0].property).toBe('fulfillmentPolicyId')
+  })
+})
+
+describe('EbayController.setupMerchantLocation (Sub-Task 2)', () => {
+  const reqWithIp = { user: { id: 'admin-7' }, ip: '10.0.0.1' } as any
+  const ORIG_ENV = { ...process.env }
+  afterEach(() => {
+    process.env = { ...ORIG_ENV }
+  })
+
+  it('production happy path: calls ensureAutonomously + audits + returns merged result', async () => {
+    process.env.EBAY_ENV = 'production'
+    const merchantLocation = jest.fn().mockResolvedValue({
+      locationKey: 'malak-lager-berlin',
+      alreadyExisted: false,
+      wasDisabled: false,
+    })
+    const ctrl = makeController({ merchantLocation })
+    const hooks = (ctrl as any).__testHooks
+
+    const result = await ctrl.setupMerchantLocation(reqWithIp)
+
+    expect(result).toEqual({
+      ok: true,
+      locationKey: 'malak-lager-berlin',
+      alreadyExisted: false,
+      wasDisabled: false,
+    })
+    expect(hooks.merchantLocation.ensureAutonomously).toHaveBeenCalledTimes(1)
+    expect(hooks.audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'EBAY_MERCHANT_LOCATION_ENSURED',
+        entityType: 'sales_channel_config',
+        entityId: 'ebay',
+        adminId: 'admin-7',
+        ipAddress: '10.0.0.1',
+        changes: {
+          after: expect.objectContaining({
+            locationKey: 'malak-lager-berlin',
+            alreadyExisted: false,
+            wasDisabled: false,
+          }),
+        },
+      }),
+    )
+  })
+
+  it('sandbox-mode → 400 BadRequestException with 3-lang message; service NOT called', async () => {
+    process.env.EBAY_ENV = 'sandbox'
+    const ctrl = makeController()
+    const hooks = (ctrl as any).__testHooks
+
+    let caught: any = null
+    try {
+      await ctrl.setupMerchantLocation(reqWithIp)
+    } catch (e) {
+      caught = e
+    }
+
+    expect(caught).toBeInstanceOf(BadRequestException)
+    expect(caught.getStatus()).toBe(400)
+    const response: any = caught.getResponse()
+    expect(response.error).toBe('SandboxModeNotAllowed')
+    expect(response.message).toEqual({
+      de: expect.any(String),
+      en: expect.any(String),
+      ar: expect.any(String),
+    })
+    expect(hooks.merchantLocation.ensureAutonomously).not.toHaveBeenCalled()
+    expect(hooks.audit.log).not.toHaveBeenCalled()
+  })
+
+  it('EbayNotConnectedError → 403 ForbiddenException with 3-lang message', async () => {
+    process.env.EBAY_ENV = 'production'
+    const err = new EbayNotConnectedError()
+    const merchantLocation = jest.fn().mockRejectedValue(err)
+    const ctrl = makeController({ merchantLocation })
+
+    let caught: any = null
+    try {
+      await ctrl.setupMerchantLocation(reqWithIp)
+    } catch (e) {
+      caught = e
+    }
+
+    expect(caught).toBeInstanceOf(ForbiddenException)
+    expect(caught.getStatus()).toBe(403)
+    const response: any = caught.getResponse()
+    expect(response.error).toBe(err.code)
+    expect(response.message).toEqual({
+      de: expect.any(String),
+      en: expect.any(String),
+      ar: expect.any(String),
+    })
+  })
+
+  it('audit-log failure does NOT block the success response', async () => {
+    process.env.EBAY_ENV = 'production'
+    const audit = { log: jest.fn().mockRejectedValue(new Error('audit DB down')) }
+    const ctrl = makeController({ audit })
+
+    await expect(ctrl.setupMerchantLocation(reqWithIp)).resolves.toEqual(
+      expect.objectContaining({ ok: true, locationKey: 'malak-lager-berlin' }),
+    )
   })
 })

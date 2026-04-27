@@ -39,6 +39,7 @@ import {
   EbayNotConnectedError,
   EbayRefreshRevokedError,
 } from './ebay-auth.service'
+import { EbayMerchantLocationService } from './ebay-merchant-location.service'
 import { EbaySandboxPoliciesService } from './ebay-sandbox-policies.service'
 import { EbayListingService } from './ebay-listing.service'
 import { resolveEbayMode } from './ebay-env'
@@ -125,6 +126,7 @@ export class EbayController {
     private readonly sandbox: EbaySandboxPoliciesService,
     private readonly audit: AuditService,
     private readonly listing: EbayListingService,
+    private readonly merchantLocation: EbayMerchantLocationService,
   ) {}
 
   @Get('status')
@@ -322,6 +324,66 @@ export class EbayController {
         /* audit must never block business success */
       })
     return { ok: true }
+  }
+
+  /**
+   * Sub-Task 2: Production-merchant-location setup. Sandbox runs the
+   * same service implicitly via bootstrap-sandbox-policies; production
+   * has no equivalent batch entrypoint, so this exposes the standalone
+   * wrapper directly.
+   *
+   * Sandbox-mode → 400 (use bootstrap instead).
+   * Production-mode → ensureAutonomously() (idempotent: GET → POST →
+   * ENABLE-if-disabled), persists merchantLocationKey to settings JSON.
+   */
+  @Post('merchant-location')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async setupMerchantLocation(@Req() req: Request) {
+    const adminId = (req as any).user?.id ?? 'system'
+    const ipAddress = req.ip
+    const mode = resolveEbayMode()
+    if (mode !== 'production') {
+      throw new BadRequestException({
+        error: 'SandboxModeNotAllowed',
+        message: {
+          de: 'In Sandbox wird Merchant-Location automatisch via "Sandbox-Policies anlegen" erstellt — bitte diesen Button verwenden.',
+          en: 'In Sandbox, the merchant location is created automatically via "Bootstrap sandbox policies" — please use that button.',
+          ar: 'في Sandbox، يتم إنشاء موقع التاجر تلقائيًا عبر "إعداد سياسات Sandbox" — يرجى استخدام هذا الزر.',
+        },
+      })
+    }
+
+    try {
+      const result = await this.merchantLocation.ensureAutonomously()
+      await this.audit
+        .log({
+          adminId,
+          action: 'EBAY_MERCHANT_LOCATION_ENSURED',
+          entityType: 'sales_channel_config',
+          entityId: 'ebay',
+          ipAddress,
+          changes: {
+            after: {
+              locationKey: result.locationKey,
+              alreadyExisted: result.alreadyExisted,
+              wasDisabled: result.wasDisabled,
+            },
+          },
+        })
+        .catch(() => {
+          /* never block business success on audit */
+        })
+      return { ok: true, ...result }
+    } catch (e: any) {
+      if (e instanceof EbayNotConnectedError || e instanceof EbayRefreshRevokedError) {
+        throw new ForbiddenException({
+          error: e.code,
+          message: e.message3,
+        })
+      }
+      throw e
+    }
   }
 
   /**

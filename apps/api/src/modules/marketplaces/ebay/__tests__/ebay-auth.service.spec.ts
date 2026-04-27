@@ -327,6 +327,33 @@ describe('getStatus — admin UI probe', () => {
       }
     }
   })
+
+  // Sub-Task 2: getStatus must surface settings.merchantLocationKey so
+  // the admin StatusTile can render whether the production location
+  // setup has been completed.
+  it('projects merchantLocationKey from settings JSON', async () => {
+    await withEnv(EBAY_ENV_VARS, async () => {
+      const prisma = mkPrisma({
+        isActive: true,
+        settings: { merchantLocationKey: 'malak-lager-berlin' } as any,
+      })
+      const svc = new EbayAuthService(prisma as any)
+      const status = await svc.getStatus()
+      expect(status.merchantLocationKey).toBe('malak-lager-berlin')
+    })
+  })
+
+  it('returns merchantLocationKey=null when not yet set in settings', async () => {
+    await withEnv(EBAY_ENV_VARS, async () => {
+      const prisma = mkPrisma({
+        isActive: true,
+        settings: { policyIds: { fulfillmentPolicyId: '111' } } as any,
+      })
+      const svc = new EbayAuthService(prisma as any)
+      const status = await svc.getStatus()
+      expect(status.merchantLocationKey).toBeNull()
+    })
+  })
 })
 
 describe('disconnect', () => {

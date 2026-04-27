@@ -74,6 +74,10 @@ export interface EbayConnectionStatus {
     returnPolicyId?: string
     paymentPolicyId?: string
   }
+  // Sub-Task 2: surfaced so the admin StatusTile can render whether
+  // setup-merchant-location has been clicked. Drawn from the same
+  // settings.merchantLocationKey that the listing-service consumes.
+  merchantLocationKey?: string | null
   missingEnvVars: string[]
   /**
    * If the master key env var is absent, encryption helper is
@@ -384,6 +388,7 @@ export class EbayAuthService {
     const settings = (row?.settings ?? {}) as {
       policyIds?: EbayConnectionStatus['policyIds']
       externalId?: string
+      merchantLocationKey?: string
     }
 
     return {
@@ -394,6 +399,7 @@ export class EbayAuthService {
       hasRefreshToken: Boolean(row?.refreshToken),
       externalId: row?.externalId ?? settings.externalId ?? null,
       policyIds: settings.policyIds,
+      merchantLocationKey: settings.merchantLocationKey ?? null,
       missingEnvVars: missing,
       masterKeyMissing,
     }

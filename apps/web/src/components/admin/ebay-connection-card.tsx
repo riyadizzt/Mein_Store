@@ -38,6 +38,7 @@ import {
   Upload,
   ChevronDown,
   ChevronUp,
+  MapPin,
 } from 'lucide-react'
 
 const t3 = (l: string, d: string, e: string, a: string) =>
@@ -74,6 +75,10 @@ interface Status {
     returnPolicyId?: string
     paymentPolicyId?: string
   }
+  // Sub-Task 2: surfaced from settings.merchantLocationKey for the
+  // production StatusTile + as a downstream signal that publish-flow
+  // is ready (Listing-Service bails with bootstrap_incomplete otherwise).
+  merchantLocationKey?: string | null
   missingEnvVars: string[]
   masterKeyMissing: boolean
 }
@@ -219,6 +224,53 @@ export function EbayConnectionCard() {
         text:
           (typeof msg === 'object' ? msg[locale] ?? msg.de : msg) ??
           t3(locale, 'Policy-IDs konnten nicht gespeichert werden', 'Could not save policy IDs', 'تعذر حفظ معرّفات السياسات'),
+      })
+    },
+  })
+
+  // Sub-Task 2: production merchant-location setup. Sandbox path is
+  // handled by the bootstrap-mutation; production has no equivalent
+  // batch step so this is its own button. Idempotent: GET-first on
+  // eBay's side, so multiple clicks are safe.
+  const setupMerchantLocationMutation = useMutation({
+    mutationFn: async () =>
+      (await api.post('/admin/marketplaces/ebay/merchant-location', {})).data as {
+        ok: true
+        locationKey: string
+        alreadyExisted: boolean
+        wasDisabled: boolean
+      },
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'marketplaces', 'ebay'] })
+      setBanner({
+        kind: 'success',
+        text: d.alreadyExisted
+          ? t3(
+              locale,
+              `Merchant-Location bereits eingerichtet (${d.locationKey}).`,
+              `Merchant location already set up (${d.locationKey}).`,
+              `موقع التاجر مُعد بالفعل (${d.locationKey}).`,
+            )
+          : t3(
+              locale,
+              `Merchant-Location erfolgreich erstellt: ${d.locationKey}.`,
+              `Merchant location created: ${d.locationKey}.`,
+              `تم إنشاء موقع التاجر بنجاح: ${d.locationKey}.`,
+            ),
+      })
+    },
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message ?? e?.message
+      setBanner({
+        kind: 'error',
+        text:
+          (typeof msg === 'object' ? msg[locale] ?? msg.de : msg) ??
+          t3(
+            locale,
+            'Merchant-Location konnte nicht eingerichtet werden',
+            'Could not set up merchant location',
+            'تعذر إعداد موقع التاجر',
+          ),
       })
     },
   })
@@ -393,6 +445,12 @@ export function EbayConnectionCard() {
           tone={s.policyIds?.returnPolicyId ? 'good' : 'muted'}
           mono
         />
+        <StatusTile
+          label={t3(locale, 'Merchant-Location', 'Merchant location', 'موقع التاجر')}
+          value={s.merchantLocationKey ?? '—'}
+          tone={s.merchantLocationKey ? 'good' : 'muted'}
+          mono
+        />
       </div>
 
       {/* Sub-Task 1: Production-Policies-UI.
@@ -474,6 +532,25 @@ export function EbayConnectionCard() {
           >
             {setPolicyIdsMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             {t3(locale, 'Policy-IDs speichern', 'Save policy IDs', 'حفظ المعرّفات')}
+          </Button>
+
+          {/* Sub-Task 2: Production merchant-location setup. Vertical
+              stack under the policy-IDs save-button — same flow:
+              configure once, idempotent on re-click. Listing-Service
+              reads settings.merchantLocationKey before every publish. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setupMerchantLocationMutation.mutate()}
+            disabled={setupMerchantLocationMutation.isPending}
+            className="mt-3 gap-2"
+          >
+            {setupMerchantLocationMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <MapPin className="h-4 w-4" />
+            )}
+            {t3(locale, 'Merchant-Location einrichten', 'Setup merchant location', 'إعداد موقع التاجر')}
           </Button>
         </div>
       )}
