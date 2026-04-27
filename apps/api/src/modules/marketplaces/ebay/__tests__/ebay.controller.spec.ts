@@ -21,12 +21,18 @@ import {
 function makeController(overrides: {
   bootstrap?: jest.Mock
   publish?: jest.Mock
+  authPatch?: jest.Mock
+  audit?: { log: jest.Mock }
 } = {}) {
-  const audit = { log: jest.fn() }
-  const auth = {} as any
+  // Default audit.log returns a resolved promise so the controller's
+  // `.catch(() => {})` chain doesn't crash on undefined.
+  const audit = overrides.audit ?? { log: jest.fn().mockResolvedValue(undefined) }
+  // Sub-Task 1: setPolicyIds calls auth.patchSettings — stub it.
+  const auth = { patchSettings: overrides.authPatch ?? jest.fn().mockResolvedValue(undefined) } as any
   const sandbox = { bootstrapPolicies: overrides.bootstrap ?? jest.fn() } as any
   const listing = { publishPending: overrides.publish ?? jest.fn() } as any
-  return new EbayController(auth, sandbox, audit as any, listing)
+  const ctrl = new EbayController(auth, sandbox, audit as any, listing)
+  return Object.assign(ctrl, { __testHooks: { auth, audit } })
 }
 
 const req = { user: { id: 'admin-1' } } as any
@@ -136,5 +142,113 @@ describe('EbayController — error envelope contract', () => {
       const ctrl = makeController({ publish: jest.fn().mockResolvedValue(summary) })
       await expect(ctrl.publishPending({}, req)).resolves.toEqual(summary)
     })
+  })
+})
+
+describe('EbayController.setPolicyIds (Sub-Task 1 — production policies UI)', () => {
+  const reqWithIp = { user: { id: 'admin-7' }, ip: '10.0.0.1' } as any
+
+  it('persists all three policy IDs via auth.patchSettings + writes audit row', async () => {
+    const ctrl = makeController()
+    const hooks = (ctrl as any).__testHooks
+    const dto = {
+      fulfillmentPolicyId: '111111',
+      returnPolicyId: '222222',
+      paymentPolicyId: '333333',
+    }
+
+    const result = await ctrl.setPolicyIds(dto as any, reqWithIp)
+
+    expect(result).toEqual({ ok: true })
+    expect(hooks.auth.patchSettings).toHaveBeenCalledWith({
+      policyIds: {
+        fulfillmentPolicyId: '111111',
+        returnPolicyId: '222222',
+        paymentPolicyId: '333333',
+      },
+    })
+    expect(hooks.audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 'admin-7',
+        action: 'EBAY_POLICY_IDS_UPDATED',
+        entityType: 'sales_channel_config',
+        entityId: 'ebay',
+        ipAddress: '10.0.0.1',
+        changes: {
+          after: {
+            policyIds: {
+              fulfillmentPolicyId: '111111',
+              returnPolicyId: '222222',
+              paymentPolicyId: '333333',
+            },
+          },
+        },
+      }),
+    )
+  })
+
+  it('passes through optional merchantLocationKey when provided', async () => {
+    const ctrl = makeController()
+    const hooks = (ctrl as any).__testHooks
+    const dto = {
+      fulfillmentPolicyId: '111111',
+      returnPolicyId: '222222',
+      paymentPolicyId: '333333',
+      merchantLocationKey: 'malak-lager-berlin',
+    }
+    await ctrl.setPolicyIds(dto as any, reqWithIp)
+    expect(hooks.auth.patchSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        policyIds: expect.any(Object),
+        merchantLocationKey: 'malak-lager-berlin',
+      }),
+    )
+  })
+
+  it('omits merchantLocationKey from patch when not provided in DTO', async () => {
+    const ctrl = makeController()
+    const hooks = (ctrl as any).__testHooks
+    await ctrl.setPolicyIds(
+      {
+        fulfillmentPolicyId: '111111',
+        returnPolicyId: '222222',
+        paymentPolicyId: '333333',
+      } as any,
+      reqWithIp,
+    )
+    const patchArg = hooks.auth.patchSettings.mock.calls[0][0]
+    expect(Object.keys(patchArg)).not.toContain('merchantLocationKey')
+    expect(patchArg.policyIds).toBeDefined()
+  })
+
+  it('audit-log failure does NOT block the success response', async () => {
+    const audit = { log: jest.fn().mockRejectedValue(new Error('audit DB down')) }
+    const ctrl = makeController({ audit })
+    await expect(
+      ctrl.setPolicyIds(
+        {
+          fulfillmentPolicyId: '111111',
+          returnPolicyId: '222222',
+          paymentPolicyId: '333333',
+        } as any,
+        reqWithIp,
+      ),
+    ).resolves.toEqual({ ok: true })
+  })
+
+  it('falls back to "system" adminId when req.user is missing', async () => {
+    const ctrl = makeController()
+    const hooks = (ctrl as any).__testHooks
+    await ctrl.setPolicyIds(
+      {
+        fulfillmentPolicyId: '111111',
+        returnPolicyId: '222222',
+        paymentPolicyId: '333333',
+      } as any,
+      { ip: '127.0.0.1' } as any,
+    )
+    expect(hooks.audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ adminId: 'system' }),
+    )
   })
 })

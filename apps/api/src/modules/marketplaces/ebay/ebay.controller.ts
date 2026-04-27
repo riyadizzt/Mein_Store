@@ -43,6 +43,7 @@ import { EbaySandboxPoliciesService } from './ebay-sandbox-policies.service'
 import { EbayListingService } from './ebay-listing.service'
 import { resolveEbayMode } from './ebay-env'
 import { randomBytes } from 'node:crypto'
+import { IsString, IsOptional, Matches, MaxLength, MinLength } from 'class-validator'
 
 // In-memory state store for OAuth state tokens. Phase-2-only
 // mechanism — low volume, single-admin-at-a-time, 10-minute TTL.
@@ -65,6 +66,39 @@ function consumeState(token: string): boolean {
   if (!ts) return false
   stateStore.delete(token)
   return Date.now() - ts <= STATE_TTL_MS
+}
+
+// Sub-Task 1 (Production-Policies-UI): admin pastes the 3 policy
+// IDs (and optional merchant-location-key) from the eBay Seller Hub
+// into our settings JSON. Sandbox uses the bootstrap-service; this
+// DTO is exclusively for the manual production path.
+class SetPolicyIdsDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  @Matches(/^\d+$/, { message: 'fulfillmentPolicyId must be numeric' })
+  fulfillmentPolicyId!: string
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  @Matches(/^\d+$/, { message: 'returnPolicyId must be numeric' })
+  returnPolicyId!: string
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  @Matches(/^\d+$/, { message: 'paymentPolicyId must be numeric' })
+  paymentPolicyId!: string
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(36)
+  @Matches(/^[A-Za-z0-9_-]+$/, {
+    message: 'merchantLocationKey must be alphanumeric/underscore/hyphen only',
+  })
+  merchantLocationKey?: string
 }
 
 // Guards are applied PER METHOD, not at the class level. The
@@ -236,6 +270,49 @@ export class EbayController {
       }
       throw e
     }
+  }
+
+  /**
+   * Sub-Task 1 (Production-Policies-UI): admin manually pastes the 3
+   * production policy IDs (created via Seller Hub) into our settings
+   * JSON. Sandbox keeps the bootstrap-service; this is the production
+   * counterpart per the C10 user-decision (no API-write to production
+   * seller account).
+   *
+   * Optional merchantLocationKey: Sub-Task 2 will fill this via the
+   * production merchant-location service, but admins may also paste
+   * it here for manual control.
+   */
+  @Post('policy-ids')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async setPolicyIds(@Body() dto: SetPolicyIdsDto, @Req() req: Request) {
+    const adminId = (req as any).user?.id ?? 'system'
+    const ipAddress = req.ip
+    const patch: Record<string, unknown> = {
+      policyIds: {
+        fulfillmentPolicyId: dto.fulfillmentPolicyId,
+        returnPolicyId: dto.returnPolicyId,
+        paymentPolicyId: dto.paymentPolicyId,
+      },
+    }
+    if (dto.merchantLocationKey) {
+      patch.merchantLocationKey = dto.merchantLocationKey
+    }
+    await this.auth.patchSettings(patch)
+    await this.audit
+      .log({
+        adminId,
+        action: 'EBAY_POLICY_IDS_UPDATED',
+        entityType: 'sales_channel_config',
+        entityId: 'ebay',
+        ipAddress,
+        changes: { after: patch },
+      })
+      .catch(() => {
+        /* audit must never block business success */
+      })
+    return { ok: true }
   }
 
   /**

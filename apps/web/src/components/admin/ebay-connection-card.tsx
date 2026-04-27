@@ -20,7 +20,7 @@
  *     JWT, credentials:'include').
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocale } from 'next-intl'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
@@ -88,6 +88,18 @@ export function EbayConnectionCard() {
   const [publishSummary, setPublishSummary] = useState<PublishPendingSummary | null>(null)
   const [summaryExpanded, setSummaryExpanded] = useState(false)
 
+  // Sub-Task 1: production policy-IDs form. Pre-filled once on first
+  // status load via useRef-guard — subsequent 60s refetches don't
+  // overwrite the admin's draft. Admin manually copies IDs from the
+  // eBay Seller Hub (production-policies were a manual step per C10).
+  const [policyForm, setPolicyForm] = useState({
+    fulfillmentPolicyId: '',
+    returnPolicyId: '',
+    paymentPolicyId: '',
+    merchantLocationKey: '',
+  })
+  const policyFormPrefilled = useRef(false)
+
   // Surface ?ebay=connected / ?ebay=error from OAuth redirect.
   useEffect(() => {
     const flag = searchParams.get('ebay')
@@ -121,6 +133,20 @@ export function EbayConnectionCard() {
     queryFn: async () => (await api.get('/admin/marketplaces/ebay/status')).data as Status,
     refetchInterval: 60_000,
   })
+
+  // One-time pre-fill of the policy-IDs form on first non-empty status.
+  // Guards against the 60s refetch overwriting the admin's draft.
+  useEffect(() => {
+    if (policyFormPrefilled.current) return
+    if (!status?.policyIds) return
+    setPolicyForm((prev) => ({
+      ...prev,
+      fulfillmentPolicyId: status.policyIds?.fulfillmentPolicyId ?? '',
+      returnPolicyId: status.policyIds?.returnPolicyId ?? '',
+      paymentPolicyId: status.policyIds?.paymentPolicyId ?? '',
+    }))
+    policyFormPrefilled.current = true
+  }, [status?.policyIds])
 
   const connectMutation = useMutation({
     mutationFn: async () => (await api.post('/admin/marketplaces/ebay/connect')).data as { url: string },
@@ -171,6 +197,28 @@ export function EbayConnectionCard() {
         text:
           (typeof msg === 'object' ? msg[locale] ?? msg.de : msg) ??
           t3(locale, 'Policy-Bootstrap fehlgeschlagen', 'Policy bootstrap failed', 'فشل إعداد السياسات'),
+      })
+    },
+  })
+
+  // Sub-Task 1: persist manually-entered production policy IDs.
+  const setPolicyIdsMutation = useMutation({
+    mutationFn: async (body: typeof policyForm) =>
+      (await api.post('/admin/marketplaces/ebay/policy-ids', body)).data as { ok: true },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'marketplaces', 'ebay'] })
+      setBanner({
+        kind: 'success',
+        text: t3(locale, 'Policy-IDs gespeichert.', 'Policy IDs saved.', 'تم حفظ معرّفات السياسات.'),
+      })
+    },
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message ?? e?.message
+      setBanner({
+        kind: 'error',
+        text:
+          (typeof msg === 'object' ? msg[locale] ?? msg.de : msg) ??
+          t3(locale, 'Policy-IDs konnten nicht gespeichert werden', 'Could not save policy IDs', 'تعذر حفظ معرّفات السياسات'),
       })
     },
   })
@@ -346,6 +394,89 @@ export function EbayConnectionCard() {
           mono
         />
       </div>
+
+      {/* Sub-Task 1: Production-Policies-UI.
+          Rendered only when connected + production mode. Sandbox keeps
+          the existing bootstrap-button as the right answer because the
+          sandbox-bootstrap-service is sandbox-only by C10 design. */}
+      {s.connected && s.mode === 'production' && (
+        <div className="border-t pt-4 space-y-3">
+          <div>
+            <h4 className="text-sm font-semibold mb-1">
+              {t3(locale, 'Production Policy-IDs', 'Production Policy IDs', 'معرّفات سياسات الإنتاج')}
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              {t3(
+                locale,
+                'Manuell aus eBay Seller Hub einpflegen (Geschäftliche Richtlinien → Versand/Rückgabe/Zahlung).',
+                'Manually paste from eBay Seller Hub (Business Policies → Shipping/Return/Payment).',
+                'الصق يدويًا من eBay Seller Hub (السياسات التجارية → الشحن/الإرجاع/الدفع).',
+              )}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <PolicyInput
+              label={t3(locale, 'Versandrichtlinie', 'Shipping policy', 'سياسة الشحن')}
+              value={policyForm.fulfillmentPolicyId}
+              onChange={(v) =>
+                setPolicyForm({ ...policyForm, fulfillmentPolicyId: v.replace(/[^0-9]/g, '') })
+              }
+            />
+            <PolicyInput
+              label={t3(locale, 'Rückgaberichtlinie', 'Return policy', 'سياسة الإرجاع')}
+              value={policyForm.returnPolicyId}
+              onChange={(v) =>
+                setPolicyForm({ ...policyForm, returnPolicyId: v.replace(/[^0-9]/g, '') })
+              }
+            />
+            <PolicyInput
+              label={t3(locale, 'Zahlungsrichtlinie', 'Payment policy', 'سياسة الدفع')}
+              value={policyForm.paymentPolicyId}
+              onChange={(v) =>
+                setPolicyForm({ ...policyForm, paymentPolicyId: v.replace(/[^0-9]/g, '') })
+              }
+            />
+            <div>
+              <label className="text-xs font-medium block mb-1">
+                {t3(
+                  locale,
+                  'Merchant-Location-Key (optional)',
+                  'Merchant Location Key (optional)',
+                  'مفتاح موقع التاجر (اختياري)',
+                )}
+              </label>
+              <input
+                type="text"
+                value={policyForm.merchantLocationKey}
+                onChange={(e) =>
+                  setPolicyForm({
+                    ...policyForm,
+                    merchantLocationKey: e.target.value.replace(/[^A-Za-z0-9_-]/g, ''),
+                  })
+                }
+                placeholder="malak-lager-berlin"
+                className="w-full h-9 px-3 rounded-lg border bg-background text-sm font-mono"
+                dir="ltr"
+              />
+            </div>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={() => setPolicyIdsMutation.mutate(policyForm)}
+            disabled={
+              setPolicyIdsMutation.isPending ||
+              !policyForm.fulfillmentPolicyId ||
+              !policyForm.returnPolicyId ||
+              !policyForm.paymentPolicyId
+            }
+          >
+            {setPolicyIdsMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {t3(locale, 'Policy-IDs speichern', 'Save policy IDs', 'حفظ المعرّفات')}
+          </Button>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex flex-wrap gap-2 pt-2 border-t">
@@ -628,6 +759,31 @@ function DiagnosticBanner({
         <div className="font-medium">{title}</div>
         <div className="text-xs mt-1 opacity-90">{body}</div>
       </div>
+    </div>
+  )
+}
+
+function PolicyInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <label className="text-xs font-medium block mb-1">{label}</label>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="^[0-9]+$"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-9 px-3 rounded-lg border bg-background text-sm font-mono"
+        dir="ltr"
+      />
     </div>
   )
 }
