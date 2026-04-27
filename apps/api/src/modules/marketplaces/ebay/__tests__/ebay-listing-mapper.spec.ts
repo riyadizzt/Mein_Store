@@ -125,23 +125,31 @@ describe('resolveEan', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('buildAspects', () => {
-  it('always includes Brand', () => {
+  it('always includes Brand AND MPN default', () => {
     expect(buildAspects('Malak Bekleidung', null, null)).toEqual({
       Brand: ['Malak Bekleidung'],
+      MPN: ['Does Not Apply'],
     })
   })
-  it('includes Color and Size when present', () => {
+  it('includes Color and Size when present, MPN always present', () => {
     expect(buildAspects('Malak', 'Schwarz', 'L')).toEqual({
       Brand: ['Malak'],
+      MPN: ['Does Not Apply'],
       Color: ['Schwarz'],
       Size: ['L'],
     })
   })
-  it('skips Color/Size if empty/whitespace', () => {
+  it('skips Color/Size if empty/whitespace, MPN survives', () => {
     expect(buildAspects('Malak', '   ', 'L')).toEqual({
       Brand: ['Malak'],
+      MPN: ['Does Not Apply'],
       Size: ['L'],
     })
+  })
+  it('MPN literal is "Does Not Apply" (English, not "Entfällt")', () => {
+    // Regression guard: do not localize MPN per marketplace.
+    // eBay-Sell-API expects the canonical English token even on EBAY_DE.
+    expect(buildAspects('X', null, null).MPN).toEqual(['Does Not Apply'])
   })
 })
 
@@ -384,6 +392,7 @@ describe('buildInventoryItemPayload', () => {
     expect(payload.product.ean).toEqual(['1234567890123'])
     expect(payload.product.aspects).toEqual({
       Brand: ['Malak'],
+      MPN: ['Does Not Apply'],
       Color: ['Schwarz'],
       Size: ['L'],
     })

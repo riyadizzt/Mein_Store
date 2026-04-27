@@ -180,8 +180,19 @@ export function resolveEan(barcode: string | null | undefined): string {
 }
 
 // ──────────────────────────────────────────────────────────────
+// MPN — eBay requires the "MPN" aspect for most fashion categories
+// (15709 Herren-Schuhe, 11484 Bekleidung, etc.). Malak sells own-brand
+// fashion without manufacturer part numbers, so we always send the
+// canonical placeholder. Keep the literal value English even on
+// EBAY_DE — eBay's spec is marketplace-agnostic for this token.
+// Discovered 2026-04-27: omitting MPN caused errorId 25002 on every
+// /publish call, with parameter ref "BrandMPN".
+// ──────────────────────────────────────────────────────────────
+const MPN_DOES_NOT_APPLY = 'Does Not Apply'
+
+// ──────────────────────────────────────────────────────────────
 // Aspects — eBay expects { [aspectName]: string[] }.
-// For C11c we send Brand + Color + Size only.
+// For C11c we send Brand + MPN + Color + Size.
 // ──────────────────────────────────────────────────────────────
 
 export function buildAspects(
@@ -191,6 +202,7 @@ export function buildAspects(
 ): Record<string, string[]> {
   const aspects: Record<string, string[]> = {
     Brand: [brand],
+    MPN: [MPN_DOES_NOT_APPLY],
   }
   const c = (color ?? '').trim()
   const s = (size ?? '').trim()
