@@ -277,9 +277,37 @@ export class EbayAuthService {
       })
     } catch (e) {
       if (e instanceof EbayApiError) {
+        // eBay returns several status/code combinations for an
+        // unusable refresh token. Map all of them to RefreshRevokedError
+        // so the admin gets a clear "reconnect" UX instead of a raw 500.
+        //
+        // Known cases (verified against eBay OAuth docs + observed prod):
+        //   - HTTP 401 — token formally rejected
+        //   - HTTP 400 + body contains error: "invalid_grant"
+        //     (typical OAuth2 spec response, eBay follows it)
+        //   - HTTP 400 + body contains error: "invalid_token"
+        //   - String "invalid_grant"/"invalid_token" anywhere in
+        //     ebayErrors[].message (older sandbox response shape)
+        //   - Sandbox-token used after EBAY_ENV flip to production →
+        //     HTTP 400 with "invalid_grant" — this is the case that
+        //     broke Sub-Task 2 production smoke-test (2026-04-25).
+        //
+        // STRICT whitelist: only invalid_grant / invalid_token in the
+        // body classify as revoked. Generic 400 (e.g. malformed-request)
+        // still bubbles up as raw EbayApiError — we don't want
+        // false-positives marking the connection inactive on transient
+        // glitches. Negative-test in spec guards against future drift.
+        const rawBodyLower = (e.rawBody ?? '').toLowerCase()
+        const bodyHasRevokeMarker =
+          rawBodyLower.includes('invalid_grant') ||
+          rawBodyLower.includes('invalid_token')
         const isRevoked =
           e.status === 401 ||
-          e.ebayErrors.some((x) => (x.message ?? '').toLowerCase().includes('invalid_grant'))
+          (e.status === 400 && bodyHasRevokeMarker) ||
+          e.ebayErrors.some((x) => {
+            const m = (x.message ?? '').toLowerCase()
+            return m.includes('invalid_grant') || m.includes('invalid_token')
+          })
         if (isRevoked) {
           await this.markRevoked()
           throw new EbayRefreshRevokedError()

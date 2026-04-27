@@ -247,6 +247,112 @@ describe('getAccessTokenOrRefresh — MV-2 refresh-revoke branch', () => {
     })
   })
 
+  // Sub-Task-2 bug-fix (2026-04-25): the original revoke classifier
+  // matched HTTP 401 + ebayErrors[].message string-search. eBay's
+  // OAuth2 endpoint actually returns top-level
+  //   { "error": "invalid_grant", "error_description": "..." }
+  // on HTTP 400 — not nested in ebayErrors[] — so the old check
+  // missed it. Production smoke-test for setupMerchantLocation
+  // returned 500 instead of 403. Fix extends the classifier to scan
+  // the raw body for "invalid_grant"/"invalid_token" on 400.
+  it('Sub-Task-2 fix: 400 + invalid_grant in body → marks inactive AND throws EbayRefreshRevokedError', async () => {
+    await withEnv(EBAY_ENV_VARS, async () => {
+      const { encryptChannelToken } = require('../../../../common/helpers/channel-token-encryption')
+      const prisma = mkPrisma({
+        isActive: true,
+        accessToken: encryptChannelToken('expiring'),
+        refreshToken: encryptChannelToken('stale-sandbox-token'),
+        tokenExpiresAt: new Date(Date.now() + 30_000),
+        refreshTokenExpiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+      })
+      const svc = new EbayAuthService(prisma as any)
+      const fakeFetch: FetchLike = async () => ({
+        status: 400,
+        headers: { get: () => null },
+        text: async () =>
+          JSON.stringify({
+            error: 'invalid_grant',
+            error_description: 'the refresh token is invalid',
+          }),
+        json: async () => ({}),
+      })
+      svc.__setFetchForTests(fakeFetch)
+
+      await expect(svc.getAccessTokenOrRefresh()).rejects.toBeInstanceOf(EbayRefreshRevokedError)
+
+      const row = prisma._row()
+      expect(row!.isActive).toBe(false)
+      expect(row!.accessToken).toBeNull()
+    })
+  })
+
+  it('Sub-Task-2 fix: 400 + invalid_token in body → marks inactive AND throws EbayRefreshRevokedError', async () => {
+    // Variant: eBay sometimes uses "invalid_token" instead of
+    // "invalid_grant" for the same condition. Same behaviour expected.
+    await withEnv(EBAY_ENV_VARS, async () => {
+      const { encryptChannelToken } = require('../../../../common/helpers/channel-token-encryption')
+      const prisma = mkPrisma({
+        isActive: true,
+        accessToken: encryptChannelToken('expiring'),
+        refreshToken: encryptChannelToken('stale'),
+        tokenExpiresAt: new Date(Date.now() + 30_000),
+        refreshTokenExpiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+      })
+      const svc = new EbayAuthService(prisma as any)
+      const fakeFetch: FetchLike = async () => ({
+        status: 400,
+        headers: { get: () => null },
+        text: async () => JSON.stringify({ error: 'invalid_token' }),
+        json: async () => ({}),
+      })
+      svc.__setFetchForTests(fakeFetch)
+
+      await expect(svc.getAccessTokenOrRefresh()).rejects.toBeInstanceOf(EbayRefreshRevokedError)
+
+      expect(prisma._row()!.isActive).toBe(false)
+    })
+  })
+
+  it('Sub-Task-2 fix (negative guard): generic 400 WITHOUT invalid_grant/token → raw error, NO false-positive revoke', async () => {
+    // Defensive: a 400 with a generic message must NOT classify as
+    // revoked. Otherwise a transient eBay validation error would
+    // wrongly mark the connection inactive. Any future PR that loosens
+    // the whitelist (e.g. "any 400 → revoked") will fail this test.
+    await withEnv(EBAY_ENV_VARS, async () => {
+      const { encryptChannelToken } = require('../../../../common/helpers/channel-token-encryption')
+      const prisma = mkPrisma({
+        isActive: true,
+        accessToken: encryptChannelToken('expiring'),
+        refreshToken: encryptChannelToken('valid-refresh'),
+        tokenExpiresAt: new Date(Date.now() + 30_000),
+        refreshTokenExpiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000),
+      })
+      const svc = new EbayAuthService(prisma as any)
+      const fakeFetch: FetchLike = async () => ({
+        status: 400,
+        headers: { get: () => null },
+        text: async () =>
+          JSON.stringify({
+            error: 'invalid_request',
+            error_description: 'missing scope param',
+          }),
+        json: async () => ({}),
+      })
+      svc.__setFetchForTests(fakeFetch)
+
+      let caught: any = null
+      try {
+        await svc.getAccessTokenOrRefresh()
+      } catch (e) {
+        caught = e
+      }
+      // Must NOT be reclassified as revoked
+      expect(caught).not.toBeInstanceOf(EbayRefreshRevokedError)
+      // Connection must remain active (no markRevoked side-effect)
+      expect(prisma._row()!.isActive).toBe(true)
+    })
+  })
+
   it('raises EbayNotConnectedError when no row exists yet', async () => {
     await withEnv(EBAY_ENV_VARS, async () => {
       const prisma = mkPrisma() // null row
