@@ -125,31 +125,45 @@ describe('resolveEan', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('buildAspects', () => {
-  it('always includes Brand AND MPN default', () => {
-    expect(buildAspects('Malak Bekleidung', null, null)).toEqual({
-      Brand: ['Malak Bekleidung'],
-      MPN: ['Does Not Apply'],
+  it('emits localized DE aspect keys (Marke/Herstellernummer)', () => {
+    expect(buildAspects('Malak Bekleidung', null, null, 'MAL-X-1')).toEqual({
+      Marke: ['Malak Bekleidung'],
+      Herstellernummer: ['MAL-X-1'],
     })
   })
-  it('includes Color and Size when present, MPN always present', () => {
-    expect(buildAspects('Malak', 'Schwarz', 'L')).toEqual({
-      Brand: ['Malak'],
-      MPN: ['Does Not Apply'],
-      Color: ['Schwarz'],
-      Size: ['L'],
+  it('includes Farbe and Größe when present', () => {
+    expect(buildAspects('Malak', 'Schwarz', 'L', 'MAL-Y-2')).toEqual({
+      Marke: ['Malak'],
+      Herstellernummer: ['MAL-Y-2'],
+      Farbe: ['Schwarz'],
+      Größe: ['L'],
     })
   })
-  it('skips Color/Size if empty/whitespace, MPN survives', () => {
-    expect(buildAspects('Malak', '   ', 'L')).toEqual({
-      Brand: ['Malak'],
-      MPN: ['Does Not Apply'],
-      Size: ['L'],
+  it('skips Farbe/Größe if empty/whitespace', () => {
+    expect(buildAspects('Malak', '   ', 'L', 'MAL-Z-3')).toEqual({
+      Marke: ['Malak'],
+      Herstellernummer: ['MAL-Z-3'],
+      Größe: ['L'],
     })
   })
-  it('MPN literal is "Does Not Apply" (English, not "Entfällt")', () => {
-    // Regression guard: do not localize MPN per marketplace.
-    // eBay-Sell-API expects the canonical English token even on EBAY_DE.
-    expect(buildAspects('X', null, null).MPN).toEqual(['Does Not Apply'])
+  it('Herstellernummer = the variant SKU (eBay needs unique Brand+MPN)', () => {
+    // Regression guard: MPN must be unique-per-variant. eBay rejects
+    // placeholder values like "Does Not Apply" when paired with a real Brand.
+    expect(buildAspects('Malak', null, null, 'MAL-HERREN-SCH-40').Herstellernummer)
+      .toEqual(['MAL-HERREN-SCH-40'])
+  })
+  it('two variants of the same product get distinct Herstellernummer', () => {
+    const a = buildAspects('Malak', 'Schwarz', '40', 'MAL-HERREN-SCH-40')
+    const b = buildAspects('Malak', 'Schwarz', '41', 'MAL-HERREN-SCH-41')
+    expect(a.Herstellernummer).not.toEqual(b.Herstellernummer)
+  })
+  it('does NOT emit English aspect keys (Brand/MPN/Color/Size)', () => {
+    // Regression guard: localized keys only on EBAY_DE.
+    const a = buildAspects('Malak', 'Schwarz', 'L', 'MAL-X-1')
+    expect(a.Brand).toBeUndefined()
+    expect(a.MPN).toBeUndefined()
+    expect(a.Color).toBeUndefined()
+    expect(a.Size).toBeUndefined()
   })
 })
 
@@ -389,12 +403,13 @@ describe('buildInventoryItemPayload', () => {
     expect(payload.product.title).toBe('Herren Hemd — Schwarz L')
     expect(payload.product.description).toBe('Ein tolles Hemd')
     expect(payload.product.brand).toBe('Malak')
+    expect(payload.product.mpn).toBe('MAL-001-SCH-L') // top-level mpn = variant.sku
     expect(payload.product.ean).toEqual(['1234567890123'])
     expect(payload.product.aspects).toEqual({
-      Brand: ['Malak'],
-      MPN: ['Does Not Apply'],
-      Color: ['Schwarz'],
-      Size: ['L'],
+      Marke: ['Malak'],
+      Herstellernummer: ['MAL-001-SCH-L'],
+      Farbe: ['Schwarz'],
+      Größe: ['L'],
     })
     expect(payload.product.imageUrls).toEqual(['https://cdn.malak.com/img1.jpg'])
     expect(payload.packageWeightAndSize.weight).toEqual({ value: 300, unit: 'GRAM' })

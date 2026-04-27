@@ -180,34 +180,48 @@ export function resolveEan(barcode: string | null | undefined): string {
 }
 
 // ──────────────────────────────────────────────────────────────
-// MPN — eBay requires the "MPN" aspect for most fashion categories
-// (15709 Herren-Schuhe, 11484 Bekleidung, etc.). Malak sells own-brand
-// fashion without manufacturer part numbers, so we always send the
-// canonical placeholder. Keep the literal value English even on
-// EBAY_DE — eBay's spec is marketplace-agnostic for this token.
-// Discovered 2026-04-27: omitting MPN caused errorId 25002 on every
-// /publish call, with parameter ref "BrandMPN".
+// EBAY_DE aspects — localized aspect names.
+//
+// eBay's category-aspect schema is per-marketplace. Sending English
+// keys ("Brand"/"MPN") to EBAY_DE causes the BrandMPN compound to
+// fail validation with errorId 25002, even when values are correct.
+// The official method is getItemAspectsForCategory (taxonomy API),
+// but for C11 we hardcode EBAY_DE — the only marketplace we publish
+// to. Multi-marketplace dynamic lookup is C17 scope.
+//
+// Discovered 2026-04-27 across two iterations:
+//   1. omitting MPN → 25002 BrandMPN
+//   2. MPN="Does Not Apply" + English keys → STILL 25002
+//   3. Resolution: localized keys + per-variant unique MPN (the SKU)
+// Sources: ChannelUnity KB (MPN→SKU fallback for own-brand sellers),
+// eBay Inventory API docs (MPNs unique within a brand), eBay Taxonomy
+// API (aspect names are localized per marketplace).
 // ──────────────────────────────────────────────────────────────
-const MPN_DOES_NOT_APPLY = 'Does Not Apply'
+const ASPECT_KEY_BRAND_DE = 'Marke'
+const ASPECT_KEY_MPN_DE   = 'Herstellernummer'
+const ASPECT_KEY_COLOR_DE = 'Farbe'
+const ASPECT_KEY_SIZE_DE  = 'Größe'
 
 // ──────────────────────────────────────────────────────────────
 // Aspects — eBay expects { [aspectName]: string[] }.
-// For C11c we send Brand + MPN + Color + Size.
+// For C11c we send Marke + Herstellernummer + Farbe + Größe (DE).
+// MPN is the variant SKU (unique per variant) — see const block above.
 // ──────────────────────────────────────────────────────────────
 
 export function buildAspects(
   brand: string,
   color: string | null,
   size: string | null,
+  sku: string,
 ): Record<string, string[]> {
   const aspects: Record<string, string[]> = {
-    Brand: [brand],
-    MPN: [MPN_DOES_NOT_APPLY],
+    [ASPECT_KEY_BRAND_DE]: [brand],
+    [ASPECT_KEY_MPN_DE]:   [sku],
   }
   const c = (color ?? '').trim()
   const s = (size ?? '').trim()
-  if (c.length > 0) aspects.Color = [c]
-  if (s.length > 0) aspects.Size = [s]
+  if (c.length > 0) aspects[ASPECT_KEY_COLOR_DE] = [c]
+  if (s.length > 0) aspects[ASPECT_KEY_SIZE_DE]  = [s]
   return aspects
 }
 
@@ -371,6 +385,7 @@ export interface InventoryItemPayload {
     description: string
     imageUrls: string[]
     brand: string
+    mpn: string
     ean: string[]
     aspects: Record<string, string[]>
   }
@@ -388,7 +403,7 @@ export function buildInventoryItemPayload(
   const description = truncateDescription(translation.description)
   const brand = resolveBrand(product.brand)
   const ean = resolveEan(variant.barcode)
-  const aspects = buildAspects(brand, variant.color, variant.size)
+  const aspects = buildAspects(brand, variant.color, variant.size, variant.sku)
   const images = pickImages(product.images, variant.color)
   if (images.length === 0) {
     throw new MappingBlockError(
@@ -407,6 +422,7 @@ export function buildInventoryItemPayload(
       description,
       imageUrls: images,
       brand,
+      mpn: variant.sku, // top-level: defense-in-depth alongside aspects.Herstellernummer
       ean: [ean], // eBay accepts an array even for a single value
       aspects,
     },
