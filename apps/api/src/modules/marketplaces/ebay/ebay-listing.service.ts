@@ -49,9 +49,13 @@ import {
   buildInventoryItemPayload,
   buildOfferPayload,
   MappingBlockError,
+  buildInventoryItemGroupKey,
+  buildInventoryItemGroupPayload,
+  resolveDepartment,
   type MapperProduct,
   type MapperVariant,
   type MapperListing,
+  type InventoryItemGroupPayload,
 } from './ebay-listing-mapper'
 import { AuditService } from '../../admin/services/audit.service'
 
@@ -82,6 +86,32 @@ export interface PublishOneFailure {
 }
 
 export type PublishEntry = PublishOneResult | PublishOneFailure
+
+// ──────────────────────────────────────────────────────────────
+// Multi-Variation Publish Result (C11.6)
+// ──────────────────────────────────────────────────────────────
+//
+// publishProduct returns this discriminated union. publishPending
+// internally wraps the per-product results back into PublishEntry
+// for backwards-compatibility with the frontend (which renders a
+// per-row card with `listingId` as React-key).
+export type PublishProductResult =
+  | {
+      ok: true
+      productId: string
+      externalListingId: string
+      variantCount: number
+      groupKey?: string
+      mode: 'single' | 'group'
+    }
+  | {
+      ok: false
+      productId: string
+      errorCode: string
+      errorMessage: string
+      retryable: boolean
+      mode: 'single' | 'group' | 'unknown'
+    }
 
 export interface PublishPendingSummary {
   requested: number
@@ -283,40 +313,46 @@ export class EbayListingService {
   ): Promise<PublishPendingSummary> {
     const limit = Math.max(1, Math.min(batchLimit || PUBLISH_BATCH_DEFAULT, PUBLISH_BATCH_MAX))
 
-    const pending = await this.prisma.channelProductListing.findMany({
+    // C11.6 — Group-by-productId: iterate distinct productIds in
+    // oldest-first order. batchLimit semantics changed from "max N
+    // variants" to "max N products". For our scale (12-30 variants
+    // per product) the default 25 products = up to ~750 variants.
+    const pendingProductRows = await this.prisma.channelProductListing.findMany({
       where: { channel: 'ebay', status: 'pending' },
-      select: { id: true },
+      select: { productId: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
-      take: limit,
     })
+    const distinctProductIds: string[] = []
+    const seen = new Set<string>()
+    for (const row of pendingProductRows) {
+      if (!seen.has(row.productId)) {
+        distinctProductIds.push(row.productId)
+        seen.add(row.productId)
+        if (distinctProductIds.length >= limit) break
+      }
+    }
 
-    const totalPendingCount = await this.prisma.channelProductListing.count({
-      where: { channel: 'ebay', status: 'pending' },
-    })
-
-    const results: PublishEntry[] = []
+    const productResults: PublishProductResult[] = []
     let published = 0
     let failed = 0
 
-    for (const { id } of pending) {
+    for (const productId of distinctProductIds) {
       try {
-        const result = await this.publishOne(id)
-        results.push(result)
-        // publishOne returns a PublishOneResult OR a PublishOneFailure;
-        // only the success path counts toward `published`.
+        const result = await this.publishProduct(productId)
+        productResults.push(result)
         if (result.ok) published++
         else failed++
       } catch (e: any) {
-        // publishOne is supposed to never throw except for the
-        // not-connected / revoked cases. Those must halt the batch
-        // since every subsequent call would fail identically.
+        // publishProduct is supposed to never throw except for the
+        // not-connected / revoked cases. Those halt the batch since
+        // every subsequent call would fail identically.
         if (e?.name === 'EbayNotConnectedError' || e?.name === 'EbayRefreshRevokedError') {
           throw e
         }
-        // Defensive safety net if something did slip through.
-        results.push({
-          listingId: id,
+        productResults.push({
           ok: false,
+          productId,
+          mode: 'unknown',
           errorCode: 'unknown_exception',
           errorMessage: String(e?.message ?? e).slice(0, 500),
           retryable: false,
@@ -324,6 +360,35 @@ export class EbayListingService {
         failed++
       }
     }
+
+    // Backward-compat: frontend renders a per-row card with `listingId`
+    // as React-key. Map per-product results to PublishEntry shape using
+    // productId as the key. The externalListingId is now group-level
+    // (same value across all variants of one product) — frontend shows
+    // it once per product, which is semantically correct.
+    const results: PublishEntry[] = productResults.map((r) =>
+      r.ok
+        ? {
+            listingId: r.productId,
+            ok: true,
+            externalListingId: r.externalListingId,
+            alreadyPublished: false,
+            marginWarning: false,
+          }
+        : {
+            listingId: r.productId,
+            ok: false,
+            errorCode: r.errorCode,
+            errorMessage: r.errorMessage,
+            retryable: r.retryable,
+          },
+    )
+
+    // Recompute remaining as variant-count (frontend's expectation)
+    // rather than product-count — preserves the existing semantics.
+    const remainingVariantRows = await this.prisma.channelProductListing.count({
+      where: { channel: 'ebay', status: 'pending' },
+    })
 
     await this.audit.log({
       adminId,
@@ -333,19 +398,19 @@ export class EbayListingService {
       changes: {
         after: {
           batchLimit: limit,
-          requested: pending.length,
+          requested: distinctProductIds.length,
           published,
           failed,
-          remaining: Math.max(0, totalPendingCount - pending.length),
+          remaining: remainingVariantRows,
         },
       },
     })
 
     return {
-      requested: pending.length,
+      requested: distinctProductIds.length,
       published,
       failed,
-      remaining: Math.max(0, totalPendingCount - pending.length),
+      remaining: remainingVariantRows,
       results,
     }
   }
@@ -739,8 +804,437 @@ export class EbayListingService {
   }
 
   // ────────────────────────────────────────────────────────────
+  // Public — multi-variation product publish (C11.6)
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Publish a complete product (all its active variants) to eBay.
+   *
+   * Routing logic:
+   *   - 0 active variants → recordProductFail('no_active_variants')
+   *   - 1 active variant → delegates to publishOne (Single-Variant path,
+   *     existing C11c flow unchanged)
+   *   - 2+ active variants → multi-variation group path (10 steps)
+   *
+   * Multi-Variation Group Path (10 steps):
+   *
+   *   Pre-tx:
+   *     1. Multi-Row claim — atomic updateMany on all pending rows of
+   *        this productId. If claim.count !== expectedVariantCount,
+   *        recordProductFail('partial_pending').
+   *
+   *     2. Load context — product + N active variants + N inventories +
+   *        N channel-prices.
+   *
+   *     3. Pull policies + merchant-location-key.
+   *
+   *     4. Pre-flight build (Q-16 STRICT validation):
+   *          - buildInventoryItemGroupPayload  (group body)
+   *          - buildInventoryItemPayload × N   (per-variant item bodies)
+   *          - buildOfferPayload × N            (per-variant offer bodies)
+   *        Any MappingBlockError → recordFail for ALL N rows with same
+   *        syncError.
+   *
+   *   eBay HTTP calls (sequential per Q-D1):
+   *     5. PUT /sell/inventory/v1/inventory_item/{sku}    × N variants
+   *     6. GET offer?sku + POST/PUT offer (DRAFT)         × N
+   *     7. PUT /sell/inventory/v1/inventory_item_group/{groupKey}
+   *     8. POST /sell/inventory/v1/offer/publish_by_inventory_item_group
+   *        body: { inventoryItemGroupKey, marketplaceId: 'EBAY_DE' }
+   *        → response.listingId  (single listing ID for whole group)
+   *
+   *   Persistence:
+   *     9. Multi-Row updateMany — all N rows: status='active',
+   *        externalListingId=<groupListingId>, syncError=null.
+   *
+   *    10. Audit log entry: EBAY_PRODUCT_GROUP_PUBLISHED.
+   *
+   * Throws ONLY for EbayNotConnectedError / EbayRefreshRevokedError.
+   *
+   * Concurrency: Step 1's atomic updateMany is the lock. A racing
+   * publishProduct(same productId) finds claim.count=0 and returns
+   * 'not_claimable'.
+   */
+  async publishProduct(productId: string): Promise<PublishProductResult> {
+    // Step 0 — Routing
+    const activeVariantCount = await this.prisma.productVariant.count({
+      where: { productId, isActive: true },
+    })
+    if (activeVariantCount === 0) {
+      return await this.recordProductFail(
+        productId, 'rejected', 'no_active_variants',
+        `Product ${productId} has no active variants`, false, 'unknown',
+      )
+    }
+    if (activeVariantCount === 1) {
+      return await this.publishProductSingleVariant(productId)
+    }
+    return await this.publishProductGroup(productId, activeVariantCount)
+  }
+
+  private async publishProductSingleVariant(productId: string): Promise<PublishProductResult> {
+    const row = await this.prisma.channelProductListing.findFirst({
+      where: { productId, channel: 'ebay', status: 'pending' },
+      select: { id: true },
+    })
+    if (!row) {
+      return {
+        ok: false, productId, mode: 'single',
+        errorCode: 'no_pending_row',
+        errorMessage: 'No pending row for this product (1-variant case)',
+        retryable: false,
+      }
+    }
+    const result = await this.publishOne(row.id)
+    if (result.ok) {
+      return {
+        ok: true, productId, mode: 'single',
+        externalListingId: result.externalListingId,
+        variantCount: 1,
+      }
+    }
+    return {
+      ok: false, productId, mode: 'single',
+      errorCode: result.errorCode, errorMessage: result.errorMessage, retryable: result.retryable,
+    }
+  }
+
+  private async publishProductGroup(
+    productId: string,
+    expectedVariantCount: number,
+  ): Promise<PublishProductResult> {
+    // Step 1 — Multi-Row Concurrency claim (Q-D2)
+    const claim = await this.prisma.channelProductListing.updateMany({
+      where: { productId, channel: 'ebay', status: 'pending' },
+      data: { syncAttempts: { increment: 1 }, lastSyncedAt: new Date() },
+    })
+    if (claim.count === 0) {
+      return {
+        ok: false, productId, mode: 'group',
+        errorCode: 'not_claimable',
+        errorMessage: 'No pending rows — already published or claimed by racer',
+        retryable: false,
+      }
+    }
+    if (claim.count !== expectedVariantCount) {
+      return await this.recordProductFail(
+        productId, 'rejected', 'partial_pending',
+        `Group needs ALL ${expectedVariantCount} variants in pending state, got ${claim.count}`,
+        false, 'group',
+      )
+    }
+
+    // Step 2 — Load context
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true, slug: true, brand: true, basePrice: true, salePrice: true,
+        category: { select: { ebayCategoryId: true, slug: true, parent: { select: { slug: true } } } },
+        translations: { select: { language: true, name: true, description: true } },
+        images: { select: { url: true, colorName: true, isPrimary: true, sortOrder: true } },
+      },
+    })
+    if (!product) {
+      return await this.recordProductFail(productId, 'rejected', 'product_missing', 'Product not found', false, 'group')
+    }
+    const variants = await this.prisma.productVariant.findMany({
+      where: { productId, isActive: true },
+      select: { id: true, sku: true, barcode: true, color: true, size: true, priceModifier: true, weightGrams: true },
+    })
+    const inventoryRows = await this.prisma.inventory.findMany({
+      where: { variantId: { in: variants.map(v => v.id) } },
+      select: { variantId: true, quantityOnHand: true, quantityReserved: true },
+    })
+    const inventoryByVariant = new Map<string, Array<{ quantityOnHand: number; quantityReserved: number }>>()
+    for (const inv of inventoryRows) {
+      if (!inv.variantId) continue
+      const list = inventoryByVariant.get(inv.variantId) ?? []
+      list.push({ quantityOnHand: inv.quantityOnHand, quantityReserved: inv.quantityReserved })
+      inventoryByVariant.set(inv.variantId, list)
+    }
+    const listingRows = await this.prisma.channelProductListing.findMany({
+      where: { productId, channel: 'ebay' },
+      select: { variantId: true, channelPrice: true, safetyStock: true },
+    })
+    const listingByVariant = new Map<string, { channelPrice: string | null; safetyStock: number }>()
+    for (const lr of listingRows) {
+      if (!lr.variantId) continue
+      listingByVariant.set(lr.variantId, {
+        channelPrice: lr.channelPrice?.toString() ?? null,
+        safetyStock: lr.safetyStock,
+      })
+    }
+
+    // Step 3 — Policies + merchantLocationKey
+    const cfg = await this.prisma.salesChannelConfig.findUnique({
+      where: { channel: 'ebay' },
+      select: { settings: true },
+    })
+    const settings = (cfg?.settings ?? {}) as any
+    const policyIds = settings?.policyIds
+    const merchantLocationKey = settings?.merchantLocationKey
+    if (
+      !policyIds?.fulfillmentPolicyId ||
+      !policyIds?.returnPolicyId ||
+      !policyIds?.paymentPolicyId ||
+      !merchantLocationKey
+    ) {
+      return await this.recordProductFail(
+        productId, 'rejected', 'bootstrap_incomplete',
+        'Run bootstrap-sandbox-policies first (missing policy IDs or merchant location)',
+        false, 'group',
+      )
+    }
+
+    // Step 4 — Pre-flight build (Q-16)
+    const groupKey = buildInventoryItemGroupKey(productId)
+    const departmentSlug = product.category?.parent?.slug ?? product.category?.slug ?? null
+    const department = resolveDepartment(departmentSlug)
+    if (!department) {
+      return await this.recordProductFail(
+        productId, 'rejected', 'department_unmapped',
+        `Cannot resolve department from category slug=${departmentSlug ?? 'null'}`,
+        false, 'group',
+      )
+    }
+
+    const mapperProduct: MapperProduct = {
+      id: product.id, slug: product.slug, brand: product.brand,
+      basePrice: product.basePrice.toString(),
+      salePrice: product.salePrice?.toString() ?? null,
+      category: product.category
+        ? { ebayCategoryId: product.category.ebayCategoryId, departmentSlug }
+        : null,
+      translations: product.translations as MapperProduct['translations'],
+      images: product.images,
+    }
+
+    let groupPayload: InventoryItemGroupPayload
+    const itemPayloads = new Map<string, ReturnType<typeof buildInventoryItemPayload>>()
+    const offerBuilds = new Map<string, ReturnType<typeof buildOfferPayload>>()
+
+    try {
+      const mapperVariants: MapperVariant[] = variants.map((v) => ({
+        id: v.id, sku: v.sku, barcode: v.barcode, color: v.color, size: v.size,
+        priceModifier: v.priceModifier.toString(), weightGrams: v.weightGrams,
+      }))
+      groupPayload = buildInventoryItemGroupPayload(mapperProduct, mapperVariants, department)
+      for (const v of variants) {
+        const lr = listingByVariant.get(v.id)
+        const mapperListing: MapperListing = {
+          channelPrice: lr?.channelPrice ?? null,
+          safetyStock: lr?.safetyStock ?? 1,
+        }
+        const mv: MapperVariant = {
+          id: v.id, sku: v.sku, barcode: v.barcode, color: v.color, size: v.size,
+          priceModifier: v.priceModifier.toString(), weightGrams: v.weightGrams,
+        }
+        const inv = inventoryByVariant.get(v.id) ?? []
+        itemPayloads.set(v.sku, buildInventoryItemPayload(mapperListing, mapperProduct, mv, inv))
+        offerBuilds.set(v.sku, buildOfferPayload({
+          listing: mapperListing, product: mapperProduct, variant: mv, inventoryRows: inv,
+          policyIds, merchantLocationKey,
+        }))
+      }
+    } catch (e) {
+      if (e instanceof MappingBlockError) {
+        return await this.recordProductFail(productId, 'rejected', e.code, e.message, false, 'group')
+      }
+      throw e
+    }
+
+    // Step 5 — Token + Loop N: PUT inventory_item
+    const token = await this.auth.getAccessTokenOrRefresh()
+    const client = this.buildClient()
+
+    for (const v of variants) {
+      try {
+        await client.request(
+          'PUT',
+          `/sell/inventory/v1/inventory_item/${encodeURIComponent(v.sku)}`,
+          { bearer: token, bodyKind: 'json', body: itemPayloads.get(v.sku)! as unknown as Record<string, unknown> },
+        )
+      } catch (e) {
+        return await this.handleGroupApiFailure(productId, e, 'inventory_item_failed')
+      }
+    }
+
+    // Step 6 — Loop N: GET offer?sku → POST/PUT offer (DRAFT)
+    for (const v of variants) {
+      let existingOfferId: string | null = null
+      try {
+        const offers = await client.request<{ offers?: Array<{ offerId: string; marketplaceId: string; status: string }> }>(
+          'GET',
+          `/sell/inventory/v1/offer?sku=${encodeURIComponent(v.sku)}&marketplace_id=EBAY_DE&limit=5`,
+          { bearer: token },
+        )
+        const match = (offers.offers ?? []).find((o) => o.marketplaceId === 'EBAY_DE')
+        if (match) existingOfferId = match.offerId
+      } catch (e) {
+        if (!(e instanceof EbayApiError && e.status === 404)) {
+          return await this.handleGroupApiFailure(productId, e, 'offer_lookup_failed')
+        }
+      }
+
+      const offerBody = offerBuilds.get(v.sku)!.payload as unknown as Record<string, unknown>
+      if (existingOfferId) {
+        try {
+          await client.request(
+            'PUT',
+            `/sell/inventory/v1/offer/${encodeURIComponent(existingOfferId)}`,
+            { bearer: token, bodyKind: 'json', body: offerBody },
+          )
+        } catch (e) {
+          return await this.handleGroupApiFailure(productId, e, 'offer_update_failed')
+        }
+      } else {
+        try {
+          await client.request<{ offerId: string }>(
+            'POST',
+            `/sell/inventory/v1/offer`,
+            { bearer: token, bodyKind: 'json', body: offerBody },
+          )
+        } catch (e) {
+          return await this.handleGroupApiFailure(productId, e, 'offer_create_failed')
+        }
+      }
+    }
+
+    // Step 7 — PUT inventory_item_group
+    try {
+      await client.request(
+        'PUT',
+        `/sell/inventory/v1/inventory_item_group/${encodeURIComponent(groupKey)}`,
+        { bearer: token, bodyKind: 'json', body: groupPayload as unknown as Record<string, unknown> },
+      )
+    } catch (e) {
+      return await this.handleGroupApiFailure(productId, e, 'group_create_failed')
+    }
+
+    // Step 8 — POST publish_by_inventory_item_group
+    let externalListingId: string | null = null
+    try {
+      const resp = await client.request<{ listingId?: string; warnings?: any[] }>(
+        'POST',
+        `/sell/inventory/v1/offer/publish_by_inventory_item_group`,
+        { bearer: token, bodyKind: 'json', body: { inventoryItemGroupKey: groupKey, marketplaceId: 'EBAY_DE' } },
+      )
+      externalListingId = resp.listingId ?? null
+      if (resp.warnings && resp.warnings.length > 0) {
+        this.logger.warn(`Group-publish warnings for ${productId}: ${JSON.stringify(resp.warnings).slice(0, 500)}`)
+      }
+    } catch (e) {
+      return await this.handleGroupApiFailure(productId, e, 'publish_group_failed')
+    }
+
+    if (!externalListingId) {
+      return await this.recordProductFail(
+        productId, 'rejected', 'no_listing_id_after_group_publish',
+        'eBay did not return listingId after publish_by_inventory_item_group', false, 'group',
+      )
+    }
+
+    // Step 9 — Multi-Row Persistence (Q-D3)
+    await this.prisma.channelProductListing.updateMany({
+      where: { productId, channel: 'ebay', status: 'pending' },
+      data: { status: 'active', externalListingId, syncError: null, lastSyncedAt: new Date() },
+    })
+
+    // Step 10 — Audit log
+    await this.audit.log({
+      adminId: 'system',
+      action: 'EBAY_PRODUCT_GROUP_PUBLISHED',
+      entityType: 'product',
+      entityId: productId,
+      changes: {
+        after: { groupKey, externalListingId, variantCount: variants.length },
+      },
+    })
+
+    return {
+      ok: true, productId, mode: 'group',
+      externalListingId, variantCount: variants.length, groupKey,
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
   // Internals
   // ────────────────────────────────────────────────────────────
+
+  private async recordProductFail(
+    productId: string,
+    nextStatus: ChannelListingStatus,
+    errorCode: string,
+    errorMessage: string,
+    retryable: boolean,
+    mode: 'single' | 'group' | 'unknown',
+  ): Promise<PublishProductResult> {
+    // Q-D4 — Multi-Row updateMany with same syncError
+    try {
+      await this.prisma.channelProductListing.updateMany({
+        where: { productId, channel: 'ebay', status: 'pending' },
+        data: {
+          status: nextStatus,
+          syncError: `${errorCode}: ${errorMessage}`.slice(0, 500),
+          lastSyncedAt: new Date(),
+        },
+      })
+    } catch (dbErr: any) {
+      this.logger.warn(`Failed to persist group-fail state for ${productId}: ${dbErr?.message}`)
+    }
+    await this.audit.log({
+      adminId: 'system',
+      action: 'EBAY_PRODUCT_GROUP_REJECTED',
+      entityType: 'product',
+      entityId: productId,
+      changes: { after: { errorCode, errorMessage, retryable, nextStatus, mode } },
+    })
+    return { ok: false, productId, errorCode, errorMessage, retryable, mode }
+  }
+
+  private async handleGroupApiFailure(
+    productId: string,
+    err: unknown,
+    errorCode: string,
+  ): Promise<PublishProductResult> {
+    if (err instanceof EbayApiError) {
+      // Q-17 — explicit error-code mapping for group-specific errors
+      const groupSpecificCodes = [25025, 25401, 25402]
+      const groupErr = err.ebayErrors.find((e) => groupSpecificCodes.includes(e.errorId ?? 0))
+      if (groupErr) {
+        return await this.recordProductFail(
+          productId, 'rejected',
+          `group_${errorCode}_${groupErr.errorId}`,
+          (groupErr.message ?? 'group variation error').slice(0, 500),
+          false, 'group',
+        )
+      }
+      // 25002 umbrella — reuse Bug-B-message-Branching (analog publishOne)
+      const ebay25002 = err.ebayErrors.find((x) => x.errorId === 25002)
+      if (ebay25002) {
+        const haystack = `${ebay25002.message ?? ''} ${ebay25002.longMessage ?? ''}`.toLowerCase()
+        const isAlreadyPublished =
+          haystack.includes('already published') || haystack.includes('bereits veröffentlicht')
+        if (!isAlreadyPublished) {
+          const detail = `${ebay25002.message ?? ''}${ebay25002.longMessage ? ' / ' + ebay25002.longMessage : ''}`.slice(0, 500)
+          return await this.recordProductFail(productId, 'rejected', 'publish_rejected', detail, false, 'group')
+        }
+        return await this.recordProductFail(
+          productId, 'rejected', 'group_already_published_no_id',
+          'eBay reports group already published — manual recovery required', false, 'group',
+        )
+      }
+      const retryable = err.retryable
+      const nextStatus: ChannelListingStatus = retryable ? 'pending' : 'rejected'
+      return await this.recordProductFail(
+        productId, nextStatus, errorCode, err.message.slice(0, 500), retryable, 'group',
+      )
+    }
+    return await this.recordProductFail(
+      productId, 'pending', `${errorCode}_unknown`,
+      String((err as any)?.message ?? err).slice(0, 500), true, 'group',
+    )
+  }
 
   private async handleApiFailure(
     listingId: string,

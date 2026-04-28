@@ -23,6 +23,11 @@ import {
   MappingBlockError,
   EAN_DOES_NOT_APPLY,
   BRAND_FALLBACK,
+  buildInventoryItemGroupKey,
+  buildGroupTitle,
+  buildGroupAspects,
+  buildVariesBy,
+  buildInventoryItemGroupPayload,
   type MapperProduct,
   type MapperVariant,
   type MapperListing,
@@ -574,5 +579,185 @@ describe('buildOfferPayload', () => {
       policyIds, merchantLocationKey: 'k',
     })
     expect(price.hasMarginWarning).toBe(true)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Multi-Variation Group Helpers (C11.6)
+// ──────────────────────────────────────────────────────────────
+
+describe('buildInventoryItemGroupKey', () => {
+  it('returns MAL_<productId>', () => {
+    expect(buildInventoryItemGroupKey('p1')).toBe('MAL_p1')
+  })
+  it('truncates to 50 chars when productId is very long', () => {
+    const long = 'x'.repeat(100)
+    const result = buildInventoryItemGroupKey(long)
+    expect(result.length).toBe(50)
+    expect(result.startsWith('MAL_')).toBe(true)
+  })
+})
+
+describe('buildGroupTitle', () => {
+  it('returns trimmed product name unchanged when ≤80 chars', () => {
+    expect(buildGroupTitle('Herren Schuhe')).toBe('Herren Schuhe')
+    expect(buildGroupTitle('  Herren Schuhe  ')).toBe('Herren Schuhe')
+  })
+  it('truncates to 77 + "..." when >80 chars', () => {
+    const long = 'x'.repeat(100)
+    const result = buildGroupTitle(long)
+    expect(result.length).toBe(80)
+    expect(result.endsWith('...')).toBe(true)
+  })
+  it('throws MappingBlockError(group_title_missing) on empty/whitespace', () => {
+    try {
+      buildGroupTitle('')
+      throw new Error('expected throw')
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MappingBlockError)
+      expect(e.code).toBe('group_title_missing')
+    }
+  })
+})
+
+describe('buildGroupAspects', () => {
+  it('emits only Marke + Abteilung (no Color/Size/MPN)', () => {
+    const result = buildGroupAspects('Malak', 'Herren')
+    expect(result).toEqual({
+      Marke: ['Malak'],
+      Abteilung: ['Herren'],
+    })
+  })
+})
+
+describe('buildVariesBy', () => {
+  it('extracts unique colors + sizes from variants list', () => {
+    const variants = [
+      { color: 'Schwarz', size: '40' },
+      { color: 'Schwarz', size: '41' },
+      { color: 'Weiß', size: '40' },
+      { color: 'Weiß', size: '41' },
+    ]
+    const result = buildVariesBy(variants)
+    expect(result.specifications).toContainEqual({ name: 'Farbe', values: ['Schwarz', 'Weiß'] })
+    expect(result.specifications).toContainEqual({ name: 'Größe', values: ['40', '41'] })
+  })
+
+  it('keeps both axes even with 1 unique value (size variation, single color)', () => {
+    const variants = [
+      { color: 'Schwarz', size: '40' },
+      { color: 'Schwarz', size: '41' },
+    ]
+    const result = buildVariesBy(variants)
+    expect(result.specifications).toContainEqual({ name: 'Farbe', values: ['Schwarz'] })
+    expect(result.specifications).toContainEqual({ name: 'Größe', values: ['40', '41'] })
+  })
+
+  it('keeps both axes even with 1 unique value (color variation, single size)', () => {
+    const variants = [
+      { color: 'Schwarz', size: 'M' },
+      { color: 'Weiß', size: 'M' },
+    ]
+    const result = buildVariesBy(variants)
+    expect(result.specifications).toContainEqual({ name: 'Farbe', values: ['Schwarz', 'Weiß'] })
+    expect(result.specifications).toContainEqual({ name: 'Größe', values: ['M'] })
+  })
+
+  it('emits axis only when at least 1 variant has a non-empty value (size only when no color anywhere)', () => {
+    const variants = [
+      { color: null as string | null, size: '40' },
+      { color: null as string | null, size: '41' },
+    ]
+    const result = buildVariesBy(variants)
+    expect(result.specifications).toHaveLength(1)
+    expect(result.specifications[0].name).toBe('Größe')
+  })
+
+  it('throws no_varying_aspects when both empty', () => {
+    try {
+      buildVariesBy([{ color: null, size: null }, { color: null, size: null }])
+      throw new Error('expected throw')
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MappingBlockError)
+      expect(e.code).toBe('no_varying_aspects')
+    }
+  })
+
+  it('aspectsImageVariesBy=["Farbe"] when 2+ colors', () => {
+    const variants = [
+      { color: 'Schwarz', size: '40' },
+      { color: 'Weiß', size: '40' },
+    ]
+    expect(buildVariesBy(variants).aspectsImageVariesBy).toEqual(['Farbe'])
+  })
+
+  it('aspectsImageVariesBy=[] when 1 color', () => {
+    const variants = [
+      { color: 'Schwarz', size: '40' },
+      { color: 'Schwarz', size: '41' },
+    ]
+    expect(buildVariesBy(variants).aspectsImageVariesBy).toEqual([])
+  })
+})
+
+describe('buildInventoryItemGroupPayload', () => {
+  const product: MapperProduct = {
+    id: 'p1',
+    slug: 'herren-schuhe',
+    brand: 'Malak',
+    basePrice: '59.90',
+    salePrice: null,
+    category: { ebayCategoryId: '15709', departmentSlug: 'herren' },
+    translations: [{ language: 'de', name: 'Herren Schuhe', description: 'Tolle Schuhe' }],
+    images: [
+      { url: 'https://cdn.malak.com/black-1.jpg', colorName: 'Schwarz', isPrimary: true, sortOrder: 0 },
+      { url: 'https://cdn.malak.com/white-1.jpg', colorName: 'Weiß', isPrimary: false, sortOrder: 1 },
+    ],
+  }
+  const variants: MapperVariant[] = [
+    { id: 'v1', sku: 'MAL-HER-SCH-40', barcode: null, color: 'Schwarz', size: '40', priceModifier: '0', weightGrams: 500 },
+    { id: 'v2', sku: 'MAL-HER-WEI-40', barcode: null, color: 'Weiß', size: '40', priceModifier: '0', weightGrams: 500 },
+  ]
+
+  it('happy path: 2-variant minimal → full payload', () => {
+    const result = buildInventoryItemGroupPayload(product, variants, 'Herren')
+    expect(result.title).toBe('Herren Schuhe')
+    expect(result.description).toBe('Tolle Schuhe')
+    expect(result.aspects).toEqual({ Marke: ['Malak'], Abteilung: ['Herren'] })
+    expect(result.variantSKUs).toEqual(['MAL-HER-SCH-40', 'MAL-HER-WEI-40'])
+    expect(result.variesBy.specifications).toContainEqual({ name: 'Farbe', values: ['Schwarz', 'Weiß'] })
+    expect(result.imageUrls).toHaveLength(2)
+  })
+
+  it('throws group_needs_2_plus_variants when 1 variant', () => {
+    try {
+      buildInventoryItemGroupPayload(product, [variants[0]], 'Herren')
+      throw new Error('expected throw')
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MappingBlockError)
+      expect(e.code).toBe('group_needs_2_plus_variants')
+    }
+  })
+
+  it('throws group_no_images when product has no images', () => {
+    const noImg = { ...product, images: [] }
+    try {
+      buildInventoryItemGroupPayload(noImg, variants, 'Herren')
+      throw new Error('expected throw')
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(MappingBlockError)
+      expect(e.code).toBe('group_no_images')
+    }
+  })
+
+  it('imageUrls includes ALL product images (no color filter)', () => {
+    const result = buildInventoryItemGroupPayload(product, variants, 'Herren')
+    expect(result.imageUrls).toContain('https://cdn.malak.com/black-1.jpg')
+    expect(result.imageUrls).toContain('https://cdn.malak.com/white-1.jpg')
+  })
+
+  it('variantSKUs matches variants order', () => {
+    const result = buildInventoryItemGroupPayload(product, variants, 'Herren')
+    expect(result.variantSKUs).toEqual(variants.map((v) => v.sku))
   })
 })

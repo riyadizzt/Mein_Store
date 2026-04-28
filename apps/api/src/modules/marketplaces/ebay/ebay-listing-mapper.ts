@@ -542,3 +542,163 @@ export function buildOfferPayload(input: {
 
   return { payload, price }
 }
+
+// ──────────────────────────────────────────────────────────────
+// Multi-Variation Group Helpers (C11.6)
+// ──────────────────────────────────────────────────────────────
+//
+// eBay supports two listing patterns:
+//   - Single-Variant: 1 inventory_item → 1 offer → 1 publish → 1 listing
+//   - Multi-Variation: N inventory_items → 1 inventory_item_group →
+//                      N draft offers → publishByInventoryItemGroup → 1 listing
+//
+// We use Multi-Variation for products with 2+ active variants (better
+// shopping UX — buyer sees all sizes/colors on one listing page) and
+// fall back to Single-Variant for 1-variant products. Decision is made
+// upstream in publishProduct(productId).
+//
+// Per Phase A/B audit + eBay Inventory Item Group docs:
+//   - groupKey: "MAL_<productId>" (underscore — eBay's documented pattern;
+//     hyphen is not officially confirmed for inventoryItemGroupKey)
+//   - aspects: only fixed-aspects (Marke, Abteilung) — varying aspects
+//     (Farbe, Größe) live in variesBy.specifications
+//   - variesBy.specifications: hardcoded ['Farbe', 'Größe'] for EBAY_DE
+//     (matches our localized aspect-keys); values dynamically extracted
+//   - aspectsImageVariesBy: ['Farbe'] only when 2+ unique colors
+//   - variantSKUs: list of all active-variant SKUs
+//   - title: product-level (no color/size suffix)
+//   - description: product-level (re-uses pickTranslation)
+//   - imageUrls: ALL product images (group-level, color-agnostic)
+
+/**
+ * Build the eBay inventoryItemGroupKey from our internal productId.
+ * Underscore-only format per eBay-Doku-Konvention. Length capped at 50.
+ */
+export function buildInventoryItemGroupKey(productId: string): string {
+  return `MAL_${productId}`.slice(0, 50)
+}
+
+/**
+ * Group-level title — pure product name, no color/size suffix.
+ * Mirror of buildTitle() but without per-variant disambiguation.
+ * eBay 80-char cap enforced (same as single-variant title).
+ */
+export function buildGroupTitle(productName: string): string {
+  const trimmed = (productName ?? '').trim()
+  if (trimmed.length === 0) {
+    throw new MappingBlockError('group_title_missing', 'Product has no name')
+  }
+  if (trimmed.length <= 80) return trimmed
+  return trimmed.slice(0, 77) + '...'
+}
+
+/**
+ * Group-level aspects — only fixed (non-varying) aspects.
+ * Brand and Abteilung ARE the same for all variants of a product.
+ * Color and Size go into variesBy.specifications, NOT here.
+ *
+ * MPN is per-variant (= variant.sku) and stays in the per-item body
+ * via existing buildAspects(); not duplicated at group level.
+ */
+export function buildGroupAspects(
+  brand: string,
+  department: string,
+): Record<string, string[]> {
+  return {
+    [ASPECT_KEY_BRAND_DE]: [brand],
+    [ASPECT_KEY_DEPARTMENT_DE]: [department],
+  }
+}
+
+/**
+ * Build the variesBy block from a list of variants.
+ * Hardcoded specification keys ['Farbe', 'Größe'] (Q-10 decision).
+ * Values dynamically extracted as deduplicated unique sets per axis.
+ *
+ * Throws MappingBlockError if neither color NOR size varies across the
+ * given variants — that means it's effectively a single-variant
+ * product and shouldn't go through the group path.
+ */
+export interface VariesByPayload {
+  specifications: Array<{ name: string; values: string[] }>
+  aspectsImageVariesBy: string[]
+}
+
+export function buildVariesBy(
+  variants: Array<Pick<MapperVariant, 'color' | 'size'>>,
+): VariesByPayload {
+  const colors = uniqueNonEmpty(variants.map((v) => v.color))
+  const sizes = uniqueNonEmpty(variants.map((v) => v.size))
+  if (colors.length === 0 && sizes.length === 0) {
+    throw new MappingBlockError(
+      'no_varying_aspects',
+      'Multi-variation group requires at least Farbe or Größe to vary across variants',
+    )
+  }
+  const specs: Array<{ name: string; values: string[] }> = []
+  if (colors.length > 0) specs.push({ name: ASPECT_KEY_COLOR_DE, values: colors })
+  if (sizes.length > 0) specs.push({ name: ASPECT_KEY_SIZE_DE, values: sizes })
+  return {
+    specifications: specs,
+    aspectsImageVariesBy: colors.length > 1 ? [ASPECT_KEY_COLOR_DE] : [],
+  }
+}
+
+function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((v): v is string => !!v && v.trim().length > 0))]
+}
+
+/**
+ * Top-level builder for the inventory_item_group request body.
+ * Composes title + description + imageUrls + aspects + variesBy +
+ * variantSKUs into the eBay InventoryItemGroup type.
+ *
+ * Pre-flight validation per Q-16: throws MappingBlockError on any
+ * structural issue. Caller must NOT proceed to the API call when this
+ * throws — instead recordFail for ALL N rows of the productId.
+ */
+export interface InventoryItemGroupPayload {
+  title: string
+  description: string
+  imageUrls: string[]
+  aspects: Record<string, string[]>
+  variesBy: VariesByPayload
+  variantSKUs: string[]
+}
+
+export function buildInventoryItemGroupPayload(
+  product: MapperProduct,
+  variants: MapperVariant[],
+  department: string,
+): InventoryItemGroupPayload {
+  if (variants.length < 2) {
+    throw new MappingBlockError(
+      'group_needs_2_plus_variants',
+      `Inventory item group requires 2+ variants, got ${variants.length}`,
+    )
+  }
+  const translation = pickTranslation(product.translations)
+  const title = buildGroupTitle(translation.name)
+  const description = truncateDescription(translation.description)
+  const brand = resolveBrand(product.brand)
+  const aspects = buildGroupAspects(brand, department)
+  const variesBy = buildVariesBy(variants)
+  const variantSKUs = variants.map((v) => v.sku)
+  // pickImages(_, null) = no color filter → all product images, sorted
+  // primary-first, capped at 12 (verified Phase D pickImages-Body Z.290-296).
+  const imageUrls = pickImages(product.images, null)
+  if (imageUrls.length === 0) {
+    throw new MappingBlockError(
+      'group_no_images',
+      `Product ${product.id} has no usable images`,
+    )
+  }
+  return {
+    title,
+    description,
+    imageUrls,
+    aspects,
+    variesBy,
+    variantSKUs,
+  }
+}
