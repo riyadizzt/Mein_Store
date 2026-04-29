@@ -12,6 +12,8 @@ import { VorkasseProvider } from './providers/vorkasse.provider'
 import { SumUpProvider } from './providers/sumup.provider'
 import { VorkasseCron } from './vorkasse.cron'
 import { PAYMENT_PROVIDERS } from './payment-provider.interface'
+// C13.1 — marketplace invoice generation listener
+import { MarketplaceInvoiceListener } from './listeners/marketplace-invoice.listener'
 
 @Module({
   imports: [PrismaModule, EmailModule],
@@ -25,6 +27,7 @@ import { PAYMENT_PROVIDERS } from './payment-provider.interface'
     VorkasseProvider,
     SumUpProvider,
     VorkasseCron,
+    MarketplaceInvoiceListener,
     {
       provide: PAYMENT_PROVIDERS,
       useFactory: (

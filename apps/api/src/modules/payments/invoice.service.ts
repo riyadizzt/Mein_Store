@@ -16,6 +16,10 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   paypal: 'PayPal',
   sepa_direct_debit: 'SEPA-Lastschrift',
   giropay: 'Giropay',
+  // C13.1 — eBay Managed Payments (added after C12.0 PaymentMethod-enum
+  // expansion). Without this map entry, the "Bezahlt via …" banner
+  // would render the raw enum string `ebay_managed_payments`.
+  ebay_managed_payments: 'eBay Managed Payments',
 }
 
 interface CompanyData {
@@ -720,8 +724,16 @@ export class InvoiceService implements OnModuleInit {
         doc.text(`Bankverbindung: ${co.bankName ? co.bankName + ' · ' : ''}IBAN: ${co.bankIban}${co.bankBic ? ' · BIC: ' + co.bankBic : ''}`, 50, y)
       }
 
-      // ── FOOTER ─────────────────────────────────────
+      // ── MARKETPLACE FOOTER BLOCK (C13.1) ─────────────
+      // Channel-conditional GoBD-marker block above the standard
+      // footer separator. Extracted into a helper so the rendering
+      // logic is unit-testable without running pdfkit's binary
+      // encoder (FlateDecode + font glyph subsetting in production
+      // makes content streams unreadable from the PDF buffer alone).
       const footerY = 770
+      this.renderMarketplaceFooterBlock(doc, order, footerY)
+
+      // ── FOOTER ─────────────────────────────────────
       doc.moveTo(50, footerY).lineTo(545, footerY).lineWidth(1).strokeColor(GOLD).stroke()
       doc.font('Helvetica').fontSize(6.5).fillColor('#9ca3af')
       doc.text(
@@ -731,6 +743,35 @@ export class InvoiceService implements OnModuleInit {
 
       doc.end()
     })
+  }
+
+  /**
+   * C13.1 — Marketplace footer block. Rendered above the standard
+   * footer separator, only for marketplace-imported orders. eBay-
+   * specific today; TIKTOK in Phase 3 will follow the same shape.
+   *
+   * Extracted from buildInvoicePdf so the rendering logic is unit-
+   * testable without running pdfkit's binary encoder. Tests pass a
+   * stub doc that records `.text()` calls.
+   *
+   * Defensive null-check on channelOrderId — the schema marks it
+   * nullable for legacy reasons, but a marketplace order with null
+   * channelOrderId would render a meaningless footer.
+   */
+  private renderMarketplaceFooterBlock(doc: any, order: any, footerY: number): void {
+    if (order.channel !== 'ebay' || !order.channelOrderId) return
+    const blockY = footerY - 38
+    doc.roundedRect(50, blockY - 4, 495, 30, 4).fill('#f1f5f9')
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#334155')
+    doc.text(
+      `Verkauf über eBay — eBay-Bestellnummer: ${order.channelOrderId}`,
+      58, blockY + 2,
+    )
+    doc.font('Helvetica').fontSize(7.5).fillColor('#475569')
+    doc.text(
+      'Zahlung über eBay Managed Payments verarbeitet.',
+      58, blockY + 14,
+    )
   }
 
   // ── PDF: Credit Note / Gutschrift (Premium Design — Red Accent) ──
