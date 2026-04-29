@@ -24,6 +24,7 @@
 import { forwardRef, Module } from '@nestjs/common'
 import { PrismaModule } from '../../prisma/prisma.module'
 import { AdminModule } from '../admin/admin.module'
+import { OrdersModule } from '../orders/orders.module'
 
 // C9 core (no NestJS — type-only imports elsewhere)
 // C10 adapters + services
@@ -40,6 +41,11 @@ import { EbayAccountDeletionController } from './ebay/ebay-account-deletion.cont
 import { EbayAccountDeletionService } from './ebay/ebay-account-deletion.service'
 import { EbayCategoryMatcherController } from './ebay/ebay-category-matcher.controller'
 import { EbayCategoryMatcherService } from './ebay/ebay-category-matcher.service'
+// C12.2 + C12.4 — order-import adapter, glue + webhook
+import { EbayOrderAdapter } from './ebay/ebay-order.adapter'
+import { MarketplaceImportService } from './marketplace-import.service'
+import { EbayOrderNotificationService } from './ebay/ebay-order-notification.service'
+import { EbayOrderNotificationController } from './ebay/ebay-order-notification.controller'
 
 @Module({
   imports: [
@@ -48,11 +54,16 @@ import { EbayCategoryMatcherService } from './ebay/ebay-category-matcher.service
     // forwardRef guards against a future circular import should
     // AdminModule itself ever consume something from marketplaces.
     forwardRef(() => AdminModule),
+    // C12.4: OrdersModule brings OrdersService.createFromMarketplace.
+    // forwardRef defensively (Klärung 2) — OrdersModule already imports
+    // AdminModule and we want to stay safe against future cycles.
+    forwardRef(() => OrdersModule),
   ],
   controllers: [
     EbayController,
     EbayAccountDeletionController,
     EbayCategoryMatcherController,
+    EbayOrderNotificationController,
   ],
   providers: [
     PrismaMarketplaceImportStore,
@@ -65,6 +76,9 @@ import { EbayCategoryMatcherService } from './ebay/ebay-category-matcher.service
     EbayTokenRefreshCron,
     EbayAccountDeletionService,
     EbayCategoryMatcherService,
+    EbayOrderAdapter,
+    MarketplaceImportService,
+    EbayOrderNotificationService,
   ],
   exports: [
     PrismaMarketplaceImportStore,
@@ -73,6 +87,8 @@ import { EbayCategoryMatcherService } from './ebay/ebay-category-matcher.service
     EbayAuthService,
     EbayMerchantLocationService,
     EbayListingService,
+    EbayOrderAdapter,
+    MarketplaceImportService,
   ],
 })
 export class MarketplacesModule {}
