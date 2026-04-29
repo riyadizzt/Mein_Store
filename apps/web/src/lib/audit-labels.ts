@@ -139,6 +139,16 @@ const FIELD_LABELS: Record<string, L> = {
   notif_daily_summary: { de: 'Tägliche Zusammenfassung', en: 'Daily summary', ar: 'ملخص يومي' },
   notif_daily_summary_email: { de: 'Tages-E-Mail-Empfänger', en: 'Daily summary email', ar: 'بريد الملخص اليومي' },
   notif_email_auto_cancel: { de: 'E-Mail: Auto-Storno', en: 'Email: auto cancel', ar: 'إيميل: إلغاء تلقائي' },
+
+  // ── C12.5 Marketplace pull-cron tick summary ──
+  since: { de: 'Von', en: 'From', ar: 'من' },
+  until: { de: 'Bis', en: 'Until', ar: 'حتى' },
+  found: { de: 'Gefunden', en: 'Found', ar: 'تم العثور' },
+  imported: { de: 'Importiert', en: 'Imported', ar: 'تم الاستيراد' },
+  skipped: { de: 'Übersprungen', en: 'Skipped', ar: 'تم التخطي' },
+  failed: { de: 'Fehlgeschlagen', en: 'Failed', ar: 'فشل' },
+  durationMs: { de: 'Dauer (ms)', en: 'Duration (ms)', ar: 'المدة (مللي ثانية)' },
+  hardCapHit: { de: 'Limit erreicht', en: 'Hard-cap hit', ar: 'تم بلوغ الحد' },
 }
 
 // ── Enum-value labels ──────────────────────────────────────────

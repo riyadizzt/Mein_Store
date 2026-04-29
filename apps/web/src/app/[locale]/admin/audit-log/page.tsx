@@ -212,6 +212,9 @@ const ACTION_COLORS: Record<string, string> = {
   CATEGORY_REACTIVATED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
   EBAY_POLICY_IDS_UPDATED: 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300',
   EBAY_MERCHANT_LOCATION_ENSURED: 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300',
+  // C12.5 — eBay Pull-Cron tick summary. Slate (neutral operational signal,
+  // not a success/alert). Only written when found > 0 (no audit-spam).
+  MARKETPLACE_PULL_TICK_COMPLETED: 'bg-slate-100 text-slate-800 dark:bg-slate-500/20 dark:text-slate-300',
   ADMIN_PASSWORD_RESET: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300',
   MAINTENANCE_AUTO_DISABLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
   EMERGENCY_RECOVERY: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -321,6 +324,7 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   CATEGORY_REACTIVATED: { de: 'Kategorie reaktiviert', en: 'Category reactivated', ar: 'تمت إعادة تفعيل الفئة' },
   EBAY_POLICY_IDS_UPDATED: { de: 'eBay-Policy-IDs aktualisiert', en: 'eBay policy IDs updated', ar: 'تم تحديث معرّفات سياسات eBay' },
   EBAY_MERCHANT_LOCATION_ENSURED: { de: 'eBay-Merchant-Location eingerichtet', en: 'eBay merchant location ensured', ar: 'تم إعداد موقع التاجر eBay' },
+  MARKETPLACE_PULL_TICK_COMPLETED: { de: 'eBay Pull-Cron — Tick abgeschlossen', en: 'eBay pull-cron — tick completed', ar: 'مزامنة eBay الدورية — انتهى التحديث' },
   PRODUCTS_CHANNEL_ENABLED: { de: 'Kanal aktiviert', en: 'Channel enabled', ar: 'تفعيل القناة' },
   PRODUCTS_CHANNEL_DISABLED: { de: 'Kanal deaktiviert', en: 'Channel disabled', ar: 'إلغاء تفعيل القناة' },
   DELIVERY_CREATED: { de: 'Lieferung erstellt', en: 'Delivery created', ar: 'إنشاء توصيل' },

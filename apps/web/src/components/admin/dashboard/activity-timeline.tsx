@@ -46,6 +46,7 @@ import {
   BadgeEuro,
   PackageX,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react'
 
 interface ActionConfig {
@@ -119,6 +120,7 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   PAYMENT_CREATED:           { de: 'Zahlung erstellt',               en: 'Payment created',        ar: 'تم إنشاء الدفع',             Icon: CreditCard,     color: 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300' },
   MAINTENANCE_AUTO_DISABLED: { de: 'Wartungsmodus beendet',          en: 'Maintenance ended',      ar: 'إيقاف وضع الصيانة تلقائياً', Icon: Wrench,         color: 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300' },
   EMERGENCY_RECOVERY:        { de: 'Notfall-Wiederherstellung',      en: 'Emergency recovery',     ar: 'استعادة طوارئ',              Icon: Siren,          color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
+  MARKETPLACE_PULL_TICK_COMPLETED: { de: 'eBay Pull-Cron — Tick abgeschlossen', en: 'eBay pull-cron — tick completed', ar: 'مزامنة eBay الدورية — انتهى التحديث', Icon: RefreshCw, color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
 }
 
 const DEFAULT_CONFIG: ActionConfig = {

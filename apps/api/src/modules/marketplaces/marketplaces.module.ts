@@ -46,6 +46,9 @@ import { EbayOrderAdapter } from './ebay/ebay-order.adapter'
 import { MarketplaceImportService } from './marketplace-import.service'
 import { EbayOrderNotificationService } from './ebay/ebay-order-notification.service'
 import { EbayOrderNotificationController } from './ebay/ebay-order-notification.controller'
+// C12.5 — pull-cron safety-net
+import { EbayOrderPullService } from './ebay/ebay-order-pull.service'
+import { EbayOrderPullCron } from './ebay/ebay-order-pull.cron'
 
 @Module({
   imports: [
@@ -79,6 +82,8 @@ import { EbayOrderNotificationController } from './ebay/ebay-order-notification.
     EbayOrderAdapter,
     MarketplaceImportService,
     EbayOrderNotificationService,
+    EbayOrderPullService,
+    EbayOrderPullCron,
   ],
   exports: [
     PrismaMarketplaceImportStore,
