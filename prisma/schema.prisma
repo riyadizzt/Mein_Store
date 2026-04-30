@@ -950,6 +950,14 @@ model Shipment {
   shippedAt           DateTime?       @map("shipped_at")
   deliveredAt         DateTime?       @map("delivered_at")
   estimatedDelivery   DateTime?       @map("estimated_delivery")
+  // C14 — eBay tracking-push state (only relevant for marketplace-imported
+  // orders with channel='ebay'). Listener pushes the tracking number to
+  // eBay's shipping_fulfillment endpoint after the shipment is created;
+  // cron retries up to 5 times if the live push fails. Other shipments
+  // leave these NULL.
+  ebayPushedAt        DateTime?       @map("ebay_pushed_at")
+  ebayPushAttempts    Int             @default(0) @map("ebay_push_attempts")
+  ebayPushError       String?         @map("ebay_push_error")
   createdAt           DateTime        @default(now()) @map("created_at")
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
