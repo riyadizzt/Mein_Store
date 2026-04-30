@@ -215,6 +215,13 @@ export class EbayOrderNotificationService {
     }
 
     // 4. orderId resolution + extraction (existing).
+    //
+    // C15.2 — Marker substring 'notification.data.orderId missing' is
+    // ALSO referenced by EbayOrderNotificationController as
+    // ORDER_ID_MISSING_MARKER. The controller catches this specific
+    // message, swallows the 4xx, returns 204, and admin-notifies. If
+    // this string ever changes here, the controller's catch-block
+    // breaks silently — the controller test asserts the marker.
     const orderId = (n.data.orderId ?? n.data.legacyOrderId ?? '').toString().trim()
     if (!orderId) {
       throw new BadRequestException('notification.data.orderId missing')
