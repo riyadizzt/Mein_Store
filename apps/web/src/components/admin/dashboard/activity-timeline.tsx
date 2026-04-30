@@ -127,6 +127,9 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   EBAY_REFUND_MANUALLY_CONFIRMED: { de: 'eBay-Erstattung manuell bestätigt', en: 'eBay refund manually confirmed', ar: 'تم تأكيد استرداد eBay يدوياً', Icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
   EBAY_SHIPPING_PUSHED:         { de: 'eBay Tracking übertragen',         en: 'eBay tracking pushed',           ar: 'تم إرسال تتبع eBay',         Icon: Truck,         color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
   EBAY_SHIPPING_PUSH_FAILED:    { de: 'eBay Tracking-Push fehlgeschlagen', en: 'eBay tracking push failed',      ar: 'فشل إرسال تتبع eBay',        Icon: AlertTriangle, color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
+  CHANNEL_STOCK_PUSH_FAILED:    { de: 'eBay Bestand-Sync fehlgeschlagen',  en: 'eBay stock sync failed',         ar: 'فشل مزامنة مخزون eBay',     Icon: AlertTriangle, color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
+  EBAY_STOCK_RATE_LIMITED:      { de: 'eBay Rate-Limit (Bestand)',         en: 'eBay rate-limit (stock)',        ar: 'حد معدل eBay (المخزون)',     Icon: Pause,         color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  CHANNEL_STOCK_RECONCILE_TICK: { de: 'eBay Bestand-Reconcile Tick',       en: 'eBay stock reconcile tick',      ar: 'تشغيل مزامنة مخزون eBay',   Icon: Activity,      color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
 }
 
 const DEFAULT_CONFIG: ActionConfig = {

@@ -160,6 +160,13 @@ const FIELD_LABELS: Record<string, L> = {
   trackingNumber: { de: 'Sendungsnummer', en: 'Tracking number', ar: 'رقم التتبع' },
   carrier: { de: 'Versanddienstleister', en: 'Carrier', ar: 'شركة الشحن' },
   attempts: { de: 'Versuche', en: 'Attempts', ar: 'المحاولات' },
+
+  // ── C15 channel stock-sync fields ──
+  scanned: { de: 'Geprüft', en: 'Scanned', ar: 'تم الفحص' },
+  pushed: { de: 'Übertragen', en: 'Pushed', ar: 'تم الإرسال' },
+  rateLimited: { de: 'Rate-Limit', en: 'Rate-limited', ar: 'حد المعدل' },
+  batchSize: { de: 'Batch-Größe', en: 'Batch size', ar: 'حجم الدفعة' },
+  fromCron: { de: 'Aus Cron', en: 'From cron', ar: 'من الجدولة' },
 }
 
 // ── Enum-value labels ──────────────────────────────────────────

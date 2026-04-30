@@ -11,6 +11,7 @@ import { ReserveStockDto } from './dto/reserve-stock.dto'
 import { InventoryService } from './inventory.service'
 import { revalidateProductTags } from '../../common/helpers/revalidation'
 import { propagateChannelSafetyCheck } from '../../common/helpers/channel-safety-stock'
+import { propagateChannelStockPush } from '../../common/helpers/channel-stock-push'
 
 interface InventoryRow {
   id: string
@@ -138,6 +139,10 @@ export class ReservationService {
       // ChannelProductListing rows whose (variant, channel) has
       // dropped to/below safetyStock. Never blocks or rolls back.
       propagateChannelSafetyCheck(this.prisma, [dto.variantId]).catch(() => {})
+      // C15 — eBay quantity-push fast-path. C5 runs first (above) so
+      // pause-state wins over quantity-push at race-time. Errors are
+      // swallowed; reconcile-cron is the safety net.
+      propagateChannelStockPush([dto.variantId]).catch(() => {})
       return reservation
     })
   }
@@ -203,6 +208,9 @@ export class ReservationService {
           // C5 — release raises availableStock; may auto-resume a
           // low_stock-paused listing for this variant.
           propagateChannelSafetyCheck(this.prisma, [r.variantId]).catch(() => {})
+          // C15 — release raises availableStock → push higher quantity
+          // to eBay so a previously-low listing becomes more visible.
+          propagateChannelStockPush([r.variantId]).catch(() => {})
         }
       })
       .catch(() => {})
@@ -301,6 +309,8 @@ export class ReservationService {
     revalidateProductTags(this.prisma, [reservation.variantId]).catch(() => {})
     // C5 — onHand dropped on capture; check if safety-stock auto-pause triggers.
     propagateChannelSafetyCheck(this.prisma, [reservation.variantId]).catch(() => {})
+    // C15 — capture decremented onHand; eBay needs the new lower quantity.
+    propagateChannelStockPush([reservation.variantId]).catch(() => {})
 
     return { success: true, reservationId, orderId }
   }
@@ -424,6 +434,9 @@ export class ReservationService {
       // C5 — restock raised availableStock; may auto-resume low_stock-
       // paused listings for any of these variants.
       propagateChannelSafetyCheck(this.prisma, touchedVariantIds).catch(() => {})
+      // C15 — restock raised availableStock → push higher quantity to
+      // eBay so the recovered listing is sellable again.
+      propagateChannelStockPush(touchedVariantIds).catch(() => {})
     }
 
     return { restocked: restockedCount }

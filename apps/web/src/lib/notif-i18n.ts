@@ -312,6 +312,27 @@ export function translateNotification(
         body: errMsg,
       }
     }
+    case 'channel_stock_push_failed': {
+      // Persisted by EbayStockPushService (C15) when a per-listing
+      // quantity-push fails MAX_PUSH_ATTEMPTS times. data.attempts
+      // is the cumulative count, data.error the last short message.
+      // Surfaces only on exhaustion to avoid notification-spam during
+      // transient cron-retries.
+      const attempts = d.attempts ?? '?'
+      const errMsg = d.error ?? ''
+      return {
+        title: t(
+          'eBay Bestand-Sync fehlgeschlagen',
+          'eBay stock sync failed',
+          'فشل مزامنة مخزون eBay',
+        ),
+        body: t(
+          `Nach ${attempts} Versuchen konnte der Bestand nicht aktualisiert werden. ${errMsg}`,
+          `Stock could not be updated after ${attempts} attempts. ${errMsg}`,
+          `تعذر تحديث المخزون بعد ${attempts} محاولات. ${errMsg}`,
+        ),
+      }
+    }
     default:
       return { title: n.title ?? '', body: n.body ?? '' }
   }

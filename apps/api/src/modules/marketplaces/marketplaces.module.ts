@@ -56,6 +56,10 @@ import { EbayRefundPollCron } from './ebay/ebay-refund-poll.cron'
 import { EbayShippingPushService } from './ebay/ebay-shipping-push.service'
 import { EbayShippingPushListener } from './ebay/ebay-shipping-push.listener'
 import { EbayShippingPushCron } from './ebay/ebay-shipping-push.cron'
+// C15 — inventory quantity push to eBay (listener fast-path + reconcile cron)
+import { EbayStockPushService } from './ebay/ebay-stock-push.service'
+import { EbayStockReconcileService } from './ebay/ebay-stock-reconcile.service'
+import { EbayStockReconcileCron } from './ebay/ebay-stock-reconcile.cron'
 
 @Module({
   imports: [
@@ -96,6 +100,9 @@ import { EbayShippingPushCron } from './ebay/ebay-shipping-push.cron'
     EbayShippingPushService,
     EbayShippingPushListener,
     EbayShippingPushCron,
+    EbayStockPushService,
+    EbayStockReconcileService,
+    EbayStockReconcileCron,
   ],
   exports: [
     PrismaMarketplaceImportStore,

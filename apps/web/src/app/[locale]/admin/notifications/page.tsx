@@ -8,7 +8,7 @@ import { translateNotification } from '@/lib/notif-i18n'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import {
   Bell, ShoppingBag, RotateCcw, Users, X, Trash2, ShieldAlert, MessageSquare,
-  Check, ChevronLeft, ChevronRight, Filter, FileWarning,
+  Check, ChevronLeft, ChevronRight, Filter, FileWarning, AlertTriangle,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -40,6 +40,7 @@ const TYPE_CONFIG: Record<string, { Icon: typeof Bell; bg: string; fg: string; d
   admin_password_reset: { Icon: ShieldAlert, bg: 'bg-purple-100', fg: 'text-purple-600', dot: 'bg-purple-500' },
   maintenance_auto_ended: { Icon: Bell, bg: 'bg-teal-100', fg: 'text-teal-600', dot: 'bg-teal-500' },
   cron_crashed: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-700' },
+  channel_stock_push_failed: { Icon: AlertTriangle, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-600' },
   // NOTE: 'low_stock' removed — backend never emits this type.
 }
 
@@ -63,6 +64,7 @@ const TYPE_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   admin_password_reset: { de: 'Passwort zurückgesetzt', en: 'Password Reset', ar: 'إعادة تعيين كلمة المرور' },
   maintenance_auto_ended: { de: 'Wartungsende', en: 'Maintenance Ended', ar: 'نهاية الصيانة' },
   cron_crashed: { de: 'Cron abgestürzt', en: 'Cron Crashed', ar: 'توقف Cron' },
+  channel_stock_push_failed: { de: 'Bestand-Sync fehlgeschlagen', en: 'Stock Sync Failed', ar: 'فشل مزامنة المخزون' },
 }
 
 const LIMIT = 20

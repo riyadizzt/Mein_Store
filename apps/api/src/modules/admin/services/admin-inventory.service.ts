@@ -4,6 +4,7 @@ import { AuditService } from './audit.service'
 import { WebhookDispatcherService } from '../../webhooks/webhook-dispatcher.service'
 import { buildInventoryRestockPayload } from '../../webhooks/payload-builders/inventory'
 import { propagateChannelSafetyCheck } from '../../../common/helpers/channel-safety-stock'
+import { propagateChannelStockPush } from '../../../common/helpers/channel-stock-push'
 
 @Injectable()
 export class AdminInventoryService {
@@ -1024,6 +1025,9 @@ export class AdminInventoryService {
     // may auto-resume low_stock-paused listings. Fire-and-forget.
     if (touchedVariantIds.size > 0) {
       propagateChannelSafetyCheck(this.prisma, Array.from(touchedVariantIds)).catch(() => {})
+      // C15 — intake raised availableStock; push the new quantity to
+      // eBay so the listing reflects fresh stock.
+      propagateChannelStockPush(Array.from(touchedVariantIds)).catch(() => {})
     }
 
     return { processed: results.length, items: results }

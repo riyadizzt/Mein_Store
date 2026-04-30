@@ -223,6 +223,10 @@ const ACTION_COLORS: Record<string, string> = {
   // C14 — eBay shipping tracking push state
   EBAY_SHIPPING_PUSHED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
   EBAY_SHIPPING_PUSH_FAILED: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
+  // C15 — channel stock-quantity sync (listener fast-path + reconcile cron)
+  CHANNEL_STOCK_PUSH_FAILED: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
+  EBAY_STOCK_RATE_LIMITED: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  CHANNEL_STOCK_RECONCILE_TICK: 'bg-slate-100 text-slate-800 dark:bg-slate-500/20 dark:text-slate-300',
   ADMIN_PASSWORD_RESET: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300',
   MAINTENANCE_AUTO_DISABLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
   EMERGENCY_RECOVERY: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -339,6 +343,9 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   EBAY_REFUND_MANUALLY_CONFIRMED: { de: 'eBay-Erstattung manuell bestätigt', en: 'eBay refund manually confirmed', ar: 'تم تأكيد استرداد eBay يدوياً' },
   EBAY_SHIPPING_PUSHED: { de: 'eBay Tracking übertragen', en: 'eBay tracking pushed', ar: 'تم إرسال تتبع eBay' },
   EBAY_SHIPPING_PUSH_FAILED: { de: 'eBay Tracking-Push fehlgeschlagen', en: 'eBay tracking push failed', ar: 'فشل إرسال تتبع eBay' },
+  CHANNEL_STOCK_PUSH_FAILED: { de: 'eBay Bestand-Sync fehlgeschlagen', en: 'eBay stock sync failed', ar: 'فشل مزامنة مخزون eBay' },
+  EBAY_STOCK_RATE_LIMITED: { de: 'eBay Rate-Limit beim Bestand-Sync', en: 'eBay rate-limit during stock sync', ar: 'حد معدل eBay أثناء مزامنة المخزون' },
+  CHANNEL_STOCK_RECONCILE_TICK: { de: 'eBay Bestand-Reconcile Tick', en: 'eBay stock reconcile tick', ar: 'تشغيل مزامنة مخزون eBay' },
   PRODUCTS_CHANNEL_ENABLED: { de: 'Kanal aktiviert', en: 'Channel enabled', ar: 'تفعيل القناة' },
   PRODUCTS_CHANNEL_DISABLED: { de: 'Kanal deaktiviert', en: 'Channel disabled', ar: 'إلغاء تفعيل القناة' },
   DELIVERY_CREATED: { de: 'Lieferung erstellt', en: 'Delivery created', ar: 'إنشاء توصيل' },
