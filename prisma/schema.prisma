@@ -874,6 +874,10 @@ model Refund {
   providerRefundId String?      @map("provider_refund_id")
   idempotencyKey   String?      @unique @map("idempotency_key")
   processedAt      DateTime?    @map("processed_at")
+  // C13.3 — eBay-only timestamp for the 48h-fallback admin-notification.
+  // Set when EbayPaymentProvider.refund() successfully calls eBay's
+  // issue_refund API. Other providers leave this NULL.
+  ebayRequestedAt  DateTime?    @map("ebay_requested_at")
   createdBy        String?      @map("created_by")
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
