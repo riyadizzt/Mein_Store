@@ -1314,19 +1314,46 @@ model DataExportRequest {
 // ADMIN
 // ─────────────────────────────────────────────────────────────
 
+// C15.1 — three-tier classification for audit-log retention.
+//   financial   → GoBD §147 AO. NEVER deleted. (Invoices, refunds,
+//                 payments, credit notes, money-bearing cancels.)
+//   operational → 90-day retention in Supabase. Then archived to R2
+//                 (gzip JSON, upload-verified before delete).
+//   ephemeral   → 7-day retention. PERMANENT delete (no R2). For
+//                 high-volume low-value events like eBay account-
+//                 deletion notifications + webhook-duplicate noise.
+// AuditService.log() auto-classifies via FINANCIAL_ACTIONS +
+// EPHEMERAL_ACTIONS Sets; default is operational. The audit-archive
+// cron uses this enum as its only filter — see audit-archive.service.
+enum AuditTier {
+  financial
+  operational
+  ephemeral
+}
+
 model AdminAuditLog {
-  id         String   @id @default(uuid())
-  adminId    String   @map("admin_id")
-  action     String   // ORDER_CANCELLED, PRODUCT_UPDATED, USER_BLOCKED, etc.
-  entityType String   @map("entity_type") // order, product, user, inventory, etc.
-  entityId   String?  @map("entity_id")
-  changes    Json?    // { before: {...}, after: {...} }
-  ipAddress  String?  @map("ip_address")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  adminId    String    @map("admin_id")
+  action     String    // ORDER_CANCELLED, PRODUCT_UPDATED, USER_BLOCKED, etc.
+  entityType String    @map("entity_type") // order, product, user, inventory, etc.
+  entityId   String?   @map("entity_id")
+  changes    Json?     // { before: {...}, after: {...} }
+  ipAddress  String?   @map("ip_address")
+  // C15.1 retention-classification. Defaults to 'operational' so
+  // any forgotten classification stays archive-eligible (NOT
+  // ephemeral — better safe-side error is "archived but not needed"
+  // than "deleted but should have been kept").
+  tier       AuditTier @default(operational)
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([adminId])
   @@index([entityType, entityId])
   @@index([createdAt])
+  // C15.1 — index for the archive-cron's primary scan path.
+  // Predicate: WHERE tier IN ('operational','ephemeral') AND
+  // created_at < cutoff. Composite (tier, created_at) is the
+  // optimal shape for both branches of the cron's two-step plan.
+  @@index([tier, createdAt])
   @@map("admin_audit_log")
 }
 
@@ -2006,6 +2033,11 @@ model MarketplaceOrderImport {
   error           String?                    @db.Text
 
   // Correlation to notification-api payload for replay/debug.
+  // C15.1: also used as webhook-idempotency key — see the @@unique
+  // below. Pull-cron rows leave this NULL (no notification triggered
+  // them); Postgres NULL-semantics treat each NULL as distinct so the
+  // unique-constraint allows arbitrarily many NULL rows. Webhook
+  // path always sets it to notification.notificationId.
   rawEventId      String?                    @map("raw_event_id")
 
   createdAt       DateTime                   @default(now()) @map("created_at")
@@ -2013,6 +2045,12 @@ model MarketplaceOrderImport {
   importedAt      DateTime?                  @map("imported_at")
 
   @@unique([marketplace, externalOrderId], name: "marketplace_external_order_unique")
+  // C15.1 — webhook-idempotency. EbayOrderNotificationService pre-
+  // checks this UNIQUE pair BEFORE calling the expensive getOrder().
+  // Postgres allows multiple NULL rawEventId rows (pull-cron path);
+  // duplicate webhook deliveries with the same notificationId hit
+  // P2002 here AND surface earlier via the service-level pre-check.
+  @@unique([marketplace, rawEventId], name: "marketplace_raw_event_unique")
   @@index([marketplace, status, createdAt])
   @@index([orderId])
   @@map("marketplace_order_imports")
