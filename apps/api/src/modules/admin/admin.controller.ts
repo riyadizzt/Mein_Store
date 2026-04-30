@@ -1614,6 +1614,17 @@ export class AdminController {
     return this.returns.markRefundTransferred(id, req.user.id, ip)
   }
 
+  // C13.3 — eBay refund manual confirmation. 48h-fallback for cases
+  // where EbayRefundPollService could not auto-confirm via polling.
+  // Identical guard semantics as Vorkasse mark-transferred but
+  // filtered for EBAY_MANAGED_PAYMENTS provider.
+  @Post('refunds/:id/manually-confirm-ebay')
+  @RequirePermission(PERMISSIONS.RETURNS_EDIT)
+  @HttpCode(HttpStatus.OK)
+  manuallyConfirmEbayRefund(@Param('id', ParseUUIDPipe) id: string, @Req() req: any, @Ip() ip: string) {
+    return this.returns.manualConfirmEbayRefund(id, req.user.id, ip)
+  }
+
   @Post('returns/:id/send-label')
   @RequirePermission(PERMISSIONS.RETURNS_APPROVE)
   @HttpCode(HttpStatus.OK)

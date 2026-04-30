@@ -121,6 +121,10 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   MAINTENANCE_AUTO_DISABLED: { de: 'Wartungsmodus beendet',          en: 'Maintenance ended',      ar: 'إيقاف وضع الصيانة تلقائياً', Icon: Wrench,         color: 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300' },
   EMERGENCY_RECOVERY:        { de: 'Notfall-Wiederherstellung',      en: 'Emergency recovery',     ar: 'استعادة طوارئ',              Icon: Siren,          color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
   MARKETPLACE_PULL_TICK_COMPLETED: { de: 'eBay Pull-Cron — Tick abgeschlossen', en: 'eBay pull-cron — tick completed', ar: 'مزامنة eBay الدورية — انتهى التحديث', Icon: RefreshCw, color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  EBAY_REFUND_COMPLETED:        { de: 'eBay-Erstattung abgeschlossen',     en: 'eBay refund completed',          ar: 'تم اكتمال استرداد eBay',     Icon: BadgeEuro,     color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_REFUND_FAILED:           { de: 'eBay-Erstattung fehlgeschlagen',    en: 'eBay refund failed',             ar: 'فشل استرداد eBay',           Icon: AlertTriangle, color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
+  EBAY_REFUND_PENDING_48H:      { de: 'eBay-Erstattung > 48h pending',     en: 'eBay refund > 48h pending',      ar: 'استرداد eBay معلق > 48 ساعة', Icon: Clock,         color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  EBAY_REFUND_MANUALLY_CONFIRMED: { de: 'eBay-Erstattung manuell bestätigt', en: 'eBay refund manually confirmed', ar: 'تم تأكيد استرداد eBay يدوياً', Icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
 }
 
 const DEFAULT_CONFIG: ActionConfig = {

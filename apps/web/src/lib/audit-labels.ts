@@ -149,6 +149,12 @@ const FIELD_LABELS: Record<string, L> = {
   failed: { de: 'Fehlgeschlagen', en: 'Failed', ar: 'فشل' },
   durationMs: { de: 'Dauer (ms)', en: 'Duration (ms)', ar: 'المدة (مللي ثانية)' },
   hardCapHit: { de: 'Limit erreicht', en: 'Hard-cap hit', ar: 'تم بلوغ الحد' },
+
+  // ── C13.3 eBay refund poll-cron fields ──
+  providerRefundId: { de: 'eBay-Erstattungs-ID', en: 'eBay refund ID', ar: 'معرّف استرداد eBay' },
+  ebayStatus: { de: 'eBay-Status', en: 'eBay status', ar: 'حالة eBay' },
+  ebayDetail: { de: 'eBay-Details', en: 'eBay details', ar: 'تفاصيل eBay' },
+  ageHours: { de: 'Alter (Stunden)', en: 'Age (hours)', ar: 'العمر (ساعات)' },
 }
 
 // ── Enum-value labels ──────────────────────────────────────────

@@ -215,6 +215,11 @@ const ACTION_COLORS: Record<string, string> = {
   // C12.5 — eBay Pull-Cron tick summary. Slate (neutral operational signal,
   // not a success/alert). Only written when found > 0 (no audit-spam).
   MARKETPLACE_PULL_TICK_COMPLETED: 'bg-slate-100 text-slate-800 dark:bg-slate-500/20 dark:text-slate-300',
+  // C13.3 — eBay refund poll-cron status transitions
+  EBAY_REFUND_COMPLETED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
+  EBAY_REFUND_FAILED: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
+  EBAY_REFUND_PENDING_48H: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
+  EBAY_REFUND_MANUALLY_CONFIRMED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
   ADMIN_PASSWORD_RESET: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300',
   MAINTENANCE_AUTO_DISABLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
   EMERGENCY_RECOVERY: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -325,6 +330,10 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   EBAY_POLICY_IDS_UPDATED: { de: 'eBay-Policy-IDs aktualisiert', en: 'eBay policy IDs updated', ar: 'تم تحديث معرّفات سياسات eBay' },
   EBAY_MERCHANT_LOCATION_ENSURED: { de: 'eBay-Merchant-Location eingerichtet', en: 'eBay merchant location ensured', ar: 'تم إعداد موقع التاجر eBay' },
   MARKETPLACE_PULL_TICK_COMPLETED: { de: 'eBay Pull-Cron — Tick abgeschlossen', en: 'eBay pull-cron — tick completed', ar: 'مزامنة eBay الدورية — انتهى التحديث' },
+  EBAY_REFUND_COMPLETED: { de: 'eBay-Erstattung abgeschlossen', en: 'eBay refund completed', ar: 'تم اكتمال استرداد eBay' },
+  EBAY_REFUND_FAILED: { de: 'eBay-Erstattung fehlgeschlagen', en: 'eBay refund failed', ar: 'فشل استرداد eBay' },
+  EBAY_REFUND_PENDING_48H: { de: 'eBay-Erstattung > 48h pending', en: 'eBay refund > 48h pending', ar: 'استرداد eBay معلق > 48 ساعة' },
+  EBAY_REFUND_MANUALLY_CONFIRMED: { de: 'eBay-Erstattung manuell bestätigt', en: 'eBay refund manually confirmed', ar: 'تم تأكيد استرداد eBay يدوياً' },
   PRODUCTS_CHANNEL_ENABLED: { de: 'Kanal aktiviert', en: 'Channel enabled', ar: 'تفعيل القناة' },
   PRODUCTS_CHANNEL_DISABLED: { de: 'Kanal deaktiviert', en: 'Channel disabled', ar: 'إلغاء تفعيل القناة' },
   DELIVERY_CREATED: { de: 'Lieferung erstellt', en: 'Delivery created', ar: 'إنشاء توصيل' },

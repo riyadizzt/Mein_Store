@@ -1289,6 +1289,115 @@ export class AdminReturnsService {
     return updated
   }
 
+  // ── 8c. manualConfirmEbayRefund (C13.3 — eBay 48h-fallback) ──
+  //
+  // eBay's issue_refund API returns immediately with status='INITIATED'
+  // and the actual money-transfer happens asynchronously. Normally
+  // EbayRefundPollService.runPollTick (every 60min) flips refund.status
+  // PENDING → PROCESSED automatically by polling getOrder() refund-state.
+  //
+  // BUT — if the poll-cron cannot determine the status (eBay API hiccup,
+  // shape-drift in response, etc.) the refund stays PENDING. The poll
+  // fires a 48h-fallback admin-notification ('ebay_refund_pending_48h')
+  // pointing the admin to this endpoint.
+  //
+  // Behavior: identical to markRefundTransferred (Vorkasse variant) but
+  // filtered for EBAY_MANAGED_PAYMENTS provider only.
+  //
+  // Guards: only EBAY_MANAGED_PAYMENTS refunds, only PENDING. Idempotent
+  // via PENDING guard. Audit-action EBAY_REFUND_MANUALLY_CONFIRMED.
+  async manualConfirmEbayRefund(refundId: string, adminId: string, ip: string) {
+    const refund = await this.prisma.refund.findUnique({
+      where: { id: refundId },
+      select: {
+        id: true,
+        status: true,
+        amount: true,
+        processedAt: true,
+        providerRefundId: true,
+        payment: {
+          select: {
+            provider: true,
+            orderId: true,
+            order: { select: { orderNumber: true } },
+          },
+        },
+      },
+    })
+
+    if (!refund) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'RefundNotFound',
+        message: {
+          de: 'Erstattung nicht gefunden.',
+          en: 'Refund not found.',
+          ar: 'الاسترداد غير موجود.',
+        },
+      })
+    }
+
+    if (refund.payment?.provider !== 'EBAY_MANAGED_PAYMENTS') {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'OnlyEbayManagedPaymentsSupported',
+        message: {
+          de: 'Nur eBay Managed Payments-Erstattungen können hier manuell bestätigt werden.',
+          en: 'Only eBay Managed Payments refunds can be manually confirmed here.',
+          ar: 'يمكن تأكيد استرداد eBay Managed Payments يدويًا هنا فقط.',
+        },
+      })
+    }
+
+    if (refund.status !== 'PENDING') {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'RefundNotPending',
+        message: {
+          de: `Erstattung ist bereits im Status "${refund.status}".`,
+          en: `Refund is already in status "${refund.status}".`,
+          ar: `الاسترداد بالفعل في حالة "${refund.status}".`,
+        },
+      })
+    }
+
+    const updated = await this.prisma.refund.update({
+      where: { id: refundId },
+      data: {
+        status: 'PROCESSED',
+        processedAt: new Date(),
+      },
+    })
+
+    try {
+      await this.audit.log({
+        adminId,
+        action: 'EBAY_REFUND_MANUALLY_CONFIRMED',
+        entityType: 'refund',
+        entityId: refundId,
+        changes: {
+          before: { status: 'PENDING', processedAt: null },
+          after: {
+            status: 'PROCESSED',
+            processedAt: updated.processedAt,
+            amount: Number(refund.amount),
+            providerRefundId: refund.providerRefundId,
+            orderNumber: refund.payment.order?.orderNumber ?? null,
+          },
+        },
+        ipAddress: ip,
+      })
+    } catch (e: any) {
+      this.logger.error(`Audit: ${e.message}`)
+    }
+
+    this.logger.log(
+      `eBay refund ${refundId} manually confirmed: ${Number(refund.amount).toFixed(2)} EUR | ebayRefundId=${refund.providerRefundId} | order=${refund.payment.order?.orderNumber ?? refund.payment.orderId} | by=${adminId}`,
+    )
+
+    return updated
+  }
+
   // ── 9. getStats ────────────────────────────────────────────
 
   async getStats() {

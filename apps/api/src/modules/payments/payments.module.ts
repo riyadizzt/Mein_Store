@@ -10,6 +10,7 @@ import { KlarnaProvider } from './providers/klarna.provider'
 import { PayPalProvider } from './providers/paypal.provider'
 import { VorkasseProvider } from './providers/vorkasse.provider'
 import { SumUpProvider } from './providers/sumup.provider'
+import { EbayPaymentProvider } from './providers/ebay.provider'
 import { VorkasseCron } from './vorkasse.cron'
 import { PAYMENT_PROVIDERS } from './payment-provider.interface'
 // C13.1 — marketplace invoice generation listener
@@ -26,6 +27,7 @@ import { MarketplaceInvoiceListener } from './listeners/marketplace-invoice.list
     PayPalProvider,
     VorkasseProvider,
     SumUpProvider,
+    EbayPaymentProvider,
     VorkasseCron,
     MarketplaceInvoiceListener,
     {
@@ -36,8 +38,9 @@ import { MarketplaceInvoiceListener } from './listeners/marketplace-invoice.list
         paypal: PayPalProvider,
         vorkasse: VorkasseProvider,
         sumup: SumUpProvider,
-      ) => [stripe, klarna, paypal, vorkasse, sumup],
-      inject: [StripeProvider, KlarnaProvider, PayPalProvider, VorkasseProvider, SumUpProvider],
+        ebay: EbayPaymentProvider,
+      ) => [stripe, klarna, paypal, vorkasse, sumup, ebay],
+      inject: [StripeProvider, KlarnaProvider, PayPalProvider, VorkasseProvider, SumUpProvider, EbayPaymentProvider],
     },
   ],
   exports: [PaymentsService, InvoiceService, VorkasseProvider, SumUpProvider, PayPalProvider],
