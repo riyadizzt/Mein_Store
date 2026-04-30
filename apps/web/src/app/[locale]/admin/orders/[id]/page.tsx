@@ -8,7 +8,8 @@ import Image from 'next/image'
 import {
   Check, Truck, Download, Ban, Loader2, ExternalLink, StickyNote,
   Package, CreditCard, MapPin, User, Clock, FileText,
-  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro, Building2, Pencil, Send
+  ChevronRight, Printer, RotateCcw, AlertTriangle, Copy, Euro, Building2, Pencil, Send,
+  ShoppingBag,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
@@ -406,6 +407,43 @@ export default function AdminOrderDetailPage({ params: { id } }: { params: { id:
           </span>
         </div>
       </div>
+
+      {/* ── eBay Marketplace Info-Block (C13.4) ─────────────────
+          Conditional on order.channel === 'ebay'. Surfaces the
+          marketplace context the admin needs for support cases:
+          - eBay-Bestellnummer (= channelOrderId, what the eBay-Buyer
+            sees on their eBay confirmation email — often quoted in
+            support requests)
+          - Payment processor clarification (eBay Managed Payments,
+            NOT Stripe/PayPal/etc. — different refund-flow path)
+          Visual: slate panel with Gold left-border, matches the
+          marketplace footer block on the invoice PDF (cross-surface
+          consistency). Defensive null-check on channelOrderId. */}
+      {order.channel === 'ebay' && order.channelOrderId && (
+        <div className="bg-slate-50 dark:bg-slate-900/30 border-l-4 border-l-[#d4a853] border border-slate-200 dark:border-slate-700 rounded-2xl p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <ShoppingBag className="h-5 w-5 text-[#d4a853] flex-shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t3('Verkauft über eBay', 'Sold via eBay', 'تم البيع عبر eBay')}
+              </p>
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                <span className="text-slate-500 dark:text-slate-400 ltr:mr-2 rtl:ml-2">
+                  {t3('eBay-Bestellnummer:', 'eBay order number:', 'رقم طلب eBay:')}
+                </span>
+                <span className="font-mono" dir="ltr">{order.channelOrderId}</span>
+              </p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                {t3(
+                  'Zahlung über eBay Managed Payments verarbeitet — keine separate Provider-Buchung.',
+                  'Payment processed via eBay Managed Payments — no separate provider transaction.',
+                  'تمت معالجة الدفع عبر eBay Managed Payments — لا توجد معاملة منفصلة.',
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── PROGRESS BAR ───────────────────────────────────── */}
       <div className="bg-background border rounded-2xl p-5 mb-6" style={{ animation: 'fadeSlideUp 300ms ease-out 50ms both' }}>

@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/auth-store'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
+import { EbayRefundStatusBlock } from '@/components/admin/ebay-refund-status-block'
 import { useConfirm } from '@/components/ui/confirm-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -175,6 +176,16 @@ export default function AdminReturnsPage() {
     onSuccess: invalidate,
   })
 
+  // C13.4 — eBay 48h-fallback: flip Refund.status PENDING → PROCESSED when
+  // EbayRefundPollService cannot determine the status from eBay-API
+  // (rare edge case). Mirrors the Vorkasse pattern. Server-side endpoint
+  // guards (admin-returns.service.manualConfirmEbayRefund) only allow
+  // EBAY_MANAGED_PAYMENTS provider + PENDING status.
+  const manualConfirmEbayRefundMut = useMutation({
+    mutationFn: (refundId: string) => api.post(`/admin/refunds/${refundId}/manually-confirm-ebay`),
+    onSuccess: invalidate,
+  })
+
   // ── Handlers ───────────────────────────────────────────────
   const openDetail = (ret: any) => {
     setSelectedId(ret.id)
@@ -264,6 +275,30 @@ export default function AdminReturnsPage() {
       cancelLabel: t3('Abbrechen', 'Cancel', '\u0625\u0644\u063a\u0627\u0621'),
     })
     if (ok) markTransferredMut.mutate(refundId)
+  }
+
+  // C13.4 — eBay 48h-fallback manual confirm. Identical pattern to
+  // handleConfirmTransfer (Vorkasse) but routes to the eBay endpoint.
+  // Status flip is irreversible — eBay already moved the money on
+  // their side; we are catching up our DB visibility.
+  const handleConfirmEbayRefund = async (refundId: string, amount: number) => {
+    const amt = formatCurrency(amount, locale)
+    const ok = await confirmDialog({
+      title: t3(
+        'eBay-Erstattung manuell bestätigen?',
+        'Manually confirm eBay refund?',
+        'تأكيد استرداد eBay يدوياً؟',
+      ),
+      description: t3(
+        `Bestätige, dass eBay die Erstattung von ${amt} im eBay Seller Hub als abgeschlossen anzeigt. Diese Aktion flippt den Status auf PROCESSED und kann nicht rückgängig gemacht werden.`,
+        `Confirm that eBay shows the ${amt} refund as completed in eBay Seller Hub. This action flips the status to PROCESSED and cannot be undone.`,
+        `أكد أن eBay يعرض الاسترداد بقيمة ${amt} كمكتمل في Seller Hub. هذا الإجراء يحول الحالة إلى PROCESSED ولا يمكن التراجع عنه.`,
+      ),
+      variant: 'danger',
+      confirmLabel: t3('Ja, bestätigen', 'Yes, confirm', 'نعم، أكّد'),
+      cancelLabel: t3('Abbrechen', 'Cancel', 'إلغاء'),
+    })
+    if (ok) manualConfirmEbayRefundMut.mutate(refundId)
   }
 
   const handleInspect = () => {
@@ -863,6 +898,33 @@ export default function AdminReturnsPage() {
                             )}
                           </Button>
                         </div>
+                      )
+                    }
+
+                    // C13.4 \u2014 eBay refund status (PENDING/FAILED rendered by
+                    // EbayRefundStatusBlock; PROCESSED falls through to the
+                    // standard green block below). The component returns
+                    // null for PROCESSED to keep ZERO-TOUCH on success path.
+                    const isEbayRefundNonProcessed =
+                      provider === 'EBAY_MANAGED_PAYMENTS' &&
+                      latestRefund &&
+                      latestRefund.status !== 'PROCESSED'
+                    if (isEbayRefundNonProcessed && latestRefund) {
+                      const ebayRefund = {
+                        id: latestRefund.id,
+                        status: latestRefund.status,
+                        amount: latestRefund.amount,
+                        providerRefundId: (latestRefund as any).providerRefundId ?? null,
+                        ebayRequestedAt: (latestRefund as any).ebayRequestedAt ?? null,
+                        createdAt: latestRefund.createdAt,
+                      }
+                      return (
+                        <EbayRefundStatusBlock
+                          refund={ebayRefund}
+                          locale={locale}
+                          isPending={manualConfirmEbayRefundMut.isPending}
+                          onConfirm={() => handleConfirmEbayRefund(ebayRefund.id, Number(ebayRefund.amount))}
+                        />
                       )
                     }
 
