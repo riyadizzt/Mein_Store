@@ -1064,8 +1064,12 @@ model ChannelProductListing {
   // ── Safety-Stock System (C5) ─────────────────────────────────────
   // Buffer kept aside when reporting stock to external marketplaces.
   // Listing is auto-paused when `availableStock <= safetyStock`.
-  // Default 1 (pro spec) — overridable per (variant, channel).
-  safetyStock       Int                  @default(1) @map("safety_stock")
+  // Default 0 (C15.0 owner-decision) — many products carry only 1-2
+  // units, so safetyStock=1 at quantity=1 reports eBay-quantity=0 =
+  // lost sale. Oversell-protection lives in 4 other layers (Listener
+  // fast-path, Reconcile-Cron, C5 Auto-Pause, C12.3 softStockCheck).
+  // Admin can manually raise per-listing as needed.
+  safetyStock       Int                  @default(0) @map("safety_stock")
   // Why the listing is paused. Null when status != 'paused'.
   // Enum-like: 'low_stock' | 'manual' | 'sync_error' | 'admin_disabled'.
   // Critical invariant: 'low_stock' pauses may auto-resume; 'manual'
@@ -1077,6 +1081,12 @@ model ChannelProductListing {
   // Phase 2/3. Reset to 0 on first success after failures.
   syncAttempts      Int                  @default(0) @map("sync_attempts")
   lastSyncedAt      DateTime?            @map("last_synced_at")
+  // C15: effective quantity last reported to the marketplace
+  // (= max(0, available - safetyStock)). Reconcile-cron pre-flight
+  // skips listings where current effective quantity matches this
+  // value — idempotency-guard. NULL means "never pushed" → cron
+  // will push on first tick.
+  lastSyncedQuantity Int?                @map("last_synced_quantity")
   syncError         String?              @map("sync_error")
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
