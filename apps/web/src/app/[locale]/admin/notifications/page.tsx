@@ -8,7 +8,7 @@ import { translateNotification } from '@/lib/notif-i18n'
 import { AdminBreadcrumb } from '@/components/admin/breadcrumb'
 import {
   Bell, ShoppingBag, RotateCcw, Users, X, Trash2, ShieldAlert, MessageSquare,
-  Check, ChevronLeft, ChevronRight, Filter, FileWarning, AlertTriangle,
+  Check, ChevronLeft, ChevronRight, Filter, FileWarning, AlertTriangle, CloudOff,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -41,6 +41,7 @@ const TYPE_CONFIG: Record<string, { Icon: typeof Bell; bg: string; fg: string; d
   maintenance_auto_ended: { Icon: Bell, bg: 'bg-teal-100', fg: 'text-teal-600', dot: 'bg-teal-500' },
   cron_crashed: { Icon: ShieldAlert, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-700' },
   channel_stock_push_failed: { Icon: AlertTriangle, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-600' },
+  audit_archive_failed: { Icon: CloudOff, bg: 'bg-red-100', fg: 'text-red-700', dot: 'bg-red-600' },
   // NOTE: 'low_stock' removed — backend never emits this type.
 }
 
@@ -65,6 +66,7 @@ const TYPE_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   maintenance_auto_ended: { de: 'Wartungsende', en: 'Maintenance Ended', ar: 'نهاية الصيانة' },
   cron_crashed: { de: 'Cron abgestürzt', en: 'Cron Crashed', ar: 'توقف Cron' },
   channel_stock_push_failed: { de: 'Bestand-Sync fehlgeschlagen', en: 'Stock Sync Failed', ar: 'فشل مزامنة المخزون' },
+  audit_archive_failed: { de: 'Audit-Archiv fehlgeschlagen', en: 'Audit Archive Failed', ar: 'فشل أرشفة السجل' },
 }
 
 const LIMIT = 20

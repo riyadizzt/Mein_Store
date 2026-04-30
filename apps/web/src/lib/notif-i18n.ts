@@ -333,6 +333,30 @@ export function translateNotification(
         ),
       }
     }
+    case 'audit_archive_failed': {
+      // Persisted by AuditArchiveService (C15.1) when the daily 03:00
+      // archive-tick fails to upload to R2 (network / credential /
+      // bucket-config issue). data.rowsAttempted shows how many
+      // operational audit-rows are still in Supabase pending archive;
+      // data.error is the short failure-reason. The cron retries
+      // automatically the next night at 03:00 — no admin action
+      // required unless the failure persists multiple days (then
+      // verify R2 credentials in env).
+      const rows = d.rowsAttempted ?? '?'
+      const errMsg = d.error ?? ''
+      return {
+        title: t(
+          'Audit-Archivierung fehlgeschlagen',
+          'Audit archive failed',
+          'فشل أرشفة سجل التدقيق',
+        ),
+        body: t(
+          `R2-Upload fehlgeschlagen (${rows} Zeilen ausstehend). ${errMsg} — automatischer Retry morgen um 03:00.`,
+          `R2 upload failed (${rows} rows pending). ${errMsg} — auto-retry tomorrow at 03:00.`,
+          `فشل تحميل R2 (${rows} صف معلق). ${errMsg} — إعادة المحاولة تلقائياً غداً الساعة 03:00.`,
+        ),
+      }
+    }
     default:
       return { title: n.title ?? '', body: n.body ?? '' }
   }

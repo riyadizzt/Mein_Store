@@ -19,6 +19,18 @@
  * Pre-C12 audit confirmed zero eBay-buyer data in DB, so the scan is a
  * no-op returning false today. When C12 (eBay order import) lands, the
  * scan gets real redaction logic — see scanAndRedactBuyerData() below.
+ *
+ * C15.1 — Idempotency review:
+ *   This service is ALREADY idempotent (line ~135-143). The pre-check
+ *   `findUnique({ where: { notificationId } })` short-circuits BEFORE
+ *   any persist or audit-row write. Live-DB analysis on 2026-05-01
+ *   showed 11.200 distinct EBAY_ACCOUNT_DELETION_RECEIVED audit rows
+ *   — these are NOT idempotency failures: eBay legitimately emits one
+ *   notification per affected service (Bidding, Stores, etc.) per
+ *   user-deletion event, with each carrying its own notificationId.
+ *   The downstream classification fix is C15.1's `tier='ephemeral'`
+ *   for this action — 7-day retention then permanent delete via the
+ *   audit-archive cron Step A. No service-code change here.
  */
 
 import {

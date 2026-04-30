@@ -47,6 +47,15 @@ import {
   PackageX,
   AlertTriangle,
   RefreshCw,
+  // C15.1 i18n bug-fix icons
+  Archive,
+  ShoppingBag,
+  PlugZap,
+  Plug,
+  FolderTree,
+  CloudOff,
+  Cloud,
+  Send,
 } from 'lucide-react'
 
 interface ActionConfig {
@@ -130,6 +139,32 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   CHANNEL_STOCK_PUSH_FAILED:    { de: 'eBay Bestand-Sync fehlgeschlagen',  en: 'eBay stock sync failed',         ar: 'فشل مزامنة مخزون eBay',     Icon: AlertTriangle, color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
   EBAY_STOCK_RATE_LIMITED:      { de: 'eBay Rate-Limit (Bestand)',         en: 'eBay rate-limit (stock)',        ar: 'حد معدل eBay (المخزون)',     Icon: Pause,         color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
   CHANNEL_STOCK_RECONCILE_TICK: { de: 'eBay Bestand-Reconcile Tick',       en: 'eBay stock reconcile tick',      ar: 'تشغيل مزامنة مخزون eBay',   Icon: Activity,      color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  // ── C15.1 audit-archive cron + webhook idempotency ──────────────
+  AUDIT_ARCHIVE_COMPLETED:      { de: 'Audit-Archivierung abgeschlossen',  en: 'Audit archive completed',        ar: 'تم اكتمال أرشفة السجل',     Icon: Archive,       color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  AUDIT_ARCHIVE_FAILED:         { de: 'Audit-Archivierung fehlgeschlagen', en: 'Audit archive failed',           ar: 'فشل أرشفة السجل',           Icon: CloudOff,      color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
+  EBAY_WEBHOOK_DUPLICATE:       { de: 'eBay Webhook-Duplikat',             en: 'eBay webhook duplicate',         ar: 'إشعار eBay مكرر',           Icon: Copy,          color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  // ── C15.1 i18n bug-fix — eBay Listing/OAuth/Category labels ─────
+  // Previously fell back to English-prettified text on AR-dashboard.
+  EBAY_ACCOUNT_DELETION_RECEIVED: { de: 'eBay Account-Löschung empfangen', en: 'eBay account deletion received', ar: 'تم استلام إشعار حذف حساب eBay', Icon: Inbox,    color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  CATEGORY_UPDATED:             { de: 'Kategorie bearbeitet',              en: 'Category updated',               ar: 'تعديل الفئة',                Icon: FolderTree,    color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  CATEGORY_ARCHIVED:            { de: 'Kategorie archiviert',              en: 'Category archived',              ar: 'أرشفة الفئة',                Icon: Archive,       color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  CATEGORY_ARCHIVED_WITH_MOVE:  { de: 'Kategorie archiviert (mit Verschiebung)', en: 'Category archived with move', ar: 'أرشفة الفئة مع النقل',     Icon: Archive,       color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  CATEGORY_REACTIVATED:         { de: 'Kategorie reaktiviert',             en: 'Category reactivated',           ar: 'إعادة تفعيل الفئة',          Icon: RotateCcw,     color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  CHANNEL_LISTING_ENABLED:      { de: 'Channel-Listing aktiviert',         en: 'Channel listing enabled',        ar: 'تفعيل عرض القناة',           Icon: ShoppingBag,   color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_LISTING_CLEANUP_FOR_REGROUP: { de: 'eBay-Listing für Neugruppierung bereinigt', en: 'eBay listing cleaned up for regroup', ar: 'تنظيف عرض eBay لإعادة التجميع', Icon: RefreshCw, color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  EBAY_LISTING_DISABLED:        { de: 'eBay-Listing deaktiviert',          en: 'eBay listing disabled',          ar: 'إلغاء تفعيل عرض eBay',       Icon: Pause,         color: 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300' },
+  EBAY_LISTING_ENABLED:         { de: 'eBay-Listing aktiviert',            en: 'eBay listing enabled',           ar: 'تفعيل عرض eBay',             Icon: ShoppingBag,   color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_LISTING_PUBLISHED:       { de: 'eBay-Listing veröffentlicht',       en: 'eBay listing published',         ar: 'نشر عرض eBay',               Icon: Send,          color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_LISTING_REJECTED:        { de: 'eBay-Listing abgelehnt',            en: 'eBay listing rejected',          ar: 'رفض عرض eBay',               Icon: XCircle,       color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
+  EBAY_MERCHANT_LOCATION_ENSURED: { de: 'eBay Lager-Location verifiziert', en: 'eBay merchant location ensured', ar: 'تأكيد موقع تاجر eBay',       Icon: Warehouse,     color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  EBAY_OAUTH_CONNECT_INITIATED: { de: 'eBay OAuth-Verbindung gestartet',   en: 'eBay OAuth connect initiated',   ar: 'بدء ربط OAuth مع eBay',       Icon: Plug,          color: 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300' },
+  EBAY_OAUTH_CONNECTED:         { de: 'eBay OAuth verbunden',              en: 'eBay OAuth connected',           ar: 'تم الربط مع eBay عبر OAuth', Icon: PlugZap,       color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_OAUTH_DISCONNECTED:      { de: 'eBay OAuth getrennt',               en: 'eBay OAuth disconnected',        ar: 'فصل OAuth عن eBay',          Icon: Plug,          color: 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300' },
+  EBAY_OAUTH_REVOKED:           { de: 'eBay OAuth widerrufen',             en: 'eBay OAuth revoked',             ar: 'تم إبطال OAuth مع eBay',     Icon: ShieldAlert,   color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
+  EBAY_POLICY_IDS_UPDATED:      { de: 'eBay Policy-IDs aktualisiert',      en: 'eBay policy IDs updated',        ar: 'تحديث معرفات سياسات eBay',    Icon: Settings,      color: 'bg-slate-100 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  EBAY_PRODUCT_GROUP_PUBLISHED: { de: 'eBay Produkt-Gruppe veröffentlicht', en: 'eBay product group published',  ar: 'نشر مجموعة منتجات eBay',     Icon: Send,          color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_PUBLISH_PENDING_BATCH:   { de: 'eBay Veröffentlichungs-Batch ausstehend', en: 'eBay publish-pending batch', ar: 'دفعة نشر eBay قيد الانتظار', Icon: Cloud,      color: 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300' },
+  PRODUCTS_DELETED:             { de: 'Produkte gelöscht',                 en: 'Products deleted',               ar: 'حذف منتجات',                 Icon: Trash2,        color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
 }
 
 const DEFAULT_CONFIG: ActionConfig = {

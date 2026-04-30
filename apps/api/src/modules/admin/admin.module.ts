@@ -31,6 +31,9 @@ import { DailySummaryCron } from './cron/daily-summary.cron'
 import { PaymentTimeoutCron } from './cron/payment-timeout.cron'
 import { ExpiryReminderCron } from './cron/expiry-reminder.cron'
 import { ChannelSafetyStockCron } from './cron/channel-safety-stock.cron'
+import { AuditArchiveCron } from './cron/audit-archive.cron'
+import { AuditArchiveService } from './services/audit-archive.service'
+import { AuditArchiveR2Client } from './services/audit-archive-r2.client'
 import { AdminSuppliersService } from './services/admin-suppliers.service'
 import { TranslationService } from '../../common/services/translation.service'
 import { CampaignService } from './services/campaign.service'
@@ -58,6 +61,9 @@ import { CronCrashAlertService } from './services/cron-crash-alert.service'
     ExpiryReminderCron,
     PaymentTimeoutCron,
     ChannelSafetyStockCron,
+    AuditArchiveR2Client,
+    AuditArchiveService,
+    AuditArchiveCron,
     AdminSuppliersService,
     TranslationService,
     CampaignService,

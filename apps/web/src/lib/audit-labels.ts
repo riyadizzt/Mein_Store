@@ -167,6 +167,15 @@ const FIELD_LABELS: Record<string, L> = {
   rateLimited: { de: 'Rate-Limit', en: 'Rate-limited', ar: 'حد المعدل' },
   batchSize: { de: 'Batch-Größe', en: 'Batch size', ar: 'حجم الدفعة' },
   fromCron: { de: 'Aus Cron', en: 'From cron', ar: 'من الجدولة' },
+
+  // ── C15.1 audit-archive cron + webhook idempotency fields ──
+  rowsArchived: { de: 'Archivierte Zeilen', en: 'Rows archived', ar: 'الصفوف المؤرشفة' },
+  rowsAttempted: { de: 'Versuchte Zeilen', en: 'Rows attempted', ar: 'الصفوف المحاولة' },
+  r2Path: { de: 'R2-Pfad', en: 'R2 path', ar: 'مسار R2' },
+  fileSize: { de: 'Dateigröße', en: 'File size', ar: 'حجم الملف' },
+  bucket: { de: 'Bucket', en: 'Bucket', ar: 'الحاوية' },
+  raceSkipped: { de: 'Race übersprungen', en: 'Race skipped', ar: 'تم تجاوز التنافس' },
+  storageKey: { de: 'Speicher-Schlüssel', en: 'Storage key', ar: 'مفتاح التخزين' },
 }
 
 // ── Enum-value labels ──────────────────────────────────────────

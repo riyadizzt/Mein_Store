@@ -37,6 +37,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import { createVerify } from 'node:crypto'
+import { PrismaService } from '../../../prisma/prisma.service'
+import { AuditService } from '../../admin/services/audit.service'
 import { resolveEbayMode, resolveEbayEnv } from './ebay-env'
 import { EbayAuthService } from './ebay-auth.service'
 import { EbayApiClient, EbayApiError } from './ebay-api.client'
@@ -99,6 +101,9 @@ export class EbayOrderNotificationService {
   constructor(
     private readonly auth: EbayAuthService,
     private readonly importService: MarketplaceImportService,
+    // C15.1 — webhook idempotency pre-check + duplicate audit-row.
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Test-only: inject stub fetch for getPublicKey lookup. */
@@ -133,12 +138,89 @@ export class EbayOrderNotificationService {
     const parsed = this.parseEnvelope(rawBody)
 
     const n = parsed.notification
+
+    // 3. C15.1 — Webhook idempotency pre-check.
+    //
+    // Lookup MarketplaceOrderImport by (marketplace, rawEventId). If
+    // a row exists, this is a duplicate webhook delivery (eBay retries
+    // a notification after our 5xx, after our 200-then-eBay-misread,
+    // or after their queue-state machine glitches). Short-circuit
+    // BEFORE the expensive getOrder() Sell-Fulfillment call which
+    // costs an eBay-API rate-limit slot.
+    //
+    // Returns null per owner-decision Q-8 (controller → 200, no
+    // ImportOutcome to report — caller already knows; nothing to do).
+    // Audit-row tier='ephemeral' so the duplicate-stream doesn't
+    // pollute the long-term audit log (7-day retention then permanent
+    // delete via audit-archive cron Step A).
+    //
+    // Defensive: if rawEventId is missing/empty in the envelope, skip
+    // the pre-check and let downstream idempotency catch (orderId-
+    // unique). The MarketplaceOrderImport schema already permits
+    // multiple NULL rawEventIds so this never produces false-matches.
+    const rawEventId = n.notificationId
+    if (rawEventId && typeof rawEventId === 'string') {
+      const existing = await this.prisma.marketplaceOrderImport
+        .findUnique({
+          where: {
+            marketplace_raw_event_unique: {
+              marketplace: 'EBAY',
+              rawEventId,
+            },
+          },
+          select: {
+            id: true,
+            externalOrderId: true,
+            status: true,
+            orderId: true,
+          },
+        })
+        .catch((err: any) => {
+          // Non-fatal — if the lookup itself fails, fall through to
+          // the normal flow. Downstream (marketplace, externalOrderId)
+          // unique-check is the second-line defense.
+          this.logger.warn(
+            `[ebay-order-webhook] idempotency pre-check failed: ${err?.message ?? err}`,
+          )
+          return null
+        })
+
+      if (existing) {
+        this.logger.log(
+          `[ebay-order-webhook] duplicate webhook notificationId=${rawEventId} ` +
+            `existingImportId=${existing.id} externalOrderId=${existing.externalOrderId} ` +
+            `status=${existing.status} — short-circuit, no getOrder() call`,
+        )
+        await this.audit
+          .log({
+            adminId: 'system',
+            action: 'EBAY_WEBHOOK_DUPLICATE',
+            entityType: 'marketplace_order_import',
+            entityId: existing.id,
+            changes: {
+              after: {
+                rawEventId,
+                externalOrderId: existing.externalOrderId,
+                status: existing.status,
+                orderId: existing.orderId ?? null,
+              },
+            },
+            // tier='ephemeral' is auto-determined via EPHEMERAL_ACTIONS
+            // Set; explicit override here is belt-and-suspenders.
+            tier: 'ephemeral',
+          })
+          .catch(() => {})
+        return null
+      }
+    }
+
+    // 4. orderId resolution + extraction (existing).
     const orderId = (n.data.orderId ?? n.data.legacyOrderId ?? '').toString().trim()
     if (!orderId) {
       throw new BadRequestException('notification.data.orderId missing')
     }
 
-    // 3. Optional publishDate window — mitigates replay outside eBay's
+    // 5. Optional publishDate window — mitigates replay outside eBay's
     // ordinary retry envelope. publishDate is ISO-8601 from eBay.
     const publishDate = Date.parse(n.publishDate)
     if (Number.isFinite(publishDate)) {
@@ -153,7 +235,7 @@ export class EbayOrderNotificationService {
       }
     }
 
-    // 4. getOrder() — fetch full Sell-Fulfillment payload
+    // 6. getOrder() — fetch full Sell-Fulfillment payload
     let rawOrderPayload: unknown
     try {
       rawOrderPayload = await this.fetchOrderFromEbay(orderId)
@@ -167,7 +249,7 @@ export class EbayOrderNotificationService {
       throw e
     }
 
-    // 5. Build event + delegate to Glue
+    // 7. Build event + delegate to Glue
     const event: MarketplaceImportEvent = {
       marketplace: 'EBAY',
       externalOrderId: orderId,

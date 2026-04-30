@@ -60,7 +60,15 @@ jest.mock('../ebay-env', () => {
 
 import { EbayApiClient } from '../ebay-api.client'
 
-function makeService(overrides?: { auth?: any; importService?: any }) {
+function makeService(overrides?: {
+  auth?: any
+  importService?: any
+  // C15.1: prisma + audit added for the new webhook-idempotency
+  // pre-check path. Defaults: findUnique returns null (no duplicate)
+  // → existing tests proceed unchanged through the new branch.
+  prisma?: any
+  audit?: any
+}) {
   const auth = overrides?.auth ?? {
     getApplicationAccessToken: jest.fn().mockResolvedValue('test-app-token'),
     getAccessTokenOrRefresh: jest.fn().mockResolvedValue('test-bearer'),
@@ -75,13 +83,24 @@ function makeService(overrides?: { auth?: any; importService?: any }) {
         orderNumber: 'ORD-MP-1',
       }),
   }
-  const service = new EbayOrderNotificationService(auth as any, importService as any)
+  const prisma = overrides?.prisma ?? {
+    marketplaceOrderImport: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
+  }
+  const audit = overrides?.audit ?? { log: jest.fn().mockResolvedValue(undefined) }
+  const service = new EbayOrderNotificationService(
+    auth as any,
+    importService as any,
+    prisma as any,
+    audit as any,
+  )
   service.__clearPublicKeyCacheForTests()
   // Reset the mocked client request impl per test
   ;(EbayApiClient as unknown as jest.Mock).mockImplementation(() => ({
     request: jest.fn().mockResolvedValue({ orderId: 'EX-1', /* full payload */ }),
   }))
-  return { service, auth, importService }
+  return { service, auth, importService, prisma, audit }
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -346,5 +365,111 @@ describe('EbayOrderNotificationService.handleNotification — ECDSA + delegation
     await expect(service.handleNotification(body, header)).rejects.toThrow(
       /500 Internal Server Error/,
     )
+  })
+
+  // ─────────────────────────────────────────────────────────────
+  // C15.1 — Webhook idempotency pre-check
+  // ─────────────────────────────────────────────────────────────
+
+  it('C15.1 duplicate webhook: pre-check finds existing → returns null + ephemeral audit + NO getOrder()', async () => {
+    const existing = {
+      id: 'imp-prev-1',
+      externalOrderId: 'EX-100',
+      status: 'IMPORTED',
+      orderId: 'ord-prev-1',
+    }
+    const findUnique = jest.fn().mockResolvedValue(existing)
+    const auditLog = jest.fn().mockResolvedValue(undefined)
+    const requestMock = jest.fn() // should NOT be called
+    ;(EbayApiClient as unknown as jest.Mock).mockImplementation(() => ({
+      request: requestMock,
+    }))
+
+    const { service, importService } = makeService({
+      prisma: {
+        marketplaceOrderImport: { findUnique },
+      },
+      audit: { log: auditLog },
+    })
+    service.__setFetchForTests(stubPublicKeyFetch())
+
+    const payload = buildPayload({ notificationId: 'dup-notif-1', orderId: 'EX-100' })
+    const body = Buffer.from(JSON.stringify(payload))
+    const header = signBody(body)
+
+    const result = await service.handleNotification(body, header)
+
+    expect(result).toBeNull()
+    // Idempotency lookup happened with the unique-constraint name
+    expect(findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          marketplace_raw_event_unique: { marketplace: 'EBAY', rawEventId: 'dup-notif-1' },
+        }),
+      }),
+    )
+    // getOrder() was NOT called (saved an eBay-API rate-limit slot)
+    expect(requestMock).not.toHaveBeenCalled()
+    // Glue service was NOT delegated to
+    expect(importService.processMarketplaceOrderEvent).not.toHaveBeenCalled()
+    // Ephemeral audit-row written for the duplicate
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'EBAY_WEBHOOK_DUPLICATE',
+        tier: 'ephemeral',
+        entityType: 'marketplace_order_import',
+        entityId: 'imp-prev-1',
+      }),
+    )
+  })
+
+  it('C15.1 fresh notification: pre-check finds nothing → normal flow proceeds', async () => {
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const { service, importService } = makeService({
+      prisma: { marketplaceOrderImport: { findUnique } },
+    })
+    service.__setFetchForTests(stubPublicKeyFetch())
+    // Override AFTER makeService — its constructor resets the
+    // EbayApiClient mock implementation.
+    const requestMock = jest.fn().mockResolvedValue({ orderId: 'EX-200' })
+    ;(EbayApiClient as unknown as jest.Mock).mockImplementation(() => ({
+      request: requestMock,
+    }))
+
+    const payload = buildPayload({ notificationId: 'fresh-notif-1', orderId: 'EX-200' })
+    const body = Buffer.from(JSON.stringify(payload))
+    const header = signBody(body)
+
+    const result = await service.handleNotification(body, header)
+
+    expect(findUnique).toHaveBeenCalled()
+    expect(requestMock).toHaveBeenCalledTimes(1) // getOrder ran
+    expect(importService.processMarketplaceOrderEvent).toHaveBeenCalledTimes(1)
+    expect(result).not.toBeNull()
+  })
+
+  it('C15.1 pre-check DB-error → falls through to normal flow (defense-in-depth)', async () => {
+    const findUnique = jest.fn().mockRejectedValue(new Error('DB unreachable'))
+    const { service, importService } = makeService({
+      prisma: { marketplaceOrderImport: { findUnique } },
+    })
+    service.__setFetchForTests(stubPublicKeyFetch())
+    const requestMock = jest.fn().mockResolvedValue({ orderId: 'EX-300' })
+    ;(EbayApiClient as unknown as jest.Mock).mockImplementation(() => ({
+      request: requestMock,
+    }))
+
+    const payload = buildPayload({ notificationId: 'maybe-dup', orderId: 'EX-300' })
+    const body = Buffer.from(JSON.stringify(payload))
+    const header = signBody(body)
+
+    // Should not throw — normal flow runs, downstream (marketplace,
+    // externalOrderId) unique-check is the second-line defense.
+    const result = await service.handleNotification(body, header)
+
+    expect(findUnique).toHaveBeenCalled()
+    expect(requestMock).toHaveBeenCalledTimes(1)
+    expect(importService.processMarketplaceOrderEvent).toHaveBeenCalledTimes(1)
+    expect(result).not.toBeNull()
   })
 })
