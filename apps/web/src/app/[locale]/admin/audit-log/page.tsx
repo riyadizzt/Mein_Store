@@ -220,6 +220,9 @@ const ACTION_COLORS: Record<string, string> = {
   EBAY_REFUND_FAILED: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
   EBAY_REFUND_PENDING_48H: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300',
   EBAY_REFUND_MANUALLY_CONFIRMED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
+  // C14 — eBay shipping tracking push state
+  EBAY_SHIPPING_PUSHED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300',
+  EBAY_SHIPPING_PUSH_FAILED: 'bg-red-200 text-red-900 dark:bg-red-600/30 dark:text-red-200',
   ADMIN_PASSWORD_RESET: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300',
   MAINTENANCE_AUTO_DISABLED: 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300',
   EMERGENCY_RECOVERY: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300',
@@ -334,6 +337,8 @@ const ACTION_LABELS: Record<string, { de: string; en: string; ar: string }> = {
   EBAY_REFUND_FAILED: { de: 'eBay-Erstattung fehlgeschlagen', en: 'eBay refund failed', ar: 'فشل استرداد eBay' },
   EBAY_REFUND_PENDING_48H: { de: 'eBay-Erstattung > 48h pending', en: 'eBay refund > 48h pending', ar: 'استرداد eBay معلق > 48 ساعة' },
   EBAY_REFUND_MANUALLY_CONFIRMED: { de: 'eBay-Erstattung manuell bestätigt', en: 'eBay refund manually confirmed', ar: 'تم تأكيد استرداد eBay يدوياً' },
+  EBAY_SHIPPING_PUSHED: { de: 'eBay Tracking übertragen', en: 'eBay tracking pushed', ar: 'تم إرسال تتبع eBay' },
+  EBAY_SHIPPING_PUSH_FAILED: { de: 'eBay Tracking-Push fehlgeschlagen', en: 'eBay tracking push failed', ar: 'فشل إرسال تتبع eBay' },
   PRODUCTS_CHANNEL_ENABLED: { de: 'Kanal aktiviert', en: 'Channel enabled', ar: 'تفعيل القناة' },
   PRODUCTS_CHANNEL_DISABLED: { de: 'Kanal deaktiviert', en: 'Channel disabled', ar: 'إلغاء تفعيل القناة' },
   DELIVERY_CREATED: { de: 'Lieferung erstellt', en: 'Delivery created', ar: 'إنشاء توصيل' },

@@ -155,6 +155,11 @@ const FIELD_LABELS: Record<string, L> = {
   ebayStatus: { de: 'eBay-Status', en: 'eBay status', ar: 'حالة eBay' },
   ebayDetail: { de: 'eBay-Details', en: 'eBay details', ar: 'تفاصيل eBay' },
   ageHours: { de: 'Alter (Stunden)', en: 'Age (hours)', ar: 'العمر (ساعات)' },
+
+  // ── C14 eBay shipping push fields ──
+  trackingNumber: { de: 'Sendungsnummer', en: 'Tracking number', ar: 'رقم التتبع' },
+  carrier: { de: 'Versanddienstleister', en: 'Carrier', ar: 'شركة الشحن' },
+  attempts: { de: 'Versuche', en: 'Attempts', ar: 'المحاولات' },
 }
 
 // ── Enum-value labels ──────────────────────────────────────────

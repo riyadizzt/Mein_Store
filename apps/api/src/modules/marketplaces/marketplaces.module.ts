@@ -52,6 +52,10 @@ import { EbayOrderPullCron } from './ebay/ebay-order-pull.cron'
 // C13.3 — refund poll-cron + service
 import { EbayRefundPollService } from './ebay/ebay-refund-poll.service'
 import { EbayRefundPollCron } from './ebay/ebay-refund-poll.cron'
+// C14 — shipping tracking push to eBay
+import { EbayShippingPushService } from './ebay/ebay-shipping-push.service'
+import { EbayShippingPushListener } from './ebay/ebay-shipping-push.listener'
+import { EbayShippingPushCron } from './ebay/ebay-shipping-push.cron'
 
 @Module({
   imports: [
@@ -89,6 +93,9 @@ import { EbayRefundPollCron } from './ebay/ebay-refund-poll.cron'
     EbayOrderPullCron,
     EbayRefundPollService,
     EbayRefundPollCron,
+    EbayShippingPushService,
+    EbayShippingPushListener,
+    EbayShippingPushCron,
   ],
   exports: [
     PrismaMarketplaceImportStore,

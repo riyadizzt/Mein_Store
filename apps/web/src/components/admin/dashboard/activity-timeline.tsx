@@ -125,6 +125,8 @@ const ACTION_LABELS: Record<string, ActionConfig> = {
   EBAY_REFUND_FAILED:           { de: 'eBay-Erstattung fehlgeschlagen',    en: 'eBay refund failed',             ar: 'فشل استرداد eBay',           Icon: AlertTriangle, color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
   EBAY_REFUND_PENDING_48H:      { de: 'eBay-Erstattung > 48h pending',     en: 'eBay refund > 48h pending',      ar: 'استرداد eBay معلق > 48 ساعة', Icon: Clock,         color: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
   EBAY_REFUND_MANUALLY_CONFIRMED: { de: 'eBay-Erstattung manuell bestätigt', en: 'eBay refund manually confirmed', ar: 'تم تأكيد استرداد eBay يدوياً', Icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_SHIPPING_PUSHED:         { de: 'eBay Tracking übertragen',         en: 'eBay tracking pushed',           ar: 'تم إرسال تتبع eBay',         Icon: Truck,         color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' },
+  EBAY_SHIPPING_PUSH_FAILED:    { de: 'eBay Tracking-Push fehlgeschlagen', en: 'eBay tracking push failed',      ar: 'فشل إرسال تتبع eBay',        Icon: AlertTriangle, color: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
 }
 
 const DEFAULT_CONFIG: ActionConfig = {
