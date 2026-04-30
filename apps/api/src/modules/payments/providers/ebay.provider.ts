@@ -41,6 +41,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common'
+import { ModuleRef } from '@nestjs/core'
 import { resolveEbayEnv } from '../../marketplaces/ebay/ebay-env'
 import { EbayAuthService } from '../../marketplaces/ebay/ebay-auth.service'
 import { EbayApiClient, EbayApiError } from '../../marketplaces/ebay/ebay-api.client'
@@ -91,9 +92,30 @@ export class EbayPaymentProvider implements IPaymentProvider {
   readonly providerName = 'EBAY_MANAGED_PAYMENTS'
   private readonly logger = new Logger(EbayPaymentProvider.name)
 
+  // C13.3 hotfix: ModuleRef-based lazy resolution of EbayAuthService
+  // breaks the module-load-time cycle that direct injection would
+  // create (PaymentsModule → MarketplacesModule → AdminModule →
+  // PaymentsModule). ModuleRef is provided by NestJS core, no module
+  // import needed. EbayAuthService is resolved on-demand inside
+  // refund() — the auth-token call is async anyway, so the lookup
+  // overhead is negligible.
   constructor(
-    private readonly auth: EbayAuthService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /** Lazy-resolve EbayAuthService from any module it lives in
+   *  (`strict: false` searches the whole DI tree). Cached after
+   *  first resolution. */
+  private cachedAuth: EbayAuthService | null = null
+  private async getAuth(): Promise<EbayAuthService> {
+    if (this.cachedAuth) return this.cachedAuth
+    const resolved = this.moduleRef.get(EbayAuthService, { strict: false })
+    if (!resolved) {
+      throw new Error('EbayPaymentProvider: EbayAuthService not resolvable via ModuleRef')
+    }
+    this.cachedAuth = resolved
+    return resolved
+  }
 
   async createPaymentIntent(_input: CreatePaymentInput): Promise<PaymentIntentResult> {
     // eBay-orders are pre-paid via eBay Managed Payments. Creating
@@ -115,7 +137,8 @@ export class EbayPaymentProvider implements IPaymentProvider {
     const refundAmountEur = (input.amount / 100).toFixed(2)
 
     const env = resolveEbayEnv()
-    const bearer = await this.auth.getAccessTokenOrRefresh()
+    const auth = await this.getAuth()
+    const bearer = await auth.getAccessTokenOrRefresh()
     const client = new EbayApiClient(env)
 
     // Body shape — best-effort per eBay-Doku, defensive against

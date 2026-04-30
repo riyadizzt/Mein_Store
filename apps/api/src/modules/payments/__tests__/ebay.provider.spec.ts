@@ -66,8 +66,13 @@ function setApiError(error: Error): jest.Mock {
 function makeProvider() {
   const auth = {
     getAccessTokenOrRefresh: jest.fn().mockResolvedValue('test-bearer'),
+  }
+  // C13.3 hotfix: ModuleRef-based lazy resolution. Stub returns the
+  // auth instance when EbayAuthService is requested via moduleRef.get().
+  const moduleRef = {
+    get: jest.fn().mockReturnValue(auth),
   } as any
-  return new EbayPaymentProvider(auth)
+  return new EbayPaymentProvider(moduleRef)
 }
 
 // ──────────────────────────────────────────────────────────────
