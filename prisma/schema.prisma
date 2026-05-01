@@ -1055,6 +1055,13 @@ model ChannelProductListing {
   variantId         String?              @map("variant_id")
   channel           SalesChannel
   externalListingId String?              @map("external_listing_id")
+  // C15.4 — eBay Sell-API offer-id (numeric, e.g. "158298846011"),
+  // used by bulk_update_price_quantity. Distinct from externalListingId
+  // which is the public ebay.de/itm/{X} listing-id. publishOne persists
+  // both; stock-push uses ONLY externalOfferId. Verified empirically via
+  // W3 production-probe 2026-05-01 (offerId ≠ listingId for all 12
+  // multi-variation SKUs). Null until publishOne or backfill populates.
+  externalOfferId   String?              @map("external_offer_id")
   status            ChannelListingStatus @default(pending)
   // Admin-entered per-channel price (incl. channel commission uplift for
   // eBay/TikTok). Null = fall back to variant sale/base price. Differs
