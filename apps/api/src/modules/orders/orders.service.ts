@@ -1206,7 +1206,16 @@ export class OrdersService {
     )
 
     // Step 8 — Emit MarketplaceOrderImportedEvent (reservation listener fires)
-    await this.eventEmitter.emitAsync(
+    //
+    // emitAsync resolves to an array of listener-return-values. The
+    // inventory.listener.handleOrderCreated method returns the
+    // string[] of reservation-IDs it created (no { async: true } on
+    // the @OnEvent decorator — see inventory.listener.ts:27-39 for
+    // the architectural reason why that flag was removed). We
+    // capture the IDs here to feed them explicitly into the
+    // ORDER_EVENTS.CONFIRMED emission below (C15.3 owner-decision
+    // Q-5: explicit pass, NOT DB-re-query).
+    const importResults = await this.eventEmitter.emitAsync(
       MARKETPLACE_ORDER_EVENTS.IMPORTED,
       new MarketplaceOrderImportedEvent(
         created.id,
@@ -1222,6 +1231,53 @@ export class OrdersService {
         })),
       ),
     )
+
+    // Step 9 — C15.3: emit ORDER_EVENTS.CONFIRMED so the existing
+    //   inventory.listener.handleOrderConfirmed runs reservation.
+    //   confirm() for every reservation just made. Without this
+    //   emit, marketplace-imported orders left their reservations
+    //   stuck at status='RESERVED' forever and onHand was never
+    //   decremented (Bug-1 incident: ORD-20260430-000001 on
+    //   2026-04-30, the first real eBay buyer event).
+    //
+    //   The legitimate non-marketplace pathway emits CONFIRMED from
+    //   payments.service.handlePaymentSuccess on the
+    //   Stripe/PayPal/Klarna/SumUp webhook → that path is unchanged.
+    //   markAsCaptured (manual Vorkasse-confirm) also emits
+    //   correctly. Only createFromMarketplace was missing the emit.
+    //
+    //   reservationIds come from the importResults array — each
+    //   listener that handled MARKETPLACE_ORDER_EVENTS.IMPORTED
+    //   contributed its return value to that array. We flatten +
+    //   filter to a clean string[]. If a future listener returns
+    //   something other than string[] for this event, the filter
+    //   keeps us safe (only string-arrays are folded in).
+    //
+    //   Defensive: if no reservations were created (e.g. all-stockout
+    //   compensation rolled them back), we skip the CONFIRMED emit
+    //   entirely. The downstream listener would no-op anyway, but
+    //   skipping saves an event-bus roundtrip and a confusing log
+    //   line.
+    const reservationIds: string[] = (importResults ?? [])
+      .filter((r): r is string[] => Array.isArray(r))
+      .flat()
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+    if (reservationIds.length > 0) {
+      await this.eventEmitter.emitAsync(
+        ORDER_EVENTS.CONFIRMED,
+        new OrderConfirmedEvent(
+          created.id,
+          created.orderNumber,
+          correlationId,
+          reservationIds,
+        ),
+      )
+    } else {
+      this.logger.warn(
+        `[${correlationId}] No reservations created for marketplace order ${created.orderNumber} — skipping ORDER_EVENTS.CONFIRMED emit`,
+      )
+    }
 
     return { id: created.id, orderNumber }
   }

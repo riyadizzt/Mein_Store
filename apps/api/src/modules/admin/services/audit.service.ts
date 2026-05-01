@@ -52,6 +52,14 @@ export const FINANCIAL_ACTIONS: ReadonlySet<string> = new Set<string>([
   // leave a permanent audit-trail. Owner-decision Q-9.
   'AUDIT_ARCHIVE_COMPLETED',
   'AUDIT_ARCHIVE_FAILED',
+  // C15.3 — One-shot recovery operation for marketplace orders
+  // whose reservations stayed RESERVED because pre-fix
+  // createFromMarketplace didn't emit ORDER_EVENTS.CONFIRMED
+  // (Bug-1, ORD-20260430-000001, 2026-04-30). Each backfill row
+  // represents a corrective stock-decrement that MUST stay
+  // archived for §147 AO traceability — it touches money-bearing
+  // inventory state retroactively.
+  'AUDIT_BACKFILL_MARKETPLACE_CONFIRM',
 ])
 
 /**

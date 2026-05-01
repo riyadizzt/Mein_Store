@@ -10,7 +10,7 @@
 
 import { Test, TestingModule } from '@nestjs/testing'
 import { ConfigService } from '@nestjs/config'
-import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common'
+import { ConflictException, NotFoundException } from '@nestjs/common'
 import { ReservationService } from '../reservation.service'
 import { InventoryService } from '../inventory.service'
 import { PrismaService } from '../../../prisma/prisma.service'
@@ -31,6 +31,11 @@ function buildPrisma() {
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      // C15.3 — confirm() now uses updateMany WHERE status='RESERVED'
+      // as the atomic claim. Default mock returns count: 1 (winner)
+      // so happy-path tests proceed normally. Race-tests in the new
+      // suite override this to count: 0 (race-loser path).
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     productVariant: {
       // R13 — revalidateProductTags resolves slugs via productVariant.findMany.
@@ -229,16 +234,50 @@ describe('ReservationService', () => {
       await expect(service.confirm('ghost', 'order1')).rejects.toThrow(NotFoundException)
     })
 
-    it('wirft BadRequestException wenn Reservierung bereits CONFIRMED', async () => {
+    // ── C15.3 contract change ────────────────────────────────────
+    //
+    // PRE-C15.3 (this test pre-2026-05-01):
+    //   confirm() on an already-CONFIRMED reservation threw
+    //   BadRequestException ("nur RESERVED kann bestätigt werden").
+    //   Caller had to wrap with try/catch to be idempotent. A
+    //   concurrent webhook + cron retry pair would produce a 4xx
+    //   error in the loser's path even though the work was done
+    //   correctly by the winner.
+    //
+    // POST-C15.3 (this test from 2026-05-01):
+    //   confirm() returns a silent no-op result `{ idempotent: true,
+    //   reservationId, orderId }` when the reservation is already
+    //   CONFIRMED. This aligns with the Variante-B atomic-claim
+    //   pattern where racing callers cooperatively no-op rather
+    //   than throw. Backfill scripts, cron re-syncs, parallel
+    //   webhook+cron emits all become safe to re-run without
+    //   wrapper try/catch.
+    //
+    // Reason: Bug-1 (ORD-20260430-000001 incident, 2026-04-30) +
+    //   ADR-3 owner-approved Variante B in C15.3. See commit
+    //   message of C15.3 for full rationale + race-safety analysis.
+    //
+    // Note for maintainers: confirm() with status NEITHER
+    // 'RESERVED' nor 'CONFIRMED' (e.g. legacy 'CANCELLED' /
+    // 'EXPIRED' rows) STILL throws BadRequestException — that
+    // path is unchanged. Only the CONFIRMED branch flipped from
+    // throw to no-op.
+    it('C15.3 — gibt { idempotent: true } zurück wenn Reservierung bereits CONFIRMED (silent no-op statt throw)', async () => {
       prisma.stockReservation.findUnique.mockResolvedValue({
         id: 'res-done',
         variantId: 'v1',
         warehouseId: 'wh1',
         quantity: 1,
         status: 'CONFIRMED',
+        orderId: 'order1',
       })
       const service = await makeService(prisma)
-      await expect(service.confirm('res-done', 'order1')).rejects.toThrow(BadRequestException)
+      const result = await service.confirm('res-done', 'order1')
+      expect(result).toEqual({ idempotent: true, reservationId: 'res-done', orderId: 'order1' })
+      // Defense-in-depth: idempotent path MUST NOT touch DB beyond
+      // the initial findUnique read. No transaction, no inventory
+      // update, no movement-create.
+      expect(prisma.$transaction).not.toHaveBeenCalled()
     })
   })
 

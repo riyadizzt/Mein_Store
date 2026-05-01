@@ -228,6 +228,31 @@ export class ReservationService {
       throw new NotFoundException(`Reservierung "${reservationId}" nicht gefunden`)
     }
 
+    // C15.3 — Idempotency early-exit. Mehrfach-Aufruf für die gleiche
+    // Reservation (Cron-Re-Sync, Retry-Loop, Konkurrierende
+    // ORDER_EVENTS.CONFIRMED Emits aus Webhook + Marketplace-Pfad)
+    // ist ein silent no-op success, kein 4xx-Fehler. Caller können
+    // sich darauf verlassen dass confirm() never-throws bei
+    // already-CONFIRMED — kein try/catch-Boilerplate in den Listenern
+    // nötig. Bug-1 Pattern (ORD-20260430-000001, 2026-04-30):
+    // Marketplace-Order hatte Reservation=RESERVED + Payment=captured
+    // weil createFromMarketplace nie ORDER_EVENTS.CONFIRMED emittierte.
+    // Mit C15.3-Fix wird CONFIRMED nun emittiert; falls aus irgendeinem
+    // Grund DOPPELT emittiert (z.B. nachgezogenes Backfill-Script
+    // läuft parallel zum echten Webhook), greift dieser Branch.
+    if (reservation.status === 'CONFIRMED') {
+      if (reservation.orderId !== orderId) {
+        // Defensive: should never happen — reservation→order link is
+        // 1:1, the orderId mismatch would indicate severe data drift.
+        // Log loud, still no-op (don't propagate the surprise to caller).
+        this.logger.warn(
+          `confirm() called for already-CONFIRMED reservation ${reservationId} ` +
+            `with different orderId (incoming=${orderId} stored=${reservation.orderId}) — no-op`,
+        )
+      }
+      return { idempotent: true, reservationId, orderId: reservation.orderId }
+    }
+
     if (reservation.status !== 'RESERVED') {
       throw new BadRequestException(
         `Reservierung hat Status "${reservation.status}" — nur RESERVED kann bestätigt werden`,
@@ -266,9 +291,45 @@ export class ReservationService {
       })
     }
 
-    await this.prisma.$transaction([
-      // Physisch abziehen + Reservierung aufheben
-      this.prisma.inventory.update({
+    // C15.3 — Variante B: atomic claim via updateMany with status-guard.
+    //
+    // The previous code path used $transaction([...]) with the status
+    // change INSIDE the same transaction. That is atomic at the DB
+    // level for a single transaction, but does NOT prevent a race
+    // where two concurrent confirm() calls both pass the
+    // findUnique-status-check above + both queue identical
+    // transactions. Postgres serialises them, but both will succeed
+    // → quantityOnHand decremented TWICE → permanent stock loss.
+    //
+    // The atomic claim flips this to "first-writer-wins": the
+    // updateMany WHERE status='RESERVED' clause becomes the
+    // serialisation point. Only the call whose updateMany matches
+    // (count===1) proceeds with the decrement + movement-create.
+    // Any subsequent call sees count===0 and silently no-ops
+    // (returning the idempotent: true shape). No StockUnderflow
+    // exception, no double-decrement, no log noise on the loser
+    // beyond a debug-level trace.
+    //
+    // Owner-decision: KEIN DB-level UNIQUE INDEX — service-layer
+    // alone is sufficient guarantee given Variante B's atomic claim
+    // (see C15.3 Phase B owner-revision 2026-05-01).
+    const result = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.stockReservation.updateMany({
+        where: { id: reservationId, status: 'RESERVED' },
+        data: { status: 'CONFIRMED', orderId },
+      })
+
+      if (claimed.count === 0) {
+        // Race lost — another concurrent confirm() already won the
+        // claim. Caller-visible behaviour: same as idempotent path
+        // above (silent no-op). DB invariants intact: the winner is
+        // doing/has done the decrement + movement-row create.
+        return { won: false }
+      }
+
+      // We won the claim → it is safe to decrement (no other path
+      // will pass the WHERE status='RESERVED' filter for this row).
+      await tx.inventory.update({
         where: {
           variantId_warehouseId: {
             variantId: reservation.variantId,
@@ -279,14 +340,9 @@ export class ReservationService {
           quantityOnHand: { decrement: reservation.quantity },
           quantityReserved: { decrement: reservation.quantity },
         },
-      }),
-      // Status CONFIRMED
-      this.prisma.stockReservation.update({
-        where: { id: reservationId },
-        data: { status: 'CONFIRMED', orderId },
-      }),
-      // Bewegungshistorie
-      this.prisma.inventoryMovement.create({
+      })
+
+      await tx.inventoryMovement.create({
         data: {
           variantId: reservation.variantId,
           warehouseId: reservation.warehouseId,
@@ -298,8 +354,16 @@ export class ReservationService {
           notes: `Verkauf bestätigt — Reservierung ${reservationId}`,
           createdBy: 'system',
         },
-      }),
-    ])
+      })
+
+      return { won: true }
+    })
+
+    if (!result.won) {
+      // Concurrent caller already finished the work. No log-spam,
+      // no hooks (the winner already fired R13/C5/C15 hooks).
+      return { idempotent: true, reservationId, orderId }
+    }
 
     this.logger.log(
       `Bestätigt: reservationId=${reservationId} | orderId=${orderId} | qty=${reservation.quantity}`,

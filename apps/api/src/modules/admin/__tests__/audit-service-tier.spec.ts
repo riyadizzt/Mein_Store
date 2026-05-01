@@ -120,6 +120,8 @@ describe('FINANCIAL_ACTIONS + EPHEMERAL_ACTIONS — invariants', () => {
       'PAYMENT_TIMEOUT_REFUNDED',
       'AUDIT_ARCHIVE_COMPLETED',
       'AUDIT_ARCHIVE_FAILED',
+      // C15.3 — backfill recovery for marketplace-confirm gap
+      'AUDIT_BACKFILL_MARKETPLACE_CONFIRM',
     ]
     for (const a of required) {
       expect(FINANCIAL_ACTIONS.has(a)).toBe(true)
