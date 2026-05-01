@@ -59,7 +59,13 @@ function makeListing(overrides: any = {}) {
   return {
     id: 'lst-1',
     variantId: 'v1',
-    externalListingId: 'offer-1',
+    // C15.4 — distinct values to make the offerId vs listingId
+    // distinction explicit. eBay's bulk_update_price_quantity
+    // requires offerId, NOT the public listingId. Both are 12-digit
+    // numerics in production — visually indistinguishable, the bug
+    // hid for 4 days. Tests now pin the C15.4-correct contract.
+    externalListingId: 'listing-1', // public ebay.de/itm/{X} id
+    externalOfferId: 'offer-1',     // Sell-API offer-id (used by stock-push)
     safetyStock: 0,
     lastSyncedQuantity: null,
     syncAttempts: 0,
@@ -211,10 +217,12 @@ describe('EbayStockPushService — idempotency', () => {
 // ──────────────────────────────────────────────────────────────
 
 describe('EbayStockPushService — skipped paths', () => {
-  it('listing without externalListingId → skipped, no API call', async () => {
-    const listing = makeListing({ externalListingId: null })
-    // Even though where-clause filters this server-side, the unit-test
-    // proves the in-service guard. We pass it directly.
+  it('listing without externalOfferId → skipped, no API call', async () => {
+    const listing = makeListing({ externalOfferId: null })
+    // C15.4: skip-guard fires on missing externalOfferId, not
+    // externalListingId. Where-clause in loadCandidateListings filters
+    // serverseitig vor; this in-service guard is Defense-in-Depth for
+    // listener-fed listings that may bypass the where-clause.
     const { service, prisma } = makeService({
       listings: [listing],
       inventory: [makeInventoryRow()],
@@ -225,6 +233,34 @@ describe('EbayStockPushService — skipped paths', () => {
 
     expect(requestMock).not.toHaveBeenCalled()
     expect(prisma.channelProductListing.update).not.toHaveBeenCalled()
+  })
+
+  it('listing with externalOfferId valid + externalListingId=null → push proceeds', async () => {
+    // C15.4 positive-coverage: stock-push depends on externalOfferId
+    // EXCLUSIVELY. A null externalListingId (e.g. legacy data) must
+    // NOT block the push as long as externalOfferId is set. This pins
+    // the bug-fix bidirectionally — paired with the negative-coverage
+    // test above to lock in the C15.4 contract from both sides and
+    // prevent regression where a future maintainer adds a defensive
+    // externalListingId-check that would re-introduce the skip.
+    const listing = makeListing({
+      externalListingId: null,
+      externalOfferId: 'offer-1', // explicit, even though factory default
+    })
+    const { service, prisma } = makeService({
+      listings: [listing],
+      inventory: [makeInventoryRow({ quantityOnHand: 10, quantityReserved: 2 })],
+    })
+    const requestMock = setApiResponse({ responses: [] })
+
+    await service.pushForVariants(['v1'])
+
+    expect(requestMock).toHaveBeenCalledTimes(1)
+    const [, , opts] = requestMock.mock.calls[0]
+    expect((opts as any).body).toEqual({
+      requests: [{ offerId: 'offer-1', availableQuantity: 8 }],
+    })
+    expect(prisma.channelProductListing.update).toHaveBeenCalled()
   })
 
   it('listing with variant.sku missing → skipped', async () => {

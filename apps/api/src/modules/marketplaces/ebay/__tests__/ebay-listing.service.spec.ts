@@ -290,6 +290,11 @@ describe('EbayListingService.publishOne — MV-1 happy path', () => {
       }
       expect(snap.listings['L1'].status).toBe('active')
       expect(snap.listings['L1'].externalListingId).toBe('EBAY-LISTING-1')
+      // C15.4: externalOfferId persisted alongside externalListingId.
+      // Stock-push (bulk_update_price_quantity) requires the offerId,
+      // NOT the listingId — the format-tarn-effect (both 12-digit
+      // numerics in production) hid this bug for 4 days.
+      expect(snap.listings['L1'].externalOfferId).toBe('OFFER-1')
       expect(snap.listings['L1'].syncAttempts).toBe(1)
       expect(snap.listings['L1'].syncError).toBeNull()
       // Exactly 4 eBay calls: PUT inventory-item, GET offer-lookup, POST create, POST publish
@@ -1178,5 +1183,112 @@ describe('EbayListingService.publishPending — group-by-productId iteration (C1
       expect(summary.requested).toBe(2)
       expect(summary.published + summary.failed).toBe(2)
     })
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// C15.4 — resetListingSync (admin reset for stuck stock-push)
+// ──────────────────────────────────────────────────────────────
+
+describe('EbayListingService.resetListingSync — C15.4', () => {
+  function mkPausedListing() {
+    const snap = mkBaselineSnapshot()
+    snap.listings['L1'].status = 'paused'
+    snap.listings['L1'].syncAttempts = 5
+    ;(snap.listings['L1'] as any).syncError = 'eBay 500: Ein Systemfehler ist aufgetreten.'
+    ;(snap.listings['L1'] as any).pauseReason = 'sync_error'
+    ;(snap.listings['L1'] as any).externalListingId = '406893266945'
+    ;(snap.listings['L1'] as any).externalOfferId = '158298846011'
+    return snap
+  }
+
+  it('paused-with-syncError listing → flipped to active, attempts=0, errors cleared', async () => {
+    const snap = mkPausedListing()
+    const prisma = mkPrisma(snap)
+    const audit = mkAudit() as any
+    const svc = new EbayListingService(prisma, mkAuth(), audit)
+
+    const result = await svc.resetListingSync('L1', 'admin-1', '127.0.0.1')
+
+    expect(result.id).toBe('L1')
+    expect(result.previousStatus).toBe('paused')
+    expect(result.previousAttempts).toBe(5)
+    expect(result.previousSyncError).toContain('eBay 500')
+    expect(result.newStatus).toBe('active')
+    expect(result.newAttempts).toBe(0)
+
+    expect(snap.listings['L1'].status).toBe('active')
+    expect(snap.listings['L1'].syncAttempts).toBe(0)
+    expect(snap.listings['L1'].syncError).toBeNull()
+    expect((snap.listings['L1'] as any).pauseReason).toBeNull()
+    // externalOfferId MUST be preserved (otherwise next reconcile-tick can't push)
+    expect((snap.listings['L1'] as any).externalOfferId).toBe('158298846011')
+  })
+
+  it('writes audit-row with action=CHANNEL_LISTING_SYNC_RESET + before/after diff', async () => {
+    const snap = mkPausedListing()
+    const prisma = mkPrisma(snap)
+    const audit = mkAudit() as any
+    const svc = new EbayListingService(prisma, mkAuth(), audit)
+
+    await svc.resetListingSync('L1', 'admin-7', '10.0.0.1')
+
+    expect(audit._entries).toHaveLength(1)
+    const entry = audit._entries[0]
+    expect(entry.action).toBe('CHANNEL_LISTING_SYNC_RESET')
+    expect(entry.entityType).toBe('channel_product_listing')
+    expect(entry.entityId).toBe('L1')
+    expect(entry.adminId).toBe('admin-7')
+    expect(entry.ipAddress).toBe('10.0.0.1')
+    expect(entry.changes.before.status).toBe('paused')
+    expect(entry.changes.before.syncAttempts).toBe(5)
+    expect(entry.changes.before.pauseReason).toBe('sync_error')
+    expect(entry.changes.after.status).toBe('active')
+    expect(entry.changes.after.syncAttempts).toBe(0)
+    expect(entry.changes.after.pauseReason).toBeNull()
+  })
+
+  it('listing not found → throws NotFoundException with 3-lang message', async () => {
+    const snap = mkPausedListing()
+    const prisma = mkPrisma(snap)
+    const svc = new EbayListingService(prisma, mkAuth(), mkAudit())
+
+    await expect(svc.resetListingSync('does-not-exist', 'admin-1')).rejects.toMatchObject({
+      response: {
+        error: 'ListingNotFound',
+        message: { de: expect.any(String), en: expect.any(String), ar: expect.any(String) },
+      },
+    })
+  })
+
+  it('non-eBay channel listing → throws BadRequestException WrongChannel', async () => {
+    const snap = mkPausedListing()
+    snap.listings['L1'].channel = 'tiktok' as any
+    const prisma = mkPrisma(snap)
+    const svc = new EbayListingService(prisma, mkAuth(), mkAudit())
+
+    await expect(svc.resetListingSync('L1', 'admin-1')).rejects.toMatchObject({
+      response: {
+        error: 'WrongChannel',
+        data: { actualChannel: 'tiktok' },
+      },
+    })
+    // No write-side effect on rejected reset
+    expect(snap.listings['L1'].status).toBe('paused')
+  })
+
+  it('listing in terminal state (deleted) → throws BadRequestException ListingInTerminalState', async () => {
+    const snap = mkPausedListing()
+    snap.listings['L1'].status = 'deleted'
+    const prisma = mkPrisma(snap)
+    const svc = new EbayListingService(prisma, mkAuth(), mkAudit())
+
+    await expect(svc.resetListingSync('L1', 'admin-1')).rejects.toMatchObject({
+      response: {
+        error: 'ListingInTerminalState',
+        data: { currentStatus: 'deleted' },
+      },
+    })
+    expect(snap.listings['L1'].status).toBe('deleted')
   })
 })

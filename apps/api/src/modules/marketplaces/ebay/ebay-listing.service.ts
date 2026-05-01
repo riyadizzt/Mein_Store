@@ -39,7 +39,7 @@
  * variant, inventory, order, payment tables are READ-ONLY for us.
  */
 
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common'
 import type { ChannelListingStatus } from '@prisma/client'
 import { PrismaService } from '../../../prisma/prisma.service'
 import { EbayAuthService } from './ebay-auth.service'
@@ -200,6 +200,130 @@ export class EbayListingService {
     return this.prisma.channelProductListing.count({
       where: { channel: 'ebay', status: 'pending' },
     })
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Public — admin reset (C15.4)
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * C15.4 — Admin-only reset for an eBay listing whose stock-push got
+   * stuck (exhausted MAX_PUSH_ATTEMPTS, paused for sync_error, or paused
+   * manually). Resets the sync-state and flips status='active' so the
+   * next reconcile-cron-tick picks it up again.
+   *
+   * Caller must have SETTINGS_EDIT permission (enforced in controller).
+   * Audit-row written (CHANNEL_LISTING_SYNC_RESET, operational tier).
+   *
+   * Guards:
+   *   - Listing must exist and be channel='ebay'.
+   *   - Listing must NOT be in terminal state ('deleted' or 'rejected') —
+   *     those require explicit re-publish via toggleForProduct, not a reset.
+   *
+   * Idempotency: a listing already in status='active' with attempts=0 is
+   * a no-op write (same data) but still produces an audit-row for trail.
+   */
+  async resetListingSync(
+    listingId: string,
+    adminId: string,
+    ipAddress?: string,
+  ): Promise<{
+    id: string
+    previousStatus: string
+    previousAttempts: number
+    previousSyncError: string | null
+    newStatus: 'active'
+    newAttempts: 0
+  }> {
+    const row = await this.prisma.channelProductListing.findUnique({
+      where: { id: listingId },
+      select: {
+        id: true,
+        channel: true,
+        status: true,
+        syncAttempts: true,
+        syncError: true,
+        pauseReason: true,
+      },
+    })
+    if (!row) {
+      throw new NotFoundException({
+        error: 'ListingNotFound',
+        message: {
+          de: `Channel-Listing ${listingId} nicht gefunden`,
+          en: `Channel listing ${listingId} not found`,
+          ar: `قائمة القناة ${listingId} غير موجودة`,
+        },
+      })
+    }
+    if (row.channel !== 'ebay') {
+      throw new BadRequestException({
+        error: 'WrongChannel',
+        message: {
+          de: 'Reset-Sync ist nur für eBay-Listings verfügbar',
+          en: 'reset-sync is only available for eBay listings',
+          ar: 'إعادة ضبط المزامنة متاحة فقط لقوائم eBay',
+        },
+        data: { actualChannel: row.channel },
+      })
+    }
+    if (row.status === 'deleted' || row.status === 'rejected') {
+      throw new BadRequestException({
+        error: 'ListingInTerminalState',
+        message: {
+          de: `Listing ist in Status '${row.status}' — Reset nicht möglich. Re-Publish über die Produkt-Bearbeitung erforderlich.`,
+          en: `Listing is in status '${row.status}' — reset not allowed. Re-publish via product editor required.`,
+          ar: `القائمة في حالة '${row.status}' — لا يمكن إعادة الضبط. مطلوب إعادة النشر عبر محرر المنتج.`,
+        },
+        data: { currentStatus: row.status },
+      })
+    }
+
+    const previousStatus = row.status
+    const previousAttempts = row.syncAttempts
+    const previousSyncError = row.syncError
+    const previousPauseReason = row.pauseReason
+
+    await this.prisma.channelProductListing.update({
+      where: { id: listingId },
+      data: {
+        status: 'active',
+        syncAttempts: 0,
+        syncError: null,
+        pauseReason: null,
+      },
+    })
+
+    await this.audit.log({
+      adminId,
+      action: 'CHANNEL_LISTING_SYNC_RESET',
+      entityType: 'channel_product_listing',
+      entityId: listingId,
+      ipAddress,
+      changes: {
+        before: {
+          status: previousStatus,
+          syncAttempts: previousAttempts,
+          syncError: previousSyncError,
+          pauseReason: previousPauseReason,
+        },
+        after: {
+          status: 'active',
+          syncAttempts: 0,
+          syncError: null,
+          pauseReason: null,
+        },
+      },
+    })
+
+    return {
+      id: listingId,
+      previousStatus,
+      previousAttempts,
+      previousSyncError,
+      newStatus: 'active',
+      newAttempts: 0,
+    }
   }
 
   // ────────────────────────────────────────────────────────────
@@ -766,12 +890,18 @@ export class EbayListingService {
       )
     }
 
-    // Step 6 — Success persistence (externalListingId guaranteed non-null)
+    // Step 6 — Success persistence (externalListingId guaranteed non-null).
+    // C15.4: persist externalOfferId next to externalListingId. Stock-push
+    // (bulk_update_price_quantity) requires the offerId, NOT the listingId.
+    // Both branches above (fresh publish via Zeile 712 + alreadyPublished
+    // GET-fallback via Zeile 741-753) flow through here with offerId
+    // already known from Zeile 661/673/697.
     await this.prisma.channelProductListing.update({
       where: { id: listingId },
       data: {
         status: 'active',
         externalListingId,
+        externalOfferId: offerId,
         syncError: null,
         lastSyncedAt: new Date(),
       },

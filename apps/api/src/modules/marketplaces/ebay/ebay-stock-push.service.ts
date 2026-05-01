@@ -105,7 +105,7 @@ export interface PushItemResult {
   variantId: string
   sku: string
   effective: number
-  status: 'pushed' | 'skipped_no_change' | 'skipped_paused' | 'skipped_no_external_id' | 'skipped_no_sku' | 'failed'
+  status: 'pushed' | 'skipped_no_change' | 'skipped_paused' | 'skipped_no_offer_id' | 'skipped_no_sku' | 'failed'
   error?: string
 }
 
@@ -212,10 +212,18 @@ export class EbayStockPushService implements ChannelStockPusher {
     cron?: boolean
     maxListings?: number
   }): Promise<Array<any>> {
+    // C15.4 — filter by externalOfferId (the actual key used by
+    // bulk_update_price_quantity). externalListingId stays in the SELECT
+    // for audit/logging only. Anti-spam: skip exhausted listings
+    // (syncAttempts >= MAX_PUSH_ATTEMPTS) — they need an admin reset
+    // via /admin/marketplaces/ebay/listings/:id/reset-sync before the
+    // cron picks them up again. Listings without externalOfferId are
+    // legacy rows awaiting backfill or a re-publish — silently skipped.
     const where: any = {
       channel: 'ebay',
       status: 'active',
-      externalListingId: { not: null },
+      externalOfferId: { not: null },
+      syncAttempts: { lt: MAX_PUSH_ATTEMPTS },
     }
     if (opts.variantIds) {
       where.variantId = { in: opts.variantIds }
@@ -228,6 +236,7 @@ export class EbayStockPushService implements ChannelStockPusher {
         id: true,
         variantId: true,
         externalListingId: true,
+        externalOfferId: true,
         safetyStock: true,
         lastSyncedQuantity: true,
         syncAttempts: true,
@@ -288,8 +297,11 @@ export class EbayStockPushService implements ChannelStockPusher {
       items: [],
     }
 
-    // 1. Filter out listings without SKU or externalListingId. Build
+    // 1. Filter out listings without SKU or externalOfferId. Build
     //    safety-stock map so we can compute effective per-variant.
+    //    C15.4: defensive double-check on externalOfferId — the
+    //    where-clause in loadCandidateListings already excludes nulls,
+    //    but listener-fed listings may not pass through that filter.
     const variantIds: string[] = []
     const safetyByVariant = new Map<string, number>()
     const skipped: PushItemResult[] = []
@@ -315,13 +327,13 @@ export class EbayStockPushService implements ChannelStockPusher {
         })
         continue
       }
-      if (!l.externalListingId) {
+      if (!l.externalOfferId) {
         skipped.push({
           listingId: l.id,
           variantId: l.variantId,
           sku,
           effective: 0,
-          status: 'skipped_no_external_id',
+          status: 'skipped_no_offer_id',
         })
         continue
       }
@@ -347,7 +359,7 @@ export class EbayStockPushService implements ChannelStockPusher {
       offerId: string
     }> = []
     for (const l of listings) {
-      if (!l.variantId || !l.variant?.sku || !l.externalListingId) continue // already in skipped
+      if (!l.variantId || !l.variant?.sku || !l.externalOfferId) continue // already in skipped
       const sku = l.variant.sku
       const effective = effectiveByVariant.get(l.variantId) ?? 0
       if (l.lastSyncedQuantity === effective) {
@@ -361,11 +373,16 @@ export class EbayStockPushService implements ChannelStockPusher {
         })
         continue
       }
+      // C15.4 BUG-FIX-KERN: bulk_update_price_quantity erwartet die
+      // eBay offerId (numerisch, z.B. "158298846011"), NICHT die
+      // public listingId ("406893266945"). Format-Tarn-Effekt:
+      // beide 12-stellig numerisch — visuell nicht unterscheidbar.
+      // Empirisch verifiziert via W3-Production-Probe 2026-05-01.
       toPush.push({
         listing: l,
         sku,
         effective,
-        offerId: l.externalListingId,
+        offerId: l.externalOfferId,
       })
     }
     if (toPush.length === 0) return result

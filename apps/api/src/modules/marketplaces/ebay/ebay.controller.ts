@@ -22,6 +22,7 @@ import {
   Query,
   Res,
   Req,
+  Param,
   UseGuards,
   Logger,
   BadRequestException,
@@ -523,5 +524,24 @@ export class EbayController {
       }
       throw e
     }
+  }
+
+  /**
+   * C15.4 — Admin-only reset for an eBay listing whose stock-push got
+   * stuck (e.g. exhausted MAX_PUSH_ATTEMPTS or paused for sync_error).
+   * Flips status='active', clears syncError + pauseReason, resets
+   * syncAttempts=0. Next reconcile-cron-tick (every 15min) picks the
+   * listing up again.
+   *
+   * Uses :id (the ChannelProductListing.id, UUID), NOT externalListingId
+   * or externalOfferId — the URL stays opaque to outside observers.
+   */
+  @Post('listings/:id/reset-sync')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission(PERMISSIONS.SETTINGS_EDIT)
+  async resetSync(@Param('id') listingId: string, @Req() req: Request) {
+    const adminId = (req as any).user?.id ?? 'system'
+    const ipAddress = req.ip
+    return this.listing.resetListingSync(listingId, adminId, ipAddress)
   }
 }
