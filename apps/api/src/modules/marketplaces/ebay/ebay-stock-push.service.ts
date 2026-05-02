@@ -61,16 +61,15 @@
  *   - Existing eBay services: ZERO TOUCH (this is a new sibling)
  */
 
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, Optional } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
+import { EbayStockStrategySelector } from './ebay-stock-strategy-selector'
 import { PrismaService } from '../../../prisma/prisma.service'
-import { resolveEbayEnv } from './ebay-env'
 import {
   EbayAuthService,
   EbayNotConnectedError,
   EbayRefreshRevokedError,
 } from './ebay-auth.service'
-import { EbayApiClient, EbayApiError } from './ebay-api.client'
 import { AuditService } from '../../admin/services/audit.service'
 import { NotificationService } from '../../admin/services/notification.service'
 import { computeAvailableStock } from '../../../common/helpers/channel-safety-stock'
@@ -136,6 +135,10 @@ export class EbayStockPushService implements ChannelStockPusher {
     private readonly moduleRef: ModuleRef,
     private readonly audit: AuditService,
     private readonly notifications: NotificationService,
+    // C15.6: Selector orchestriert Multi-Strategy push per SKU.
+    // @Optional damit existing tests die ohne Selector instantiieren weiterlaufen
+    // (Tests werden in Block 4 spec-synced).
+    @Optional() private readonly selector?: EbayStockStrategySelector,
   ) {}
 
   /**
@@ -409,125 +412,110 @@ export class EbayStockPushService implements ChannelStockPusher {
       throw e
     }
 
-    // 5. Chunk into eBay's 25-SKU batches.
-    const env = resolveEbayEnv()
-    const client = new EbayApiClient(env)
-    for (let i = 0; i < toPush.length; i += EBAY_BULK_BATCH_SIZE) {
-      const chunk = toPush.slice(i, i + EBAY_BULK_BATCH_SIZE)
-      const requests = chunk.map((c) => ({
+    // 5. C15.6: Per-SKU iteration via Selector (replaces 25-SKU bulk-chunk).
+    //    Selector orchestriert Multi-Strategy mit Auto-Fallback + Per-SKU-Lock
+    //    + ESCALATE-Pfad. Wenn Selector nicht injected ist (legacy-tests):
+    //    fallback to direct bulk_update_price_quantity (alt-pfad).
+    if (!this.selector) {
+      // Legacy code-path — wird in Block 4 spec-synced + entfernt.
+      // For now: emit warning + early-return ohne push (fail-safe).
+      this.logger.warn('[ebay-stock-push] no Selector injected — legacy fallback (no push)')
+      return result
+    }
+
+    for (const c of toPush) {
+      const stratResult = await this.selector.executeForSku({
+        listing: { id: c.listing.id, variantId: c.listing.variantId, externalListingId: c.listing.externalListingId ?? null },
+        sku: c.sku,
         offerId: c.offerId,
-        // Only quantity is touched. Price omitted intentionally —
-        // C11 publish-flow owns price; C15 owns quantity.
-        availableQuantity: c.effective,
-      }))
+        effectiveQuantity: c.effective,
+        bearerToken: bearer,
+      })
 
-      let rawResponse: any = null
-      let batchOk = false
-      let batchError: string | null = null
-      let httpStatus = 0
-
-      try {
-        rawResponse = await client.request<any>(
-          'POST',
-          '/sell/inventory/v1/bulk_update_price_quantity',
-          { bearer, body: { requests }, bodyKind: 'json', retry: false },
-        )
-        batchOk = true
-      } catch (e: any) {
-        if (e instanceof EbayApiError) {
-          httpStatus = e.status
-          if (e.status === 429) {
-            // Rate-limit: stop the tick. Don't bump syncAttempts on
-            // these listings — the failure is server-side, not ours.
-            result.rateLimited = true
-            this.logger.warn(`[ebay-stock-push] 429 rate-limited — aborting tick`)
-            await this.audit
-              .log({
-                adminId: 'system',
-                action: STOCK_AUDIT_ACTIONS.RATE_LIMITED,
-                entityType: 'channel_listing',
-                entityId: 'batch',
-                changes: { after: { batchSize: chunk.length, fromCron } },
-              })
-              .catch(() => {})
-            // Mark remaining items as skipped (rate-limited)
-            for (const c of chunk) {
-              result.items.push({
-                listingId: c.listing.id,
-                variantId: c.listing.variantId,
-                sku: c.sku,
-                effective: c.effective,
-                status: 'failed',
-                error: '429 rate-limited',
-              })
-              result.failed++
-            }
-            return result
-          }
-          batchError = `eBay ${e.status}: ${e.message.slice(0, 300)}`
-        } else {
-          batchError = `network: ${(e?.message ?? String(e)).slice(0, 300)}`
-        }
+      // 429 short-circuit (preserves alt-Verhalten)
+      if (stratResult.rateLimited) {
+        result.rateLimited = true
+        await this.audit
+          .log({
+            adminId: 'system',
+            action: STOCK_AUDIT_ACTIONS.RATE_LIMITED,
+            entityType: 'channel_listing',
+            entityId: c.listing.id,
+            changes: { after: { sku: c.sku, fromCron } },
+          })
+          .catch(() => {})
+        result.items.push({
+          listingId: c.listing.id,
+          variantId: c.listing.variantId,
+          sku: c.sku,
+          effective: c.effective,
+          status: 'failed',
+          error: '429 rate-limited',
+        })
+        result.failed++
+        return result
       }
 
-      // First-Run-Logging
+      // Skipped (Lock-held-by-other or REDIS-OUTAGE-SKIP) — caller bumps not-touched
+      if (stratResult.skipped) {
+        result.skipped++
+        result.items.push({
+          listingId: c.listing.id,
+          variantId: c.listing.variantId,
+          sku: c.sku,
+          effective: c.effective,
+          status: 'skipped_no_change',
+        })
+        continue
+      }
+
+      // First-Run-Logging (per-SKU statt per-batch)
       if (this.rawLogCount < FIRST_RUN_LOG_LIMIT) {
         this.rawLogCount++
-        const summary = batchOk
-          ? `OK: ${JSON.stringify(rawResponse).slice(0, 800)}`
-          : `FAIL (${httpStatus}): ${batchError}`
+        const summary = stratResult.ok
+          ? 'OK'
+          : `FAIL (${stratResult.httpStatus}): ${stratResult.errorMessage}`
         this.logger.log(
-          `[ebay-stock-push] first-run batch #${this.rawLogCount}/${FIRST_RUN_LOG_LIMIT} (${chunk.length} SKUs): ${summary}`,
+          `[ebay-stock-push] first-run #${this.rawLogCount}/${FIRST_RUN_LOG_LIMIT} sku=${c.sku}: ${summary}`,
         )
       }
 
-      // 6. Parse per-SKU outcomes from the response (defensive
-      //    multi-path). On batchError we treat all chunk-items as
-      //    failed.
-      const perSkuErrors = batchOk ? extractPerSkuErrors(rawResponse) : new Map<string, string>()
-
-      for (const c of chunk) {
-        const skuErr = perSkuErrors.get(c.offerId) ?? perSkuErrors.get(c.sku) ?? null
-        if (batchOk && !skuErr) {
-          // Success — persist
-          try {
-            await this.prisma.channelProductListing.update({
-              where: { id: c.listing.id },
-              data: {
-                lastSyncedQuantity: c.effective,
-                lastSyncedAt: new Date(),
-                syncAttempts: 0, // reset on success
-                syncError: null,
-              },
-            })
-          } catch (writeErr: any) {
-            // DB write failed — log but don't fail the whole batch.
-            this.logger.warn(
-              `[ebay-stock-push] DB persist failed for listing=${c.listing.id}: ${writeErr?.message ?? writeErr}`,
-            )
-          }
-          result.pushed++
-          result.items.push({
-            listingId: c.listing.id,
-            variantId: c.listing.variantId,
-            sku: c.sku,
-            effective: c.effective,
-            status: 'pushed',
+      if (stratResult.ok) {
+        try {
+          await this.prisma.channelProductListing.update({
+            where: { id: c.listing.id },
+            data: {
+              lastSyncedQuantity: c.effective,
+              lastSyncedAt: new Date(),
+              syncAttempts: 0,
+              syncError: null,
+            },
           })
-        } else {
-          // Failed
-          const errMsg = skuErr ?? batchError ?? 'unknown error'
-          await this.persistFailure(c.listing, errMsg)
-          result.failed++
-          result.items.push({
-            listingId: c.listing.id,
-            variantId: c.listing.variantId,
-            sku: c.sku,
-            effective: c.effective,
-            status: 'failed',
-            error: errMsg,
-          })
+        } catch (writeErr: any) {
+          this.logger.warn(
+            `[ebay-stock-push] DB persist failed listing=${c.listing.id}: ${writeErr?.message}`,
+          )
         }
+        result.pushed++
+        result.items.push({
+          listingId: c.listing.id,
+          variantId: c.listing.variantId,
+          sku: c.sku,
+          effective: c.effective,
+          status: 'pushed',
+        })
+      } else {
+        const errMsg = stratResult.errorMessage ?? 'unknown error'
+        await this.persistFailure(c.listing, errMsg)
+        result.failed++
+        result.items.push({
+          listingId: c.listing.id,
+          variantId: c.listing.variantId,
+          sku: c.sku,
+          effective: c.effective,
+          status: 'failed',
+          error: errMsg,
+        })
       }
     }
 

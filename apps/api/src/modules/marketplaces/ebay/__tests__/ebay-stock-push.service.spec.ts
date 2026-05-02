@@ -116,8 +116,21 @@ function makeService(opts?: Parameters<typeof buildPrisma>[0] & { authError?: Er
   const moduleRef = { get: jest.fn().mockReturnValue(auth) } as any
   const audit = { log: jest.fn().mockResolvedValue(undefined) } as any
   const notifications = { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } as any
-  const service = new EbayStockPushService(prisma, moduleRef, audit, notifications)
-  return { service, prisma, auth, audit, notifications }
+
+  // C15.6 spec-sync: mock-Selector that delegates to a real BulkUpdateStrategy.
+  // BulkUpdateStrategy uses the same EbayApiClient mock established at the top
+  // of this file → existing test assertions on bulk_update_price_quantity URL
+  // and request-body shape continue to pass without changes.
+  // Selector-orchestration semantics (rateLimited, ok flags) are preserved.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { BulkUpdateStrategy } = require('../ebay-stock-strategies/bulk-update-strategy')
+  const realBulk = new BulkUpdateStrategy()
+  const selector = {
+    executeForSku: jest.fn().mockImplementation((ctx: any) => realBulk.execute(ctx)),
+  } as any
+
+  const service = new EbayStockPushService(prisma, moduleRef, audit, notifications, selector)
+  return { service, prisma, auth, audit, notifications, selector }
 }
 
 // ──────────────────────────────────────────────────────────────

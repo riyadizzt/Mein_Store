@@ -60,6 +60,12 @@ import { EbayShippingPushCron } from './ebay/ebay-shipping-push.cron'
 import { EbayStockPushService } from './ebay/ebay-stock-push.service'
 import { EbayStockReconcileService } from './ebay/ebay-stock-reconcile.service'
 import { EbayStockReconcileCron } from './ebay/ebay-stock-reconcile.cron'
+// C15.6 — Multi-Strategy stock-push (Bulk + GetThenPut + Selector + Health + Verifier)
+import { BulkUpdateStrategy } from './ebay/ebay-stock-strategies/bulk-update-strategy'
+import { GetThenPutStrategy } from './ebay/ebay-stock-strategies/get-then-put-strategy'
+import { EbaySnapshotVerifier } from './ebay/ebay-snapshot-verifier'
+import { EbayEndpointHealthService } from './ebay/ebay-endpoint-health.service'
+import { EbayStockStrategySelector } from './ebay/ebay-stock-strategy-selector'
 
 @Module({
   imports: [
@@ -103,6 +109,12 @@ import { EbayStockReconcileCron } from './ebay/ebay-stock-reconcile.cron'
     EbayStockPushService,
     EbayStockReconcileService,
     EbayStockReconcileCron,
+    // C15.6 — Multi-Strategy Stock-Push (additive, no changes to existing providers)
+    BulkUpdateStrategy,
+    GetThenPutStrategy,
+    EbaySnapshotVerifier,
+    EbayEndpointHealthService,
+    EbayStockStrategySelector,
   ],
   exports: [
     PrismaMarketplaceImportStore,
