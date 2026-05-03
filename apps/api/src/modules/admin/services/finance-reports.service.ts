@@ -15,7 +15,7 @@ const PDFDocument = require('pdfkit')
  * Contract for adding new channels: when a new SalesChannel enum value
  * lands (e.g. future tiktok-shop, instagram-shop), it MUST be added
  * here AND to the 8 hardcoded SQL strings further down in this file
- * (search TODO(C17.1) — those will be refactored to use Prisma.sql
+ * (search TODO(C15.8.1) — those will be refactored to use Prisma.sql
  * interpolation against this constant in a follow-up cleanup task).
  *
  * Other consumers: dashboard.service.ts imports this constant for the
@@ -186,15 +186,15 @@ export class FinanceReportsService {
   /**
    * Aggregate refunds for a date range — used by all finance reports.
    *
-   * C17 — explicit channel-symmetry filter: refunds must come from the
+   * C15.8 — explicit channel-symmetry filter: refunds must come from the
    * same set of channels that sales aggregates from (ONLINE_CHANNELS).
-   * Pre-C17 this was permissive (no channel filter) and worked by
+   * Pre-C15.8 this was permissive (no channel filter) and worked by
    * accident because POS has no refund flow. Adding explicit filter
    * documents intent + protects against future channel additions.
    * Refunds from POS or any non-ONLINE_CHANNELS channel are excluded
    * from finance totals — symmetric with sales-side.
    *
-   * C17 status-filter (Phase D fix) — Refund-counting semantic:
+   * C15.8 status-filter (Phase D fix) — Refund-counting semantic:
    *
    *   A refund is counted toward refundsTotal as soon as it's ISSUED
    *   (Refund.status IN ['PENDING', 'PROCESSED']), NOT when the bank
@@ -221,9 +221,9 @@ export class FinanceReportsService {
     const refunds = await this.prisma.refund.findMany({
       where: {
         createdAt: { gte: start, lte: end },
-        // C17 status-filter: count both PENDING and PROCESSED — see JSDoc above.
+        // C15.8 status-filter: count both PENDING and PROCESSED — see JSDoc above.
         status: { in: ['PROCESSED', 'PENDING'] },
-        // C17 symmetry: only count refunds for orders from ONLINE_CHANNELS.
+        // C15.8 symmetry: only count refunds for orders from ONLINE_CHANNELS.
         payment: {
           order: { channel: { in: ONLINE_CHANNELS } },
         },
@@ -301,13 +301,13 @@ export class FinanceReportsService {
     return hourly
   }
 
-  // TODO(C17.1): The 8 raw-SQL queries below (this one + getVatReport's
+  // TODO(C15.8.1): The 8 raw-SQL queries below (this one + getVatReport's
   // CTEs + getProfitReport + getBestsellersReport + getCustomerReport's
   // CTEs) all hardcode the channel-list inline as a SQL string literal.
   // This violates single-source-of-truth — adding a new SalesChannel
   // requires updating ONLINE_CHANNELS AND every one of those 8 sites.
   // Refactor to Prisma.sql interpolation against ONLINE_CHANNELS in a
-  // follow-up cleanup. C17 fixes the missing 'ebay' in all 8 sites
+  // follow-up cleanup. C15.8 fixes the missing 'ebay' in all 8 sites
   // (atomic) but defers the architectural refactor.
   private async getTopProductsForDay(day: Date): Promise<Array<{ name: string; sku: string; quantity: number; revenue: number }>> {
     const start = new Date(day); start.setUTCHours(0, 0, 0, 0)
@@ -481,7 +481,7 @@ export class FinanceReportsService {
     }
   }
 
-  // C17 — same channel-symmetry filter as aggregateRefunds(). This is
+  // C15.8 — same channel-symmetry filter as aggregateRefunds(). This is
   // a SEPARATE path used by getMonthlyReport's refundsTotal field
   // (distinct from refundDetails which goes through aggregateRefunds).
   // Both paths must apply the same ONLINE_CHANNELS + status filter for
@@ -497,7 +497,7 @@ export class FinanceReportsService {
   ): Promise<number> {
     const result = await this.prisma.refund.aggregate({
       where: {
-        // C17 status-filter: count both PENDING and PROCESSED — see
+        // C15.8 status-filter: count both PENDING and PROCESSED — see
         // aggregateRefunds JSDoc for the architectural contract.
         status: { in: ['PROCESSED', 'PENDING'] },
         createdAt: { gte: start, lte: end },

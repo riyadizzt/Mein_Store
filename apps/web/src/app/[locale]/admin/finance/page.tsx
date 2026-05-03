@@ -316,7 +316,7 @@ function OverviewTab({ data, isLoading, t3 }: { data: any; isLoading: boolean; t
   const methods: any[] = data?.byPaymentMethod ?? []
   const topProducts: any[] = data?.topProducts ?? []
   const channels: any[] = data?.byChannel ?? []
-  // C17 — single source of truth for channel labels. See
+  // C15.8 — single source of truth for channel labels. See
   // apps/web/src/lib/channel-labels.ts. Replaces the previously-
   // duplicated inline maps (this site + line ~507 in same file +
   // monthly-tab.tsx). eBay branding now consistent across all surfaces.
@@ -509,7 +509,7 @@ function DailyTab({ data, isLoading, date, setDate, t3 }: {
   const methodsTotal = methods.reduce((s: number, x: any) => s + Number(x.gross ?? 0), 0)
   const channelsTotal = channels.reduce((s: number, x: any) => s + Number(x.gross ?? 0), 0)
 
-  // C17 — see comment at line ~318. Same shared map.
+  // C15.8 — see comment at line ~318. Same shared map.
   const CHANNEL_LABELS = SHARED_CHANNEL_LABELS
 
   return (

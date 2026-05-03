@@ -4,9 +4,9 @@ import { PrismaService } from '../../../prisma/prisma.service'
 // shared with finance-reports to prevent the two services from drifting
 // apart again (the exact bug shape of Launch-Blocker #3).
 //
-// C17 — also imports ONLINE_CHANNELS for the same reason: dashboard
+// C15.8 — also imports ONLINE_CHANNELS for the same reason: dashboard
 // revenue tiles MUST aggregate the same channel-set as finance-reports.
-// Pre-C17 the dashboard had NO channel filter at all (over-counted
+// Pre-C15.8 the dashboard had NO channel filter at all (over-counted
 // eBay vs finance-reports which excluded eBay) — the asymmetry made
 // dashboard "Today's revenue" disagree with finance daily report.
 import { COUNTABLE_STATUSES, ONLINE_CHANNELS } from './finance-reports.service'
@@ -59,8 +59,8 @@ export class DashboardService {
       revenueLast7DaysRaw,
     ] = await Promise.all([
       // Today's revenue — FINANCIAL KPI. Uses COUNTABLE_STATUSES + the
-      // ONLINE_CHANNELS filter (C17) so it matches finance-reports
-      // .aggregateSalesForDay exactly. Pre-C17 had no channel filter and
+      // ONLINE_CHANNELS filter (C15.8) so it matches finance-reports
+      // .aggregateSalesForDay exactly. Pre-C15.8 had no channel filter and
       // included POS + always counted eBay (asymmetric vs finance which
       // excluded eBay). Previously the COUNTABLE_STATUSES alignment was
       // added in Launch-Blocker #3; this is the channel-side equivalent.
@@ -191,7 +191,7 @@ export class DashboardService {
         orderBy: { createdAt: 'desc' },
       }),
       // Revenue by payment method.
-      // C17: nested ONLINE_CHANNELS filter on order so payment-method
+      // C15.8: nested ONLINE_CHANNELS filter on order so payment-method
       // breakdown matches the same revenue universe as the today/week/
       // month aggregates above.
       this.prisma.payment.groupBy({
@@ -245,7 +245,7 @@ export class DashboardService {
       // Today's revenue by channel — FINANCIAL KPI.
       // Same COUNTABLE_STATUSES + ONLINE_CHANNELS filter as the today/
       // week/month aggregates so the channel-breakdown sum matches
-      // today.revenueGross. C17: added ONLINE_CHANNELS for parity with
+      // today.revenueGross. C15.8: added ONLINE_CHANNELS for parity with
       // finance-reports byChannel.
       this.prisma.order.groupBy({
         by: ['channel'],

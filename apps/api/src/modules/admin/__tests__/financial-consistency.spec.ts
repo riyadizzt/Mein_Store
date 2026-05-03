@@ -242,9 +242,9 @@ describe('Financial consistency — Dashboard vs FinanceReports', () => {
     // Seed: 11 orders today, 7 countable + 4 non-countable. Finance and
     // dashboard must both compute the countable sum (480) and exclude
     // the non-countable (140).
-    // C17 — added eBay seed (id='k', €25). Pre-C17 the dashboard would
+    // C15.8 — added eBay seed (id='k', €25). Pre-C15.8 the dashboard would
     // have over-counted (no channel filter, included eBay) while finance
-    // excluded eBay → drift. Post-C17 both include eBay symmetrically.
+    // excluded eBay → drift. Post-C15.8 both include eBay symmetrically.
     const at = utcMidday()
     const seed: SeedOrder[] = [
       // COUNTABLE (sum = 100+50+75+80+90+60+25 = 480, incl. eBay 25)
@@ -254,7 +254,7 @@ describe('Financial consistency — Dashboard vs FinanceReports', () => {
       mkOrder({ id: 'd', status: 'delivered',  total: 80,  channel: 'instagram', at }),
       mkOrder({ id: 'e', status: 'returned',   total: 90,  channel: 'website',   at }),
       mkOrder({ id: 'f', status: 'refunded',   total: 60,  channel: 'website',   at }),
-      mkOrder({ id: 'k', status: 'delivered',  total: 25,  channel: 'ebay',      at }), // C17
+      mkOrder({ id: 'k', status: 'delivered',  total: 25,  channel: 'ebay',      at }), // C15.8
       // NON-COUNTABLE (must be excluded from revenue, old dashboard
       // bug would have included pending + pending_payment + disputed)
       mkOrder({ id: 'g', status: 'pending',         total: 30, channel: 'website', at }),
@@ -284,14 +284,14 @@ describe('Financial consistency — Dashboard vs FinanceReports', () => {
 
   it('this month revenue matches between dashboard.thisMonth and finance.currentMonth (incl. eBay)', async () => {
     // All seed orders are within this calendar month. Mix of statuses + channels.
-    // C17 — added eBay seed. Both dashboard and finance MUST include it.
+    // C15.8 — added eBay seed. Both dashboard and finance MUST include it.
     const at = utcMidday()
     const seed: SeedOrder[] = [
       mkOrder({ id: 'a', status: 'confirmed',  total: 200, at }),
       mkOrder({ id: 'b', status: 'shipped',    total: 300, at }),
       mkOrder({ id: 'c', status: 'delivered',  total: 400, at }),
       mkOrder({ id: 'd', status: 'refunded',   total: 100, at }),
-      mkOrder({ id: 'g', status: 'delivered',  total: 50,  channel: 'ebay', at }), // C17
+      mkOrder({ id: 'g', status: 'delivered',  total: 50,  channel: 'ebay', at }), // C15.8
       // non-countable — must be excluded by both
       mkOrder({ id: 'e', status: 'cancelled',       total: 500, at }),
       mkOrder({ id: 'f', status: 'pending_payment', total: 250, at }),

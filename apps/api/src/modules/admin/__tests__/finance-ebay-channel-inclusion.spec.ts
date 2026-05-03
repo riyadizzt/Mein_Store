@@ -1,7 +1,7 @@
 /**
- * C17 regression — eBay channel inclusion in finance reports.
+ * C15.8 regression — eBay channel inclusion in finance reports.
  *
- * Owner-reported bug: pre-C17 ONLINE_CHANNELS list excluded 'ebay' →
+ * Owner-reported bug: pre-C15.8 ONLINE_CHANNELS list excluded 'ebay' →
  * eBay orders were silently dropped from finance daily/monthly aggregates,
  * but eBay refunds were still counted (no channel filter on refund side).
  * Result: GoBD-violating phantom-refund effect on the Finanzamt PDF.
@@ -35,7 +35,7 @@ interface SeedRefund {
   amount: number
   channel: string
   createdAt: Date
-  status?: 'PROCESSED' | 'PENDING' | 'FAILED' // C17 status-filter — defaults to PROCESSED for back-compat with existing seeds
+  status?: 'PROCESSED' | 'PENDING' | 'FAILED' // C15.8 status-filter — defaults to PROCESSED for back-compat with existing seeds
 }
 
 function matchesOrderWhere(order: SeedOrder, where: any): boolean {
@@ -95,10 +95,10 @@ function buildMockPrisma(seed: { orders?: SeedOrder[]; refunds?: SeedRefund[] })
   const matchRefund = (r: SeedRefund, where: any) => {
     if (where?.createdAt?.gte && r.createdAt < where.createdAt.gte) return false
     if (where?.createdAt?.lte && r.createdAt > where.createdAt.lte) return false
-    // C17 — refund.payment.order.channel filter
+    // C15.8 — refund.payment.order.channel filter
     const allowedChannels = where?.payment?.order?.channel?.in
     if (allowedChannels && !allowedChannels.includes(r.channel)) return false
-    // C17 status-filter: support both single-value and { in: [...] } forms
+    // C15.8 status-filter: support both single-value and { in: [...] } forms
     const status = r.status ?? 'PROCESSED'
     if (where?.status) {
       if (typeof where.status === 'string' && where.status !== status) return false
@@ -166,10 +166,10 @@ function utcMidday(): Date {
   return d
 }
 
-describe('FinanceReportsService — C17 eBay channel inclusion', () => {
+describe('FinanceReportsService — C15.8 eBay channel inclusion', () => {
   it('1. eBay order is included in monthly currentMonth.gross', async () => {
-    // Pre-C17: eBay excluded by ONLINE_CHANNELS → gross would have been 100.
-    // Post-C17: gross includes eBay → 150.
+    // Pre-C15.8: eBay excluded by ONLINE_CHANNELS → gross would have been 100.
+    // Post-C15.8: gross includes eBay → 150.
     const at = utcMidday()
     const prisma = buildMockPrisma({
       orders: [
@@ -188,7 +188,7 @@ describe('FinanceReportsService — C17 eBay channel inclusion', () => {
 
   it('2. eBay tax is included in currentMonth.tax (refund-adjusted math)', async () => {
     // €119 eBay order → 100 net + 19 VAT. No refund → tax stays 19.
-    // Pre-C17 would have shown tax=0 (eBay excluded entirely).
+    // Pre-C15.8 would have shown tax=0 (eBay excluded entirely).
     const at = utcMidday()
     const prisma = buildMockPrisma({
       orders: [mkOrder({ id: 'a', status: 'delivered', total: 119, channel: 'ebay', at })],
@@ -218,7 +218,7 @@ describe('FinanceReportsService — C17 eBay channel inclusion', () => {
     expect(report.currentMonth.gross).toBe('100.00')
     expect(report.refundsTotal).toBe('100.00')
     expect(report.netRevenue).toBe('0.00')
-    // C17 + tax-fix-v2 working together: eBay tax is now in the gross
+    // C15.8 + tax-fix-v2 working together: eBay tax is now in the gross
     // AND the eBay refund VAT is symmetrically deducted → 0.
     expect(report.currentMonth.tax).toBe('0.00')
     expect(report.currentMonth.net).toBe('0.00')
@@ -248,7 +248,7 @@ describe('FinanceReportsService — C17 eBay channel inclusion', () => {
     expect(Number(websiteRow!.gross)).toBe(100)
   })
 
-  it('5. C17 refund symmetry: POS refunds excluded (defense-in-depth)', async () => {
+  it('5. C15.8 refund symmetry: POS refunds excluded (defense-in-depth)', async () => {
     // POS is NOT in ONLINE_CHANNELS. Even if a hypothetical POS refund
     // landed in the table, aggregateRefunds must filter it out for
     // symmetric exclusion with sales side.
@@ -270,7 +270,7 @@ describe('FinanceReportsService — C17 eBay channel inclusion', () => {
   })
 
   // ────────────────────────────────────────────────────────────────────
-  // C17 status-filter (Phase D fix) — refund counted on issuance, not
+  // C15.8 status-filter (Phase D fix) — refund counted on issuance, not
   // on bank-transfer completion. Async-channels (eBay, Vorkasse) start
   // as PENDING and transition to PROCESSED via poll-cron / admin-action.
   // Both states must count toward refundsTotal to eliminate phantom-

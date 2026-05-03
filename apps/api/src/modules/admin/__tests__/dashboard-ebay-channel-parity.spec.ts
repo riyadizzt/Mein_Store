@@ -1,8 +1,8 @@
 /**
- * C17 regression — DashboardService and FinanceReportsService MUST agree
+ * C15.8 regression — DashboardService and FinanceReportsService MUST agree
  * on revenue totals when seed contains mixed website + eBay orders.
  *
- * Pre-C17 the dashboard had NO channel filter (would over-count eBay)
+ * Pre-C15.8 the dashboard had NO channel filter (would over-count eBay)
  * while finance-reports excluded eBay (under-counted). The two surfaces
  * disagreed on totals for the same period — exactly the consistency-
  * drift bug shape that financial-consistency.spec.ts was designed to
@@ -125,10 +125,10 @@ function utcMidday(): Date {
   return d
 }
 
-describe('Financial consistency — Dashboard vs Finance with eBay channel (C17)', () => {
+describe('Financial consistency — Dashboard vs Finance with eBay channel (C15.8)', () => {
   it('eBay seed: dashboard.today.revenueGross === finance.todaySales.gross', async () => {
     // Mixed seeds: 1 website (€100) + 1 eBay (€50). Both services MUST
-    // include both — total €150. Pre-C17, dashboard would have shown
+    // include both — total €150. Pre-C15.8, dashboard would have shown
     // €150 (no channel filter) but finance only €100 (eBay excluded).
     const at = utcMidday()
     const seed: SeedOrder[] = [
@@ -153,8 +153,8 @@ describe('Financial consistency — Dashboard vs Finance with eBay channel (C17)
   })
 
   it('POS-only seed: BOTH services exclude POS (defensive symmetry)', async () => {
-    // POS is excluded from ONLINE_CHANNELS. Dashboard pre-C17 had no
-    // channel filter and would have included POS. Post-C17 both exclude.
+    // POS is excluded from ONLINE_CHANNELS. Dashboard pre-C15.8 had no
+    // channel filter and would have included POS. Post-C15.8 both exclude.
     const at = utcMidday()
     const seed: SeedOrder[] = [
       mkOrder({ id: 'a', status: 'delivered', total: 100, channel: 'website', at }),
