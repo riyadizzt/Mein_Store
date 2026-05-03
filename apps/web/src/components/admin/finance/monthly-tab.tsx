@@ -1,5 +1,7 @@
 'use client'
 
+import { deriveMonthlyDisplayValues, deriveDailyVatPerRow } from '@/lib/finance-display'
+
 type T3 = (de: string, en: string, ar: string) => string
 
 function fmtNum(v: number): string {
@@ -15,10 +17,15 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
   const cur = data?.currentMonth ?? {}
   const daily: any[] = data?.dailyBreakdown ?? []
   const activeDays = daily.filter((d: any) => d.orderCount > 0)
-  const totalGross = Number(cur.gross ?? 0)
-  const totalNet = Number(cur.net ?? 0)
-  const totalTax = totalGross - totalNet
-  const refunds = Number(data?.refundsTotal ?? 0)
+  // Architectural contract: backend is single authority for tax / net.
+  // See apps/web/src/lib/finance-display.ts. Local `gross - net` derivation
+  // is forbidden — it silently produces phantom VAT once refunds are
+  // applied (the tax-phantom bug discovered in Mai 2026).
+  const display = deriveMonthlyDisplayValues(data)
+  const totalGross = display.totalGross
+  const totalNet = display.totalNet
+  const totalTax = display.totalTax
+  const refunds = display.refunds
   const monthNames = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
 
   const gridCols5 = 'grid grid-cols-5 gap-x-2'
@@ -85,7 +92,7 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
         ) : (
           <>
             {activeDays.map((d: any) => {
-              const g = Number(d.gross); const n = Number(d.net); const vat = g - n
+              const g = Number(d.gross); const n = Number(d.net); const vat = deriveDailyVatPerRow(d)
               return (
                 <div key={d.date} className={`${gridCols5} border-b hover:bg-muted/30 transition-colors items-center`}>
                   <div className="px-4 py-3 text-sm tabular-nums text-center">{d.date.split('-').reverse().join('.')}</div>

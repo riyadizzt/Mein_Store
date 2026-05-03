@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { MonthlyTabV2 } from '@/components/admin/finance/monthly-tab'
+import { deriveMonthlyDisplayValues, deriveDailyVatPerRow } from '@/lib/finance-display'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 
 type Tab = 'overview' | 'daily' | 'monthly' | 'profit' | 'vat' | 'bestsellers' | 'customers'
@@ -192,12 +193,16 @@ export default function AdminFinancePage() {
             } catch (e: any) { alert(t3('PDF-Download fehlgeschlagen', 'PDF download failed', 'فشل تحميل PDF') + (e?.message ? `: ${e.message}` : '')) }
           }}
           onCsvExport={() => {
+            // Architectural contract: backend is single authority for tax/net.
+            // See apps/web/src/lib/finance-display.ts. Forbidden pattern
+            // (gross - net) replaced with direct reads of cur.tax + d.tax.
             const cur = monthly.data?.currentMonth ?? {}
             const daily: any[] = monthly.data?.dailyBreakdown ?? []
             const activeDays = daily.filter((d: any) => d.orderCount > 0)
-            const tG = Number(cur.gross ?? 0); const tN = Number(cur.net ?? 0); const tT = tG - tN
+            const display = deriveMonthlyDisplayValues(monthly.data)
+            const tG = display.totalGross; const tN = display.totalNet; const tT = display.totalTax
             const header = 'Datum;Bestellungen;Brutto (EUR);Netto (EUR);USt (EUR)'
-            const rows = activeDays.map((d: any) => { const g = Number(d.gross); const n = Number(d.net); return `${d.date};${d.orderCount};${g.toFixed(2).replace('.', ',')};${n.toFixed(2).replace('.', ',')};${(g - n).toFixed(2).replace('.', ',')}` })
+            const rows = activeDays.map((d: any) => { const g = Number(d.gross); const n = Number(d.net); const t = deriveDailyVatPerRow(d); return `${d.date};${d.orderCount};${g.toFixed(2).replace('.', ',')};${n.toFixed(2).replace('.', ',')};${t.toFixed(2).replace('.', ',')}` })
             rows.push(''); rows.push(`SUMME;${cur.orderCount ?? 0};${tG.toFixed(2).replace('.', ',')};${tN.toFixed(2).replace('.', ',')};${tT.toFixed(2).replace('.', ',')}`)
             const csv = '\uFEFF' + header + '\n' + rows.join('\n')
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
