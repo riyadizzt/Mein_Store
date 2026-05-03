@@ -102,9 +102,25 @@ export class FinanceReportsService {
         this.aggregateRefunds(dayStart, dayEnd),
       ])
 
+    // Tax phantom bug fix — mirror getVatReport logic.
+    // Refunds must adjust tax + net, not only gross. Required for accurate
+    // Finanzamt reporting (GoBD compliance). Same single-rate assumption as
+    // getMonthlyReport / getVatReport (line 584). Daily KPIs feed dashboard
+    // tiles and per-day breakdowns; un-adjusted tax would propagate phantom
+    // VAT into every per-day Finanzamt-relevant figure.
+    const dayRefundNet = todayRefunds.totalRefunded / 1.19
+    const dayRefundVat = todayRefunds.totalRefunded - dayRefundNet
+    const dayAdjustedTax = Math.max(0, Number(todaySales.tax) - dayRefundVat)
+    const dayAdjustedNet = Math.max(0, Number(todaySales.net) - dayRefundNet)
+    const todaySalesAdjusted = {
+      ...todaySales,
+      tax: dayAdjustedTax.toFixed(2),
+      net: dayAdjustedNet.toFixed(2),
+    }
+
     return {
       date: targetDate,
-      todaySales,
+      todaySales: todaySalesAdjusted,
       yesterdaySales,
       lastWeekSameDaySales,
       refunds: {
@@ -332,12 +348,28 @@ export class FinanceReportsService {
     const grossNum = Number(currentMonth.gross)
     const netRevenue = grossNum - refundsTotal
 
+    // Tax phantom bug fix — mirror getVatReport logic.
+    // Refunds must adjust tax + net, not only gross. Required for accurate
+    // Finanzamt reporting (GoBD compliance). The Refund row records gross
+    // refund amount (e.g. €24.99); we extract its embedded VAT at 19% and
+    // subtract from both the period's output VAT and net-ex-tax. Single-rate
+    // assumption mirrors getVatReport at lines 584-590 (Malak today: 19% only;
+    // multi-rate future: needs pro-rating). Math.max(0, …) clamps to zero
+    // when refunds in the period exceed sales (e.g. refunds of prior-month
+    // sales) — tax-credit handling is a separate ledger feature.
+    const refundNet = refundsTotal / 1.19
+    const refundVat = refundsTotal - refundNet
+    const adjustedTax = Math.max(0, Number(currentMonth.tax) - refundVat)
+    const adjustedNet = Math.max(0, Number(currentMonth.net) - refundNet)
+
     return {
       year,
       month,
       currentMonth: {
         ...currentMonth,
-        taxTotal: currentMonth.tax,
+        tax: adjustedTax.toFixed(2),
+        net: adjustedNet.toFixed(2),
+        taxTotal: adjustedTax.toFixed(2),
       },
       previousMonth: {
         ...previousMonth,
