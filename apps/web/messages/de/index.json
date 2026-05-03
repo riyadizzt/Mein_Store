@@ -1042,7 +1042,9 @@
       "page": "Seite {page} von {total}",
       "prev": "Zurück",
       "next": "Weiter",
-      "noEntries": "Keine Einträge"
+      "noEntries": "Keine Einträge",
+      "includeSystemEvents": "Systemereignisse einbeziehen",
+      "includeSystemEventsHelp": "eBay-Webhooks und andere Systemereignisse anzeigen"
     },
     "notif": {
       "title": "Benachrichtigungen",

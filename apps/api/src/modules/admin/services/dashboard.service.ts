@@ -155,8 +155,16 @@ export class DashboardService {
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
-      // Recent 10 audit actions
+      // Recent 10 audit actions.
+      // C15.7 — Dashboard recent-activity widget ALWAYS excludes
+      // tier='ephemeral' (eBay LOPP webhooks etc.) because it represents
+      // human-driven admin actions, not telemetry. Without this filter,
+      // ~106 ebay-deletion-notifications/h would dominate the timeline
+      // and bury real admin events. The opt-in toggle for ephemeral lives
+      // on /admin/audit-log only — no toggle here, this is the executive-
+      // summary view. See AuditService.findAll JSDoc for the full contract.
       this.prisma.adminAuditLog.findMany({
+        where: { tier: { not: 'ephemeral' } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),

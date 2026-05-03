@@ -1042,7 +1042,9 @@
       "page": "صفحة {page} من {total}",
       "prev": "السابق",
       "next": "التالي",
-      "noEntries": "لا توجد إدخالات"
+      "noEntries": "لا توجد إدخالات",
+      "includeSystemEvents": "إظهار أحداث النظام",
+      "includeSystemEventsHelp": "عرض إشعارات eBay وأحداث النظام الأخرى"
     },
     "notif": {
       "title": "الإشعارات",

@@ -141,17 +141,37 @@ export class AuditService {
     )
   }
 
+  /**
+   * C15.7 — Architectural contract for the admin audit-log viewer:
+   *
+   * Admin audit-log default view EXCLUDES `tier='ephemeral'` rows because
+   * they represent high-volume system telemetry (eBay LOPP webhooks,
+   * marketplace-deletion notifications) with zero regulatory or business
+   * value. The data is preserved in DB for 7 days for forensics
+   * (audit-archive cron Step A); UI shows it on opt-in via the
+   * "Include system events" toggle (`excludeEphemeral=false`).
+   *
+   * Dashboard recent-activity widget ALWAYS excludes ephemeral (see
+   * dashboard.service.ts `recentAuditActions` query) because it represents
+   * human-driven admin actions, not telemetry — no toggle there.
+   *
+   * Backward-compat: callers passing `excludeEphemeral=false` get the
+   * pre-C15.7 behavior (all rows including ephemeral).
+   */
   async findAll(query: {
     adminId?: string
     action?: string
     page?: number
     limit?: number
+    excludeEphemeral?: boolean
   }) {
     const page = query.page ?? 1
     const limit = query.limit ?? 50
     const where: any = {}
     if (query.adminId) where.adminId = query.adminId
     if (query.action) where.action = { contains: query.action, mode: 'insensitive' }
+    // Default-on: hide ephemeral noise from admin UI unless explicitly requested.
+    if (query.excludeEphemeral !== false) where.tier = { not: 'ephemeral' }
 
     const [items, total] = await Promise.all([
       this.prisma.adminAuditLog.findMany({
@@ -192,8 +212,18 @@ export class AuditService {
     })
   }
 
-  async getActionTypes() {
+  /**
+   * Action-type list for the admin filter-dropdown. Mirrors the C15.7
+   * tier-filter contract: when `excludeEphemeral` is true (default), the
+   * dropdown only lists actions that exist in the visible (non-ephemeral)
+   * data — otherwise admin would see e.g. EBAY_ACCOUNT_DELETION_RECEIVED
+   * in the dropdown, select it, and get an empty result page.
+   */
+  async getActionTypes(opts?: { excludeEphemeral?: boolean }) {
+    const where: any = {}
+    if (opts?.excludeEphemeral !== false) where.tier = { not: 'ephemeral' }
     const actions = await this.prisma.adminAuditLog.findMany({
+      where,
       distinct: ['action'],
       select: { action: true },
       orderBy: { action: 'asc' },

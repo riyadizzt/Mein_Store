@@ -413,14 +413,20 @@ export default function AuditLogPage() {
   const [adminFilter, setAdminFilter] = useState('')
   const [actionFilter, setActionFilter] = useState('')
   const [page, setPage] = useState(1)
+  // C15.7 — default OFF: hide ephemeral system telemetry (eBay LOPP webhooks etc.)
+  // from the admin viewer. Toggle on to see all rows. Resets every page-load
+  // (no localStorage) — power-users typically need ephemeral for a specific
+  // forensic query, not as their always-on view.
+  const [includeEphemeral, setIncludeEphemeral] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-audit-log', adminFilter, actionFilter, page],
+    queryKey: ['admin-audit-log', adminFilter, actionFilter, page, includeEphemeral],
     queryFn: async () => {
       const params: Record<string, string> = { page: String(page), limit: '30' }
       if (adminFilter) params.adminId = adminFilter
       if (actionFilter) params.action = actionFilter
+      if (includeEphemeral) params.includeEphemeral = 'true'
       const { data } = await api.get('/admin/audit-log', { params })
       return data
     },
@@ -432,8 +438,13 @@ export default function AuditLogPage() {
   })
 
   const { data: actionTypes } = useQuery({
-    queryKey: ['admin-audit-actions'],
-    queryFn: async () => { const { data } = await api.get('/admin/audit-log/actions'); return data },
+    queryKey: ['admin-audit-actions', includeEphemeral],
+    queryFn: async () => {
+      const params: Record<string, string> = {}
+      if (includeEphemeral) params.includeEphemeral = 'true'
+      const { data } = await api.get('/admin/audit-log/actions', { params })
+      return data
+    },
   })
 
   const logs = data?.data ?? []
@@ -475,6 +486,19 @@ export default function AuditLogPage() {
             emptyLabel={t('auditLog.allActions')}
           />
         </div>
+        {/* C15.7 — Toggle for ephemeral system events (eBay LOPP webhooks etc.). */}
+        <label
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background text-sm cursor-pointer select-none hover:bg-muted/40 transition-colors"
+          title={t('auditLog.includeSystemEventsHelp')}
+        >
+          <input
+            type="checkbox"
+            checked={includeEphemeral}
+            onChange={(e) => { setIncludeEphemeral(e.target.checked); setPage(1) }}
+            className="h-4 w-4"
+          />
+          <span>{t('auditLog.includeSystemEvents')}</span>
+        </label>
       </div>
 
       {/* Table with Day Grouping */}

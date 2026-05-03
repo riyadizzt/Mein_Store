@@ -1514,12 +1514,15 @@ export class AdminController {
     @Query('action') action?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('includeEphemeral') includeEphemeral?: string,
   ) {
     return this.audit.findAll({
       adminId,
       action,
       page: page ? +page : 1,
       limit: limit ? +limit : 50,
+      // C15.7 — default hides ephemeral; admin opt-in via ?includeEphemeral=true
+      excludeEphemeral: includeEphemeral !== 'true',
     })
   }
 
@@ -1533,8 +1536,8 @@ export class AdminController {
   @Get('audit-log/actions')
   @RequirePermission(PERMISSIONS.AUDIT_VIEW)
   @Roles('super_admin')
-  getAuditActions() {
-    return this.audit.getActionTypes()
+  getAuditActions(@Query('includeEphemeral') includeEphemeral?: string) {
+    return this.audit.getActionTypes({ excludeEphemeral: includeEphemeral !== 'true' })
   }
 
   // ── Returns ───────────────────────────────────────────
