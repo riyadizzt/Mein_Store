@@ -238,19 +238,23 @@ describe('Financial consistency — Dashboard vs FinanceReports', () => {
   // started disagreeing numerically for the same period — that is exactly
   // the launch-blocker bug family. Investigate before merging.
 
-  it('mixed statuses: revenue today matches between dashboard and finance', async () => {
-    // Seed: 10 orders today, 6 countable + 4 non-countable. Finance and
-    // dashboard must both compute the countable sum (455) and exclude
+  it('mixed statuses + channels (incl. eBay): revenue today matches between dashboard and finance', async () => {
+    // Seed: 11 orders today, 7 countable + 4 non-countable. Finance and
+    // dashboard must both compute the countable sum (480) and exclude
     // the non-countable (140).
+    // C17 — added eBay seed (id='k', €25). Pre-C17 the dashboard would
+    // have over-counted (no channel filter, included eBay) while finance
+    // excluded eBay → drift. Post-C17 both include eBay symmetrically.
     const at = utcMidday()
     const seed: SeedOrder[] = [
-      // COUNTABLE (sum = 100+50+75+80+90+60 = 455)
+      // COUNTABLE (sum = 100+50+75+80+90+60+25 = 480, incl. eBay 25)
       mkOrder({ id: 'a', status: 'confirmed',  total: 100, channel: 'website',   at }),
       mkOrder({ id: 'b', status: 'processing', total: 50,  channel: 'website',   at }),
       mkOrder({ id: 'c', status: 'shipped',    total: 75,  channel: 'facebook',  at }),
       mkOrder({ id: 'd', status: 'delivered',  total: 80,  channel: 'instagram', at }),
       mkOrder({ id: 'e', status: 'returned',   total: 90,  channel: 'website',   at }),
       mkOrder({ id: 'f', status: 'refunded',   total: 60,  channel: 'website',   at }),
+      mkOrder({ id: 'k', status: 'delivered',  total: 25,  channel: 'ebay',      at }), // C17
       // NON-COUNTABLE (must be excluded from revenue, old dashboard
       // bug would have included pending + pending_payment + disputed)
       mkOrder({ id: 'g', status: 'pending',         total: 30, channel: 'website', at }),
@@ -268,24 +272,26 @@ describe('Financial consistency — Dashboard vs FinanceReports', () => {
       finance.getDailyReport(todayStr),
     ])
 
-    // Both services: gross revenue = sum of countable only = €455.00
-    expect(dash.today.revenueGross).toBe('455.00')
-    expect(fin.todaySales.gross).toBe('455.00')
+    // Both services: gross revenue = sum of countable incl. eBay = €480.00
+    expect(dash.today.revenueGross).toBe('480.00')
+    expect(fin.todaySales.gross).toBe('480.00')
     expect(dash.today.revenueGross).toBe(fin.todaySales.gross)
 
-    // Count parity: both count only the 6 countable orders
-    expect(dash.today.orderCount).toBe(6)
-    expect(fin.todaySales.orderCount).toBe(6)
+    // Count parity: both count only the 7 countable orders
+    expect(dash.today.orderCount).toBe(7)
+    expect(fin.todaySales.orderCount).toBe(7)
   })
 
-  it('this month revenue matches between dashboard.thisMonth and finance.currentMonth', async () => {
-    // All seed orders are within this calendar month. Mix of statuses again.
+  it('this month revenue matches between dashboard.thisMonth and finance.currentMonth (incl. eBay)', async () => {
+    // All seed orders are within this calendar month. Mix of statuses + channels.
+    // C17 — added eBay seed. Both dashboard and finance MUST include it.
     const at = utcMidday()
     const seed: SeedOrder[] = [
       mkOrder({ id: 'a', status: 'confirmed',  total: 200, at }),
       mkOrder({ id: 'b', status: 'shipped',    total: 300, at }),
       mkOrder({ id: 'c', status: 'delivered',  total: 400, at }),
       mkOrder({ id: 'd', status: 'refunded',   total: 100, at }),
+      mkOrder({ id: 'g', status: 'delivered',  total: 50,  channel: 'ebay', at }), // C17
       // non-countable — must be excluded by both
       mkOrder({ id: 'e', status: 'cancelled',       total: 500, at }),
       mkOrder({ id: 'f', status: 'pending_payment', total: 250, at }),
@@ -300,9 +306,9 @@ describe('Financial consistency — Dashboard vs FinanceReports', () => {
       finance.getMonthlyReport(now.getUTCFullYear(), now.getUTCMonth() + 1),
     ])
 
-    // Countable sum = 200+300+400+100 = 1000
-    expect(dash.thisMonth.revenue).toBe('1000.00')
-    expect(fin.currentMonth.gross).toBe('1000.00')
+    // Countable sum = 200+300+400+100+50 = 1050 (incl. eBay)
+    expect(dash.thisMonth.revenue).toBe('1050.00')
+    expect(fin.currentMonth.gross).toBe('1050.00')
     expect(dash.thisMonth.revenue).toBe(fin.currentMonth.gross)
   })
 

@@ -13,6 +13,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { MonthlyTabV2 } from '@/components/admin/finance/monthly-tab'
 import { deriveMonthlyDisplayValues, deriveDailyVatPerRow } from '@/lib/finance-display'
+import { CHANNEL_LABELS as SHARED_CHANNEL_LABELS } from '@/lib/channel-labels'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 
 type Tab = 'overview' | 'daily' | 'monthly' | 'profit' | 'vat' | 'bestsellers' | 'customers'
@@ -315,7 +316,11 @@ function OverviewTab({ data, isLoading, t3 }: { data: any; isLoading: boolean; t
   const methods: any[] = data?.byPaymentMethod ?? []
   const topProducts: any[] = data?.topProducts ?? []
   const channels: any[] = data?.byChannel ?? []
-  const CHANNEL_LABELS: Record<string, string> = { website: 'Webshop', mobile: 'Mobile App', pos: 'POS', facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp' }
+  // C17 — single source of truth for channel labels. See
+  // apps/web/src/lib/channel-labels.ts. Replaces the previously-
+  // duplicated inline maps (this site + line ~507 in same file +
+  // monthly-tab.tsx). eBay branding now consistent across all surfaces.
+  const CHANNEL_LABELS = SHARED_CHANNEL_LABELS
   const MEDAL = ['#d4a853', '#94a3b8', '#b45309']
 
   return (
@@ -504,7 +509,8 @@ function DailyTab({ data, isLoading, date, setDate, t3 }: {
   const methodsTotal = methods.reduce((s: number, x: any) => s + Number(x.gross ?? 0), 0)
   const channelsTotal = channels.reduce((s: number, x: any) => s + Number(x.gross ?? 0), 0)
 
-  const CHANNEL_LABELS: Record<string, string> = { website: 'Website', mobile: 'Mobile App', pos: 'Shopify POS', facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', google: 'Google Shopping', whatsapp: 'WhatsApp' }
+  // C17 — see comment at line ~318. Same shared map.
+  const CHANNEL_LABELS = SHARED_CHANNEL_LABELS
 
   return (
     <div className="space-y-6">

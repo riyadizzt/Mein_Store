@@ -3,7 +3,13 @@ import { PrismaService } from '../../../prisma/prisma.service'
 // Single source of truth for "what counts toward gross revenue" —
 // shared with finance-reports to prevent the two services from drifting
 // apart again (the exact bug shape of Launch-Blocker #3).
-import { COUNTABLE_STATUSES } from './finance-reports.service'
+//
+// C17 — also imports ONLINE_CHANNELS for the same reason: dashboard
+// revenue tiles MUST aggregate the same channel-set as finance-reports.
+// Pre-C17 the dashboard had NO channel filter at all (over-counted
+// eBay vs finance-reports which excluded eBay) — the asymmetry made
+// dashboard "Today's revenue" disagree with finance daily report.
+import { COUNTABLE_STATUSES, ONLINE_CHANNELS } from './finance-reports.service'
 
 @Injectable()
 export class DashboardService {
@@ -52,31 +58,33 @@ export class DashboardService {
       lowStockCountRows,
       revenueLast7DaysRaw,
     ] = await Promise.all([
-      // Today's revenue — FINANCIAL KPI. Uses COUNTABLE_STATUSES so it
-      // matches finance-reports.aggregateSalesForDay exactly. Previously
-      // used `notIn ['cancelled']` which silently counted pending /
-      // pending_payment / disputed orders (money not yet received) as
-      // revenue, overstating the number vs. the finance reports.
+      // Today's revenue — FINANCIAL KPI. Uses COUNTABLE_STATUSES + the
+      // ONLINE_CHANNELS filter (C17) so it matches finance-reports
+      // .aggregateSalesForDay exactly. Pre-C17 had no channel filter and
+      // included POS + always counted eBay (asymmetric vs finance which
+      // excluded eBay). Previously the COUNTABLE_STATUSES alignment was
+      // added in Launch-Blocker #3; this is the channel-side equivalent.
       this.prisma.order.aggregate({
-        where: { createdAt: { gte: todayStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
+        where: { channel: { in: ONLINE_CHANNELS }, createdAt: { gte: todayStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
         _sum: { totalAmount: true, subtotal: true },
         _count: true,
       }),
       // This week — FINANCIAL KPI, see todayOrders comment above.
       this.prisma.order.aggregate({
-        where: { createdAt: { gte: weekStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
+        where: { channel: { in: ONLINE_CHANNELS }, createdAt: { gte: weekStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
         _sum: { totalAmount: true },
         _count: true,
       }),
       // This month — FINANCIAL KPI, see todayOrders comment above.
       this.prisma.order.aggregate({
-        where: { createdAt: { gte: monthStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
+        where: { channel: { in: ONLINE_CHANNELS }, createdAt: { gte: monthStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
         _sum: { totalAmount: true },
         _count: true,
       }),
       // Last month — FINANCIAL KPI used for month-over-month comparison.
       this.prisma.order.aggregate({
         where: {
+          channel: { in: ONLINE_CHANNELS },
           createdAt: { gte: lastMonthStart, lt: monthStart },
           status: { in: COUNTABLE_STATUSES },
           deletedAt: null,
@@ -182,12 +190,18 @@ export class DashboardService {
         include: { order: { select: { orderNumber: true } } },
         orderBy: { createdAt: 'desc' },
       }),
-      // Revenue by payment method
+      // Revenue by payment method.
+      // C17: nested ONLINE_CHANNELS filter on order so payment-method
+      // breakdown matches the same revenue universe as the today/week/
+      // month aggregates above.
       this.prisma.payment.groupBy({
         by: ['method'],
         _sum: { amount: true },
         _count: true,
-        where: { status: 'captured' },
+        where: {
+          status: 'captured',
+          order: { channel: { in: ONLINE_CHANNELS }, deletedAt: null },
+        },
       }),
       // Top 10 products this month — FINANCIAL KPI.
       // Status list below MUST stay in sync with COUNTABLE_STATUSES in
@@ -229,13 +243,15 @@ export class DashboardService {
         LIMIT 10
       `,
       // Today's revenue by channel — FINANCIAL KPI.
-      // Same COUNTABLE_STATUSES filter as the today/week/month aggregates
-      // so the channel-breakdown sum matches today.revenueGross.
+      // Same COUNTABLE_STATUSES + ONLINE_CHANNELS filter as the today/
+      // week/month aggregates so the channel-breakdown sum matches
+      // today.revenueGross. C17: added ONLINE_CHANNELS for parity with
+      // finance-reports byChannel.
       this.prisma.order.groupBy({
         by: ['channel'],
         _sum: { totalAmount: true },
         _count: true,
-        where: { createdAt: { gte: todayStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
+        where: { channel: { in: ONLINE_CHANNELS }, createdAt: { gte: todayStart }, status: { in: COUNTABLE_STATUSES }, deletedAt: null },
       }),
       // Unread (first-viewed-by-admin-at IS NULL) orders — ALL statuses.
       // Powers the sidebar badge. Consistent with the red pulsing dot in

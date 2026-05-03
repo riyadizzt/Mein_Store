@@ -4,10 +4,25 @@ import { OrderStatus, SalesChannel } from '@prisma/client'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit')
 
-// All customer-facing channels — exclude POS (offline/Shopify).
-// Exported so other finance-related services (e.g. admin dashboard) can
-// import the same list instead of duplicating it and drifting over time.
-export const ONLINE_CHANNELS: SalesChannel[] = ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp']
+/**
+ * All revenue-generating channels INCLUDING eBay (and any future
+ * marketplace/social channel). Used by every finance aggregate as the
+ * single source of truth for "what counts toward revenue".
+ *
+ * POS is intentionally excluded — Shopify-managed offline channel,
+ * reported separately.
+ *
+ * Contract for adding new channels: when a new SalesChannel enum value
+ * lands (e.g. future tiktok-shop, instagram-shop), it MUST be added
+ * here AND to the 8 hardcoded SQL strings further down in this file
+ * (search TODO(C17.1) — those will be refactored to use Prisma.sql
+ * interpolation against this constant in a follow-up cleanup task).
+ *
+ * Other consumers: dashboard.service.ts imports this constant for the
+ * 4 revenue aggregates (today/week/month/lastMonth) so dashboard and
+ * finance-reports always agree on totals.
+ */
+export const ONLINE_CHANNELS: SalesChannel[] = ['website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay']
 
 // Countable statuses: every order that WAS paid counts as revenue.
 // 'returned' is included because the payment was captured — the refund
@@ -168,12 +183,50 @@ export class FinanceReportsService {
     }
   }
 
-  /** Aggregate refunds for a date range — used by all finance reports */
+  /**
+   * Aggregate refunds for a date range — used by all finance reports.
+   *
+   * C17 — explicit channel-symmetry filter: refunds must come from the
+   * same set of channels that sales aggregates from (ONLINE_CHANNELS).
+   * Pre-C17 this was permissive (no channel filter) and worked by
+   * accident because POS has no refund flow. Adding explicit filter
+   * documents intent + protects against future channel additions.
+   * Refunds from POS or any non-ONLINE_CHANNELS channel are excluded
+   * from finance totals — symmetric with sales-side.
+   *
+   * C17 status-filter (Phase D fix) — Refund-counting semantic:
+   *
+   *   A refund is counted toward refundsTotal as soon as it's ISSUED
+   *   (Refund.status IN ['PENDING', 'PROCESSED']), NOT when the bank
+   *   transfer completes.
+   *
+   * Rationale: aligns with German Soll-Versteuerung (accrual accounting).
+   * The decision to refund creates the obligation; bank-transfer timing
+   * is an operational detail. FAILED status is excluded — no money
+   * actually moved.
+   *
+   * Async-flow channels (eBay, Vorkasse) start as PENDING and transition
+   * to PROCESSED via poll-cron or admin action. Both states count toward
+   * the refund total to eliminate phantom-revenue windows during the
+   * transition lag — without this, an eBay order canceled but with its
+   * refund still in PENDING (until next 60-min poll-cron) appears in
+   * gross WITHOUT a matching refund deduction → phantom revenue + tax
+   * (the Phase D failure that motivated this fix).
+   *
+   * Symmetric with getRefundsTotalForRange — same filter applied at
+   * line 466 for the parallel refund-aggregation path used by
+   * getMonthlyReport.refundsTotal.
+   */
   private async aggregateRefunds(start: Date, end: Date): Promise<{ totalRefunded: number; refundCount: number; refundsByChannel: Record<string, number> }> {
     const refunds = await this.prisma.refund.findMany({
       where: {
         createdAt: { gte: start, lte: end },
-        status: 'PROCESSED',
+        // C17 status-filter: count both PENDING and PROCESSED — see JSDoc above.
+        status: { in: ['PROCESSED', 'PENDING'] },
+        // C17 symmetry: only count refunds for orders from ONLINE_CHANNELS.
+        payment: {
+          order: { channel: { in: ONLINE_CHANNELS } },
+        },
       },
       select: {
         amount: true,
@@ -248,6 +301,14 @@ export class FinanceReportsService {
     return hourly
   }
 
+  // TODO(C17.1): The 8 raw-SQL queries below (this one + getVatReport's
+  // CTEs + getProfitReport + getBestsellersReport + getCustomerReport's
+  // CTEs) all hardcode the channel-list inline as a SQL string literal.
+  // This violates single-source-of-truth — adding a new SalesChannel
+  // requires updating ONLINE_CHANNELS AND every one of those 8 sites.
+  // Refactor to Prisma.sql interpolation against ONLINE_CHANNELS in a
+  // follow-up cleanup. C17 fixes the missing 'ebay' in all 8 sites
+  // (atomic) but defers the architectural refactor.
   private async getTopProductsForDay(day: Date): Promise<Array<{ name: string; sku: string; quantity: number; revenue: number }>> {
     const start = new Date(day); start.setUTCHours(0, 0, 0, 0)
     const end = new Date(day); end.setUTCHours(23, 59, 59, 999)
@@ -263,7 +324,7 @@ export class FinanceReportsService {
       LEFT JOIN product_variants pv ON pv.id = oi.variant_id
       LEFT JOIN product_translations pt ON pt.product_id = pv.product_id AND pt.language = 'de'
       WHERE o.created_at >= ${start} AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
       GROUP BY product_name, oi.snapshot_sku
@@ -420,14 +481,29 @@ export class FinanceReportsService {
     }
   }
 
+  // C17 — same channel-symmetry filter as aggregateRefunds(). This is
+  // a SEPARATE path used by getMonthlyReport's refundsTotal field
+  // (distinct from refundDetails which goes through aggregateRefunds).
+  // Both paths must apply the same ONLINE_CHANNELS + status filter for
+  // symmetric sales/refund accounting.
+  //
+  // Status filter mirrors aggregateRefunds: counts both PENDING and
+  // PROCESSED refunds (German Soll-Versteuerung — refund counted at
+  // issuance, not transfer-completion). FAILED excluded. See JSDoc on
+  // aggregateRefunds for the full architectural contract.
   private async getRefundsTotalForRange(
     start: Date,
     end: Date,
   ): Promise<number> {
     const result = await this.prisma.refund.aggregate({
       where: {
-        status: 'PROCESSED',
+        // C17 status-filter: count both PENDING and PROCESSED — see
+        // aggregateRefunds JSDoc for the architectural contract.
+        status: { in: ['PROCESSED', 'PENDING'] },
         createdAt: { gte: start, lte: end },
+        payment: {
+          order: { channel: { in: ONLINE_CHANNELS } },
+        },
       },
       _sum: { amount: true },
     })
@@ -493,7 +569,7 @@ export class FinanceReportsService {
         ON pt.product_id = pv.product_id AND pt.language = 'de'
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
       GROUP BY pv.product_id, pt.name, oi.snapshot_name
@@ -571,7 +647,7 @@ export class FinanceReportsService {
         JOIN orders o ON o.id = oi.order_id
         WHERE o.created_at >= ${start}
           AND o.created_at <= ${end}
-          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
           AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND o.deleted_at IS NULL
         GROUP BY oi.order_id
@@ -590,7 +666,7 @@ export class FinanceReportsService {
         JOIN order_items_totals oit ON oit.order_id = o.id
         WHERE o.created_at >= ${start}
           AND o.created_at <= ${end}
-          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
           AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND o.deleted_at IS NULL
         GROUP BY oi.tax_rate, o.id, o.total_amount, o.tax_amount, oit.all_items_sum
@@ -670,7 +746,7 @@ export class FinanceReportsService {
         ON pt.product_id = p.id AND pt.language = 'de'
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
       GROUP BY pt.name, oi.snapshot_name, pv.sku
@@ -723,7 +799,7 @@ export class FinanceReportsService {
       JOIN users u ON u.id = o.user_id
       WHERE o.created_at >= ${start}
         AND o.created_at <= ${end}
-        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+        AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
         AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
         AND o.deleted_at IS NULL
         AND o.user_id IS NOT NULL
@@ -762,7 +838,7 @@ export class FinanceReportsService {
           o.user_id,
           MIN(o.created_at) AS first_order_date
         FROM orders o
-        WHERE o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+        WHERE o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
           AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND o.deleted_at IS NULL
           AND o.user_id IS NOT NULL
@@ -773,7 +849,7 @@ export class FinanceReportsService {
         FROM orders o
         WHERE o.created_at >= ${start}
           AND o.created_at <= ${end}
-          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp')
+          AND o.channel IN ('website', 'mobile', 'facebook', 'instagram', 'tiktok', 'google', 'whatsapp', 'ebay')
           AND o.status IN ('confirmed', 'processing', 'shipped', 'delivered', 'returned', 'refunded')
           AND o.deleted_at IS NULL
           AND o.user_id IS NOT NULL

@@ -1,6 +1,7 @@
 'use client'
 
 import { deriveMonthlyDisplayValues, deriveDailyVatPerRow } from '@/lib/finance-display'
+import { channelLabel } from '@/lib/channel-labels'
 
 type T3 = (de: string, en: string, ar: string) => string
 
@@ -178,7 +179,8 @@ export function MonthlyTabV2({ data, isLoading, year, setYear, month, setMonth, 
               const share = totalGross > 0 ? ((Number(ch.gross) / totalGross) * 100).toFixed(1) : '0.0'
               return (
                 <div key={ch.channel} className={`${gridCols5} border-b hover:bg-muted/30 transition-colors items-center`}>
-                  <div className="px-4 py-3 text-sm font-medium capitalize">{ch.channel}</div>
+                  {/* C17 — channelLabel() resolves SalesChannel keys to display strings (e.g. 'ebay' → 'eBay'). */}
+                  <div className="px-4 py-3 text-sm font-medium">{channelLabel(ch.channel)}</div>
                   <div className="px-4 py-3 text-sm tabular-nums text-center">{ch.count}</div>
                   <div className="px-4 py-3 text-sm tabular-nums text-center font-medium">{fmtNum(Number(ch.gross))}</div>
                   <div className="px-4 py-3 text-sm tabular-nums text-center">{fmtNum(Number(ch.avgOrderValue ?? 0))}</div>
