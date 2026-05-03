@@ -69,6 +69,8 @@ describe('GetThenPutStrategy', () => {
     expect(result.ok).toBe(true)
     expect(result.errorMessage).toBeNull()
     expect(result.dataLossDetected).toBeFalsy()
+    // Issue #6 root-fix: full chain success → eBay-side state proven in sync.
+    expect(result.verifiedSuccess).toBe(true)
 
     // PUT-call hat full body (spread-pattern preservation)
     const putCall = requestMock.mock.calls[1]
@@ -111,6 +113,9 @@ describe('GetThenPutStrategy', () => {
     expect(result.ok).toBe(true)
     expect(result.errorMessage).toBe('verify-get-timeout')
     expect(result.postSnapshot).toBeNull()
+    // Issue #6 root-fix: PUT went through but verify-GET could not confirm
+    // → eBay-side state not proven → push-service must skip lastSyncedQuantity.
+    expect(result.verifiedSuccess).toBe(false)
   }, 10000)
 
   it('ENHANCEMENT 4: verify-GET fail → recordVerifyFailure called', async () => {
@@ -128,6 +133,9 @@ describe('GetThenPutStrategy', () => {
     expect(result.ok).toBe(true) // PUT succeeded — verify-fail isolated
     expect(result.errorMessage).toBe('verify-get-failed')
     expect(health.recordVerifyFailure).toHaveBeenCalledWith('get_then_put')
+    // Issue #6 root-fix: PUT went through but verify-GET could not confirm
+    // → eBay-side state not proven → push-service must skip lastSyncedQuantity.
+    expect(result.verifiedSuccess).toBe(false)
   })
 
   it('detects data-loss via verifier (post-PUT title removed)', async () => {

@@ -384,6 +384,92 @@ describe('EbayStockPushService — failure paths', () => {
 })
 
 // ──────────────────────────────────────────────────────────────
+// 4b. Issue #6 root-fix — verifiedSuccess gating of lastSyncedQuantity
+// ──────────────────────────────────────────────────────────────
+
+describe('EbayStockPushService — verifiedSuccess gating (Issue #6)', () => {
+  it('Selector returns ok=true with verifiedSuccess=false → lastSyncedQuantity is NOT persisted', async () => {
+    // Build service with custom selector returning a verify-fail-but-ok result
+    // (simulates GetThenPutStrategy verify-GET timeout / failure path).
+    const listing = makeListing({ lastSyncedQuantity: 3 })
+    const inv = makeInventoryRow({ quantityOnHand: 10, quantityReserved: 6 }) // effective=4
+    const prisma = buildPrisma({ listings: [listing], inventory: [inv] })
+    const auth = { getAccessTokenOrRefresh: jest.fn().mockResolvedValue('test-bearer') }
+    const moduleRef = { get: jest.fn().mockReturnValue(auth) } as any
+    const audit = { log: jest.fn().mockResolvedValue(undefined) } as any
+    const notifications = { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } as any
+
+    // Selector returns ok=true (PUT went through) but verifiedSuccess=false
+    // (verify-GET could not confirm — timeout or fail). Production path:
+    // GetThenPutStrategy ENHANCEMENT 3/4.
+    const selector = {
+      executeForSku: jest.fn().mockResolvedValue({
+        ok: true,
+        httpStatus: 204,
+        errorMessage: 'verify-get-timeout',
+        errorId: null,
+        rateLimited: false,
+        verifiedSuccess: false,
+      }),
+    } as any
+
+    const service = new EbayStockPushService(prisma, moduleRef, audit, notifications, selector)
+    await service.pushForVariants(['v1'])
+
+    // The update WAS called (still bumps lastSyncedAt + resets syncAttempts/syncError)
+    expect(prisma.channelProductListing.update).toHaveBeenCalledTimes(1)
+    const updateArgs = (prisma.channelProductListing.update as jest.Mock).mock.calls[0][0]
+
+    // CRITICAL: lastSyncedQuantity must NOT be in the data payload — verify
+    // could not confirm eBay-side state. Next reconcile-cron tick will retry
+    // (drift detected because DB.lastSyncedQuantity (3) !== effective (4)).
+    expect(updateArgs.data).not.toHaveProperty('lastSyncedQuantity')
+    expect(updateArgs.data).toEqual({
+      lastSyncedAt: expect.any(Date),
+      syncAttempts: 0,
+      syncError: null,
+    })
+  })
+
+  it('Selector returns ok=true with verifiedSuccess=true → lastSyncedQuantity IS persisted', async () => {
+    // Control case mirroring the verified-success path (Bulk HTTP 200 OR
+    // GetThenPut full-chain success). Confirms the conditional spread
+    // includes lastSyncedQuantity when eBay-side is proven in sync.
+    const listing = makeListing({ lastSyncedQuantity: 3 })
+    const inv = makeInventoryRow({ quantityOnHand: 10, quantityReserved: 6 }) // effective=4
+    const prisma = buildPrisma({ listings: [listing], inventory: [inv] })
+    const auth = { getAccessTokenOrRefresh: jest.fn().mockResolvedValue('test-bearer') }
+    const moduleRef = { get: jest.fn().mockReturnValue(auth) } as any
+    const audit = { log: jest.fn().mockResolvedValue(undefined) } as any
+    const notifications = { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } as any
+
+    const selector = {
+      executeForSku: jest.fn().mockResolvedValue({
+        ok: true,
+        httpStatus: 200,
+        errorMessage: null,
+        errorId: null,
+        rateLimited: false,
+        verifiedSuccess: true,
+      }),
+    } as any
+
+    const service = new EbayStockPushService(prisma, moduleRef, audit, notifications, selector)
+    await service.pushForVariants(['v1'])
+
+    expect(prisma.channelProductListing.update).toHaveBeenCalledWith({
+      where: { id: 'lst-1' },
+      data: {
+        lastSyncedQuantity: 4,
+        lastSyncedAt: expect.any(Date),
+        syncAttempts: 0,
+        syncError: null,
+      },
+    })
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
 // 5. extractPerSkuErrors — defensive multi-path
 // ──────────────────────────────────────────────────────────────
 

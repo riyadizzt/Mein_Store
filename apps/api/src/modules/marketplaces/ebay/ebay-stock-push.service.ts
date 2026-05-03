@@ -482,10 +482,18 @@ export class EbayStockPushService implements ChannelStockPusher {
 
       if (stratResult.ok) {
         try {
+          // Issue #6 root-fix: only persist lastSyncedQuantity if eBay-side
+          // confirmed the change via verify-GET (or via Bulk's HTTP-200-as-
+          // confirmation contract). Otherwise let next reconcile-cron retry —
+          // drift will be detected naturally and re-pushed. This eliminates
+          // the "phantom sync" failure mode where verify-fail returned ok=true
+          // but eBay-side may have silently dropped the PUT.
           await this.prisma.channelProductListing.update({
             where: { id: c.listing.id },
             data: {
-              lastSyncedQuantity: c.effective,
+              ...(stratResult.verifiedSuccess
+                ? { lastSyncedQuantity: c.effective }
+                : {}),
               lastSyncedAt: new Date(),
               syncAttempts: 0,
               syncError: null,

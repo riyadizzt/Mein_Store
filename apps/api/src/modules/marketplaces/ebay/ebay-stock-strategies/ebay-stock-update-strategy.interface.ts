@@ -52,6 +52,23 @@ export interface StockUpdateResult {
   dataLossDetected?: boolean
   /** Liste der Felder mit detected drift (z.B. ['product.title', 'groupIds']). */
   dataLossFields?: string[]
+  /**
+   * True only if eBay-side state confirmed post-mutation.
+   *
+   * Bulk strategy: HTTP 200 IS the confirmation (single-call API, no
+   * separate verify step — eBay returns 200 only after applying changes).
+   *
+   * GetThenPut strategy: requires successful verify-GET that confirms the
+   * new quantity matches what we PUT. Verify-timeout or verify-fail leaves
+   * `ok=true` (PUT did go through) but `verifiedSuccess=false` because we
+   * cannot prove the eBay-side state is in sync.
+   *
+   * Push-service contract: `lastSyncedQuantity` is persisted ONLY when
+   * `verifiedSuccess=true`. If false, the next reconcile-cron tick will
+   * see the listing as drifted and retry — natural self-healing without
+   * claiming a sync we cannot prove. See Issue #6 (cancel-flow drift bug).
+   */
+  verifiedSuccess: boolean
 }
 
 export interface StockUpdateStrategy {

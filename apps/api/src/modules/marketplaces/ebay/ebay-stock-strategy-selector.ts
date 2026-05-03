@@ -135,6 +135,7 @@ export class EbayStockStrategySelector implements OnModuleDestroy {
         errorId: null,
         rateLimited: false,
         skipped: true,
+        verifiedSuccess: false,
       }
     }
     if (lockResult === 'held_by_other') {
@@ -146,6 +147,7 @@ export class EbayStockStrategySelector implements OnModuleDestroy {
         errorId: null,
         rateLimited: false,
         skipped: true,
+        verifiedSuccess: false,
       }
     }
 
@@ -219,6 +221,7 @@ export class EbayStockStrategySelector implements OnModuleDestroy {
           errorMessage: 'all_strategies_failed',
           errorId: null,
           rateLimited: false,
+          verifiedSuccess: false,
         }
       )
     } finally {

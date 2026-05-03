@@ -80,6 +80,7 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
         errorId: null,
         rateLimited: false,
         preSnapshot,
+        verifiedSuccess: false,
       }
     }
 
@@ -135,6 +136,9 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
       }
       // Return ok=true: data was put successfully. Caller can audit-log
       // STOCK_PUSH_VERIFY_GET_TIMEOUT or STOCK_PUSH_VERIFY_GET_FAILED.
+      // verifiedSuccess=false: PUT returned 204 but verify-GET could not
+      // confirm the eBay-side state. Push-service uses this to skip
+      // lastSyncedQuantity write — next cron will retry verification.
       return {
         ok: true,
         httpStatus: 204,
@@ -143,6 +147,7 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
         rateLimited: false,
         preSnapshot,
         postSnapshot: null,
+        verifiedSuccess: false,
       }
     }
 
@@ -159,6 +164,7 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
         postSnapshot,
         dataLossDetected: true,
         dataLossFields: diff.changedFields,
+        verifiedSuccess: false,
       }
     }
     if (!diff.quantityCorrect) {
@@ -172,9 +178,12 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
         rateLimited: false,
         preSnapshot,
         postSnapshot,
+        verifiedSuccess: false,
       }
     }
 
+    // Full chain success: GET → PUT → verify-GET confirmed quantity matches
+    // and PRESERVE_FIELDS unchanged. eBay-side state proven in sync.
     return {
       ok: true,
       httpStatus: 204,
@@ -183,6 +192,7 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
       rateLimited: false,
       preSnapshot,
       postSnapshot,
+      verifiedSuccess: true,
     }
   }
 
@@ -216,6 +226,7 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
           errorId,
           rateLimited: true,
           preSnapshot,
+          verifiedSuccess: false,
         }
       }
       return {
@@ -225,6 +236,7 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
         errorId,
         rateLimited: false,
         preSnapshot,
+        verifiedSuccess: false,
       }
     }
     return {
@@ -234,6 +246,7 @@ export class GetThenPutStrategy implements StockUpdateStrategy {
       errorId: null,
       rateLimited: false,
       preSnapshot,
+      verifiedSuccess: false,
     }
   }
 }

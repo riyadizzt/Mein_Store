@@ -43,6 +43,8 @@ describe('BulkUpdateStrategy', () => {
     expect(result.errorMessage).toBeNull()
     expect(result.errorId).toBeNull()
     expect(result.rateLimited).toBe(false)
+    // Issue #6 root-fix: Bulk's HTTP-200 IS the confirmation contract.
+    expect(result.verifiedSuccess).toBe(true)
     expect(requestMock).toHaveBeenCalledWith(
       'POST',
       '/sell/inventory/v1/bulk_update_price_quantity',
@@ -68,6 +70,8 @@ describe('BulkUpdateStrategy', () => {
     expect(result.errorId).toBe(25001)
     expect(result.errorMessage).toContain('eBay 500')
     expect(result.rateLimited).toBe(false)
+    // Issue #6 root-fix: failure path → no claim of eBay-side confirmation.
+    expect(result.verifiedSuccess).toBe(false)
   })
 
   it('handles missing ebayErrors array (defensive optional chaining)', async () => {

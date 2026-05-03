@@ -52,12 +52,16 @@ export class BulkUpdateStrategy implements StockUpdateStrategy {
         },
       )
 
+      // Bulk-response-as-confirmation: eBay returns HTTP 200 only after
+      // applying the changes — no separate verify step needed. Single-call
+      // API contract makes this the strongest possible verification.
       return {
         ok: true,
         httpStatus: 200,
         errorMessage: null,
         errorId: null,
         rateLimited: false,
+        verifiedSuccess: true,
       }
     } catch (e: any) {
       if (e instanceof EbayApiError) {
@@ -69,6 +73,7 @@ export class BulkUpdateStrategy implements StockUpdateStrategy {
             errorMessage: '429 rate-limited',
             errorId,
             rateLimited: true,
+            verifiedSuccess: false,
           }
         }
         return {
@@ -77,6 +82,7 @@ export class BulkUpdateStrategy implements StockUpdateStrategy {
           errorMessage: `eBay ${e.status}: ${e.message.slice(0, 300)}`,
           errorId,
           rateLimited: false,
+          verifiedSuccess: false,
         }
       }
       return {
@@ -85,6 +91,7 @@ export class BulkUpdateStrategy implements StockUpdateStrategy {
         errorMessage: `network: ${(e?.message ?? String(e)).slice(0, 300)}`,
         errorId: null,
         rateLimited: false,
+        verifiedSuccess: false,
       }
     }
   }
